@@ -1,0 +1,18 @@
+[
+    {
+        "name": "ICICI Credit Card",
+        "query": "is:unread label:Finances/Credit Cards subject:\"Transaction alert for your ICICI Bank Credit Card\"",
+        "amountRegex": "INR (\\d{1,3}(,\\d{3})*(\\.\\d+)?)",
+        "merchantInfoRegex": "Info: (.*?)(\\.)",
+        "source": "Credit Card - ICICI",
+        "enabled": false
+    },
+    {
+        "name": "HDFC Credit Card",
+        "query": "is:unread label:finances-credit-cards subject:\"Alert : Update on your HDFC Bank Credit Card\"",
+        "amountRegex": "Rs (\\d+\\.\\d{2})",
+        "merchantInfoRegex": "at (.*?) on",
+        "source": "Credit Card - HDFC",
+        "enabled": false
+    }
+]
