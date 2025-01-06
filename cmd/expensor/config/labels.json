@@ -1,0 +1,94 @@
+{
+    "GOOGLE WORKSPACE CYBS SI": {
+        "category": "Subscriptions",
+        "bucket": "Wants"
+    },
+    "RSP*SWIGGY FOOD": {
+        "category": "Food",
+        "bucket": "Wants"
+    },
+    "WWW SWIGGY COM": {
+        "category": "Food",
+        "bucket": "Wants"
+    },
+    "SWIGGY": {
+        "category": "Food",
+        "bucket": "Wants"
+    },
+    "Swiggy": {
+        "category": "Food",
+        "bucket": "Wants"
+    },
+    "Cashfree*SWIGGY LIMITE": {
+        "category": "Food",
+        "bucket": "Wants"
+    },
+    "Razorpay*Swiggy Limite": {
+        "category": "Food",
+        "bucket": "Wants"
+    },
+    "ZOMATO": {
+        "category": "Food",
+        "bucket": "Wants"
+    },
+    "Zomato Media Pvt Ltd": {
+        "category": "Subscriptions",
+        "bucket": "Wants"
+    },
+    "BLINKIT": {
+        "category": "Essentials",
+        "bucket": "Needs"
+    },
+    "BLINK COMMERCE PVT LTD": {
+        "category": "Essentials",
+        "bucket": "Needs"
+    },
+    "GROFERS INDIA PRIVATE": {
+        "category": "Essentials",
+        "bucket": "Needs"
+    },
+    "RSP*INSTAMART": {
+        "category": "Essentials",
+        "bucket": "Needs"
+    },
+    "IND*Amazon": {
+        "category": "Shopping",
+        "bucket": "Wants"
+    },
+    "Ing*IKEA INDIA PVT LTD": {
+        "category": "Shopping",
+        "bucket": "Wants"
+    },
+    "BOOKMYSHOW": {
+        "category": "Misc",
+        "bucket": "Wants"
+    },
+    "NYKAA": {
+        "category": "Shopping",
+        "bucket": "Wants"
+    },
+    "RAZORPAY RENTOMOJO": {
+        "category": "Subscriptions",
+        "bucket": "Needs"
+    },
+    "Rentomojo": {
+        "category": "Subscriptions",
+        "bucket": "Needs"
+    },
+    "SPOTIFY SI": {
+        "category": "Subscriptions",
+        "bucket": "Wants"
+    },
+    "HOTSTAR": {
+        "category": "Subscriptions",
+        "bucket": "Wants"
+    },
+    "MYNTRA DESIGNS PRIVATE": {
+        "category": "Shopping",
+        "bucket": "Wants"
+    },
+    "BLUE TOKAI COFFEE ROAS": {
+        "category": "Shopping",
+        "bucket": "Wants"
+    }
+}

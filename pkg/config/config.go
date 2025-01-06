@@ -8,4 +8,5 @@ type Config struct {
 	SheetID         string `koanf:"sheetId"`
 	SheetName       string `koanf:"sheetName"`
 	Rules           []api.Rule
+	Labels          api.Labels
 }

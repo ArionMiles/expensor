@@ -24,9 +24,11 @@ import (
 
 type Expensor struct {
 	rules        []api.Rule
+	labels       api.Labels
 	mailClient   *gmail.Service
 	sheetsClient *sheets.Service
 	spreadSheet  *sheets.Spreadsheet
+	sheetName    string
 	msgChan      chan *api.TransactionDetails
 }
 
@@ -44,8 +46,10 @@ func NewExpensor(client *http.Client, cfg *config.Config) (*Expensor, error) {
 
 	e := &Expensor{
 		rules:        cfg.Rules,
+		labels:       cfg.Labels,
 		mailClient:   mailClient,
 		sheetsClient: sheetsClient,
+		sheetName:    cfg.SheetName,
 		msgChan:      make(chan *api.TransactionDetails),
 	}
 
@@ -95,7 +99,7 @@ func (e *Expensor) createSheet(ctx context.Context, sheetTitle, sheetId, sheetNa
 		headerRange := fmt.Sprintf("%s!A1:C1", sheetName)
 		headerReq := sheets.ValueRange{
 			Values: [][]interface{}{
-				{"Date/Time", "Expense", "Amount"},
+				{"Date/Time", "Timestamp", "Expense", "Amount", "Category", "Needs/Wants/Investments", "Source"},
 			},
 		}
 		_, err = e.sheetsClient.Spreadsheets.Values.Update(spreadsheet.SpreadsheetId, headerRange, &headerReq).
@@ -129,17 +133,17 @@ func (e *Expensor) write(ctx context.Context) error {
 		case td := <-e.msgChan:
 			// Prepare values to write to the sheet
 			var values [][]interface{}
-			values = append(values, []interface{}{td.Timestamp, td.MerchantInfo, td.Amount})
+			values = append(values, []interface{}{td.Timestamp, td.MerchantInfo, td.Amount, td.Category, td.Bucket, td.Source})
 
 			// Write values to the sheet
-			writeRange := "Sheet1!A2:C2" // Append to existing data (starting from second row)
+			writeRange := fmt.Sprintf("%s!A2:C2", e.sheetName) // Append to existing data (starting from second row)
 			writeReq := sheets.ValueRange{
 				Values: values,
 			}
 			err := retry.Do(
 				func() error {
 					_, err := e.sheetsClient.Spreadsheets.Values.Append(e.spreadSheet.SpreadsheetId, writeRange, &writeReq).
-						ValueInputOption("RAW").InsertDataOption("INSERT_ROWS").Do()
+						ValueInputOption("USER_ENTERED").InsertDataOption("INSERT_ROWS").Do()
 					if err != nil {
 						return err
 					}
@@ -172,6 +176,11 @@ func (e *Expensor) write(ctx context.Context) error {
 }
 
 func (e *Expensor) runRule(wg *sync.WaitGroup, rule api.Rule) {
+	if !rule.Enabled {
+		log.Printf("Skipping disabled rule %s\n", rule.Name)
+		return
+	}
+
 	defer wg.Done()
 	user := "me"
 	// Call the Gmail API to retrieve the list of matching emails
@@ -223,15 +232,26 @@ func (e *Expensor) runRule(wg *sync.WaitGroup, rule api.Rule) {
 		// fmt.Println("Body:", body)
 		fmt.Println("Details:", dets)
 		fmt.Println("-------------------------------------")
+		dets.Category, dets.Bucket = e.getLabels(dets.MerchantInfo)
+		dets.Source = rule.Source
 		e.msgChan <- dets
 		// Mark the message as read
-		// _, err = e.mailClient.Users.Messages.Modify(user, msg.Id, &gmail.ModifyMessageRequest{
-		// 	RemoveLabelIds: []string{"UNREAD"},
-		// }).Do()
-		// if err != nil {
-		// 	log.Fatalf("Unable to mark message as read: %v", err)
-		// }
+		_, err = e.mailClient.Users.Messages.Modify(user, msg.Id, &gmail.ModifyMessageRequest{
+			RemoveLabelIds: []string{"UNREAD"},
+		}).Do()
+		if err != nil {
+			log.Fatalf("Unable to mark message as read: %v", err)
+		}
 	}
+}
+
+func (e *Expensor) getLabels(merchant string) (string, string) {
+	val, exists := e.labels[merchant]
+	if exists {
+		return val.Category, val.Bucket
+	}
+
+	return "", ""
 }
 
 // ExtractTransactionDetails extracts transaction details from the email body
@@ -254,7 +274,7 @@ func ExtractTransactionDetails(emailBody string, amountRegex, merchantRegex *reg
 	}
 
 	// Parse timestamp with full date
-	transaction.Timestamp = receivedTime.Format("Monday, January 2, 2006, 3:04:05 PM")
+	transaction.Timestamp = receivedTime.Format("2006-01-02 15:04:05")
 
 	if len(merchantMatches) > 0 {
 		transaction.MerchantInfo = merchantMatches[1]

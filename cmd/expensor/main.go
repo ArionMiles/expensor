@@ -11,6 +11,7 @@ import (
 	kJson "github.com/knadh/koanf/parsers/json"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
+	"github.com/pkg/errors"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/sheets/v4"
 
@@ -24,7 +25,10 @@ var (
 	//go:embed config/rules.json
 	rulesInput string
 	rules      []api.Rule
-	k          = koanf.New(".")
+	//go:embed config/labels.json
+	labelsInput string
+	labels      api.Labels
+	k           = koanf.New(".")
 )
 
 func init() {
@@ -32,6 +36,11 @@ func init() {
 	if err != nil {
 		log.Fatalf("Failed to generate rules: %s", err)
 	}
+
+	if err := json.Unmarshal([]byte(labelsInput), &labels); err != nil {
+		log.Fatalf("failed to read labels JSON: %s", err)
+	}
+
 }
 
 func main() {
@@ -45,6 +54,7 @@ func main() {
 	k.UnmarshalWithConf("", &cfg, koanf.UnmarshalConf{Tag: "koanf", FlatPaths: true})
 	fmt.Println(cfg)
 	cfg.Rules = rules
+	cfg.Labels = labels
 
 	client, err := client.NewClient(
 		cfg.SecretsFilePath,
@@ -71,25 +81,53 @@ func main() {
 
 func generateRules(rulesInput string) error {
 	// Parse the JSON into a slice of map[string]string to handle custom unmarshalling
-	var rawRules []map[string]string
+	var rawRules []map[string]any
 	if err := json.Unmarshal([]byte(rulesInput), &rawRules); err != nil {
 		return fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
 	// Convert the raw rules to the []api.Rule slice
 	for _, rawRule := range rawRules {
-		amountRegex, err := regexp.Compile(rawRule["amountRegex"])
+		amountRegexString, ok := rawRule["amountRegex"].(string)
+		if !ok {
+			return errors.New("amountRegex incorrect")
+		}
+		amountRegex, err := regexp.Compile(amountRegexString)
 		if err != nil {
 			return fmt.Errorf("invalid amount regex: %w", err)
 		}
-		merchantInfoRegex, err := regexp.Compile(rawRule["merchantInfoRegex"])
+
+		merchantInfoRegexString, ok := rawRule["merchantInfoRegex"].(string)
+		if !ok {
+			return errors.New("merchantInfoRegex incorrect")
+		}
+
+		merchantInfoRegex, err := regexp.Compile(merchantInfoRegexString)
 		if err != nil {
 			return fmt.Errorf("invalid merchant info regex: %w", err)
 		}
+
+		query, ok := rawRule["query"].(string)
+		if !ok {
+			return errors.New("query incorrect")
+		}
+
+		enabled, ok := rawRule["enabled"].(bool)
+		if !ok {
+			return errors.New("query incorrect")
+		}
+
+		source, ok := rawRule["source"].(string)
+		if !ok {
+			return errors.New("source incorrect")
+		}
+
 		rule := api.Rule{
-			Query:        rawRule["query"],
+			Query:        query,
 			Amount:       amountRegex,
 			MerchantInfo: merchantInfoRegex,
+			Enabled:      enabled,
+			Source:       source,
 		}
 		rules = append(rules, rule)
 	}
