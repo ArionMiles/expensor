@@ -40,3 +40,13 @@ Expensor is designed to
 There's a few more items I need to work on to make it more polished and robust, a few of them are mentioned in [#1](https://github.com/ArionMiles/expensor/issues/2). 
 
 Might get around to finishing it off one of these days, haha!
+  
+## How to run?
+
+- Follow the docs: https://developers.google.com/gmail/api/quickstart/go
+- Download secrets json file at the end of it all
+- Go back to enabled APIs and enable Sheets API
+- SheetID - if not given it will auto create
+- Run `go run cmd/expensor/main.go`
+- Once it creates the sheet, open the Expense Report sheet and copy paste the sheet ID into config.json
+- Stay alert bois, don't get hecked by Arion. To disable API later on go here: https://console.cloud.google.com/apis/api/gmail.googleapis.com/metrics?inv=1&invt=AbmIfQ&project=testgcm-4e7a8
