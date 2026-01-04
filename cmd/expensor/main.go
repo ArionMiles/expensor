@@ -40,11 +40,9 @@ func init() {
 	if err := json.Unmarshal([]byte(labelsInput), &labels); err != nil {
 		log.Fatalf("failed to read labels JSON: %s", err)
 	}
-
 }
 
 func main() {
-
 	// Load JSON config.
 	if err := k.Load(file.Provider("config.json"), kJson.Parser()); err != nil {
 		log.Fatalf("error loading config: %v", err)
@@ -62,7 +60,6 @@ func main() {
 		gmail.GmailModifyScope,
 		sheets.SpreadsheetsScope,
 	)
-
 	if err != nil {
 		log.Fatalf("Failed to initialize http client %v", err)
 	}
@@ -76,7 +73,6 @@ func main() {
 	expensor.Write(context.Background())
 
 	expensor.Read(context.Background())
-
 }
 
 func generateRules(rulesInput string) error {

@@ -1,6 +1,6 @@
 module github.com/ArionMiles/expensor
 
-go 1.21.6
+go 1.25.5
 
 require (
 	github.com/avast/retry-go v3.0.0+incompatible

@@ -21,3 +21,10 @@
 go.work
 /client_secret_*.json
 /token.json
+
+# Tools
+.tools/
+.task/
+
+# Coverage profiles
+coverage.html

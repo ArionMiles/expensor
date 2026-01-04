@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/avast/retry-go"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
@@ -19,7 +20,6 @@ import (
 
 	"github.com/ArionMiles/expensor/pkg/api"
 	"github.com/ArionMiles/expensor/pkg/config"
-	"github.com/avast/retry-go"
 )
 
 type Expensor struct {
@@ -78,7 +78,6 @@ func (e *Expensor) Read(ctx context.Context) error {
 			wg.Wait()
 		}
 	}
-
 }
 
 func (e *Expensor) createSheet(ctx context.Context, sheetTitle, sheetId, sheetName string) (*sheets.Spreadsheet, error) {
@@ -164,14 +163,12 @@ func (e *Expensor) write(ctx context.Context) error {
 				retry.Delay(60*time.Second),
 				retry.LastErrorOnly(true),
 			)
-
 			if err != nil {
 				return err
 			}
 
 			fmt.Println("Transaction details written to Google Sheet successfully.")
 		}
-
 	}
 }
 
@@ -256,7 +253,6 @@ func (e *Expensor) getLabels(merchant string) (string, string) {
 
 // ExtractTransactionDetails extracts transaction details from the email body
 func ExtractTransactionDetails(emailBody string, amountRegex, merchantRegex *regexp.Regexp, receivedTime time.Time) *api.TransactionDetails {
-
 	// Extract transaction details
 	amountMatches := amountRegex.FindStringSubmatch(emailBody)
 	merchantMatches := merchantRegex.FindStringSubmatch(emailBody)
