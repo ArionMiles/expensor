@@ -56,3 +56,9 @@ jobs:
 
       - name: Run tests
         run: task test
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: govulncheck ./...
