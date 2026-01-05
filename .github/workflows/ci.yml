@@ -1,6 +1,6 @@
 # CI workflow for linting and testing
 
-name: Lint & Unit Tests
+name: CI
 
 on:
   push:
