@@ -1,0 +1,77 @@
+name: Bank Support Request
+description: Request support for a new bank's transaction emails
+title: "[Bank Support]: "
+labels: ["bank-support", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for requesting support for a new bank! To help us add support, please provide the information below.
+
+  - type: input
+    id: bank-name
+    attributes:
+      label: Bank/Card Name
+      description: What bank or credit card company is this?
+      placeholder: e.g., Chase Bank, HDFC Bank, etc.
+    validations:
+      required: true
+
+  - type: input
+    id: country
+    attributes:
+      label: Country
+      description: What country is this bank/card from?
+      placeholder: e.g., USA, India, etc.
+    validations:
+      required: true
+
+  - type: textarea
+    id: email-sample
+    attributes:
+      label: Sample Email Content
+      description: |
+        Please paste a **REDACTED** sample of the transaction email.
+        IMPORTANT: Remove any sensitive information like account numbers, real transaction amounts, merchant names with personal info, etc.
+      placeholder: |
+        Subject: Transaction Alert
+
+        Dear Customer,
+
+        Your account XXXX1234 has been debited with Rs. XXX.XX on DD/MM/YYYY at Merchant Name.
+
+        Available balance: Rs. XXXX.XX
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: email-pattern
+    attributes:
+      label: Transaction Pattern
+      description: Describe the pattern of transaction emails from this bank
+      placeholder: |
+        - Subject always contains "Transaction Alert"
+        - Amount format: Rs. 1,234.56
+        - Date format: DD/MM/YYYY
+        - Merchant name is on line X
+
+  - type: checkboxes
+    id: transaction-types
+    attributes:
+      label: Transaction Types
+      description: What types of transactions does this bank send emails for?
+      options:
+        - label: Debit card purchases
+        - label: Credit card purchases
+        - label: ATM withdrawals
+        - label: Online transfers
+        - label: Bill payments
+        - label: Other (please specify in additional context)
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other details that might help us support this bank
+      placeholder: Any special formatting, multiple email templates, etc.

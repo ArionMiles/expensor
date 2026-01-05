@@ -1,0 +1,277 @@
+version = '2'
+
+[run]
+modules-download-mode = 'readonly'
+
+[linters]
+default = 'none'
+enable = [
+  'bodyclose',
+  'dupl',
+  'errcheck',
+  'errname',
+  'errorlint',
+  'gocheckcompilerdirectives',
+  'gochecknoinits',
+  'goconst',
+  'govet',
+  'ineffassign',
+  'lll',
+  'mirror',
+  'misspell',
+  'musttag',
+  'nakedret',
+  'nilerr',
+  'noctx',
+  'perfsprint',
+  'promlinter',
+  'protogetter',
+  'revive',
+  'rowserrcheck',
+  'sqlclosecheck',
+  'staticcheck',
+  'testifylint',
+  'thelper',
+  'unconvert',
+  'usestdlibvars'
+]
+
+[linters.settings]
+[linters.settings.errcheck]
+check-type-assertions = true
+
+[linters.settings.govet]
+disable = [
+  'asmdecl',
+  'assign',
+  'cgocall',
+  'fieldalignment',
+  'findcall',
+  'framepointer',
+  'structtag'
+]
+enable-all = true
+
+[linters.settings.lll]
+line-length = 160
+
+[linters.settings.misspell]
+locale = 'US'
+
+[linters.settings.perfsprint]
+errorf = false
+strconcat = false
+
+[linters.settings.revive]
+severity = 'error'
+
+[[linters.settings.revive.rules]]
+name = 'var-declaration'
+
+[[linters.settings.revive.rules]]
+name = 'unexported-return'
+
+[[linters.settings.revive.rules]]
+name = 'blank-imports'
+
+[[linters.settings.revive.rules]]
+name = 'context-as-argument'
+
+[[linters.settings.revive.rules]]
+name = 'exported'
+
+[[linters.settings.revive.rules]]
+name = 'if-return'
+
+[[linters.settings.revive.rules]]
+name = 'increment-decrement'
+
+[[linters.settings.revive.rules]]
+name = 'indent-error-flow'
+
+[[linters.settings.revive.rules]]
+name = 'argument-limit'
+arguments = [
+  5
+]
+
+[[linters.settings.revive.rules]]
+name = 'superfluous-else'
+
+[[linters.settings.revive.rules]]
+name = 'confusing-naming'
+
+[[linters.settings.revive.rules]]
+name = 'deep-exit'
+
+[[linters.settings.revive.rules]]
+name = 'struct-tag'
+
+[[linters.settings.revive.rules]]
+name = 'modifies-value-receiver'
+
+[[linters.settings.revive.rules]]
+name = 'constant-logical-expr'
+
+[[linters.settings.revive.rules]]
+name = 'redefines-builtin-id'
+
+[[linters.settings.revive.rules]]
+name = 'function-result-limit'
+arguments = [
+  3
+]
+
+[[linters.settings.revive.rules]]
+name = 'range-val-address'
+
+[[linters.settings.revive.rules]]
+name = 'call-to-gc'
+
+[[linters.settings.revive.rules]]
+name = 'import-shadowing'
+
+[[linters.settings.revive.rules]]
+name = 'bare-return'
+
+[[linters.settings.revive.rules]]
+name = 'early-return'
+
+[[linters.settings.revive.rules]]
+name = 'unconditional-recursion'
+
+[[linters.settings.revive.rules]]
+name = 'identical-branches'
+
+[[linters.settings.revive.rules]]
+name = 'defer'
+arguments = [
+  ['loop', 'method-call', 'recover', 'immediate-recover', 'return']
+]
+
+[[linters.settings.revive.rules]]
+name = 'unexported-naming'
+
+[[linters.settings.revive.rules]]
+name = 'optimize-operands-order'
+
+[[linters.settings.revive.rules]]
+name = 'use-any'
+
+[[linters.settings.revive.rules]]
+name = 'datarace'
+
+[[linters.settings.revive.rules]]
+name = 'comment-spacings'
+
+[[linters.settings.revive.rules]]
+name = 'redundant-import-alias'
+
+[linters.settings.rowserrcheck]
+packages = [
+  'github.com/jmoiron/sqlx'
+]
+
+[linters.settings.testifylint]
+disable-all = true
+enable = [
+  'blank-import',
+  'bool-compare',
+  'compares',
+  'empty',
+  'error-is-as',
+  'error-nil',
+  'expected-actual',
+  'float-compare',
+  'go-require',
+  'len',
+  'nil-compare',
+  'suite-dont-use-pkg',
+  'suite-extra-assert-call',
+  'useless-assert'
+]
+
+[linters.settings.usestdlibvars]
+http-status-code = false
+time-month = true
+time-layout = true
+sql-isolation-level = true
+tls-signature-scheme = true
+
+[linters.exclusions]
+generated = 'lax'
+presets = [
+  'comments',
+  'common-false-positives',
+  'std-error-handling'
+]
+paths = [
+  'third_party$',
+  'builtin$',
+  'examples$'
+]
+
+[[linters.exclusions.rules]]
+linters = [
+  'govet'
+]
+text = 'declaration of "(err|ctx)" shadows declaration at'
+
+[[linters.exclusions.rules]]
+linters = [
+  'bodyclose',
+  'dupl',
+  'gocognit',
+  'goconst',
+  'gosec',
+  'lll'
+]
+path = '_test\.go'
+
+[[linters.exclusions.rules]]
+linters = [
+  'lll'
+]
+source = '^//go:generate '
+
+[[linters.exclusions.rules]]
+linters = [
+  'errcheck'
+]
+path = '_test\.go'
+text = '^Error return value is not checked$'
+
+[[linters.exclusions.rules]]
+linters = [
+  'goconst'
+]
+path = '(.+)_test\.go'
+
+[issues]
+uniq-by-line = true
+
+[formatters]
+enable = [
+  'gci',
+  'gofumpt'
+]
+
+[formatters.settings]
+[formatters.settings.gci]
+sections = [
+  'standard',
+  'default',
+  'prefix(github.com/ArionMiles)'
+]
+custom-order = true
+
+[formatters.settings.gofumpt]
+extra-rules = true
+
+[formatters.exclusions]
+generated = 'lax'
+paths = [
+  'third_party$',
+  'builtin$',
+  'examples$'
+]

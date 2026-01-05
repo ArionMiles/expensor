@@ -1,136 +1,102 @@
 package main
 
 import (
-	"context"
-	_ "embed"
-	"encoding/json"
+	"flag"
 	"fmt"
-	"log"
-	"regexp"
+	"log/slog"
+	"os"
 
-	kJson "github.com/knadh/koanf/parsers/json"
-	"github.com/knadh/koanf/providers/file"
-	"github.com/knadh/koanf/v2"
-	"github.com/pkg/errors"
-	"google.golang.org/api/gmail/v1"
-	"google.golang.org/api/sheets/v4"
-
-	"github.com/ArionMiles/expensor/pkg/api"
-	"github.com/ArionMiles/expensor/pkg/client"
-	"github.com/ArionMiles/expensor/pkg/config"
-	"github.com/ArionMiles/expensor/pkg/orchestrator"
+	"github.com/ArionMiles/expensor/pkg/logging"
 )
 
-var (
-	//go:embed config/rules.json
-	rulesInput string
-	rules      []api.Rule
-	//go:embed config/labels.json
-	labelsInput string
-	labels      api.Labels
-	k           = koanf.New(".")
-)
+const usage = `expensor - Extract expense transactions from Gmail to Google Sheets
 
-func init() {
-	err := generateRules(rulesInput)
-	if err != nil {
-		log.Fatalf("Failed to generate rules: %s", err)
-	}
+Usage:
+  expensor <command> [options]
 
-	if err := json.Unmarshal([]byte(labelsInput), &labels); err != nil {
-		log.Fatalf("failed to read labels JSON: %s", err)
-	}
+Commands:
+  run      Start the expense tracking daemon (default)
+  setup    Configure Gmail and Sheets integration
+  status   Check authentication and configuration status
 
-}
+Options:
+  -h, --help    Show this help message
+
+Examples:
+  expensor run              # Start tracking expenses
+  expensor setup            # Set up OAuth authentication
+  expensor status           # Check if everything is configured
+
+For more information, visit: https://github.com/ArionMiles/expensor
+`
 
 func main() {
+	// Setup logging early
+	logger := logging.Setup(logging.DefaultConfig())
 
-	// Load JSON config.
-	if err := k.Load(file.Provider("config.json"), kJson.Parser()); err != nil {
-		log.Fatalf("error loading config: %v", err)
+	// Handle no arguments - show usage
+	if len(os.Args) < 2 {
+		fmt.Print(usage)
+		os.Exit(0)
 	}
 
-	var cfg config.Config
-	k.UnmarshalWithConf("", &cfg, koanf.UnmarshalConf{Tag: "koanf", FlatPaths: true})
-	fmt.Println(cfg)
-	cfg.Rules = rules
-	cfg.Labels = labels
+	// Parse command
+	cmd := os.Args[1]
 
-	client, err := client.NewClient(
-		cfg.SecretsFilePath,
-		gmail.GmailReadonlyScope,
-		gmail.GmailModifyScope,
-		sheets.SpreadsheetsScope,
-	)
+	// Handle help flags
+	if cmd == "-h" || cmd == "--help" || cmd == "help" {
+		fmt.Print(usage)
+		os.Exit(0)
+	}
+
+	// Execute command
+	var err error
+	switch cmd {
+	case "run":
+		err = runCmd(logger, os.Args[2:])
+	case "setup":
+		err = setupCmd(logger, os.Args[2:])
+	case "status":
+		err = statusCmd(os.Args[2:])
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", cmd)
+		fmt.Print(usage)
+		os.Exit(1)
+	}
 
 	if err != nil {
-		log.Fatalf("Failed to initialize http client %v", err)
+		logger.Error("command failed", "command", cmd, "error", err)
+		os.Exit(1)
 	}
-
-	expensor, err := orchestrator.NewExpensor(client, &cfg)
-	if err != nil {
-		log.Fatalf("Failed to create expensor %v", err)
-	}
-
-	// Start Writer
-	expensor.Write(context.Background())
-
-	expensor.Read(context.Background())
-
 }
 
-func generateRules(rulesInput string) error {
-	// Parse the JSON into a slice of map[string]string to handle custom unmarshalling
-	var rawRules []map[string]any
-	if err := json.Unmarshal([]byte(rulesInput), &rawRules); err != nil {
-		return fmt.Errorf("failed to parse JSON: %w", err)
+// runCmd starts the expense tracking daemon
+func runCmd(logger *slog.Logger, args []string) error {
+	fs := flag.NewFlagSet("run", flag.ExitOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
 	}
 
-	// Convert the raw rules to the []api.Rule slice
-	for _, rawRule := range rawRules {
-		amountRegexString, ok := rawRule["amountRegex"].(string)
-		if !ok {
-			return errors.New("amountRegex incorrect")
-		}
-		amountRegex, err := regexp.Compile(amountRegexString)
-		if err != nil {
-			return fmt.Errorf("invalid amount regex: %w", err)
-		}
+	return runExpensor(logger)
+}
 
-		merchantInfoRegexString, ok := rawRule["merchantInfoRegex"].(string)
-		if !ok {
-			return errors.New("merchantInfoRegex incorrect")
-		}
-
-		merchantInfoRegex, err := regexp.Compile(merchantInfoRegexString)
-		if err != nil {
-			return fmt.Errorf("invalid merchant info regex: %w", err)
-		}
-
-		query, ok := rawRule["query"].(string)
-		if !ok {
-			return errors.New("query incorrect")
-		}
-
-		enabled, ok := rawRule["enabled"].(bool)
-		if !ok {
-			return errors.New("query incorrect")
-		}
-
-		source, ok := rawRule["source"].(string)
-		if !ok {
-			return errors.New("source incorrect")
-		}
-
-		rule := api.Rule{
-			Query:        query,
-			Amount:       amountRegex,
-			MerchantInfo: merchantInfoRegex,
-			Enabled:      enabled,
-			Source:       source,
-		}
-		rules = append(rules, rule)
+// setupCmd handles OAuth setup
+func setupCmd(logger *slog.Logger, args []string) error {
+	fs := flag.NewFlagSet("setup", flag.ExitOnError)
+	force := fs.Bool("force", false, "Force re-authentication even if token exists")
+	if err := fs.Parse(args); err != nil {
+		return err
 	}
 
-	return nil
+	return runSetup(logger, *force)
+}
+
+// statusCmd checks configuration and authentication status
+func statusCmd(args []string) error {
+	fs := flag.NewFlagSet("status", flag.ExitOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	return runStatus()
 }

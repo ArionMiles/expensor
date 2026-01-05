@@ -1,0 +1,90 @@
+version: '3'
+
+tasks:
+  imports:
+    summary: Format imports with gci.
+    desc: >-
+      Format package imports in all Go files with gci.
+    cmd: go tool gci write ./ --section standard --section default --section "Prefix(github.com/ArionMiles)" --skip-generated --skip-vendor
+
+  fmt:
+    summary: Formats Go files including import statements.
+    desc: >-
+      Formats Go source files with gci for import statements and gofumpt.
+    deps: [ imports ]
+    cmd: go tool gofumpt -l -w -extra .
+
+  # LINTING
+  lint:
+    summary: Lint Go source files with golangci-lint (local config).
+    desc: >-
+      Lints Go source files with golangci-lint using .golangci.toml config.
+      This is the lighter local configuration for development.
+    cmd: go tool golangci-lint --config=".golangci.toml" run
+
+  lint:new:
+    summary: Lint only new/changed Go source files (compared to main).
+    desc: >-
+      Lints only new or changed Go source files compared to origin/main.
+      Uses --new-from-rev to enable incremental linting adoption.
+    cmd: go tool golangci-lint --config=".golangci-prod.toml" --new-from-rev=origin/main --max-same-issues=0 --max-issues-per-linter=0 run
+
+  lint:prod:
+    summary: Lint all Go source files with golangci-lint (production config).
+    desc: >-
+      Lints all Go source files with golangci-lint and reports all issues without
+      any filtering. It uses the configuration present in .golangci-prod.toml
+      for running the linter (stricter rules for CI).
+    cmd: go tool golangci-lint --config=".golangci-prod.toml" --max-same-issues=0 --max-issues-per-linter=0 run
+
+  # TESTING
+  test:
+    summary: Run unit tests.
+    desc: Run all unit tests with verbose output.
+    cmd: go test -v ./...
+
+  test:cover:
+    summary: Run unit tests with coverage.
+    desc: Run all unit tests with coverage report.
+    cmd: go test -v -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
+
+  # BUILD
+  build:
+    summary: Build the application.
+    desc: Build the expensor binary.
+    cmd: go build -v ./...
+
+  build:binary:
+    summary: Build optimized binary for current platform.
+    desc: Build a production-ready binary with version information.
+    vars:
+      VERSION:
+        sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
+    cmd: |
+      CGO_ENABLED=0 go build \
+        -trimpath \
+        -ldflags="-s -w -X main.Version={{.VERSION}}" \
+        -o bin/expensor \
+        ./cmd/expensor
+
+  build:docker:
+    summary: Build Docker image locally.
+    desc: Build Docker image for local platform.
+    vars:
+      VERSION:
+        sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
+      IMAGE_NAME: "expensor:{{.VERSION}}"
+    cmd: |
+      docker buildx build \
+        --build-arg VERSION={{.VERSION}} \
+        -t {{.IMAGE_NAME}} \
+        --load \
+        .
+
+  # CI
+  ci:
+    summary: Run all CI checks.
+    desc: Run linting (production config) and tests for CI pipeline.
+    cmds:
+      - task: lint:prod
+      - task: test

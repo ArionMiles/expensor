@@ -7,6 +7,7 @@
 *.dll
 *.so
 *.dylib
+bin/
 
 # Test binary, built with `go test -c`
 *.test
@@ -19,5 +20,16 @@
 
 # Go workspace file
 go.work
-/client_secret_*.json
-/token.json
+
+# Tools
+.tools/
+.task/
+
+# Coverage profiles
+coverage.html
+
+# Build artifacts
+dist/
+
+# Expensor specific sensitive data files
+data/

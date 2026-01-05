@@ -5,7 +5,7 @@
         "amountRegex": "INR (\\d{1,3}(,\\d{3})*(\\.\\d+)?)",
         "merchantInfoRegex": "Info: (.*?)(\\.)",
         "source": "Credit Card - ICICI",
-        "enabled": false
+        "enabled": true
     },
     {
         "name": "HDFC Credit Card",
@@ -13,6 +13,6 @@
         "amountRegex": "Rs (\\d+\\.\\d{2})",
         "merchantInfoRegex": "at (.*?) on",
         "source": "Credit Card - HDFC",
-        "enabled": false
+        "enabled": true
     }
 ]
