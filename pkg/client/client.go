@@ -65,6 +65,8 @@ func getClient(config *oauth2.Config) (*http.Client, error) {
 }
 
 func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
+	ctx := context.Background()
+
 	// Set the redirect URI to our local callback server
 	config.RedirectURL = fmt.Sprintf("http://localhost:%d%s", callbackPort, callbackPath)
 
@@ -79,7 +81,7 @@ func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
 	errChan := make(chan error, 1)
 
 	// Start local server to receive the callback
-	server, err := startCallbackServer(state, codeChan, errChan)
+	server, err := startCallbackServer(ctx, state, codeChan, errChan)
 	if err != nil {
 		return nil, fmt.Errorf("starting callback server: %w", err)
 	}
@@ -117,7 +119,7 @@ func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
 	}
 }
 
-func startCallbackServer(expectedState string, codeChan chan<- string, errChan chan<- error) (*http.Server, error) {
+func startCallbackServer(ctx context.Context, expectedState string, codeChan chan<- string, errChan chan<- error) (*http.Server, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
 		// Verify state to prevent CSRF
@@ -167,7 +169,8 @@ func startCallbackServer(expectedState string, codeChan chan<- string, errChan c
 	}
 
 	// Create listener to check if port is available
-	listener, err := net.Listen("tcp", server.Addr)
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", server.Addr)
 	if err != nil {
 		return nil, fmt.Errorf("port %d unavailable: %w", callbackPort, err)
 	}
@@ -185,15 +188,16 @@ func startCallbackServer(expectedState string, codeChan chan<- string, errChan c
 }
 
 func openBrowser(url string) error {
+	ctx := context.Background()
 	var cmd *exec.Cmd
 
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("open", url)
+		cmd = exec.CommandContext(ctx, "open", url)
 	case "linux":
-		cmd = exec.Command("xdg-open", url)
+		cmd = exec.CommandContext(ctx, "xdg-open", url)
 	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", url)
+		cmd = exec.CommandContext(ctx, "cmd", "/c", "start", url)
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}

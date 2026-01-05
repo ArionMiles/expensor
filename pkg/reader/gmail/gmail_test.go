@@ -184,7 +184,7 @@ func loadEmailFixture(filename string) (string, error) {
 	paths := []string{
 		filepath.Join("..", "..", "..", "tests", "data", "emails", filename),
 		filepath.Join("tests", "data", "emails", filename),
-		filepath.Join("../../../tests/data/emails", filename),
+		filepath.Join("..", "..", "..", "tests", "data", "emails", filename),
 	}
 
 	for _, path := range paths {

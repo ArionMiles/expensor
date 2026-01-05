@@ -75,7 +75,7 @@ func main() {
 	}
 
 	// Create dump directory
-	if err := os.MkdirAll(dumpDir, 0o755); err != nil {
+	if err := os.MkdirAll(dumpDir, 0o750); err != nil {
 		logger.Error("failed to create dump directory", "error", err)
 		os.Exit(1)
 	}
@@ -160,7 +160,7 @@ func dumpMessage(ctx context.Context, svc *gmail.Service, msgID, source string, 
 	}
 
 	// Write to file
-	if err := os.WriteFile(filePath, []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte(body), 0o600); err != nil {
 		return fmt.Errorf("writing file: %w", err)
 	}
 

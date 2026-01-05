@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -22,18 +21,32 @@ import (
 )
 
 // runStatus checks the configuration and authentication status.
-func runStatus(logger *slog.Logger, configPath string) error {
+func runStatus(configPath string) error {
 	fmt.Println("=== Expensor Status ===")
 	fmt.Println()
 
 	allGood := true
 
+	cfg, secretsPath := checkConfigAndCredentials(configPath, &allGood)
+	token := checkTokenStatus(&allGood)
+	checkEmbeddedData(&allGood)
+
+	if cfg != nil && token != nil {
+		checkAPIConnectivity(secretsPath, &allGood)
+	}
+
+	printFinalStatus(allGood)
+
+	return nil
+}
+
+func checkConfigAndCredentials(configPath string, allGood *bool) (*config.Config, string) {
 	// Check config file
 	fmt.Printf("Config file (%s): ", configPath)
 	cfg, err := checkConfig(configPath)
 	if err != nil {
 		fmt.Printf("✗ %v\n", err)
-		allGood = false
+		*allGood = false
 	} else {
 		fmt.Println("✓ Found")
 	}
@@ -46,35 +59,42 @@ func runStatus(logger *slog.Logger, configPath string) error {
 	fmt.Printf("Credentials file (%s): ", secretsPath)
 	if _, err := os.Stat(secretsPath); os.IsNotExist(err) {
 		fmt.Println("✗ Not found")
-		allGood = false
+		*allGood = false
 	} else {
 		fmt.Println("✓ Found")
 	}
 
-	// Check token file
+	return cfg, secretsPath
+}
+
+func checkTokenStatus(allGood *bool) *oauth2.Token {
 	fmt.Printf("OAuth token (%s): ", tokenFile)
 	token, err := checkToken(tokenFile)
 	if err != nil {
 		fmt.Printf("✗ %v\n", err)
-		allGood = false
-	} else {
-		if token.Expiry.Before(time.Now()) {
-			fmt.Println("⚠ Expired (will refresh on next run)")
-		} else {
-			fmt.Printf("✓ Valid (expires: %s)\n", token.Expiry.Format(time.RFC3339))
-		}
+		*allGood = false
+		return nil
 	}
 
-	// Check rules and labels
+	if token.Expiry.Before(time.Now()) {
+		fmt.Println("⚠ Expired (will refresh on next run)")
+	} else {
+		fmt.Printf("✓ Valid (expires: %s)\n", token.Expiry.Format(time.RFC3339))
+	}
+	return token
+}
+
+func checkEmbeddedData(allGood *bool) {
+	// Check rules
 	fmt.Print("Embedded rules: ")
 	if rulesInput == "" {
 		fmt.Println("✗ Not found")
-		allGood = false
+		*allGood = false
 	} else {
 		rules, err := parseRules(rulesInput)
 		if err != nil {
 			fmt.Printf("✗ Invalid: %v\n", err)
-			allGood = false
+			*allGood = false
 		} else {
 			enabledCount := 0
 			for _, r := range rules {
@@ -86,55 +106,58 @@ func runStatus(logger *slog.Logger, configPath string) error {
 		}
 	}
 
+	// Check labels
 	fmt.Print("Embedded labels: ")
 	if labelsInput == "" {
 		fmt.Println("✗ Not found")
-		allGood = false
+		*allGood = false
 	} else {
 		var labels map[string]any
 		if err := json.Unmarshal([]byte(labelsInput), &labels); err != nil {
 			fmt.Printf("✗ Invalid: %v\n", err)
-			allGood = false
+			*allGood = false
 		} else {
 			fmt.Printf("✓ %d labels\n", len(labels))
 		}
 	}
+}
 
-	// If we have valid credentials, test API connectivity
-	if cfg != nil && token != nil {
-		fmt.Println()
-		fmt.Println("API Connectivity:")
+func checkAPIConnectivity(secretsPath string, allGood *bool) {
+	fmt.Println()
+	fmt.Println("API Connectivity:")
 
-		httpClient, err := client.New(
-			secretsPath,
-			gmail.GmailReadonlyScope,
-			gmail.GmailModifyScope,
-			sheets.SpreadsheetsScope,
-		)
-		if err != nil {
-			fmt.Printf("  OAuth client: ✗ %v\n", err)
-			allGood = false
-		} else {
-			// Test Gmail API
-			fmt.Print("  Gmail API: ")
-			if err := testGmailAPI(httpClient); err != nil {
-				fmt.Printf("✗ %v\n", err)
-				allGood = false
-			} else {
-				fmt.Println("✓ Connected")
-			}
-
-			// Test Sheets API
-			fmt.Print("  Sheets API: ")
-			if err := testSheetsAPI(httpClient); err != nil {
-				fmt.Printf("✗ %v\n", err)
-				allGood = false
-			} else {
-				fmt.Println("✓ Connected")
-			}
-		}
+	httpClient, err := client.New(
+		secretsPath,
+		gmail.GmailReadonlyScope,
+		gmail.GmailModifyScope,
+		sheets.SpreadsheetsScope,
+	)
+	if err != nil {
+		fmt.Printf("  OAuth client: ✗ %v\n", err)
+		*allGood = false
+		return
 	}
 
+	// Test Gmail API
+	fmt.Print("  Gmail API: ")
+	if err := testGmailAPI(httpClient); err != nil {
+		fmt.Printf("✗ %v\n", err)
+		*allGood = false
+	} else {
+		fmt.Println("✓ Connected")
+	}
+
+	// Test Sheets API
+	fmt.Print("  Sheets API: ")
+	if err := testSheetsAPI(httpClient); err != nil {
+		fmt.Printf("✗ %v\n", err)
+		*allGood = false
+	} else {
+		fmt.Println("✓ Connected")
+	}
+}
+
+func printFinalStatus(allGood bool) {
 	fmt.Println()
 	if allGood {
 		fmt.Println("Status: ✓ Ready to run")
@@ -145,8 +168,6 @@ func runStatus(logger *slog.Logger, configPath string) error {
 		fmt.Println()
 		fmt.Println("Fix the issues above, then run 'expensor status' again.")
 	}
-
-	return nil
 }
 
 func checkConfig(configPath string) (*config.Config, error) {

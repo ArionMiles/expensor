@@ -73,39 +73,52 @@ func (w *Writer) Write(ctx context.Context, in <-chan *api.TransactionDetails) e
 	for {
 		select {
 		case <-ctx.Done():
-			w.logger.Info("buffered writer stopping, flushing remaining buffer")
-			if err := w.flush(); err != nil {
-				w.logger.Error("failed to flush on shutdown", "error", err)
-			}
-			return ctx.Err()
-
+			return w.handleShutdown()
 		case <-ticker.C:
-			if err := w.flush(); err != nil {
-				w.logger.Error("failed to flush on interval", "error", err)
-			}
-
+			w.handleTimerFlush()
 		case transaction, ok := <-in:
-			if !ok {
-				w.logger.Info("input channel closed, flushing remaining buffer")
-				if err := w.flush(); err != nil {
-					w.logger.Error("failed to flush on close", "error", err)
-					return err
-				}
-				return nil
-			}
-
-			w.mu.Lock()
-			w.buffer = append(w.buffer, transaction)
-			shouldFlush := len(w.buffer) >= w.config.BatchSize
-			w.mu.Unlock()
-
-			if shouldFlush {
-				if err := w.flush(); err != nil {
-					w.logger.Error("failed to flush on batch size", "error", err)
-				}
+			if done, err := w.handleTransaction(transaction, ok); done {
+				return err
 			}
 		}
 	}
+}
+
+func (w *Writer) handleShutdown() error {
+	w.logger.Info("buffered writer stopping, flushing remaining buffer")
+	if err := w.flush(); err != nil {
+		w.logger.Error("failed to flush on shutdown", "error", err)
+	}
+	return context.Canceled
+}
+
+func (w *Writer) handleTimerFlush() {
+	if err := w.flush(); err != nil {
+		w.logger.Error("failed to flush on interval", "error", err)
+	}
+}
+
+func (w *Writer) handleTransaction(transaction *api.TransactionDetails, ok bool) (bool, error) {
+	if !ok {
+		w.logger.Info("input channel closed, flushing remaining buffer")
+		if err := w.flush(); err != nil {
+			w.logger.Error("failed to flush on close", "error", err)
+			return true, err
+		}
+		return true, nil
+	}
+
+	w.mu.Lock()
+	w.buffer = append(w.buffer, transaction)
+	shouldFlush := len(w.buffer) >= w.config.BatchSize
+	w.mu.Unlock()
+
+	if shouldFlush {
+		if err := w.flush(); err != nil {
+			w.logger.Error("failed to flush on batch size", "error", err)
+		}
+	}
+	return false, nil
 }
 
 // flush writes all buffered transactions using the flusher function.

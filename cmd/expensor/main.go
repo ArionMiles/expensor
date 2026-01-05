@@ -57,7 +57,7 @@ func main() {
 	case "setup":
 		err = setupCmd(logger, os.Args[2:])
 	case "status":
-		err = statusCmd(logger, os.Args[2:])
+		err = statusCmd(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", cmd)
 		fmt.Print(usage)
@@ -94,12 +94,12 @@ func setupCmd(logger *slog.Logger, args []string) error {
 }
 
 // statusCmd checks configuration and authentication status
-func statusCmd(logger *slog.Logger, args []string) error {
+func statusCmd(args []string) error {
 	fs := flag.NewFlagSet("status", flag.ExitOnError)
 	configPath := fs.String("config", "config.json", "Path to configuration file")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	return runStatus(logger, *configPath)
+	return runStatus(*configPath)
 }

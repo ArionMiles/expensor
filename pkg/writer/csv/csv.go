@@ -41,7 +41,7 @@ func New(cfg Config, logger *slog.Logger) (*Writer, error) {
 	}
 
 	// Create or open file
-	file, err := os.OpenFile(cfg.FilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	file, err := os.OpenFile(cfg.FilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("opening csv file: %w", err)
 	}
@@ -56,13 +56,17 @@ func New(cfg Config, logger *slog.Logger) (*Writer, error) {
 	// Write headers if file is new/empty
 	stat, err := file.Stat()
 	if err != nil {
-		file.Close()
+		if closeErr := file.Close(); closeErr != nil {
+			return nil, fmt.Errorf("stat csv file: %w (close error: %w)", err, closeErr)
+		}
 		return nil, fmt.Errorf("stat csv file: %w", err)
 	}
 
 	if stat.Size() == 0 {
 		if err := w.writeHeaders(); err != nil {
-			file.Close()
+			if closeErr := file.Close(); closeErr != nil {
+				return nil, fmt.Errorf("writing headers: %w (close error: %w)", err, closeErr)
+			}
 			return nil, fmt.Errorf("writing headers: %w", err)
 		}
 	}

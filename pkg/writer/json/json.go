@@ -99,7 +99,7 @@ func (w *Writer) flushBatch(transactions []*api.TransactionDetails) error {
 		return fmt.Errorf("marshaling json: %w", err)
 	}
 
-	if err := os.WriteFile(w.filePath, data, 0o644); err != nil {
+	if err := os.WriteFile(w.filePath, data, 0o600); err != nil {
 		return fmt.Errorf("writing json file: %w", err)
 	}
 
