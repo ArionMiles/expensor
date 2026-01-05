@@ -4,9 +4,7 @@ go 1.25.5
 
 require (
 	github.com/avast/retry-go v3.0.0+incompatible
-	github.com/knadh/koanf/parsers/json v0.1.0
 	github.com/knadh/koanf/providers/env v1.1.0
-	github.com/knadh/koanf/providers/file v0.1.0
 	github.com/knadh/koanf/v2 v2.1.1
 	golang.org/x/oauth2 v0.30.0
 	google.golang.org/api v0.239.0
