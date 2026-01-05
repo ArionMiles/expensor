@@ -38,18 +38,6 @@ This project follows the standard open source code of conduct. Please be respect
    git remote add upstream https://github.com/ArionMiles/expensor.git
    ```
 
-### Install Development Tools
-
-```bash
-# Install linters and formatters
-task install-tools
-```
-
-This installs:
-- `golangci-lint` - Go linter
-- `gofumpt` - Stricter gofmt
-- `gci` - Import formatter
-
 ## Development Workflow
 
 ### 1. Create a Branch
