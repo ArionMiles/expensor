@@ -37,7 +37,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
 RUN ./expensor --help
 
 # Stage 2: Runtime stage
-FROM alpine:3.21
+FROM alpine:3.23
 
 # Install runtime dependencies
 RUN apk add --no-cache \
