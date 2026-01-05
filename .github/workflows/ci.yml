@@ -22,10 +22,17 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
+      - name: Extract golangci-lint version from go.mod
+        id: golangci-version
+        run: |
+          VERSION=$(grep 'github.com/golangci/golangci-lint ' go.mod | sed 's/.*golangci-lint //' | cut -d' ' -f1)
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.62.2
+          only-new-issues: true
+          version: ${{ steps.golangci-version.outputs.version }}
           args: >-
             --config=.golangci-prod.toml
             --new-from-rev=origin/main
@@ -44,7 +51,7 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Install Task
-        uses: arduino/setup-task@v2
+        uses: go-task/setup-task@v1
         with:
           version: 3.x
 
