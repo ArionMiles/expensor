@@ -35,7 +35,6 @@ jobs:
           version: ${{ steps.golangci-version.outputs.version }}
           args: >-
             --config=.golangci-prod.toml
-            --new-from-rev=origin/main
             --max-same-issues=0
             --max-issues-per-linter=0
 
