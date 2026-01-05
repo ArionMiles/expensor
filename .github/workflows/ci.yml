@@ -25,7 +25,7 @@ jobs:
       - name: Extract golangci-lint version from go.mod
         id: golangci-version
         run: |
-          VERSION=$(grep 'github.com/golangci/golangci-lint ' go.mod | sed 's/.*golangci-lint //' | cut -d' ' -f1)
+          VERSION=$(grep 'github.com/golangci/golangci-lint/v2 v' go.mod | sed 's/.*golangci-lint\/v2 //' | cut -d' ' -f1)
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: golangci-lint
@@ -35,6 +35,7 @@ jobs:
           version: ${{ steps.golangci-version.outputs.version }}
           args: >-
             --config=.golangci-prod.toml
+            --new-from-rev=origin/main
             --max-same-issues=0
             --max-issues-per-linter=0
 
