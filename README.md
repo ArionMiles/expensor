@@ -41,12 +41,138 @@ There's a few more items I need to work on to make it more polished and robust, 
 
 Might get around to finishing it off one of these days, haha!
   
-## How to run?
+## Installation
 
-- Follow the docs: https://developers.google.com/gmail/api/quickstart/go
-- Download secrets json file at the end of it all
-- Go back to enabled APIs and enable Sheets API
-- SheetID - if not given it will auto create
-- Run `go run cmd/expensor/main.go`
-- Once it creates the sheet, open the Expense Report sheet and copy paste the sheet ID into config.json
-- Stay alert bois, don't get hecked by Arion. To disable API later on go here: https://console.cloud.google.com/apis/api/gmail.googleapis.com/metrics?inv=1&invt=AbmIfQ&project=testgcm-4e7a8
+### Pre-built Binaries
+
+Download the latest release for your platform from the [releases page](https://github.com/ArionMiles/expensor/releases).
+
+### Docker
+
+Pull the latest Docker image from GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/arionmiles/expensor:latest
+```
+
+### From Source
+
+Requires Go 1.25.5 or later:
+
+```bash
+go install github.com/ArionMiles/expensor/cmd/expensor@latest
+```
+
+## Setup
+
+1. **Configure Google Cloud Project**
+   - Follow the [Gmail API Quickstart Guide](https://developers.google.com/gmail/api/quickstart/go)
+   - Download the OAuth credentials JSON file
+   - Enable both Gmail API and Google Sheets API for your project
+
+2. **Run Setup**
+   ```bash
+   expensor setup --secrets credentials.json
+   ```
+   This will guide you through OAuth authentication and save the token.
+
+3. **Configure Rules**
+   - Copy `cmd/expensor/config/rules.json` to your working directory
+   - Customize the rules to match your bank's email format
+   - See the rules section below for details
+
+4. **Run Expensor**
+   ```bash
+   expensor run --config config.json
+   ```
+
+## Running with Docker
+
+Create a `docker-compose.yml` file:
+
+```yaml
+version: '3.8'
+services:
+  expensor:
+    image: ghcr.io/arionmiles/expensor:latest
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./credentials.json:/app/credentials.json:ro
+      - ./token.json:/app/token.json
+    command: ["run", "--config", "/app/config.json"]
+    restart: unless-stopped
+```
+
+Run with:
+
+```bash
+docker-compose up -d
+```
+
+## Configuration
+
+The `config.json` file contains:
+
+- Gmail query patterns to find transaction emails
+- Regular expressions to extract transaction details
+- Google Sheets configuration
+- Polling interval and other settings
+
+Example:
+
+```json
+{
+  "gmail": {
+    "query": "from:alerts@bank.com subject:transaction"
+  },
+  "sheets": {
+    "spreadsheet_id": "your-sheet-id-here"
+  },
+  "rules": "rules.json"
+}
+```
+
+## Development
+
+This project uses [Task](https://taskfile.dev) for automation.
+
+### Setup Development Environment
+
+```bash
+# Install Task (if not already installed)
+brew install go-task/tap/go-task  # macOS
+# or
+sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b ~/.local/bin
+
+# Install development tools
+task install-tools
+```
+
+### Common Tasks
+
+```bash
+# Format code
+task fmt
+
+# Run linter (local config)
+task lint
+
+# Run tests
+task test
+
+# Run tests with coverage
+task test:cover
+
+# Build binary
+task build:binary
+
+# Build Docker image
+task build:docker
+
+# Run all CI checks
+task ci
+```
+
+## Expensor doesn't support/recognize transactions from my bank
+
+Open an issue with the email body content and I will take a look, and possibly add the rules into expensor so those are supported.

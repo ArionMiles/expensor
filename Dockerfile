@@ -1,0 +1,87 @@
+# Multi-stage Dockerfile for Expensor
+# Produces a minimal container image with only the binary and runtime dependencies
+
+# Stage 1: Build stage
+FROM golang:1.25.5-alpine AS builder
+
+# Declare build arguments for multi-platform builds
+ARG TARGETOS
+ARG TARGETARCH
+ARG VERSION=dev
+
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates tzdata
+
+# Set working directory
+WORKDIR /build
+
+# Copy go.mod and go.sum first for better caching
+COPY go.mod go.sum ./
+
+# Download dependencies (cached if go.mod/go.sum haven't changed)
+RUN go mod download && go mod verify
+
+# Copy source code
+COPY . .
+
+# Build the binary with optimizations
+# -trimpath: removes file system paths from the binary
+# -ldflags: linker flags for optimization
+#   -s: omit symbol table and debug info
+#   -w: omit DWARF symbol table
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+    go build -trimpath -ldflags="-s -w -X main.Version=${VERSION}" \
+    -o expensor ./cmd/expensor
+
+# Verify the binary was built correctly
+RUN ./expensor --help
+
+# Stage 2: Runtime stage
+FROM alpine:3.21
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    && update-ca-certificates
+
+# Create non-root user for running the application
+RUN addgroup -g 1000 expensor && \
+    adduser -D -u 1000 -G expensor expensor
+
+# Set working directory
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /build/expensor /app/expensor
+
+# Copy sample config (user should mount their own)
+COPY config.json /app/config.json.sample
+
+# Set proper ownership
+RUN chown -R expensor:expensor /app
+
+# Switch to non-root user
+USER expensor
+
+# Expose any ports if needed (not currently used by expensor)
+# EXPOSE 8080
+
+# Set environment variables
+ENV PATH="/app:${PATH}"
+
+# Health check (optional, can be customized based on your needs)
+# HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+#   CMD expensor status || exit 1
+
+# Default command
+ENTRYPOINT ["/app/expensor"]
+CMD ["run"]
+
+# Labels for metadata
+LABEL org.opencontainers.image.title="Expensor"
+LABEL org.opencontainers.image.description="Extract expense transactions from Gmail to Google Sheets"
+LABEL org.opencontainers.image.url="https://github.com/ArionMiles/expensor"
+LABEL org.opencontainers.image.source="https://github.com/ArionMiles/expensor"
+LABEL org.opencontainers.image.vendor="ArionMiles"
+LABEL org.opencontainers.image.licenses="MIT"

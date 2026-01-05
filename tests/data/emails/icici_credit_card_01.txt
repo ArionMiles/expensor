@@ -1,0 +1,7 @@
+Dear Customer,
+
+Your ICICI Bank Credit Card XX1234 has been used for a transaction of INR 1,234.56 at AMAZON on 15-Jan-2024 at 14:30:45.
+
+If you did not authorize this transaction, please call our customer care immediately.
+
+Thank you for banking with ICICI Bank.

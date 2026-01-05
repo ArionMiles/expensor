@@ -1,3 +1,4 @@
+// Package api defines the core interfaces and data structures for expensor.
 package api
 
 import (
@@ -5,22 +6,29 @@ import (
 	"regexp"
 )
 
-type ExpenseReader interface {
-	Read(ctx context.Context) error
-	Write(ctx context.Context) error
-}
-
-// TransactionDetails struct to store transaction details
+// TransactionDetails holds extracted transaction information.
 type TransactionDetails struct {
-	Amount       float64
-	Timestamp    string
-	MerchantInfo string
-	Category     string
-	// Need/Want/Investments
-	Bucket string
-	Source string
+	Amount       float64 `json:"amount"`
+	Timestamp    string  `json:"timestamp"`
+	MerchantInfo string  `json:"merchant_info"`
+	Category     string  `json:"category"`
+	// Bucket classifies the expense as Need/Want/Investment.
+	Bucket string `json:"bucket"`
+	Source string `json:"source"`
 }
 
+// Reader reads transactions from a source and sends them to the provided channel.
+// Implementations should close the channel when done or on error.
+type Reader interface {
+	Read(ctx context.Context, out chan<- *TransactionDetails) error
+}
+
+// Writer consumes transactions from a channel and writes them to a destination.
+type Writer interface {
+	Write(ctx context.Context, in <-chan *TransactionDetails) error
+}
+
+// Rule defines an email matching rule for transaction extraction.
 type Rule struct {
 	Name         string
 	Query        string
@@ -30,7 +38,17 @@ type Rule struct {
 	Source       string
 }
 
+// Labels maps merchant names to their category and bucket classification.
 type Labels map[string]struct {
 	Category string `json:"category"`
 	Bucket   string `json:"bucket"`
+}
+
+// LabelLookup returns the category and bucket for a merchant.
+// Returns empty strings if the merchant is not found.
+func (l Labels) LabelLookup(merchant string) (category, bucket string) {
+	if val, exists := l[merchant]; exists {
+		return val.Category, val.Bucket
+	}
+	return "", ""
 }

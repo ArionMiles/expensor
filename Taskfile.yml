@@ -111,6 +111,34 @@ tasks:
     desc: Build the expensor binary.
     cmd: go build -v ./...
 
+  build:binary:
+    summary: Build optimized binary for current platform.
+    desc: Build a production-ready binary with version information.
+    vars:
+      VERSION:
+        sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
+    cmd: |
+      CGO_ENABLED=0 go build \
+        -trimpath \
+        -ldflags="-s -w -X main.Version={{.VERSION}}" \
+        -o bin/expensor \
+        ./cmd/expensor
+
+  build:docker:
+    summary: Build Docker image locally.
+    desc: Build multi-platform Docker image for testing.
+    vars:
+      VERSION:
+        sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
+      IMAGE_NAME: "expensor:{{.VERSION}}"
+    cmd: |
+      docker buildx build \
+        --platform linux/amd64,linux/arm64 \
+        --build-arg VERSION={{.VERSION}} \
+        -t {{.IMAGE_NAME}} \
+        --load \
+        .
+
   # CI
   ci:
     summary: Run all CI checks.
