@@ -69,14 +69,13 @@ tasks:
 
   build:docker:
     summary: Build Docker image locally.
-    desc: Build multi-platform Docker image for testing.
+    desc: Build Docker image for local platform.
     vars:
       VERSION:
         sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
       IMAGE_NAME: "expensor:{{.VERSION}}"
     cmd: |
       docker buildx build \
-        --platform linux/amd64,linux/arm64 \
         --build-arg VERSION={{.VERSION}} \
         -t {{.IMAGE_NAME}} \
         --load \

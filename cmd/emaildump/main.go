@@ -14,8 +14,7 @@ import (
 	"strings"
 	"time"
 
-	kJson "github.com/knadh/koanf/parsers/json"
-	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/v2"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
@@ -32,9 +31,9 @@ const dumpDir = "tests/data/dump"
 func main() {
 	logger := logging.Setup(logging.DefaultConfig())
 
-	// Load configuration
-	if err := k.Load(file.Provider("config.json"), kJson.Parser()); err != nil {
-		logger.Error("failed to load config", "error", err)
+	// Load configuration from environment variables
+	if err := k.Load(env.Provider("", ".", nil), nil); err != nil {
+		logger.Error("failed to load config from environment", "error", err)
 		os.Exit(1)
 	}
 
@@ -59,7 +58,7 @@ func main() {
 
 	// Create OAuth client
 	httpClient, err := client.New(
-		cfg.SecretsFilePath,
+		config.ClientSecretFile,
 		gmail.GmailReadonlyScope,
 	)
 	if err != nil {

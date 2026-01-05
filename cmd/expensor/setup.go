@@ -9,27 +9,26 @@ import (
 	"google.golang.org/api/sheets/v4"
 
 	"github.com/ArionMiles/expensor/pkg/client"
+	"github.com/ArionMiles/expensor/pkg/config"
 )
 
-const tokenFile = "token.json"
-
 // runSetup handles the OAuth setup flow.
-func runSetup(logger *slog.Logger, secretsPath string, force bool) error {
+func runSetup(logger *slog.Logger, force bool) error {
 	fmt.Println("=== Expensor Setup ===")
 	fmt.Println()
 
 	// Check if credentials file exists
-	if _, err := os.Stat(secretsPath); os.IsNotExist(err) {
+	if _, err := os.Stat(config.ClientSecretFile); os.IsNotExist(err) {
 		return fmt.Errorf("credentials file not found: %s\n\nTo get your credentials:\n"+
 			"1. Go to https://console.cloud.google.com/apis/credentials\n"+
 			"2. Create an OAuth 2.0 Client ID (Desktop application)\n"+
-			"3. Download the JSON file and save it as '%s'", secretsPath, secretsPath)
+			"3. Download the JSON file and save it as '%s'", config.ClientSecretFile, config.ClientSecretFile)
 	}
 
 	// Check if already authenticated
 	if !force {
-		if _, err := os.Stat(tokenFile); err == nil {
-			fmt.Printf("Already authenticated! Token file exists: %s\n", tokenFile)
+		if _, err := os.Stat(client.TokenFile); err == nil {
+			fmt.Printf("Already authenticated! Token file exists: %s\n", client.TokenFile)
 			fmt.Println()
 			fmt.Println("To re-authenticate, run: expensor setup --force")
 			return nil
@@ -38,7 +37,7 @@ func runSetup(logger *slog.Logger, secretsPath string, force bool) error {
 
 	// Remove existing token if force flag is set
 	if force {
-		if err := os.Remove(tokenFile); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(client.TokenFile); err != nil && !os.IsNotExist(err) {
 			logger.Warn("failed to remove existing token", "error", err)
 		}
 		fmt.Println("Forcing re-authentication...")
@@ -56,7 +55,7 @@ func runSetup(logger *slog.Logger, secretsPath string, force bool) error {
 
 	// Trigger OAuth flow by creating client
 	_, err := client.New(
-		secretsPath,
+		config.ClientSecretFile,
 		gmail.GmailReadonlyScope,
 		gmail.GmailModifyScope,
 		sheets.SpreadsheetsScope,
@@ -68,10 +67,10 @@ func runSetup(logger *slog.Logger, secretsPath string, force bool) error {
 	fmt.Println()
 	fmt.Println("=== Setup Complete ===")
 	fmt.Println()
-	fmt.Printf("Token saved to: %s\n", tokenFile)
+	fmt.Printf("Token saved to: %s\n", client.TokenFile)
 	fmt.Println()
 	fmt.Println("Next steps:")
-	fmt.Println("  1. Create a config.json file (see README for format)")
+	fmt.Println("  1. Set environment variables (see README for details)")
 	fmt.Println("  2. Run 'expensor run' to start tracking expenses")
 	fmt.Println()
 

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"time"
 
@@ -28,16 +29,26 @@ const (
 	serverTimeout = 5 * time.Minute
 )
 
-// New creates a new HTTP client with OAuth2 credentials.
+const (
+	// TokenFile is the path to the OAuth token file.
+	TokenFile = "data/token.json"
+)
+
+// New creates a new HTTP client with OAuth2 credentials from a file path.
 func New(secretFilePath string, scope ...string) (*http.Client, error) {
 	b, err := os.ReadFile(secretFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("reading client secret file: %w", err)
 	}
 
-	config, err := google.ConfigFromJSON(b, scope...)
+	return NewFromJSON(b, scope...)
+}
+
+// NewFromJSON creates a new HTTP client with OAuth2 credentials from JSON content.
+func NewFromJSON(secretJSON []byte, scope ...string) (*http.Client, error) {
+	config, err := google.ConfigFromJSON(secretJSON, scope...)
 	if err != nil {
-		return nil, fmt.Errorf("parsing client secret file: %w", err)
+		return nil, fmt.Errorf("parsing client secret: %w", err)
 	}
 
 	client, err := getClient(config)
@@ -49,15 +60,14 @@ func New(secretFilePath string, scope ...string) (*http.Client, error) {
 }
 
 func getClient(config *oauth2.Config) (*http.Client, error) {
-	tokFile := "token.json"
-	tok, err := tokenFromFile(tokFile)
+	tok, err := tokenFromFile(TokenFile)
 	if err != nil {
 		slog.Info("no existing token found, initiating OAuth flow")
 		tok, err = getTokenFromWeb(config)
 		if err != nil {
 			return nil, err
 		}
-		if err := saveToken(tokFile, tok); err != nil {
+		if err := saveToken(TokenFile, tok); err != nil {
 			slog.Error("failed to save token", "error", err)
 		}
 	}
@@ -227,6 +237,13 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 
 func saveToken(path string, token *oauth2.Token) error {
 	slog.Info("saving credential file", "path", path)
+
+	// Ensure directory exists
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("creating token directory: %w", err)
+	}
+
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("creating token file: %w", err)

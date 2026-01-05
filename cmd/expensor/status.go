@@ -8,8 +8,7 @@ import (
 	"os"
 	"time"
 
-	kJson "github.com/knadh/koanf/parsers/json"
-	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/v2"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/gmail/v1"
@@ -21,18 +20,19 @@ import (
 )
 
 // runStatus checks the configuration and authentication status.
-func runStatus(configPath string) error {
+func runStatus() error {
 	fmt.Println("=== Expensor Status ===")
 	fmt.Println()
 
 	allGood := true
 
-	cfg, secretsPath := checkConfigAndCredentials(configPath, &allGood)
+	checkEnvConfig(&allGood)
+	credentialsOk := checkCredentialsFile(&allGood)
 	token := checkTokenStatus(&allGood)
 	checkEmbeddedData(&allGood)
 
-	if cfg != nil && token != nil {
-		checkAPIConnectivity(secretsPath, &allGood)
+	if credentialsOk && token != nil {
+		checkAPIConnectivity(&allGood)
 	}
 
 	printFinalStatus(allGood)
@@ -40,36 +40,51 @@ func runStatus(configPath string) error {
 	return nil
 }
 
-func checkConfigAndCredentials(configPath string, allGood *bool) (*config.Config, string) {
-	// Check config file
-	fmt.Printf("Config file (%s): ", configPath)
-	cfg, err := checkConfig(configPath)
-	if err != nil {
-		fmt.Printf("✗ %v\n", err)
-		*allGood = false
+func checkEnvConfig(allGood *bool) *config.Config {
+	fmt.Println("Environment Variables:")
+
+	k := koanf.New(".")
+	_ = k.Load(env.Provider("", ".", nil), nil)
+
+	var cfg config.Config
+	_ = k.UnmarshalWithConf("", &cfg, koanf.UnmarshalConf{Tag: "koanf", FlatPaths: true})
+
+	// Check GSHEETS_ID or GSHEETS_TITLE
+	fmt.Print("  GSHEETS_ID: ")
+	if cfg.GSheetsID == "" {
+		fmt.Println("✗ Not set")
 	} else {
-		fmt.Println("✓ Found")
+		fmt.Printf("✓ %s\n", cfg.GSheetsID)
 	}
 
-	// Check credentials file
-	secretsPath := "credentials.json"
-	if cfg != nil && cfg.SecretsFilePath != "" {
-		secretsPath = cfg.SecretsFilePath
-	}
-	fmt.Printf("Credentials file (%s): ", secretsPath)
-	if _, err := os.Stat(secretsPath); os.IsNotExist(err) {
-		fmt.Println("✗ Not found")
-		*allGood = false
+	fmt.Print("  GSHEETS_TITLE: ")
+	if cfg.GSheetsTitle == "" {
+		fmt.Println("✗ Not set")
 	} else {
-		fmt.Println("✓ Found")
+		fmt.Printf("✓ %s\n", cfg.GSheetsTitle)
 	}
 
-	return cfg, secretsPath
+	if cfg.GSheetsID == "" && cfg.GSheetsTitle == "" {
+		fmt.Println("  ⚠ Either GSHEETS_ID or GSHEETS_TITLE is required")
+		*allGood = false
+	}
+
+	// Check GSHEETS_NAME
+	fmt.Print("  GSHEETS_NAME: ")
+	if cfg.GSheetsName == "" {
+		fmt.Println("✗ Not set (required)")
+		*allGood = false
+	} else {
+		fmt.Printf("✓ %s\n", cfg.GSheetsName)
+	}
+
+	return &cfg
 }
 
 func checkTokenStatus(allGood *bool) *oauth2.Token {
-	fmt.Printf("OAuth token (%s): ", tokenFile)
-	token, err := checkToken(tokenFile)
+	fmt.Println()
+	fmt.Printf("OAuth token (%s): ", client.TokenFile)
+	token, err := checkToken(client.TokenFile)
 	if err != nil {
 		fmt.Printf("✗ %v\n", err)
 		*allGood = false
@@ -85,6 +100,7 @@ func checkTokenStatus(allGood *bool) *oauth2.Token {
 }
 
 func checkEmbeddedData(allGood *bool) {
+	fmt.Println()
 	// Check rules
 	fmt.Print("Embedded rules: ")
 	if rulesInput == "" {
@@ -122,12 +138,24 @@ func checkEmbeddedData(allGood *bool) {
 	}
 }
 
-func checkAPIConnectivity(secretsPath string, allGood *bool) {
+func checkCredentialsFile(allGood *bool) bool {
+	fmt.Println()
+	fmt.Printf("Credentials file (%s): ", config.ClientSecretFile)
+	if _, err := os.Stat(config.ClientSecretFile); os.IsNotExist(err) {
+		fmt.Println("✗ Not found")
+		*allGood = false
+		return false
+	}
+	fmt.Println("✓ Found")
+	return true
+}
+
+func checkAPIConnectivity(allGood *bool) {
 	fmt.Println()
 	fmt.Println("API Connectivity:")
 
 	httpClient, err := client.New(
-		secretsPath,
+		config.ClientSecretFile,
 		gmail.GmailReadonlyScope,
 		gmail.GmailModifyScope,
 		sheets.SpreadsheetsScope,
@@ -168,24 +196,6 @@ func printFinalStatus(allGood bool) {
 		fmt.Println()
 		fmt.Println("Fix the issues above, then run 'expensor status' again.")
 	}
-}
-
-func checkConfig(configPath string) (*config.Config, error) {
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("not found")
-	}
-
-	k := koanf.New(".")
-	if err := k.Load(file.Provider(configPath), kJson.Parser()); err != nil {
-		return nil, fmt.Errorf("invalid JSON: %w", err)
-	}
-
-	var cfg config.Config
-	if err := k.UnmarshalWithConf("", &cfg, koanf.UnmarshalConf{Tag: "koanf", FlatPaths: true}); err != nil {
-		return nil, fmt.Errorf("invalid format: %w", err)
-	}
-
-	return &cfg, nil
 }
 
 func checkToken(tokenPath string) (*oauth2.Token, error) {

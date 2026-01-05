@@ -73,33 +73,30 @@ func main() {
 // runCmd starts the expense tracking daemon
 func runCmd(logger *slog.Logger, args []string) error {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
-	configPath := fs.String("config", "config.json", "Path to configuration file")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	return runExpensor(logger, *configPath)
+	return runExpensor(logger)
 }
 
 // setupCmd handles OAuth setup
 func setupCmd(logger *slog.Logger, args []string) error {
 	fs := flag.NewFlagSet("setup", flag.ExitOnError)
-	secretsPath := fs.String("secrets", "credentials.json", "Path to Google OAuth credentials file")
 	force := fs.Bool("force", false, "Force re-authentication even if token exists")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	return runSetup(logger, *secretsPath, *force)
+	return runSetup(logger, *force)
 }
 
 // statusCmd checks configuration and authentication status
 func statusCmd(args []string) error {
 	fs := flag.NewFlagSet("status", flag.ExitOnError)
-	configPath := fs.String("config", "config.json", "Path to configuration file")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	return runStatus(*configPath)
+	return runStatus()
 }

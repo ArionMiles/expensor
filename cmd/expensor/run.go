@@ -12,8 +12,7 @@ import (
 	"regexp"
 	"syscall"
 
-	kJson "github.com/knadh/koanf/parsers/json"
-	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/v2"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/sheets/v4"
@@ -33,17 +32,25 @@ var (
 )
 
 // runExpensor starts the expense tracking daemon.
-func runExpensor(logger *slog.Logger, configPath string) error {
+func runExpensor(logger *slog.Logger) error {
 	k := koanf.New(".")
 
-	// Load configuration
-	if err := k.Load(file.Provider(configPath), kJson.Parser()); err != nil {
-		return fmt.Errorf("loading config: %w", err)
+	// Load configuration from environment variables
+	if err := k.Load(env.Provider("", ".", nil), nil); err != nil {
+		return fmt.Errorf("loading config from environment: %w", err)
 	}
 
 	var cfg config.Config
 	if err := k.UnmarshalWithConf("", &cfg, koanf.UnmarshalConf{Tag: "koanf", FlatPaths: true}); err != nil {
 		return fmt.Errorf("unmarshaling config: %w", err)
+	}
+
+	// Validate required configuration
+	if cfg.GSheetsName == "" {
+		return fmt.Errorf("GSHEETS_NAME environment variable is required")
+	}
+	if cfg.GSheetsID == "" && cfg.GSheetsTitle == "" {
+		return fmt.Errorf("either GSHEETS_ID or GSHEETS_TITLE environment variable is required")
 	}
 
 	// Parse rules and labels
@@ -62,12 +69,12 @@ func runExpensor(logger *slog.Logger, configPath string) error {
 	logger.Info("configuration loaded",
 		"rules_count", len(cfg.Rules),
 		"labels_count", len(cfg.Labels),
-		"sheet_title", cfg.SheetTitle,
+		"sheet_title", cfg.GSheetsTitle,
 	)
 
 	// Create OAuth client
 	httpClient, err := client.New(
-		cfg.SecretsFilePath,
+		config.ClientSecretFile,
 		gmail.GmailReadonlyScope,
 		gmail.GmailModifyScope,
 		sheets.SpreadsheetsScope,
@@ -86,9 +93,9 @@ func runExpensor(logger *slog.Logger, configPath string) error {
 	}
 
 	writer, err := sheetswriter.New(httpClient, sheetswriter.Config{
-		SheetTitle: cfg.SheetTitle,
-		SheetID:    cfg.SheetID,
-		SheetName:  cfg.SheetName,
+		SheetTitle: cfg.GSheetsTitle,
+		SheetID:    cfg.GSheetsID,
+		SheetName:  cfg.GSheetsName,
 	}, logger.With("component", "sheets_writer"))
 	if err != nil {
 		return fmt.Errorf("creating sheets writer: %w", err)
