@@ -377,9 +377,8 @@ go test -race ./...
 
 1. Run all checks: `task ci`
 2. Update documentation if needed
-3. Add entry to `CHANGELOG.md` (Unreleased section)
-4. Ensure all tests pass
-5. Rebase on latest main
+3. Ensure all tests pass
+4. Rebase on latest main
 
 ### PR Description
 
@@ -410,8 +409,7 @@ Use the provided template and include:
 ### Before Creating an Issue
 
 1. Search existing issues to avoid duplicates
-2. Check if it's a known issue in `CHANGELOG.md`
-3. Try the latest version
+2. Try the latest version
 
 ### Issue Templates
 
@@ -476,6 +474,5 @@ By contributing, you agree that your contributions will be licensed under the sa
 Contributors are recognized in:
 - GitHub contributors list
 - Release notes
-- `CHANGELOG.md`
 
 Thank you for contributing to Expensor!
