@@ -107,6 +107,12 @@ func (w *Writer) initSpreadsheet(ctx context.Context, cfg Config) (*sheets.Sprea
 		spreadsheet, err := w.client.Spreadsheets.Get(cfg.SheetID).Context(ctx).Do()
 		if err == nil {
 			w.logger.Info("using existing spreadsheet", "title", spreadsheet.Properties.Title, "id", cfg.SheetID)
+
+			// Ensure the sheet tab exists and has headers
+			if err := w.ensureSheetAndHeaders(ctx, spreadsheet, cfg.SheetName); err != nil {
+				return nil, fmt.Errorf("ensuring sheet and headers: %w", err)
+			}
+
 			return spreadsheet, nil
 		}
 		w.logger.Warn("failed to get spreadsheet, will create new one", "id", cfg.SheetID, "error", err)
@@ -116,6 +122,13 @@ func (w *Writer) initSpreadsheet(ctx context.Context, cfg Config) (*sheets.Sprea
 	spreadsheet, err := w.client.Spreadsheets.Create(&sheets.Spreadsheet{
 		Properties: &sheets.SpreadsheetProperties{
 			Title: cfg.SheetTitle,
+		},
+		Sheets: []*sheets.Sheet{
+			{
+				Properties: &sheets.SheetProperties{
+					Title: cfg.SheetName,
+				},
+			},
 		},
 	}).Context(ctx).Do()
 	if err != nil {
@@ -132,11 +145,67 @@ func (w *Writer) initSpreadsheet(ctx context.Context, cfg Config) (*sheets.Sprea
 	return spreadsheet, nil
 }
 
+// ensureSheetAndHeaders ensures the sheet tab exists and has proper headers.
+func (w *Writer) ensureSheetAndHeaders(ctx context.Context, spreadsheet *sheets.Spreadsheet, sheetName string) error {
+	// Check if sheet tab exists
+	sheetExists := false
+	for _, sheet := range spreadsheet.Sheets {
+		if sheet.Properties.Title == sheetName {
+			sheetExists = true
+			w.logger.Info("sheet tab exists", "sheet_name", sheetName)
+			break
+		}
+	}
+
+	// Create sheet tab if it doesn't exist
+	if !sheetExists {
+		w.logger.Info("creating sheet tab", "sheet_name", sheetName)
+		req := sheets.Request{
+			AddSheet: &sheets.AddSheetRequest{
+				Properties: &sheets.SheetProperties{
+					Title: sheetName,
+				},
+			},
+		}
+
+		batchReq := &sheets.BatchUpdateSpreadsheetRequest{
+			Requests: []*sheets.Request{&req},
+		}
+
+		_, err := w.client.Spreadsheets.BatchUpdate(spreadsheet.SpreadsheetId, batchReq).Context(ctx).Do()
+		if err != nil {
+			return fmt.Errorf("creating sheet tab: %w", err)
+		}
+		w.logger.Info("created sheet tab", "sheet_name", sheetName)
+	}
+
+	// Check if headers exist
+	headerRange := fmt.Sprintf("%s!A1:G1", sheetName)
+	resp, err := w.client.Spreadsheets.Values.Get(spreadsheet.SpreadsheetId, headerRange).Context(ctx).Do()
+	if err != nil {
+		w.logger.Warn("failed to read headers, will write them", "error", err)
+	}
+
+	headersExist := resp != nil && len(resp.Values) > 0 && len(resp.Values[0]) > 0
+	if headersExist {
+		w.logger.Info("headers already exist")
+		return nil
+	}
+
+	// Write headers if they don't exist
+	w.logger.Info("writing headers to sheet")
+	if err := w.writeHeaders(ctx, spreadsheet.SpreadsheetId, sheetName); err != nil {
+		return fmt.Errorf("writing headers: %w", err)
+	}
+
+	return nil
+}
+
 func (w *Writer) writeHeaders(ctx context.Context, spreadsheetID, sheetName string) error {
 	headerRange := fmt.Sprintf("%s!A1:G1", sheetName)
 	headerReq := sheets.ValueRange{
 		Values: [][]any{
-			{"Date/Time", "Timestamp", "Expense", "Amount", "Category", "Needs/Wants/Investments", "Source"},
+			{"Date/Time", "Expense", "Amount", "Category", "Needs/Wants/Investments", "Source"},
 		},
 	}
 
@@ -153,9 +222,9 @@ func (w *Writer) writeHeaders(ctx context.Context, spreadsheetID, sheetName stri
 }
 
 // Write consumes transactions from the input channel and writes them to Google Sheets.
-func (w *Writer) Write(ctx context.Context, in <-chan *api.TransactionDetails) error {
+func (w *Writer) Write(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error {
 	w.logger.Info("sheets writer started")
-	return w.buffered.Write(ctx, in)
+	return w.buffered.Write(ctx, in, ackChan)
 }
 
 // flushBatch writes a batch of transactions to Google Sheets in a single API call.

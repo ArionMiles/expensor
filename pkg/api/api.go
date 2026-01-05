@@ -15,17 +15,21 @@ type TransactionDetails struct {
 	// Bucket classifies the expense as Need/Want/Investment.
 	Bucket string `json:"bucket"`
 	Source string `json:"source"`
+	// MessageID is the email message ID (used for marking as read after successful write).
+	MessageID string `json:"-"`
 }
 
 // Reader reads transactions from a source and sends them to the provided channel.
 // Implementations should close the channel when done or on error.
+// The ackChan is used to receive acknowledgments of successfully written transactions.
 type Reader interface {
-	Read(ctx context.Context, out chan<- *TransactionDetails) error
+	Read(ctx context.Context, out chan<- *TransactionDetails, ackChan <-chan string) error
 }
 
 // Writer consumes transactions from a channel and writes them to a destination.
+// Successfully written transaction message IDs are sent to the ackChan.
 type Writer interface {
-	Write(ctx context.Context, in <-chan *TransactionDetails) error
+	Write(ctx context.Context, in <-chan *TransactionDetails, ackChan chan<- string) error
 }
 
 // Rule defines an email matching rule for transaction extraction.

@@ -81,8 +81,8 @@ func (w *Writer) loadExisting() error {
 }
 
 // Write consumes transactions from the input channel and writes them to JSON.
-func (w *Writer) Write(ctx context.Context, in <-chan *api.TransactionDetails) error {
-	return w.buffered.Write(ctx, in)
+func (w *Writer) Write(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error {
+	return w.buffered.Write(ctx, in, ackChan)
 }
 
 // flushBatch appends a batch of transactions and writes to the JSON file.

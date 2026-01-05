@@ -65,8 +65,12 @@ func New(httpClient *http.Client, cfg Config, logger *slog.Logger) (*Reader, err
 
 // Read continuously evaluates rules and sends extracted transactions to the output channel.
 // It runs until the context is canceled.
-func (r *Reader) Read(ctx context.Context, out chan<- *api.TransactionDetails) error {
+// Emails are only marked as read after receiving acknowledgment via ackChan.
+func (r *Reader) Read(ctx context.Context, out chan<- *api.TransactionDetails, ackChan <-chan string) error {
 	defer close(out)
+
+	// Start goroutine to mark messages as read when acknowledged
+	go r.handleAcknowledgments(ctx, ackChan)
 
 	ticker := time.NewTicker(r.interval)
 	defer ticker.Stop()
@@ -82,6 +86,34 @@ func (r *Reader) Read(ctx context.Context, out chan<- *api.TransactionDetails) e
 		case <-ticker.C:
 			r.evaluateRules(ctx, out)
 		}
+	}
+}
+
+// handleAcknowledgments marks emails as read when they're successfully written.
+func (r *Reader) handleAcknowledgments(ctx context.Context, ackChan <-chan string) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msgID, ok := <-ackChan:
+			if !ok {
+				r.logger.Info("acknowledgment channel closed")
+				return
+			}
+			r.markAsRead(ctx, msgID)
+		}
+	}
+}
+
+// markAsRead marks a message as read in Gmail.
+func (r *Reader) markAsRead(ctx context.Context, msgID string) {
+	_, err := r.client.Users.Messages.Modify("me", msgID, &gmail.ModifyMessageRequest{
+		RemoveLabelIds: []string{"UNREAD"},
+	}).Context(ctx).Do()
+	if err != nil {
+		r.logger.Warn("failed to mark message as read", "message_id", msgID, "error", err)
+	} else {
+		r.logger.Debug("marked message as read", "message_id", msgID)
 	}
 }
 
@@ -151,26 +183,22 @@ func (r *Reader) processMessage(ctx context.Context, msgID string, rule api.Rule
 	transaction := ExtractTransactionDetails(body, rule.Amount, rule.MerchantInfo, receivedTime)
 	transaction.Category, transaction.Bucket = r.labels.LabelLookup(transaction.MerchantInfo)
 	transaction.Source = rule.Source
+	transaction.MessageID = msgID // Store message ID for later acknowledgment
 
-	r.logger.Info("extracted transaction",
+	r.logger.Debug("extracted transaction",
 		"subject", subject,
 		"amount", transaction.Amount,
 		"merchant", transaction.MerchantInfo,
 		"category", transaction.Category,
+		"message_id", msgID,
 	)
 
 	// Send transaction to output channel
+	// Email will be marked as read only after successful write and acknowledgment
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case out <- transaction:
-	}
-
-	// Mark message as read
-	if _, err := r.client.Users.Messages.Modify("me", msgID, &gmail.ModifyMessageRequest{
-		RemoveLabelIds: []string{"UNREAD"},
-	}).Context(ctx).Do(); err != nil {
-		r.logger.Warn("failed to mark message as read", "message_id", msgID, "error", err)
 	}
 
 	return nil

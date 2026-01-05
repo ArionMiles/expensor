@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 )
 
 // Config holds logging configuration options.
@@ -18,11 +19,34 @@ type Config struct {
 }
 
 // DefaultConfig returns a default logging configuration suitable for development.
+// It reads the LOG_LEVEL environment variable to set the logging level.
+// Valid values: DEBUG, INFO, WARN, ERROR. Defaults to INFO.
 func DefaultConfig() Config {
+	level := slog.LevelInfo
+	if logLevel := os.Getenv("LOG_LEVEL"); logLevel != "" {
+		level = parseLogLevel(logLevel)
+	}
+
 	return Config{
-		Level:  slog.LevelInfo,
+		Level:  level,
 		JSON:   false,
 		Output: os.Stderr,
+	}
+}
+
+// parseLogLevel converts a string log level to slog.Level.
+func parseLogLevel(level string) slog.Level {
+	switch strings.ToUpper(level) {
+	case "DEBUG":
+		return slog.LevelDebug
+	case "INFO":
+		return slog.LevelInfo
+	case "WARN", "WARNING":
+		return slog.LevelWarn
+	case "ERROR":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
 	}
 }
 

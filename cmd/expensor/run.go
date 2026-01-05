@@ -113,18 +113,19 @@ func runExpensor(logger *slog.Logger) error {
 		cancel()
 	}()
 
-	// Create transaction channel
+	// Create transaction and acknowledgment channels
 	transactions := make(chan *api.TransactionDetails, 100)
+	ackChan := make(chan string, 100)
 
 	// Start writer in background
 	writerDone := make(chan error, 1)
 	go func() {
-		writerDone <- writer.Write(ctx, transactions)
+		writerDone <- writer.Write(ctx, transactions, ackChan)
 	}()
 
 	// Start reader (blocks until context is canceled)
 	logger.Info("starting expensor")
-	if err := reader.Read(ctx, transactions); err != nil && !errors.Is(err, context.Canceled) {
+	if err := reader.Read(ctx, transactions, ackChan); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("reader error", "error", err)
 	}
 

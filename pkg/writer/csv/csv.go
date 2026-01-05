@@ -95,9 +95,9 @@ func (w *Writer) writeHeaders() error {
 }
 
 // Write consumes transactions from the input channel and writes them to CSV.
-func (w *Writer) Write(ctx context.Context, in <-chan *api.TransactionDetails) error {
+func (w *Writer) Write(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error {
 	defer w.Close()
-	return w.buffered.Write(ctx, in)
+	return w.buffered.Write(ctx, in, ackChan)
 }
 
 // flushBatch writes a batch of transactions to the CSV file.

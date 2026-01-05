@@ -122,6 +122,7 @@ docker-compose up -d
 | `GSHEETS_NAME` | Yes | Name of the sheet/tab within the spreadsheet |
 | `GSHEETS_ID` | One of ID/Title | ID of an existing Google Spreadsheet |
 | `GSHEETS_TITLE` | One of ID/Title | Title for creating a new Google Spreadsheet |
+| `LOG_LEVEL` | No | Logging level: DEBUG, INFO (default), WARN, ERROR |
 
 ## Development
 

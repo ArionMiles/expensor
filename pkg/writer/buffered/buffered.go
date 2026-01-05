@@ -61,9 +61,10 @@ func New(flusher Flusher, cfg Config, logger *slog.Logger) *Writer {
 }
 
 // Write consumes transactions from the input channel and buffers them for batch writes.
-func (w *Writer) Write(ctx context.Context, in <-chan *api.TransactionDetails) error {
+func (w *Writer) Write(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error {
 	ticker := time.NewTicker(w.config.FlushInterval)
 	defer ticker.Stop()
+	defer close(ackChan)
 
 	w.logger.Info("buffered writer started",
 		"batch_size", w.config.BatchSize,
@@ -73,35 +74,35 @@ func (w *Writer) Write(ctx context.Context, in <-chan *api.TransactionDetails) e
 	for {
 		select {
 		case <-ctx.Done():
-			return w.handleShutdown()
+			return w.handleShutdown(ackChan)
 		case <-ticker.C:
-			w.handleTimerFlush()
+			w.handleTimerFlush(ackChan)
 		case transaction, ok := <-in:
-			if done, err := w.handleTransaction(transaction, ok); done {
+			if done, err := w.handleTransaction(transaction, ok, ackChan); done {
 				return err
 			}
 		}
 	}
 }
 
-func (w *Writer) handleShutdown() error {
+func (w *Writer) handleShutdown(ackChan chan<- string) error {
 	w.logger.Info("buffered writer stopping, flushing remaining buffer")
-	if err := w.flush(); err != nil {
+	if err := w.flush(ackChan); err != nil {
 		w.logger.Error("failed to flush on shutdown", "error", err)
 	}
 	return context.Canceled
 }
 
-func (w *Writer) handleTimerFlush() {
-	if err := w.flush(); err != nil {
+func (w *Writer) handleTimerFlush(ackChan chan<- string) {
+	if err := w.flush(ackChan); err != nil {
 		w.logger.Error("failed to flush on interval", "error", err)
 	}
 }
 
-func (w *Writer) handleTransaction(transaction *api.TransactionDetails, ok bool) (bool, error) {
+func (w *Writer) handleTransaction(transaction *api.TransactionDetails, ok bool, ackChan chan<- string) (bool, error) {
 	if !ok {
 		w.logger.Info("input channel closed, flushing remaining buffer")
-		if err := w.flush(); err != nil {
+		if err := w.flush(ackChan); err != nil {
 			w.logger.Error("failed to flush on close", "error", err)
 			return true, err
 		}
@@ -114,7 +115,7 @@ func (w *Writer) handleTransaction(transaction *api.TransactionDetails, ok bool)
 	w.mu.Unlock()
 
 	if shouldFlush {
-		if err := w.flush(); err != nil {
+		if err := w.flush(ackChan); err != nil {
 			w.logger.Error("failed to flush on batch size", "error", err)
 		}
 	}
@@ -122,7 +123,8 @@ func (w *Writer) handleTransaction(transaction *api.TransactionDetails, ok bool)
 }
 
 // flush writes all buffered transactions using the flusher function.
-func (w *Writer) flush() error {
+// On success, sends acknowledgments for each transaction's MessageID.
+func (w *Writer) flush(ackChan chan<- string) error {
 	w.mu.Lock()
 	if len(w.buffer) == 0 {
 		w.mu.Unlock()
@@ -138,10 +140,22 @@ func (w *Writer) flush() error {
 	w.logger.Debug("flushing buffer", "count", len(toFlush))
 
 	if err := w.flusher(toFlush); err != nil {
+		// On error, do NOT send acknowledgments - emails won't be marked as read
 		return err
 	}
 
 	w.logger.Info("flushed transactions", "count", len(toFlush))
+
+	// Send acknowledgments for successfully written transactions
+	// Must block to ensure all acknowledgments are sent - emails should only be marked
+	// as read after we confirm the write was successful
+	for _, transaction := range toFlush {
+		if transaction.MessageID != "" {
+			ackChan <- transaction.MessageID
+			w.logger.Debug("sent acknowledgment", "message_id", transaction.MessageID)
+		}
+	}
+
 	return nil
 }
 
