@@ -83,7 +83,7 @@ jobs:
             -trimpath \
             -ldflags="-s -w -X main.Version=${{ steps.version.outputs.VERSION }}" \
             -o dist/${{ matrix.output_name }} \
-            ./cmd/expensor
+            ./backend/cmd/server
 
       - name: Create archive
         run: |
@@ -218,7 +218,7 @@ jobs:
 
           ### From Source
           \`\`\`bash
-          go install github.com/ArionMiles/expensor/cmd/expensor@${VERSION}
+          go install github.com/ArionMiles/expensor/backend/cmd/server@${VERSION}
           \`\`\`
 
           ## Checksums

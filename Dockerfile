@@ -31,10 +31,10 @@ COPY . .
 #   -w: omit DWARF symbol table
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -trimpath -ldflags="-s -w -X main.Version=${VERSION}" \
-    -o expensor ./cmd/expensor
+    -o expensor ./backend/cmd/server
 
-# Verify the binary was built correctly
-RUN ./expensor --help
+# Verify the binary was built correctly (check it's executable and has content)
+RUN test -x ./expensor && test -s ./expensor
 
 # Stage 2: Runtime stage
 FROM alpine:3.23

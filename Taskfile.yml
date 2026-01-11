@@ -65,7 +65,7 @@ tasks:
         -trimpath \
         -ldflags="-s -w -X main.Version={{.VERSION}}" \
         -o bin/expensor \
-        ./cmd/expensor
+        ./backend/cmd/server
 
   build:docker:
     summary: Build Docker image locally.
@@ -80,6 +80,12 @@ tasks:
         -t {{.IMAGE_NAME}} \
         --load \
         .
+
+  # RUN
+  run:
+    summary: Start the backend server.
+    desc: Run the backend server for local development.
+    cmd: go run ./backend/cmd/server
 
   # CI
   ci:

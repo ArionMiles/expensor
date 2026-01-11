@@ -8,11 +8,11 @@ I've documented why exactly expensor works for me [on my blog](https://kanishk.i
 ## How does it work?
 Expensor is designed to 
 1. Periodically check my inbox
-2. Run the queries defined in my [rules](cmd/expensor/config/rules.json) to find emails of interest
+2. Run the queries defined in my [rules](backend/cmd/server/content/rules.json) to find emails of interest
 3. Extract transaction details like the amount, merchant name, date of transaction.
-4. Write them to a Google Sheet.
+4. Write them to a Google Sheet (or other configured outputs like PostgreSQL, CSV, JSON).
 5. Repeat
-  
+
 ## Installation
 
 ### Pre-built Binaries
@@ -32,7 +32,7 @@ docker pull ghcr.io/arionmiles/expensor:latest
 Requires Go 1.25.5 or later:
 
 ```bash
-go install github.com/ArionMiles/expensor/cmd/expensor@latest
+go install github.com/ArionMiles/expensor/backend/cmd/server@latest
 ```
 
 ## Setup
