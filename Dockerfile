@@ -2,7 +2,7 @@
 # Produces a minimal container image with only the binary and runtime dependencies
 
 # Stage 1: Build stage
-FROM golang:1.25.5-alpine AS builder
+FROM golang:1.25.6-alpine AS builder
 
 # Declare build arguments for multi-platform builds
 ARG TARGETOS
