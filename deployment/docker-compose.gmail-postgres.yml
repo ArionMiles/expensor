@@ -1,0 +1,77 @@
+# Docker Compose for Expensor with Gmail reader and PostgreSQL writer
+#
+# Usage:
+#   docker compose -f deployment/docker-compose.gmail-postgres.yml up -d
+#
+# Prerequisites:
+#   - Google OAuth credentials in data/client_secret.json
+#   - Run the auth command first to generate token: go run ./backend/cmd/auth
+#
+# The rules.json and labels.json files are embedded in the binary at build time.
+# See backend/cmd/server/content/ for the rule definitions.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: expensor-postgres
+    environment:
+      POSTGRES_DB: expensor
+      POSTGRES_USER: expensor
+      POSTGRES_PASSWORD: expensor_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U expensor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - expensor-network
+
+  expensor:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: expensor-server
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Reader configuration
+      EXPENSOR_READER: gmail
+      GMAIL_INTERVAL: 60  # Polling interval in seconds (default: 60)
+
+      # Writer configuration
+      EXPENSOR_WRITER: postgres
+
+      # PostgreSQL configuration
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: expensor
+      POSTGRES_USER: expensor
+      POSTGRES_PASSWORD: expensor_password
+      POSTGRES_SSLMODE: disable
+      POSTGRES_BATCH_SIZE: 10        # Transactions per batch (default: 10)
+      POSTGRES_FLUSH_INTERVAL: 30    # Max seconds before flush (default: 30)
+      POSTGRES_MAX_POOL_SIZE: 10     # Connection pool size (default: 10)
+
+      # State file for tracking processed messages
+      EXPENSOR_STATE_FILE: /app/data/state.json
+    volumes:
+      # Mount data directory for credentials, token, and state file
+      - ../data:/app/data
+    ports:
+      - "8080:8080"
+    networks:
+      - expensor-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  expensor-network:
+    driver: bridge
