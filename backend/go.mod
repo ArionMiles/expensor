@@ -1,6 +1,6 @@
 module github.com/ArionMiles/expensor/backend
 
-go 1.25.5
+go 1.25.8
 
 require (
 	github.com/emersion/go-mbox v1.0.4
