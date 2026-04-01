@@ -96,7 +96,7 @@ type WriterPlugin interface {
 
 ```bash
 task build          # go build ./...
-task build:binary   # optimised binary at bin/expensor
+task build:binary   # optimised binary at ../bin/expensor
 ```
 
 ## Running
