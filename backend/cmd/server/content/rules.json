@@ -1,0 +1,20 @@
+[
+    {
+        "name": "ICICI Credit Card",
+        "senderEmail": "credit_cards@icicibank.com",
+        "subjectContains": "Transaction alert for your ICICI Bank Credit Card",
+        "amountRegex": "INR (\\d{1,3}(,\\d{3})*(\\.\\d+)?)",
+        "merchantInfoRegex": "Info: (.*?)(\\.)",
+        "source": "Credit Card - ICICI",
+        "enabled": true
+    },
+    {
+        "name": "HDFC Credit Card",
+        "senderEmail": "alerts@hdfcbank.net",
+        "subjectContains": "Alert : Update on your HDFC Bank Credit Card",
+        "amountRegex": "Rs (\\d+\\.\\d{2})",
+        "merchantInfoRegex": "at (.*?) on",
+        "source": "Credit Card - HDFC",
+        "enabled": true
+    }
+]

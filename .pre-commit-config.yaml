@@ -1,0 +1,30 @@
+repos:
+  - repo: local
+    hooks:
+      - id: fmt
+        name: Format Go code
+        entry: task fmt
+        language: system
+        pass_filenames: false
+        types: [go]
+
+      - id: lint
+        name: Lint Go code
+        entry: task lint
+        language: system
+        pass_filenames: false
+        types: [go]
+
+      - id: test
+        name: Run unit tests
+        entry: task test
+        language: system
+        pass_filenames: false
+        types: [go]
+
+      - id: vulncheck
+        name: Check Go vulnerabilities
+        entry: task vulncheck
+        language: system
+        pass_filenames: false
+        types: [go]
