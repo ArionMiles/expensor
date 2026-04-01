@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -40,7 +41,10 @@ func main() {
 
 	// Start local server to receive callback
 	codeChan := make(chan string)
-	server := &http.Server{Addr: ":8085"}
+	server := &http.Server{
+		Addr:              ":8085",
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 
 	http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Query().Get("code")
@@ -85,5 +89,5 @@ func saveToken(path string, token *oauth2.Token) error {
 		return err
 	}
 	defer f.Close()
-	return json.NewEncoder(f).Encode(token)
+	return json.NewEncoder(f).Encode(token) //nolint:gosec // G117: intentionally encoding OAuth token for persistence
 }

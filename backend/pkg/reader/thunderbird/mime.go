@@ -91,47 +91,7 @@ func extractMultipart(body io.Reader, boundary, mediaType string) (string, error
 		if err != nil {
 			return "", fmt.Errorf("reading part: %w", err)
 		}
-
-		partContentType := part.Header.Get("Content-Type")
-		partMediaType, partParams, err := mime.ParseMediaType(partContentType)
-		if err != nil {
-			part.Close()
-			continue
-		}
-
-		// Handle nested multipart
-		if strings.HasPrefix(partMediaType, "multipart/") {
-			nestedBoundary, ok := partParams["boundary"]
-			if !ok {
-				part.Close()
-				continue
-			}
-			nestedBody, err := extractMultipart(part, nestedBoundary, partMediaType)
-			part.Close()
-			if err != nil {
-				continue
-			}
-			// Assume nested multipart contains HTML if we got content
-			if nestedBody != "" {
-				htmlParts = append(htmlParts, nestedBody)
-			}
-			continue
-		}
-
-		// Extract part body
-		partBody, err := extractPartBody(part, partMediaType, partParams)
-		part.Close()
-		if err != nil {
-			continue
-		}
-
-		// Categorize by content type
-		switch {
-		case strings.HasPrefix(partMediaType, "text/html"):
-			htmlParts = append(htmlParts, partBody)
-		case strings.HasPrefix(partMediaType, "text/plain"):
-			textParts = append(textParts, partBody)
-		}
+		processPart(part, mediaType, &htmlParts, &textParts)
 	}
 
 	// Prefer HTML over plain text
@@ -144,6 +104,43 @@ func extractMultipart(body io.Reader, boundary, mediaType string) (string, error
 	}
 
 	return "", nil
+}
+
+// processPart processes a single multipart part and appends content to html/textParts.
+func processPart(part *multipart.Part, _ string, htmlParts, textParts *[]string) {
+	partContentType := part.Header.Get("Content-Type")
+	partMediaType, partParams, err := mime.ParseMediaType(partContentType)
+	if err != nil {
+		_ = part.Close()
+		return
+	}
+
+	if strings.HasPrefix(partMediaType, "multipart/") {
+		nestedBoundary, ok := partParams["boundary"]
+		if !ok {
+			_ = part.Close()
+			return
+		}
+		nestedBody, nestedErr := extractMultipart(part, nestedBoundary, partMediaType)
+		_ = part.Close()
+		if nestedErr == nil && nestedBody != "" {
+			*htmlParts = append(*htmlParts, nestedBody)
+		}
+		return
+	}
+
+	partBody, err := extractPartBody(part, partMediaType, partParams)
+	_ = part.Close()
+	if err != nil {
+		return
+	}
+
+	switch {
+	case strings.HasPrefix(partMediaType, "text/html"):
+		*htmlParts = append(*htmlParts, partBody)
+	case strings.HasPrefix(partMediaType, "text/plain"):
+		*textParts = append(*textParts, partBody)
+	}
 }
 
 // extractPartBody extracts the body from a multipart part.
@@ -255,11 +252,12 @@ func encodeRFC2047(s, charset string) string {
 	buf.WriteString("?Q?")
 
 	for _, r := range s {
-		if r > 127 || r == '=' || r == '?' || r == '_' {
+		switch {
+		case r > 127 || r == '=' || r == '?' || r == '_':
 			fmt.Fprintf(&buf, "=%02X", r)
-		} else if r == ' ' {
+		case r == ' ':
 			buf.WriteString("_")
-		} else {
+		default:
 			buf.WriteRune(r)
 		}
 	}

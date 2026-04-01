@@ -98,7 +98,7 @@ func (m *Manager) save() error {
 	}
 
 	if err := os.Rename(tmpPath, m.filePath); err != nil {
-		os.Remove(tmpPath) // Clean up temp file on error
+		_ = os.Remove(tmpPath) // best-effort cleanup; original rename error is returned
 		return fmt.Errorf("renaming state file: %w", err)
 	}
 

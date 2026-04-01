@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 	"time"
 
@@ -79,7 +80,8 @@ func New(cfg Config, logger *slog.Logger) (*Writer, error) {
 		return nil, fmt.Errorf("parsing connection string: %w", err)
 	}
 
-	poolConfig.MaxConns = int32(cfg.MaxPoolSize)
+	maxConns := min(cfg.MaxPoolSize, math.MaxInt32)
+	poolConfig.MaxConns = int32(maxConns) //nolint:gosec // G115: value is bounded by min(cfg.MaxPoolSize, math.MaxInt32)
 	poolConfig.MinConns = 2
 	poolConfig.MaxConnLifetime = 1 * time.Hour
 	poolConfig.MaxConnIdleTime = 30 * time.Minute
@@ -135,6 +137,33 @@ func (w *Writer) runMigrations(ctx context.Context) error {
 	return nil
 }
 
+// flushBatch writes the current batch to PostgreSQL and sends acknowledgments.
+// It resets the batch slice to empty on success.
+func (w *Writer) flushBatch(ctx context.Context, batch *[]*api.TransactionDetails, ackChan chan<- string) error {
+	if len(*batch) == 0 {
+		return nil
+	}
+
+	if err := w.writeBatch(ctx, *batch); err != nil {
+		return err
+	}
+
+	for _, txn := range *batch {
+		if txn.MessageID == "" {
+			continue
+		}
+		select {
+		case ackChan <- txn.MessageID:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	w.logger.Info("wrote transaction batch", "count", len(*batch))
+	*batch = (*batch)[:0]
+	return nil
+}
+
 // Write consumes transactions from the channel and writes them to PostgreSQL.
 // It implements batch writing with periodic flushes for performance.
 func (w *Writer) Write(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error {
@@ -142,58 +171,27 @@ func (w *Writer) Write(ctx context.Context, in <-chan *api.TransactionDetails, a
 	ticker := time.NewTicker(w.flushInterval)
 	defer ticker.Stop()
 
-	flush := func() error {
-		if len(batch) == 0 {
-			return nil
-		}
-
-		if err := w.writeBatch(ctx, batch); err != nil {
-			return err
-		}
-
-		// Send acknowledgments for successfully written transactions
-		for _, txn := range batch {
-			if txn.MessageID != "" {
-				select {
-				case ackChan <- txn.MessageID:
-				case <-ctx.Done():
-					return ctx.Err()
-				}
-			}
-		}
-
-		w.logger.Info("wrote transaction batch",
-			"count", len(batch),
-		)
-
-		batch = batch[:0]
-		return nil
-	}
-
 	for {
 		select {
 		case <-ctx.Done():
-			// Flush remaining batch before returning
-			if err := flush(); err != nil {
+			if err := w.flushBatch(ctx, &batch, ackChan); err != nil {
 				w.logger.Error("failed to flush final batch", "error", err)
 			}
 			return ctx.Err()
 
 		case txn, ok := <-in:
 			if !ok {
-				// Channel closed, flush remaining batch
-				return flush()
+				return w.flushBatch(ctx, &batch, ackChan)
 			}
-
 			batch = append(batch, txn)
 			if len(batch) >= w.batchSize {
-				if err := flush(); err != nil {
+				if err := w.flushBatch(ctx, &batch, ackChan); err != nil {
 					return err
 				}
 			}
 
 		case <-ticker.C:
-			if err := flush(); err != nil {
+			if err := w.flushBatch(ctx, &batch, ackChan); err != nil {
 				return err
 			}
 		}
@@ -276,7 +274,7 @@ func (w *Writer) writeBatch(ctx context.Context, transactions []*api.Transaction
 	txnIDs := make([]string, len(transactions))
 	for i := 0; i < len(transactions); i++ {
 		if err := batchResults.QueryRow().Scan(&txnIDs[i]); err != nil {
-			batchResults.Close()
+			_ = batchResults.Close()
 			return fmt.Errorf("inserting transaction %d: %w", i, err)
 		}
 	}

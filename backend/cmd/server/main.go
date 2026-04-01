@@ -154,7 +154,6 @@ func main() {
 
 	// Setup context with cancellation on SIGINT/SIGTERM
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -174,6 +173,7 @@ func main() {
 
 	if err := runner.Run(ctx, runCfg); err != nil {
 		logger.Error("daemon failed", "error", err)
+		cancel()
 		os.Exit(1)
 	}
 }

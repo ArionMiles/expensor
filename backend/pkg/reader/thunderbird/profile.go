@@ -38,7 +38,7 @@ func FindProfiles() ([]string, error) {
 	}
 
 	// Check if base directory exists
-	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+	if _, err := os.Stat(baseDir); os.IsNotExist(err) { //nolint:gosec // G703: path from OS-determined Thunderbird directory, not user HTTP input
 		return nil, fmt.Errorf("thunderbird directory not found: %s", baseDir)
 	}
 
@@ -74,74 +74,60 @@ func FindMailboxes(profilePath string, mailboxNames []string) (map[string]string
 	}
 
 	mailboxPaths := make(map[string]string)
+	mailDirs := collectMailDirs(profilePath)
 
-	// Look for mailboxes in common locations
-	mailDirs := []string{
-		filepath.Join(profilePath, "Mail", "Local Folders"),
-	}
+	slog.Default().Debug("searching for mailboxes in directories", "dirs", mailDirs)
 
-	// Check for account-specific directories under Mail/
-	mailDir := filepath.Join(profilePath, "Mail")
-	if _, err := os.Stat(mailDir); err == nil {
-		entries, err := os.ReadDir(mailDir)
-		if err == nil {
-			for _, entry := range entries {
-				if entry.IsDir() {
-					mailDirs = append(mailDirs, filepath.Join(mailDir, entry.Name()))
-				}
-			}
-		}
-	}
-
-	// Check for IMAP account directories (e.g., ImapMail/imap.gmail.com/)
-	imapDir := filepath.Join(profilePath, "ImapMail")
-	if _, err := os.Stat(imapDir); err == nil {
-		entries, err := os.ReadDir(imapDir)
-		if err == nil {
-			for _, entry := range entries {
-				if entry.IsDir() {
-					mailDirs = append(mailDirs, filepath.Join(imapDir, entry.Name()))
-				}
-			}
-		}
-	}
-
-	logger := slog.Default()
-	logger.Debug("searching for mailboxes in directories", "dirs", mailDirs)
-	// Search for each requested mailbox
 	for _, mailboxName := range mailboxNames {
-		found := false
-
-		for _, dir := range mailDirs {
-			// Try direct path (e.g., "Inbox")
-			mailboxPath := filepath.Join(dir, mailboxName)
-			if _, err := os.Stat(mailboxPath); err == nil {
-				mailboxPaths[mailboxName] = mailboxPath
-				found = true
-				break
-			}
-
-			// Try with .sbd extension for subdirectories
-			mailboxPath = filepath.Join(dir, mailboxName+".sbd", mailboxName)
-			if _, err := os.Stat(mailboxPath); err == nil {
-				mailboxPaths[mailboxName] = mailboxPath
-				found = true
-				break
-			}
-
-			// Try lowercase (some systems use lowercase)
-			mailboxPath = filepath.Join(dir, mailboxName)
-			if _, err := os.Stat(mailboxPath); err == nil {
-				mailboxPaths[mailboxName] = mailboxPath
-				found = true
-				break
-			}
-		}
-
+		path, found := findMailboxInDirs(mailboxName, mailDirs)
 		if !found {
 			return nil, fmt.Errorf("mailbox not found: %s in profile %s", mailboxName, profilePath)
 		}
+		mailboxPaths[mailboxName] = path
 	}
 
 	return mailboxPaths, nil
+}
+
+// collectMailDirs returns all mail directories to search within a profile.
+func collectMailDirs(profilePath string) []string {
+	dirs := []string{filepath.Join(profilePath, "Mail", "Local Folders")}
+
+	for _, subDir := range []string{"Mail", "ImapMail"} {
+		dir := filepath.Join(profilePath, subDir)
+		if _, err := os.Stat(dir); err != nil {
+			continue
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				dirs = append(dirs, filepath.Join(dir, entry.Name()))
+			}
+		}
+	}
+
+	return dirs
+}
+
+// findMailboxInDirs searches for a mailbox file by name across a list of directories.
+// It tries a direct path and an .sbd subdirectory path.
+func findMailboxInDirs(mailboxName string, dirs []string) (string, bool) {
+	for _, dir := range dirs {
+		if path := filepath.Join(dir, mailboxName); pathExists(path) {
+			return path, true
+		}
+		if path := filepath.Join(dir, mailboxName+".sbd", mailboxName); pathExists(path) {
+			return path, true
+		}
+	}
+	return "", false
+}
+
+// pathExists returns true if the path exists on the filesystem.
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

@@ -20,7 +20,7 @@ type ReaderPlugin interface {
 	// RequiredScopes returns the OAuth scopes needed by this plugin.
 	RequiredScopes() []string
 	// NewReader creates a new reader instance with the given config.
-	NewReader( //nolint:revive // interface method; argument count dictated by domain
+	NewReader(
 		httpClient *http.Client, cfg *config.Config, rules []api.Rule,
 		labels api.Labels, stateManager *state.Manager, logger *slog.Logger,
 	) (api.Reader, error)

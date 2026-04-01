@@ -103,7 +103,7 @@ func SaveToken(path string, token *oauth2.Token) error {
 	}
 	defer f.Close()
 
-	if err := json.NewEncoder(f).Encode(token); err != nil {
+	if err := json.NewEncoder(f).Encode(token); err != nil { //nolint:gosec // G117: intentionally encoding OAuth token for persistence
 		return fmt.Errorf("encoding token: %w", err)
 	}
 	return nil

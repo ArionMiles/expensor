@@ -63,7 +63,7 @@ func (r *Rule) BuildGmailQuery() string {
 		query += fmt.Sprintf(" from:%s", r.SenderEmail)
 	}
 	if r.SubjectContains != "" {
-		query += fmt.Sprintf(" subject:\"%s\"", r.SubjectContains)
+		query += fmt.Sprintf(" subject:%q", r.SubjectContains)
 	}
 	return query
 }
