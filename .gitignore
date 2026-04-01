@@ -30,6 +30,9 @@ coverage.html
 
 # Build artifacts
 dist/
+backend/auth
 
 # Expensor specific sensitive data files
 data/
+
+llm-output-files/

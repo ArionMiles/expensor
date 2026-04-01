@@ -12,17 +12,17 @@ ARG VERSION=dev
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
 
-# Set working directory
-WORKDIR /build
+# Set working directory to backend (where go.mod lives)
+WORKDIR /build/backend
 
 # Copy go.mod and go.sum first for better caching
-COPY go.mod go.sum ./
+COPY backend/go.mod backend/go.sum ./
 
 # Download dependencies (cached if go.mod/go.sum haven't changed)
 RUN go mod download && go mod verify
 
-# Copy source code
-COPY . .
+# Copy backend source code
+COPY backend/ .
 
 # Build the binary with optimizations
 # -trimpath: removes file system paths from the binary
@@ -31,10 +31,10 @@ COPY . .
 #   -w: omit DWARF symbol table
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -trimpath -ldflags="-s -w -X main.Version=${VERSION}" \
-    -o expensor ./cmd/expensor
+    -o expensor ./cmd/server
 
-# Verify the binary was built correctly
-RUN ./expensor --help
+# Verify the binary was built correctly (check it's executable and has content)
+RUN test -x ./expensor && test -s ./expensor
 
 # Stage 2: Runtime stage
 FROM alpine:3.23
@@ -53,7 +53,7 @@ RUN addgroup -g 1000 expensor && \
 WORKDIR /app
 
 # Copy binary from builder
-COPY --from=builder /build/expensor /app/expensor
+COPY --from=builder /build/backend/expensor /app/expensor
 
 # Create data directory for token storage
 RUN mkdir -p /app/data

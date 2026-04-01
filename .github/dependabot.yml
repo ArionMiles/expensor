@@ -34,6 +34,11 @@ updates:
     # Allow version updates for security fixes
     allow:
       - dependency-type: "all"
+    # go-header v1.0.0 broke the API that golangci-lint depends on; keep it at v0.5.0
+    # until golangci-lint ships a release that supports go-header v1.x.
+    ignore:
+      - dependency-name: "github.com/denis-tingaikin/go-header"
+        versions: [">=1.0.0"]
 
   # GitHub Actions workflow updates
   - package-ecosystem: "github-actions"

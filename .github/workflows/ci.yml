@@ -12,6 +12,9 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v6
         with:
@@ -20,7 +23,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: 'backend/go.mod'
 
       - name: Extract golangci-lint version from go.mod
         id: golangci-version
@@ -33,8 +36,9 @@ jobs:
         with:
           only-new-issues: true
           version: ${{ steps.golangci-version.outputs.version }}
+          working-directory: backend
           args: >-
-            --config=.golangci-prod.toml
+            --config=../.golangci-prod.toml
             --max-same-issues=0
             --max-issues-per-linter=0
 
@@ -47,7 +51,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: 'backend/go.mod'
 
       - name: Install Task
         uses: go-task/setup-task@v1
@@ -57,8 +61,5 @@ jobs:
       - name: Run tests
         run: task test
 
-      - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
-
       - name: Run govulncheck
-        run: govulncheck ./...
+        run: task vulncheck
