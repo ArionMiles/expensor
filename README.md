@@ -1,27 +1,71 @@
 # expensor
 
-Expensor is a utility to find expense related emails from my bank and add those expenses to a Google Sheet for expense tracking. The Google Sheet then feeds a Grafana dashboard. Expensor relies on config based rules which can work for almost everyone.
+> [!IMPORTANT]
+> This project is built with AI-assisted tooling. Code, tests, documentation, and tooling in this repository were developed with the assistance of Claude (Anthropic). All AI-generated output has been reviewed and is the responsibility of the project maintainer.
 
-I've documented why exactly expensor works for me [on my blog](https://kanishk.io/posts/expensor/). If you find these reasons just, you might find it useful too. The rules are dead simple regex extractions which are fast (as far as reading emails go) and can be updated/modified pretty easily.
+Expensor reads expense-related emails from your inbox, extracts transaction details, and writes them to PostgreSQL for further analysis. It supports multiple email sources (Gmail, Thunderbird) and uses configurable regex-based rules to identify and parse transactions.
 
+I've documented why exactly expensor works for me [on my blog](https://kanishk.io/posts/expensor/). The rules are dead-simple regex extractions which are fast and can be updated easily.
 
 ## How does it work?
-Expensor is designed to 
-1. Periodically check my inbox
-2. Run the queries defined in my [rules](backend/cmd/server/content/rules.json) to find emails of interest
-3. Extract transaction details like the amount, merchant name, date of transaction.
-4. Write them to a Google Sheet (or other configured outputs like PostgreSQL, CSV, JSON).
+
+1. Periodically poll the configured inbox (Gmail or Thunderbird)
+2. Match emails against [rules](backend/cmd/server/content/rules.json) by sender and/or subject
+3. Extract transaction details — amount, merchant name, date — via regex
+4. Write them to PostgreSQL
 5. Repeat
+
+## Architecture
+
+```
+readers (gmail | thunderbird)
+        │
+        ▼
+  daemon runner
+        │
+        ▼
+  postgres writer
+        │
+        ▼
+  PostgreSQL DB  ──▶  API  ──▶  Frontend (planned)
+```
+
+## Repository Structure
+
+```
+.
+├── backend/
+│   ├── cmd/
+│   │   ├── server/          # Main daemon binary
+│   │   │   └── content/     # Embedded rules.json & labels.json
+│   │   └── auth/            # Standalone OAuth flow binary
+│   ├── internal/
+│   │   ├── daemon/          # Daemon runner (reader → writer pipeline)
+│   │   └── plugins/         # Plugin registry
+│   ├── migrations/          # SQL migrations
+│   └── pkg/
+│       ├── api/             # Core interfaces & types
+│       ├── config/          # Environment-based configuration
+│       ├── extractor/       # Amount & merchant regex extraction
+│       ├── state/           # SHA-256 keyed dedup state
+│       ├── reader/
+│       │   ├── gmail/       # Gmail API reader
+│       │   └── thunderbird/ # MBOX file reader
+│       ├── writer/
+│       │   └── postgres/    # PostgreSQL writer (batched)
+│       └── plugins/         # Plugin wrappers for readers & writers
+├── deployment/              # Docker Compose files per reader+writer combo
+├── docker-compose.yml       # Default compose (gmail + postgres)
+└── Taskfile.yml             # Build & dev automation
+```
 
 ## Installation
 
 ### Pre-built Binaries
 
-Download the latest release for your platform from the [releases page](https://github.com/ArionMiles/expensor/releases).
+Download the latest release from the [releases page](https://github.com/ArionMiles/expensor/releases).
 
 ### Docker
-
-Pull the latest Docker image from GitHub Container Registry:
 
 ```bash
 docker pull ghcr.io/arionmiles/expensor:latest
@@ -29,7 +73,7 @@ docker pull ghcr.io/arionmiles/expensor:latest
 
 ### From Source
 
-Requires Go 1.25.5 or later:
+Requires Go 1.25 or later:
 
 ```bash
 go install github.com/ArionMiles/expensor/backend/cmd/server@latest
@@ -37,116 +81,111 @@ go install github.com/ArionMiles/expensor/backend/cmd/server@latest
 
 ## Setup
 
-1. **Configure Google Cloud Project**
-   - Follow the [Gmail API Quickstart Guide](https://developers.google.com/gmail/api/quickstart/go)
-   - Download the OAuth credentials JSON file
-   - Enable both Gmail API and Google Sheets API for your project
+### 1. Authenticate (Gmail reader only)
 
-2. **Place Credentials File**
-   Save your OAuth credentials JSON file to:
-   ```
-   data/client_secret.json
-   ```
-
-3. **Run Setup**
-   ```bash
-   expensor setup
-   ```
-   This will guide you through OAuth authentication and save the token to `data/token.json`.
-
-4. **Set Environment Variables**
-   ```bash
-   # Required: Sheet name/tab within the spreadsheet
-   export GSHEETS_NAME="Sheet1"
-
-   # One of these is required:
-   export GSHEETS_ID="your-existing-spreadsheet-id"  # Use existing sheet
-   # OR
-   export GSHEETS_TITLE="Expense Report"  # Create new sheet with this title
-   ```
-
-5. **Run Expensor**
-   ```bash
-   expensor run
-   ```
-
-## Running with Docker
-
-Create a `docker-compose.yml` file:
-
-```yaml
-version: '3.8'
-services:
-  expensor:
-    image: ghcr.io/arionmiles/expensor:latest
-    environment:
-      - GSHEETS_ID=${GSHEETS_ID}
-      - GSHEETS_NAME=${GSHEETS_NAME}
-    volumes:
-      - ./data:/app/data  # Mount data directory for credentials and token
-    restart: unless-stopped
-```
-
-Create a `.env` file with your configuration:
+Run the auth binary once to complete the OAuth flow and write `data/token.json`:
 
 ```bash
-GSHEETS_ID=your-spreadsheet-id
-GSHEETS_NAME=Sheet1
+go run ./backend/cmd/auth
 ```
 
-Place your files in the `data/` directory:
-- `data/client_secret.json` - Your Google OAuth credentials
-- `data/token.json` - OAuth token (generated by running `expensor setup`)
+Place your Google OAuth credentials at `data/client_secret.json` before running.
 
-Run with:
+### 2. Run the database
 
 ```bash
-docker-compose up -d
+docker-compose up -d postgres
 ```
 
-**Important**: You must run `expensor setup` once (either locally or in the container) to generate the OAuth token before the app will work.
+Migrations run automatically on startup.
+
+### 3. Configure via environment variables
+
+See the [Configuration](#configuration) section below.
+
+### 4. Start expensor
+
+```bash
+task run
+# or
+go run ./backend/cmd/server
+```
+
+## Running with Docker Compose
+
+Pre-built compose files live in [`deployment/`](deployment/):
+
+| File | Reader | Writer |
+|------|--------|--------|
+| `deployment/docker-compose.gmail-postgres.yml` | Gmail | PostgreSQL |
+| `deployment/docker-compose.thunderbird-postgres.yml` | Thunderbird | PostgreSQL |
+
+```bash
+# Gmail + Postgres
+docker compose -f deployment/docker-compose.gmail-postgres.yml up -d
+
+# Thunderbird + Postgres
+docker compose -f deployment/docker-compose.thunderbird-postgres.yml up -d
+```
 
 ## Configuration
 
-### Required Files
+All configuration is via environment variables.
 
-| File | Description |
-|------|-------------|
-| `data/client_secret.json` | Google OAuth credentials (download from Google Cloud Console) |
-| `data/token.json` | OAuth token (auto-generated by `expensor setup`) |
+### Core
 
-### Environment Variables
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `EXPENSOR_READER` | Yes | — | Reader plugin: `gmail` or `thunderbird` |
+| `EXPENSOR_WRITER` | Yes | — | Writer plugin: `postgres` |
+| `EXPENSOR_STATE_FILE` | No | `data/state.json` | Path to dedup state file |
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GSHEETS_NAME` | Yes | Name of the sheet/tab within the spreadsheet |
-| `GSHEETS_ID` | One of ID/Title | ID of an existing Google Spreadsheet |
-| `GSHEETS_TITLE` | One of ID/Title | Title for creating a new Google Spreadsheet |
-| `LOG_LEVEL` | No | Logging level: DEBUG, INFO (default), WARN, ERROR |
+### Gmail reader
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `GMAIL_INTERVAL` | No | `60` | Polling interval (seconds) |
+
+OAuth credentials must be present at `data/client_secret.json` and `data/token.json` (generated by `cmd/auth`).
+
+### Thunderbird reader
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `THUNDERBIRD_PROFILE` | Yes | — | Path to Thunderbird profile directory |
+| `THUNDERBIRD_MAILBOXES` | Yes | — | Comma-separated mailbox names, e.g. `INBOX,Archives` |
+| `THUNDERBIRD_INTERVAL` | No | `60` | Polling interval (seconds) |
+
+### PostgreSQL writer
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `POSTGRES_HOST` | Yes | — | Database host |
+| `POSTGRES_DB` | Yes | — | Database name |
+| `POSTGRES_USER` | Yes | — | Database user |
+| `POSTGRES_PASSWORD` | No | — | Database password |
+| `POSTGRES_PORT` | No | `5432` | Database port |
+| `POSTGRES_SSLMODE` | No | `disable` | SSL mode |
+| `POSTGRES_BATCH_SIZE` | No | `10` | Rows to buffer before flushing |
+| `POSTGRES_FLUSH_INTERVAL` | No | `30` | Max seconds between flushes |
+| `POSTGRES_MAX_POOL_SIZE` | No | `10` | Connection pool size |
+
+### Logging
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `LOG_LEVEL` | No | `INFO` | Log level: `DEBUG`, `INFO`, `WARN`, `ERROR` |
+| `LOG_JSON` | No | `false` | Emit JSON logs |
 
 ## Development
 
-This project uses [Task](https://taskfile.dev) for automation.
-
-### Setup Development Environment
+This project uses [Task](https://taskfile.dev) for automation. All task targets run from the `backend/` directory automatically.
 
 ```bash
-# Install Task (if not already installed)
-brew install go-task/tap/go-task  # macOS
-# or
-sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b ~/.local/bin
-
-# Install development tools
-task install-tools
-```
-
-### Common Tasks
-
-```bash
-# Format code
+# Format code (gci + gofumpt)
 task fmt
 
-# Run linter (local config)
+# Lint (local config)
 task lint
 
 # Run tests
@@ -155,16 +194,32 @@ task test
 # Run tests with coverage
 task test:cover
 
+# Vulnerability scan
+task vulncheck
+
 # Build binary
 task build:binary
-
-# Build Docker image
-task build:docker
 
 # Run all CI checks
 task ci
 ```
 
-## Expensor doesn't support/recognize transactions from my bank
+## Adding Rules
 
-Open an issue with the email body content and I will take a look, and possibly add the rules into expensor so those are supported.
+Rules live in [`backend/cmd/server/content/rules.json`](backend/cmd/server/content/rules.json). Each rule specifies a sender email, subject fragment, and regex patterns to extract amount and merchant:
+
+```json
+{
+  "name": "ICICI Credit Card",
+  "senderEmail": "credit-cards@icicibank.com",
+  "subjectContains": "Alert",
+  "amountRegex": "Rs\\.\\s?([\\d,]+\\.\\d{2})",
+  "merchantInfoRegex": "at ([^.]+)\\.",
+  "enabled": true,
+  "source": "ICICI CC"
+}
+```
+
+## Expensor doesn't recognise transactions from my bank
+
+Open an issue with the email body content and I'll take a look.

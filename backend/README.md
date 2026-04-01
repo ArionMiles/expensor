@@ -1,229 +1,126 @@
 # Expensor Backend
 
-This is the restructured backend for Expensor, featuring a plugin-based architecture for readers and writers.
+Plugin-based daemon that reads expense transactions from email sources and writes them to PostgreSQL.
 
 ## Directory Structure
 
 ```
 backend/
-├── cmd/server/              # Server entry point
-│   ├── main.go             # Main application with plugin registration
-│   └── config/             # Embedded configuration files
-│       ├── rules.json      # Transaction extraction rules
-│       └── labels.json     # Merchant categorization labels
-├── internal/               # Private application code
-│   ├── daemon/            # Daemon runner
-│   │   └── runner.go      # Core daemon logic with plugin support
-│   └── plugins/           # Plugin registry
-│       └── registry.go    # Plugin registration and factory
-├── pkg/                   # Public packages (can be imported)
-│   ├── api/              # Core interfaces and data structures
-│   ├── client/           # OAuth2 client (web-only)
-│   ├── config/           # Configuration structures
-│   ├── logging/          # Logging setup
-│   ├── reader/           # Reader implementations
-│   │   └── gmail/        # Gmail reader
-│   ├── writer/           # Writer implementations
-│   │   ├── buffered/     # Buffered writer base
-│   │   ├── sheets/       # Google Sheets writer
-│   │   ├── csv/          # CSV file writer
-│   │   └── json/         # JSON file writer
-│   └── plugins/          # Plugin wrappers
-│       ├── readers/
-│       │   └── gmail/    # Gmail reader plugin
-│       └── writers/
-│           ├── sheets/   # Sheets writer plugin
-│           ├── csv/      # CSV writer plugin
-│           └── json/     # JSON writer plugin
-└── bin/                  # Compiled binaries
-    └── expensor-server   # Server binary
+├── cmd/
+│   ├── server/              # Main daemon entry point
+│   │   ├── main.go
+│   │   └── content/         # Embedded config files
+│   │       ├── rules.json   # Transaction extraction rules
+│   │       └── labels.json  # Merchant categorization labels
+│   └── auth/                # Standalone OAuth flow binary
+│       └── main.go
+├── internal/
+│   ├── daemon/              # Reader → writer pipeline
+│   │   └── runner.go
+│   └── plugins/             # Plugin registry & factory
+│       └── registry.go
+├── migrations/              # SQL migrations (run on startup)
+└── pkg/
+    ├── api/                 # Core interfaces & types (Reader, Writer, Rule, Labels)
+    ├── client/              # OAuth2 HTTP client helper
+    ├── config/              # Environment-based configuration
+    ├── extractor/           # Regex amount & merchant extraction
+    ├── logging/             # Structured logging setup
+    ├── state/               # SHA-256 keyed dedup state (prevents reprocessing)
+    ├── reader/
+    │   ├── gmail/           # Gmail API reader
+    │   └── thunderbird/     # MBOX file reader
+    ├── writer/
+    │   └── postgres/        # PostgreSQL writer (batched inserts)
+    └── plugins/             # Thin plugin wrappers (config wiring)
+        ├── readers/
+        │   ├── gmail/
+        │   └── thunderbird/
+        └── writers/
+            └── postgres/
 ```
 
 ## Plugin System
 
-The plugin system allows for extensible readers and writers without hardcoding implementations.
+Readers and writers are registered at startup via the plugin registry. Adding a new source only requires implementing the relevant interface and registering the plugin.
 
 ### Reader Plugins
-
-Reader plugins implement the `ReaderPlugin` interface:
 
 ```go
 type ReaderPlugin interface {
     Name() string
     Description() string
     RequiredScopes() []string
-    ConfigSchema() map[string]any
-    NewReader(httpClient *http.Client, config json.RawMessage, logger *slog.Logger) (api.Reader, error)
+    NewReader(httpClient *http.Client, cfg *config.Config, rules []api.Rule,
+              labels api.Labels, stateManager *state.Manager, logger *slog.Logger) (api.Reader, error)
 }
 ```
 
-**Registered Readers:**
-- `gmail` - Read transactions from Gmail messages
+**Registered readers:** `gmail`, `thunderbird`
 
 ### Writer Plugins
-
-Writer plugins implement the `WriterPlugin` interface:
 
 ```go
 type WriterPlugin interface {
     Name() string
     Description() string
     RequiredScopes() []string
-    ConfigSchema() map[string]any
-    NewWriter(httpClient *http.Client, config json.RawMessage, logger *slog.Logger) (api.Writer, error)
+    NewWriter(httpClient *http.Client, cfg *config.Config, logger *slog.Logger) (api.Writer, error)
 }
 ```
 
-**Registered Writers:**
-- `sheets` - Write to Google Sheets (requires OAuth)
-- `csv` - Write to CSV file (local file)
-- `json` - Write to JSON file (local file)
+**Registered writers:** `postgres`
 
-## Configuration
+## Adding a New Plugin
 
-Configuration is now plugin-based via environment variables:
+### New Reader
 
-### Required Environment Variables
+1. Implement the reader in `backend/pkg/reader/{name}/`
+2. Create the plugin wrapper in `backend/pkg/plugins/readers/{name}/plugin.go`
+3. Register in `backend/cmd/server/main.go`:
+   ```go
+   registry.RegisterReader(&newreaderplugin.Plugin{})
+   ```
+4. Add any required config fields to `backend/pkg/config/config.go`
 
-- `EXPENSOR_READER` - Reader plugin name (e.g., "gmail")
-- `EXPENSOR_WRITER` - Writer plugin name (e.g., "sheets", "csv", "json")
-- `EXPENSOR_READER_CONFIG` - JSON configuration for reader plugin
-- `EXPENSOR_WRITER_CONFIG` - JSON configuration for writer plugin
+### New Writer
 
-### Legacy Support (Temporary)
-
-For backward compatibility, the following environment variables are still supported:
-
-- `GSHEETS_TITLE` - Google Sheet title (for new sheets)
-- `GSHEETS_ID` - Existing Google Sheet ID
-- `GSHEETS_NAME` - Sheet tab name (required)
-
-If plugin config vars are not set, the app will build default configs from legacy vars and embedded files.
-
-## Gmail Reader Configuration
-
-```json
-{
-  "rules": [
-    {
-      "name": "ICICI Credit Card",
-      "query": "from:credit-cards@icicibank.com subject:Alert",
-      "amountRegex": "Rs\\. ?([\\d,]+\\.\\d{2})",
-      "merchantInfoRegex": "at ([^.]+)\\.",
-      "enabled": true,
-      "source": "ICICI CC"
-    }
-  ],
-  "labels": {
-    "SWIGGY": {
-      "category": "Food",
-      "bucket": "Need"
-    }
-  },
-  "interval": 10
-}
-```
-
-## Sheets Writer Configuration
-
-```json
-{
-  "sheetTitle": "Expenses 2025",
-  "sheetId": "1abc123...",
-  "sheetName": "January",
-  "batchSize": 10,
-  "flushInterval": 30
-}
-```
-
-## CSV Writer Configuration
-
-```json
-{
-  "filePath": "data/expenses.csv",
-  "batchSize": 10,
-  "flushInterval": 30
-}
-```
-
-## JSON Writer Configuration
-
-```json
-{
-  "filePath": "data/expenses.json",
-  "batchSize": 10,
-  "flushInterval": 30
-}
-```
+1. Implement the writer in `backend/pkg/writer/{name}/`
+2. Create the plugin wrapper in `backend/pkg/plugins/writers/{name}/plugin.go`
+3. Register in `backend/cmd/server/main.go`:
+   ```go
+   registry.RegisterWriter(&newwriterplugin.Plugin{})
+   ```
 
 ## Building
 
 ```bash
-go build -C backend/cmd/server -o backend/bin/expensor-server
+task build          # go build ./...
+task build:binary   # optimised binary at bin/expensor
 ```
 
 ## Running
 
 ```bash
-# Using Sheets writer (legacy env vars)
-export GSHEETS_NAME="January"
-export GSHEETS_TITLE="Expenses 2025"
-./backend/bin/expensor-server
+# Gmail + Postgres
+export EXPENSOR_READER=gmail
+export EXPENSOR_WRITER=postgres
+export POSTGRES_HOST=localhost
+export POSTGRES_DB=expensor
+export POSTGRES_USER=expensor
+export POSTGRES_PASSWORD=secret
+task run
 
-# Using CSV writer
-export EXPENSOR_READER="gmail"
-export EXPENSOR_WRITER="csv"
-export EXPENSOR_READER_CONFIG='{"rules": [...], "labels": {...}}'
-export EXPENSOR_WRITER_CONFIG='{"filePath": "data/expenses.csv"}'
-./backend/bin/expensor-server
-
-# Using JSON writer
-export EXPENSOR_READER="gmail"
-export EXPENSOR_WRITER="json"
-export EXPENSOR_READER_CONFIG='{"rules": [...], "labels": {...}}'
-export EXPENSOR_WRITER_CONFIG='{"filePath": "data/expenses.json"}'
-./backend/bin/expensor-server
+# Thunderbird + Postgres
+export EXPENSOR_READER=thunderbird
+export EXPENSOR_WRITER=postgres
+export THUNDERBIRD_PROFILE=/home/user/.thunderbird/abc123.default
+export THUNDERBIRD_MAILBOXES=INBOX,Archives
+export POSTGRES_HOST=localhost
+export POSTGRES_DB=expensor
+export POSTGRES_USER=expensor
+export POSTGRES_PASSWORD=secret
+task run
 ```
 
-## OAuth Authentication
-
-OAuth tokens must be managed by the web application. The CLI-based OAuth callback has been removed.
-
-Token file location: `data/token.json`
-
-## Key Changes from Original
-
-1. **Plugin-based architecture**: Readers and writers are now plugins registered at startup
-2. **Removed CLI commands**: `setup` and `status` commands deleted (web-only interface)
-3. **Removed CLI OAuth**: Local callback server removed (web app will handle OAuth)
-4. **Simplified config**: Plugin-based configuration via environment variables
-5. **Daemon runner**: Core run logic moved to `internal/daemon/runner.go` with context support
-6. **Import paths**: All imports updated to `github.com/ArionMiles/expensor/backend/pkg/*`
-
-## Adding New Plugins
-
-### Adding a New Reader
-
-1. Create implementation in `backend/pkg/reader/{name}/`
-2. Create plugin wrapper in `backend/pkg/plugins/readers/{name}/plugin.go`
-3. Implement `ReaderPlugin` interface
-4. Register in `cmd/server/main.go`:
-   ```go
-   registry.RegisterReader(&newreaderplugin.Plugin{})
-   ```
-
-### Adding a New Writer
-
-1. Create implementation in `backend/pkg/writer/{name}/`
-2. Create plugin wrapper in `backend/pkg/plugins/writers/{name}/plugin.go`
-3. Implement `WriterPlugin` interface
-4. Register in `cmd/server/main.go`:
-   ```go
-   registry.RegisterWriter(&newwriterplugin.Plugin{})
-   ```
-
-## Next Steps (Phase 3 & 4)
-
-- Phase 3: Web UI (React/Svelte)
-- Phase 4: REST API for OAuth, config management, and daemon control
-- Phase 5: Deployment with Docker
+See the root [README](../README.md) for the full environment variable reference.
