@@ -1,0 +1,9 @@
+services:
+  expensor:
+    image: expensor:77531cc-dirty
+    environment:
+      - GSHEETS_ID=1ExuygUwORROPKqMX6n_HJpTu4Eeh93xaF6cZCSZxBjc
+      - GSHEETS_NAME=Sheet1
+    volumes:
+      - ./data:/app/data  # Mount data directory for credentials and token
+    restart: unless-stopped
