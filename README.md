@@ -1,7 +1,7 @@
 # expensor
 
 > [!IMPORTANT]
-> This project is built with AI-assisted tooling. Code, tests, documentation, and tooling in this repository were developed with the assistance of Claude (Anthropic). All AI-generated output has been reviewed and is the responsibility of the project maintainer.
+> This project is built with AI-assisted tooling.
 
 Expensor reads expense-related emails from your inbox, extracts transaction details, and writes them to PostgreSQL for further analysis. It supports multiple email sources (Gmail, Thunderbird) and uses configurable regex-based rules to identify and parse transactions.
 
