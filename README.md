@@ -220,6 +220,28 @@ Rules live in [`backend/cmd/server/content/rules.json`](backend/cmd/server/conte
 }
 ```
 
+Both `senderEmail` and `subjectContains` can be specified — a rule matches only when **both** conditions are met. Either field can be omitted to match any sender or subject.
+
+### Amount regex patterns
+
+```
+Rs\.\s*([\d,]+\.?\d*)       → Rs. 1,234.56
+INR\s*([\d,]+\.?\d*)        → INR 500.00
+₹\s*([\d,]+\.?\d*)          → ₹ 2,500
+\$\s*([\d,]+\.?\d*)         → $ 99.99
+```
+
+### Merchant regex patterns
+
+```
+at\s+([A-Z0-9\s]+)          → at AMAZON INDIA
+on\s+([A-Z\s]+)             → on SWIGGY
+for\s+([A-Z\s]+)            → for UBER TRIP
+to\s+([A-Z\s]+)             → to NETFLIX COM
+```
+
+Each pattern must have exactly one capture group — that group is used as the extracted value. Test patterns at [regex101.com](https://regex101.com) with Go flavour selected.
+
 ## Expensor doesn't recognise transactions from my bank
 
 Open an issue with the email body content and I'll take a look.
