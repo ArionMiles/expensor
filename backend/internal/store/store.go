@@ -237,6 +237,23 @@ func (s *Store) AddLabel(ctx context.Context, transactionID, label string) error
 	return nil
 }
 
+// AddLabels attaches multiple labels to a transaction in a single round-trip (idempotent).
+func (s *Store) AddLabels(ctx context.Context, transactionID string, labels []string) error {
+	if len(labels) == 0 {
+		return nil
+	}
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO transaction_labels (transaction_id, label)
+		 SELECT $1, unnest($2::text[])
+		 ON CONFLICT (transaction_id, label) DO NOTHING`,
+		transactionID, labels,
+	)
+	if err != nil {
+		return fmt.Errorf("adding labels: %w", err)
+	}
+	return nil
+}
+
 // RemoveLabel detaches a label from a transaction.
 func (s *Store) RemoveLabel(ctx context.Context, transactionID, label string) error {
 	tag, err := s.pool.Exec(ctx,

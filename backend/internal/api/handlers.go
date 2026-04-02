@@ -694,12 +694,10 @@ func (h *Handlers) HandleAddLabels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, label := range body.Labels {
-		if err := h.store.AddLabel(r.Context(), id, label); err != nil {
-			h.logger.Error("add label", "error", err)
-			writeError(w, http.StatusInternalServerError, "failed to add label")
-			return
-		}
+	if err := h.store.AddLabels(r.Context(), id, body.Labels); err != nil {
+		h.logger.Error("add labels", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to add labels")
+		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "added"})

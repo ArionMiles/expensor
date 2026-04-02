@@ -36,6 +36,7 @@ type mockStore struct {
 	getErr       error
 	updateErr    error
 	addLabelErr  error
+	addLabelsErr error
 	removeLblErr error
 	searchResult []store.Transaction
 	searchTotal  int
@@ -61,6 +62,10 @@ func (m *mockStore) UpdateDescription(_ context.Context, _ string, _ string) err
 
 func (m *mockStore) AddLabel(_ context.Context, _ string, _ string) error {
 	return m.addLabelErr
+}
+
+func (m *mockStore) AddLabels(_ context.Context, _ string, _ []string) error {
+	return m.addLabelsErr
 }
 
 func (m *mockStore) RemoveLabel(_ context.Context, _ string, _ string) error {
@@ -532,6 +537,34 @@ func TestHandleAddLabels_InvalidJSON(t *testing.T) {
 
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d", rr.Code)
+	}
+}
+
+func TestHandleAddLabels_BatchSuccess(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+
+	body := `{"labels":["food","work","recurring"]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/transactions/abc/labels", strings.NewReader(body))
+	req.SetPathValue("id", "abc")
+	rr := httptest.NewRecorder()
+	h.HandleAddLabels(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleAddLabels_StoreError_Returns500(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{addLabelsErr: errors.New("db error")}, &mockDaemon{})
+
+	body := `{"labels":["food"]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/transactions/abc/labels", strings.NewReader(body))
+	req.SetPathValue("id", "abc")
+	rr := httptest.NewRecorder()
+	h.HandleAddLabels(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rr.Code)
 	}
 }
 
