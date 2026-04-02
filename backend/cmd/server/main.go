@@ -120,10 +120,14 @@ func main() {
 	)
 
 	// Load configuration from environment variables.
+	// Only load variables under known namespaces to avoid polluting koanf with
+	// unrelated process environment variables (PATH, HOME, etc.).
 	k := koanf.New(".")
-	if err := k.Load(env.Provider("", ".", func(s string) string { return s }), nil); err != nil {
-		logger.Error("failed to load env config", "error", err)
-		os.Exit(1)
+	for _, prefix := range []string{"EXPENSOR_", "GMAIL_", "THUNDERBIRD_", "POSTGRES_"} {
+		if err := k.Load(env.Provider(prefix, ".", func(s string) string { return s }), nil); err != nil {
+			logger.Error("failed to load env config", "prefix", prefix, "error", err)
+			os.Exit(1)
+		}
 	}
 	var cfg config.Config
 	if err := k.UnmarshalWithConf("", &cfg, koanf.UnmarshalConf{Tag: "koanf", FlatPaths: true}); err != nil {
