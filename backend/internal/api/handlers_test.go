@@ -630,3 +630,38 @@ func TestGenerateState_ContainsReaderName(t *testing.T) {
 		t.Errorf("state %q should contain the reader name", s)
 	}
 }
+
+// --- OAuth state TTL ---
+
+func TestHandleAuthCallback_RejectsUnknownState(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/callback?state=doesnotexist&code=xyz", nil)
+	rr := httptest.NewRecorder()
+	h.HandleAuthCallback(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unknown state, got %d", rr.Code)
+	}
+}
+
+func TestHandleAuthCallback_RejectsExpiredState(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+
+	// Inject an already-expired entry directly into the map.
+	expiredState := "reader:gmail:expiredtoken"
+	h.mu.Lock()
+	h.oauthStates[expiredState] = oauthStateEntry{
+		readerName: "gmail",
+		expiresAt:  time.Now().Add(-1 * time.Second), // already expired
+	}
+	h.mu.Unlock()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/callback?state="+expiredState+"&code=xyz", nil)
+	rr := httptest.NewRecorder()
+	h.HandleAuthCallback(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for expired state, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}

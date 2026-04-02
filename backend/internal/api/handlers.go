@@ -28,7 +28,14 @@ import (
 const (
 	maxCredentialsSize = 5 << 20 // 5 MB
 	dataDir            = "data"
+	oauthStateTTL      = 10 * time.Minute
 )
+
+// oauthStateEntry holds a pending OAuth state with an expiry time.
+type oauthStateEntry struct {
+	readerName string
+	expiresAt  time.Time
+}
 
 // credentialsFileName returns the per-reader credentials file path.
 func credentialsFileName(readerName string) string {
@@ -62,9 +69,9 @@ type Handlers struct {
 	startFn     func(reader string) // called by POST /api/daemon/start; may be nil
 	logger      *slog.Logger
 
-	// oauthStates maps state token → reader name for in-flight OAuth flows.
+	// oauthStates maps state token → entry for in-flight OAuth flows.
 	mu          sync.Mutex
-	oauthStates map[string]string
+	oauthStates map[string]oauthStateEntry
 }
 
 // NewHandlers creates a Handlers instance.
@@ -90,7 +97,7 @@ func NewHandlers(
 		frontendURL: strings.TrimRight(frontendURL, "/"),
 		startFn:     startFn,
 		logger:      logger,
-		oauthStates: make(map[string]string),
+		oauthStates: make(map[string]oauthStateEntry),
 	}
 }
 
@@ -285,7 +292,16 @@ func (h *Handlers) HandleAuthStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.mu.Lock()
-	h.oauthStates[state] = name
+	// Prune expired entries before adding a new one.
+	for k, v := range h.oauthStates {
+		if time.Now().After(v.expiresAt) {
+			delete(h.oauthStates, k)
+		}
+	}
+	h.oauthStates[state] = oauthStateEntry{
+		readerName: name,
+		expiresAt:  time.Now().Add(oauthStateTTL),
+	}
 	h.mu.Unlock()
 
 	// prompt=consent forces Google to always return a refresh token, even if the
@@ -303,14 +319,15 @@ func (h *Handlers) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 
 	h.mu.Lock()
-	name, ok := h.oauthStates[state]
+	entry, ok := h.oauthStates[state]
 	if ok {
 		delete(h.oauthStates, state)
 	}
 	h.mu.Unlock()
 
+	name := entry.readerName
 	h.logger.Debug("OAuth callback received", "state_valid", ok, "reader", name, "has_code", code != "")
-	if !ok {
+	if !ok || time.Now().After(entry.expiresAt) {
 		writeError(w, http.StatusBadRequest, "invalid or expired OAuth state")
 		return
 	}
