@@ -586,3 +586,47 @@ func TestHandleSearchTransactions_NilStore(t *testing.T) {
 		t.Fatalf("expected 503, got %d", rr.Code)
 	}
 }
+
+// --- generateState ---
+
+func TestGenerateState_IsUnique(t *testing.T) {
+	s1, err := generateState("gmail")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	s2, err := generateState("gmail")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s1 == s2 {
+		t.Error("generateState must return unique values on each call")
+	}
+}
+
+func TestGenerateState_IsNotPureTimestamp(t *testing.T) {
+	s, err := generateState("gmail")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Verify the suffix after the last colon is a 32-char hex string.
+	parts := strings.Split(s, ":")
+	suffix := parts[len(parts)-1]
+	if len(suffix) != 32 {
+		t.Errorf("expected 32-char hex suffix, got %q (len=%d)", suffix, len(suffix))
+	}
+	for _, c := range suffix {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			t.Errorf("suffix %q contains non-hex character %q", suffix, c)
+		}
+	}
+}
+
+func TestGenerateState_ContainsReaderName(t *testing.T) {
+	s, err := generateState("thunderbird")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(s, "thunderbird") {
+		t.Errorf("state %q should contain the reader name", s)
+	}
+}

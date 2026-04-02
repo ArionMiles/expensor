@@ -2,12 +2,15 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -275,7 +278,12 @@ func (h *Handlers) HandleAuthStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate a random state token that encodes the reader name.
-	state := generateState(name)
+	state, err := generateState(name)
+	if err != nil {
+		h.logger.Error("failed to generate OAuth state", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to initiate OAuth flow")
+		return
+	}
 	h.mu.Lock()
 	h.oauthStates[state] = name
 	h.mu.Unlock()
@@ -341,7 +349,7 @@ func (h *Handlers) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.Info("OAuth token saved", "reader", name)
 	// Redirect back to the frontend wizard so the OAuth step can detect completion.
-	http.Redirect(w, r, h.frontendURL+"/setup?auth=success&reader="+name, http.StatusFound)
+	http.Redirect(w, r, h.frontendURL+"/setup?auth=success&reader="+url.QueryEscape(name), http.StatusFound)
 }
 
 // HandleAuthStatus handles GET /api/readers/{name}/auth/status.
@@ -761,7 +769,11 @@ func queryInt(r *http.Request, key string, def int) int {
 	return n
 }
 
-// generateState creates a unique OAuth state token encoding the reader name.
-func generateState(readerName string) string {
-	return fmt.Sprintf("reader:%s:%d", readerName, time.Now().UnixNano())
+// generateState creates a cryptographically random OAuth state token.
+func generateState(readerName string) (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generating OAuth state: %w", err)
+	}
+	return fmt.Sprintf("reader:%s:%s", readerName, hex.EncodeToString(b)), nil
 }
