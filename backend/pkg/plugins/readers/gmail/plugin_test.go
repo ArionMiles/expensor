@@ -51,7 +51,7 @@ func TestPlugin_RequiredScopes(t *testing.T) {
 func TestPlugin_NewReader_NilHTTPClient(t *testing.T) {
 	p := &gmailplugin.Plugin{}
 	cfg := &config.Config{
-		Gmail: config.GmailConfig{Interval: 60},
+		ScanInterval: 60,
 	}
 
 	_, err := p.NewReader(nil, cfg, nil, nil, nil, testLogger())

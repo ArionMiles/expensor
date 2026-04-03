@@ -671,7 +671,10 @@ func (s *Store) initAppConfig(ctx context.Context) error {
 		    key   TEXT PRIMARY KEY,
 		    value TEXT NOT NULL
 		);
-		INSERT INTO app_config (key, value) VALUES ('base_currency', 'INR')
+		INSERT INTO app_config (key, value) VALUES
+		    ('base_currency', 'INR'),
+		    ('scan_interval', '60'),
+		    ('lookback_days', '180')
 		ON CONFLICT (key) DO NOTHING;
 	`)
 	return err

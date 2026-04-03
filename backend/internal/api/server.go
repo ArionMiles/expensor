@@ -91,6 +91,10 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	// App configuration
 	mux.HandleFunc("GET /api/config/base-currency", h.HandleGetBaseCurrency)
 	mux.HandleFunc("PUT /api/config/base-currency", h.HandleSetBaseCurrency)
+	mux.HandleFunc("GET /api/config/scan-interval", h.HandleGetScanInterval)
+	mux.HandleFunc("PUT /api/config/scan-interval", h.HandleSetScanInterval)
+	mux.HandleFunc("GET /api/config/lookback-days", h.HandleGetLookbackDays)
+	mux.HandleFunc("PUT /api/config/lookback-days", h.HandleSetLookbackDays)
 
 	// Labels taxonomy
 	mux.HandleFunc("GET /api/config/labels", h.HandleListLabels)

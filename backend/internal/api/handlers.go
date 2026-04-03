@@ -57,6 +57,8 @@ type Handlers struct {
 	frontendURL  string // e.g. "http://localhost:5173" — used for OAuth redirects
 	dataDir      string
 	baseCurrency string
+	scanInterval int                 // default scan interval in seconds
+	lookbackDays int                 // default lookback in days
 	startFn      func(reader string) // called by POST /api/daemon/start; may be nil
 	logger       *slog.Logger
 
@@ -76,6 +78,8 @@ func NewHandlers( //nolint:revive // dependency injection requires all these par
 	frontendURL string,
 	dataDir string,
 	baseCurrency string,
+	scanInterval int,
+	lookbackDays int,
 	startFn func(reader string),
 	logger *slog.Logger,
 ) *Handlers {
@@ -88,6 +92,12 @@ func NewHandlers( //nolint:revive // dependency injection requires all these par
 	if baseCurrency == "" {
 		baseCurrency = "INR"
 	}
+	if scanInterval <= 0 {
+		scanInterval = 60
+	}
+	if lookbackDays <= 0 {
+		lookbackDays = 180
+	}
 	return &Handlers{
 		registry:     registry,
 		store:        st,
@@ -96,6 +106,8 @@ func NewHandlers( //nolint:revive // dependency injection requires all these par
 		frontendURL:  strings.TrimRight(frontendURL, "/"),
 		dataDir:      dataDir,
 		baseCurrency: baseCurrency,
+		scanInterval: scanInterval,
+		lookbackDays: lookbackDays,
 		startFn:      startFn,
 		logger:       logger,
 		oauthStates:  make(map[string]oauthStateEntry),
@@ -1111,6 +1123,86 @@ func (h *Handlers) HandleSetBaseCurrency(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"base_currency": currency})
+}
+
+// HandleGetScanInterval handles GET /api/config/scan-interval.
+func (h *Handlers) HandleGetScanInterval(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	val := strconv.Itoa(h.scanInterval)
+	if dbVal, err := h.store.GetAppConfig(r.Context(), "scan_interval"); err == nil && dbVal != "" {
+		val = dbVal
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"scan_interval": val})
+}
+
+// HandleSetScanInterval handles PUT /api/config/scan-interval.
+// Body: {"scan_interval": "120"}
+func (h *Handlers) HandleSetScanInterval(w http.ResponseWriter, r *http.Request) { //nolint:dupl // same shape as SetLookbackDays; different key and bounds
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	var body struct {
+		ScanInterval string `json:"scan_interval"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ScanInterval == "" {
+		writeError(w, http.StatusUnprocessableEntity, "body must be {\"scan_interval\": \"<seconds>\"}")
+		return
+	}
+	n, err := strconv.Atoi(body.ScanInterval)
+	if err != nil || n < 10 || n > 3600 {
+		writeError(w, http.StatusBadRequest, "scan_interval must be an integer between 10 and 3600 seconds")
+		return
+	}
+	if err := h.store.SetAppConfig(r.Context(), "scan_interval", body.ScanInterval); err != nil {
+		h.logger.Error("set scan interval", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to update scan interval")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"scan_interval": body.ScanInterval})
+}
+
+// HandleGetLookbackDays handles GET /api/config/lookback-days.
+func (h *Handlers) HandleGetLookbackDays(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	val := strconv.Itoa(h.lookbackDays)
+	if dbVal, err := h.store.GetAppConfig(r.Context(), "lookback_days"); err == nil && dbVal != "" {
+		val = dbVal
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"lookback_days": val})
+}
+
+// HandleSetLookbackDays handles PUT /api/config/lookback-days.
+// Body: {"lookback_days": "365"}
+func (h *Handlers) HandleSetLookbackDays(w http.ResponseWriter, r *http.Request) { //nolint:dupl // same shape as SetScanInterval; different key and bounds
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	var body struct {
+		LookbackDays string `json:"lookback_days"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.LookbackDays == "" {
+		writeError(w, http.StatusUnprocessableEntity, "body must be {\"lookback_days\": \"<days>\"}")
+		return
+	}
+	n, err := strconv.Atoi(body.LookbackDays)
+	if err != nil || n < 1 || n > 3650 {
+		writeError(w, http.StatusBadRequest, "lookback_days must be an integer between 1 and 3650")
+		return
+	}
+	if err := h.store.SetAppConfig(r.Context(), "lookback_days", body.LookbackDays); err != nil {
+		h.logger.Error("set lookback days", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to update lookback days")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"lookback_days": body.LookbackDays})
 }
 
 // --- helpers ---

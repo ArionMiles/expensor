@@ -201,7 +201,7 @@ func newTestHandlers(t *testing.T, st Storer, dm DaemonStatusProvider) *Handlers
 		{Key: "profilePath", Label: "Profile Directory", Type: "path", Required: true},
 	}})
 	_ = registry.RegisterWriter(&testWriterPlugin{name: "postgres"})
-	return NewHandlers(registry, st, dm, "http://localhost:8080", "http://localhost:5173", t.TempDir(), "INR", nil, slog.Default())
+	return NewHandlers(registry, st, dm, "http://localhost:8080", "http://localhost:5173", t.TempDir(), "INR", 60, 180, nil, slog.Default())
 }
 
 // --- minimal plugin stubs ---
@@ -1024,5 +1024,72 @@ func TestHandleUpdateTransaction_InvalidCategory(t *testing.T) {
 	h.HandleUpdateTransaction(rr, req)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+// --- scan interval ---
+
+func TestHandleGetScanInterval_Default(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/scan-interval", nil)
+	rr := httptest.NewRecorder()
+	h.HandleGetScanInterval(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var resp map[string]string
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp["scan_interval"] != "60" {
+		t.Errorf("expected scan_interval=60, got %q", resp["scan_interval"])
+	}
+}
+
+func TestHandleSetScanInterval_Valid(t *testing.T) {
+	ms := &mockStore{}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+
+	body := strings.NewReader(`{"scan_interval":"120"}`)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/scan-interval", body)
+	rr := httptest.NewRecorder()
+	h.HandleSetScanInterval(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp map[string]string
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp["scan_interval"] != "120" {
+		t.Errorf("expected scan_interval=120, got %q", resp["scan_interval"])
+	}
+	if ms.appConfig["scan_interval"] != "120" {
+		t.Errorf("store not updated, got %q", ms.appConfig["scan_interval"])
+	}
+}
+
+func TestHandleSetScanInterval_TooLow(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+
+	body := strings.NewReader(`{"scan_interval":"5"}`)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/scan-interval", body)
+	rr := httptest.NewRecorder()
+	h.HandleSetScanInterval(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleSetScanInterval_TooHigh(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+
+	body := strings.NewReader(`{"scan_interval":"9999"}`)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/scan-interval", body)
+	rr := httptest.NewRecorder()
+	h.HandleSetScanInterval(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }

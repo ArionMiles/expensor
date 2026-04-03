@@ -102,6 +102,16 @@ export const api = {
       apiClient.put<{ base_currency: string }>('/config/base-currency', {
         base_currency: currency,
       }),
+    getScanInterval: () => apiClient.get<{ scan_interval: string }>('/config/scan-interval'),
+    setScanInterval: (seconds: number) =>
+      apiClient.put<{ scan_interval: string }>('/config/scan-interval', {
+        scan_interval: String(seconds),
+      }),
+    getLookbackDays: () => apiClient.get<{ lookback_days: string }>('/config/lookback-days'),
+    setLookbackDays: (days: number) =>
+      apiClient.put<{ lookback_days: string }>('/config/lookback-days', {
+        lookback_days: String(days),
+      }),
 
     labels: {
       list: () => apiClient.get<Label[]>('/config/labels'),

@@ -4,7 +4,6 @@ package config
 import (
 	"fmt"
 	"strings"
-	"time"
 )
 
 // ClientSecretFile is the default path to the Google OAuth credentials JSON file.
@@ -31,6 +30,16 @@ type Config struct {
 	// Default: INR
 	BaseCurrency string `koanf:"EXPENSOR_BASE_CURRENCY"`
 
+	// ScanInterval is the polling interval in seconds for all readers.
+	// Environment variable: EXPENSOR_SCAN_INTERVAL
+	// Default: 60
+	ScanInterval int `koanf:"EXPENSOR_SCAN_INTERVAL"`
+
+	// LookbackDays limits how far back readers search for emails on first run.
+	// Environment variable: EXPENSOR_LOOKBACK_DAYS
+	// Default: 180
+	LookbackDays int `koanf:"EXPENSOR_LOOKBACK_DAYS"`
+
 	// Reader-specific configurations (embedded to flatten the key namespace)
 	Gmail       GmailConfig       `koanf:",squash"`
 	Thunderbird ThunderbirdConfig `koanf:",squash"`
@@ -40,17 +49,7 @@ type Config struct {
 }
 
 // GmailConfig holds Gmail reader configuration.
-type GmailConfig struct {
-	// Interval is the polling interval in seconds.
-	// Environment variable: GMAIL_INTERVAL
-	// Default: 60
-	Interval int `koanf:"GMAIL_INTERVAL"`
-
-	// LookbackDays is how far back in time (in days) to search for emails.
-	// Environment variable: GMAIL_LOOKBACK_DAYS
-	// Default: 180 (6 months)
-	LookbackDays int `koanf:"GMAIL_LOOKBACK_DAYS"`
-}
+type GmailConfig struct{}
 
 // ThunderbirdConfig holds Thunderbird reader configuration.
 type ThunderbirdConfig struct {
@@ -62,11 +61,6 @@ type ThunderbirdConfig struct {
 	// Environment variable: THUNDERBIRD_MAILBOXES
 	// Example: "INBOX,Archives"
 	Mailboxes string `koanf:"THUNDERBIRD_MAILBOXES"`
-
-	// Interval is the polling interval in seconds.
-	// Environment variable: THUNDERBIRD_INTERVAL
-	// Default: 60
-	Interval int `koanf:"THUNDERBIRD_INTERVAL"`
 }
 
 // GetMailboxes returns the mailboxes as a slice.
@@ -79,14 +73,6 @@ func (c *ThunderbirdConfig) GetMailboxes() []string {
 		mailboxes[i] = strings.TrimSpace(m)
 	}
 	return mailboxes
-}
-
-// GetInterval returns the interval as a time.Duration.
-func (c *ThunderbirdConfig) GetInterval() time.Duration {
-	if c.Interval <= 0 {
-		return 60 * time.Second
-	}
-	return time.Duration(c.Interval) * time.Second
 }
 
 // PostgresConfig holds PostgreSQL connection configuration.
@@ -140,17 +126,12 @@ func (c *Config) ApplyDefaults() {
 		c.BaseCurrency = "INR"
 	}
 
-	// Gmail defaults
-	if c.Gmail.Interval <= 0 {
-		c.Gmail.Interval = 60
+	// Scan settings defaults
+	if c.ScanInterval <= 0 {
+		c.ScanInterval = 60
 	}
-	if c.Gmail.LookbackDays <= 0 {
-		c.Gmail.LookbackDays = 180
-	}
-
-	// Thunderbird defaults
-	if c.Thunderbird.Interval <= 0 {
-		c.Thunderbird.Interval = 60
+	if c.LookbackDays <= 0 {
+		c.LookbackDays = 180
 	}
 
 	// Postgres defaults

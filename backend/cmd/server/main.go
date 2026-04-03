@@ -199,7 +199,8 @@ func main() {
 		if err := saveActiveReader(cfg.DataDir, readerName); err != nil {
 			logger.Warn("failed to persist active reader", "error", err)
 		}
-		go runDaemon(ctx, registry, readerName, cfg, rules, labels, dm, logger)
+		runtimeCfg := applyScanOverrides(cfg, st)
+		go runDaemon(ctx, registry, readerName, runtimeCfg, rules, labels, dm, logger)
 	}
 
 	// Auto-start daemon if a previous reader selection was persisted.
@@ -211,6 +212,7 @@ func main() {
 	handlers := httpapi.NewHandlers(
 		registry, st, dm, baseURL, frontendURL,
 		cfg.DataDir, cfg.BaseCurrency,
+		cfg.ScanInterval, cfg.LookbackDays,
 		startDaemon,
 		logger.With("component", "api"),
 	)
@@ -401,4 +403,23 @@ func envStr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// applyScanOverrides returns a copy of cfg with ScanInterval and LookbackDays
+// overridden from app_config when valid UI-set values exist.
+func applyScanOverrides(cfg config.Config, st httpapi.Storer) config.Config {
+	if st == nil {
+		return cfg
+	}
+	if v, err := st.GetAppConfig(context.Background(), "scan_interval"); err == nil {
+		if n, convErr := strconv.Atoi(v); convErr == nil && n > 0 {
+			cfg.ScanInterval = n
+		}
+	}
+	if v, err := st.GetAppConfig(context.Background(), "lookback_days"); err == nil {
+		if n, convErr := strconv.Atoi(v); convErr == nil && n > 0 {
+			cfg.LookbackDays = n
+		}
+	}
+	return cfg
 }

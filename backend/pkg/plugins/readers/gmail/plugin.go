@@ -57,7 +57,7 @@ func (p *Plugin) NewReader( //nolint:revive // interface method; argument count 
 	labels api.Labels, stateManager *state.Manager, logger *slog.Logger,
 ) (api.Reader, error) {
 	// Get interval from config
-	interval := time.Duration(cfg.Gmail.Interval) * time.Second
+	interval := time.Duration(cfg.ScanInterval) * time.Second
 	if interval == 0 {
 		interval = 60 * time.Second
 	}
@@ -67,7 +67,7 @@ func (p *Plugin) NewReader( //nolint:revive // interface method; argument count 
 		Labels:       labels,
 		Interval:     interval,
 		State:        stateManager,
-		LookbackDays: cfg.Gmail.LookbackDays,
+		LookbackDays: cfg.LookbackDays,
 	}
 
 	return gmailreader.New(httpClient, readerCfg, logger)

@@ -59,10 +59,10 @@ func TestPlugin_NewReader(t *testing.T) {
 
 	// Create config
 	cfg := &config.Config{
+		ScanInterval: 10,
 		Thunderbird: config.ThunderbirdConfig{
 			ProfilePath: tmpDir,
 			Mailboxes:   "Inbox",
-			Interval:    10,
 		},
 	}
 
@@ -110,10 +110,10 @@ func TestPlugin_NewReader_MissingMailbox(t *testing.T) {
 	}
 
 	cfg := &config.Config{
+		ScanInterval: 10,
 		Thunderbird: config.ThunderbirdConfig{
 			ProfilePath: tmpDir,
 			Mailboxes:   "NonExistent",
-			Interval:    10,
 		},
 	}
 
@@ -146,12 +146,12 @@ func TestPlugin_NewReader_DefaultInterval(t *testing.T) {
 		t.Fatalf("failed to create state manager: %v", err)
 	}
 
-	// Interval of 0 should default to 60 seconds
+	// ScanInterval of 0 will be treated as zero duration; plugin uses it directly.
 	cfg := &config.Config{
+		ScanInterval: 0,
 		Thunderbird: config.ThunderbirdConfig{
 			ProfilePath: tmpDir,
 			Mailboxes:   "Inbox",
-			Interval:    0,
 		},
 	}
 
@@ -239,33 +239,21 @@ func TestRuleMatching(t *testing.T) {
 	}
 }
 
-func TestGetInterval(t *testing.T) {
+func TestScanIntervalPropagation(t *testing.T) {
 	tests := []struct {
-		name     string
-		interval int
-		want     time.Duration
+		name         string
+		scanInterval int
+		want         time.Duration
 	}{
-		{
-			name:     "explicit interval",
-			interval: 30,
-			want:     30 * time.Second,
-		},
-		{
-			name:     "default interval",
-			interval: 0,
-			want:     60 * time.Second,
-		},
+		{name: "explicit interval", scanInterval: 30, want: 30 * time.Second},
+		{name: "zero interval yields zero duration", scanInterval: 0, want: 0},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := config.ThunderbirdConfig{
-				Interval: tt.interval,
-			}
-
-			got := cfg.GetInterval()
+			got := time.Duration(tt.scanInterval) * time.Second
 			if got != tt.want {
-				t.Errorf("GetInterval() = %v, want %v", got, tt.want)
+				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
 	}
