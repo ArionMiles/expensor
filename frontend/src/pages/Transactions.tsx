@@ -5,12 +5,10 @@ import {
   useUpdateTransactionDescription,
 } from '@/api/queries'
 import type { Transaction, TransactionFilters } from '@/api/types'
-import { DaemonStatusBar } from '@/components/DaemonStatusBar'
 import { LabelChip } from '@/components/LabelChip'
 import { Pagination } from '@/components/Pagination'
 import { cn, formatCurrency, formatDate } from '@/lib/utils'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -223,30 +221,7 @@ export function Transactions() {
   )
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="border-b border-border px-6 py-3 flex items-center justify-between bg-card">
-        <Link
-          to="/"
-          className="text-sm font-semibold text-primary tracking-wide hover:text-primary/80 transition-colors"
-        >
-          Expensor
-        </Link>
-        <nav className="flex items-center gap-4">
-          <Link to="/transactions" className="text-xs text-foreground font-medium">
-            Transactions
-          </Link>
-          <Link
-            to="/setup"
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Setup
-          </Link>
-        </nav>
-      </header>
-
-      <DaemonStatusBar />
-
-      <main className="flex-1 flex flex-col px-6 py-4 max-w-full">
+    <div className="flex flex-col flex-1 min-h-0 px-6 py-4 max-w-full">
         {/* Toolbar */}
         <div className="mb-4 space-y-3">
           <div className="flex items-center gap-3">
@@ -409,7 +384,6 @@ export function Transactions() {
 
           <Pagination page={page} pageSize={20} total={total} onPage={setPage} />
         </div>
-      </main>
     </div>
   )
 }

@@ -13,7 +13,7 @@ import { ReaderLogo } from '@/components/ReaderLogo'
 import { cn, getReaderDisplayName } from '@/lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { ConfigureStep } from './steps/ConfigureStep'
 import { OAuthStep } from './steps/OAuthStep'
 import { ReviewAndStart } from './steps/ReviewAndStart'
@@ -531,24 +531,7 @@ export function Wizard() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="border-b border-border px-6 py-3 flex items-center justify-between bg-card">
-        <Link to="/" className="text-sm font-semibold text-primary tracking-wide hover:text-primary/80 transition-colors">
-          Expensor
-        </Link>
-        <div className="flex items-center gap-4">
-          {mode === 'wizard' && (
-            <button
-              onClick={() => setMode('overview')}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              ← Back to setup
-            </button>
-          )}
-          <span className="text-xs text-muted-foreground">Setup</span>
-        </div>
-      </header>
-
+    <div className="flex flex-col flex-1">
       <div className="flex-1 flex flex-col items-center justify-center px-4 py-12">
         {mode === 'overview' ? (
           <SetupOverview

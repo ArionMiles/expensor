@@ -96,6 +96,12 @@ export const api = {
       apiClient.delete(`/readers/${readerName}`),
   },
 
+  config: {
+    getBaseCurrency: () => apiClient.get<{ base_currency: string }>('/config/base-currency'),
+    setBaseCurrency: (currency: string) =>
+      apiClient.put<{ base_currency: string }>('/config/base-currency', { base_currency: currency }),
+  },
+
   transactions: {
     list: (filters: TransactionFilters = {}) => {
       const params = new URLSearchParams()

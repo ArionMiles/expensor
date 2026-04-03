@@ -1,8 +1,7 @@
 import { useChartData, useStatus, useTransactions } from '@/api/queries'
 import type { ChartData, TimeBucket } from '@/api/types'
-import { DaemonStatusBar } from '@/components/DaemonStatusBar'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
-import { cn, formatCurrency, formatRelative } from '@/lib/utils'
+import { formatCurrency, formatRelative } from '@/lib/utils'
 import { Link } from 'react-router-dom'
 
 // ─── Chart palette ───────────────────────────────────────────────────────────
@@ -431,80 +430,39 @@ function RecentTransactions() {
   )
 }
 
-// ─── Nav ──────────────────────────────────────────────────────────────────────
-
-function NavLink({
-  to,
-  children,
-  active,
-}: {
-  to: string
-  children: React.ReactNode
-  active?: boolean
-}) {
-  return (
-    <Link
-      to={to}
-      className={cn(
-        'text-xs transition-colors',
-        active ? 'text-foreground font-medium' : 'text-muted-foreground hover:text-foreground',
-      )}
-    >
-      {children}
-    </Link>
-  )
-}
-
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export function Dashboard() {
   const { data: chartData } = useChartData()
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="border-b border-border px-6 py-3 flex items-center justify-between bg-card">
-        <Link
-          to="/"
-          className="text-sm font-semibold text-primary tracking-wide hover:text-primary/80 transition-colors"
-        >
-          Expensor
-        </Link>
-        <nav className="flex items-center gap-4">
-          <NavLink to="/transactions">Transactions</NavLink>
-          <NavLink to="/setup">Setup</NavLink>
-        </nav>
-      </header>
-
-      <DaemonStatusBar />
-
-      <main className="flex-1 px-6 py-6 max-w-6xl mx-auto w-full space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <ErrorBoundary>
-              <StatsSection />
-            </ErrorBoundary>
-          </div>
-
-          <div className="lg:col-span-1">
-            <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xs text-muted-foreground uppercase tracking-wider">
-                  Recent transactions
-                </h2>
-              </div>
-              <ErrorBoundary>
-                <RecentTransactions />
-              </ErrorBoundary>
-            </div>
-          </div>
+    <div className="px-6 py-6 max-w-6xl mx-auto w-full space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <ErrorBoundary>
+            <StatsSection />
+          </ErrorBoundary>
         </div>
 
-        {chartData && (
-          <ErrorBoundary>
-            <ChartsSection charts={chartData} />
-          </ErrorBoundary>
-        )}
-      </main>
+        <div className="lg:col-span-1">
+          <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xs text-muted-foreground uppercase tracking-wider">
+                Recent transactions
+              </h2>
+            </div>
+            <ErrorBoundary>
+              <RecentTransactions />
+            </ErrorBoundary>
+          </div>
+        </div>
+      </div>
+
+      {chartData && (
+        <ErrorBoundary>
+          <ChartsSection charts={chartData} />
+        </ErrorBoundary>
+      )}
     </div>
   )
 }
