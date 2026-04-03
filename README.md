@@ -3,17 +3,18 @@
 > [!IMPORTANT]
 > This project is built with AI-assisted tooling.
 
-Expensor reads expense-related emails from your inbox, extracts transaction details, and writes them to PostgreSQL for further analysis. It supports multiple email sources (Gmail, Thunderbird) and uses configurable regex-based rules to identify and parse transactions.
+Expensor reads expense-related emails from your inbox, extracts transaction details, and writes them to PostgreSQL. It ships with a web UI for setup, monitoring, and transaction management.
 
 I've documented why exactly expensor works for me [on my blog](https://kanishk.io/posts/expensor/). The rules are dead-simple regex extractions which are fast and can be updated easily.
 
 ## How does it work?
 
-1. Periodically poll the configured inbox (Gmail or Thunderbird)
-2. Match emails against [rules](backend/cmd/server/content/rules.json) by sender and/or subject
-3. Extract transaction details — amount, merchant name, date — via regex
-4. Write them to PostgreSQL
-5. Repeat
+1. Open the web UI and complete the onboarding wizard (select reader, upload credentials, authenticate)
+2. Start the daemon — it periodically polls the configured inbox (Gmail or Thunderbird)
+3. Match emails against [rules](backend/cmd/server/content/rules.json) by sender and/or subject
+4. Extract transaction details — amount, merchant name, date — via regex
+5. Write them to PostgreSQL
+6. Browse, filter, search, and label transactions in the Transactions view
 
 ## Architecture
 
@@ -27,7 +28,7 @@ readers (gmail | thunderbird)
   postgres writer
         │
         ▼
-  PostgreSQL DB  ──▶  API  ──▶  Frontend (planned)
+  PostgreSQL DB  ──▶  REST API  ──▶  Web UI (React)
 ```
 
 ## Repository Structure
@@ -35,16 +36,16 @@ readers (gmail | thunderbird)
 ```
 .
 ├── backend/
-│   ├── cmd/
-│   │   ├── server/          # Main daemon binary
-│   │   │   └── content/     # Embedded rules.json & labels.json
-│   │   └── auth/            # Standalone OAuth flow binary
+│   ├── cmd/server/          # Main server binary
+│   │   └── content/         # Embedded rules.json & labels.json
 │   ├── internal/
-│   │   ├── daemon/          # Daemon runner (reader → writer pipeline)
-│   │   └── plugins/         # Plugin registry
-│   ├── migrations/          # SQL migrations
+│   │   ├── api/             # HTTP handlers, routing, middleware
+│   │   ├── daemon/          # Reader → writer pipeline
+│   │   ├── plugins/         # Plugin registry
+│   │   └── store/           # PostgreSQL query layer
+│   ├── migrations/          # SQL migrations (run automatically on startup)
 │   └── pkg/
-│       ├── api/             # Core interfaces & types
+│       ├── api/             # Core interfaces & types (Reader, Writer, Rule)
 │       ├── config/          # Environment-based configuration
 │       ├── extractor/       # Amount & merchant regex extraction
 │       ├── state/           # SHA-256 keyed dedup state
@@ -54,71 +55,18 @@ readers (gmail | thunderbird)
 │       ├── writer/
 │       │   └── postgres/    # PostgreSQL writer (batched)
 │       └── plugins/         # Plugin wrappers for readers & writers
+├── frontend/                # React + Vite + Tailwind web UI
+├── tests/                   # Integration test helpers & local docker-compose
 ├── deployment/              # Docker Compose files per reader+writer combo
 ├── docker-compose.yml       # Default compose (gmail + postgres)
 └── Taskfile.yml             # Build & dev automation
 ```
 
-## Installation
+## Quick Start
 
-### Pre-built Binaries
-
-Download the latest release from the [releases page](https://github.com/ArionMiles/expensor/releases).
-
-### Docker
-
-```bash
-docker pull ghcr.io/arionmiles/expensor:latest
-```
-
-### From Source
-
-Requires Go 1.25 or later:
-
-```bash
-go install github.com/ArionMiles/expensor/backend/cmd/server@latest
-```
-
-## Setup
-
-### 1. Authenticate (Gmail reader only)
-
-Run the auth binary once to complete the OAuth flow and write `data/token.json`:
-
-```bash
-go run ./backend/cmd/auth
-```
-
-Place your Google OAuth credentials at `data/client_secret.json` before running.
-
-### 2. Run the database
-
-```bash
-docker-compose up -d postgres
-```
-
-Migrations run automatically on startup.
-
-### 3. Configure via environment variables
-
-See the [Configuration](#configuration) section below.
-
-### 4. Start expensor
-
-```bash
-task run
-# or
-go run ./backend/cmd/server
-```
-
-## Running with Docker Compose
+### With Docker Compose
 
 Pre-built compose files live in [`deployment/`](deployment/):
-
-| File | Reader | Writer |
-|------|--------|--------|
-| `deployment/docker-compose.gmail-postgres.yml` | Gmail | PostgreSQL |
-| `deployment/docker-compose.thunderbird-postgres.yml` | Thunderbird | PostgreSQL |
 
 ```bash
 # Gmail + Postgres
@@ -128,81 +76,110 @@ docker compose -f deployment/docker-compose.gmail-postgres.yml up -d
 docker compose -f deployment/docker-compose.thunderbird-postgres.yml up -d
 ```
 
+Once up, open **http://localhost:8080** and follow the onboarding wizard.
+
+### From Source
+
+Requires Go 1.25+ and Node 20+:
+
+```bash
+# Start postgres
+task db:start
+
+# Start everything (backend + frontend dev server)
+task dev
+```
+
+Then open **http://localhost:5173**.
+
 ## Configuration
 
-All configuration is via environment variables.
+All configuration is via environment variables. Reader and writer selection is handled through the web UI, not env vars.
 
 ### Core
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `EXPENSOR_READER` | Yes | — | Reader plugin: `gmail` or `thunderbird` |
-| `EXPENSOR_WRITER` | Yes | — | Writer plugin: `postgres` |
-| `EXPENSOR_STATE_FILE` | No | `data/state.json` | Path to dedup state file |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EXPENSOR_DATA_DIR` | `data` | Directory for credentials, tokens, and state files |
+| `EXPENSOR_STATE_FILE` | `data/state.json` | Path to dedup state file |
+| `EXPENSOR_BASE_CURRENCY` | `INR` | Currency used for aggregate stats |
+
+### Server
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8080` | HTTP server port |
+| `BASE_URL` | `http://localhost:8080` | Public base URL (used for OAuth redirect) |
+| `FRONTEND_URL` | `http://localhost:5173` | Frontend URL (used for post-auth redirects) |
 
 ### Gmail reader
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `GMAIL_INTERVAL` | No | `60` | Polling interval (seconds) |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GMAIL_INTERVAL` | `60` | Polling interval (seconds) |
+| `GMAIL_LOOKBACK_DAYS` | `180` | How far back to search for emails |
 
-OAuth credentials must be present at `data/client_secret.json` and `data/token.json` (generated by `cmd/auth`).
+OAuth credentials are uploaded through the web UI (`/setup`), not via env vars.
 
 ### Thunderbird reader
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `THUNDERBIRD_PROFILE` | Yes | — | Path to Thunderbird profile directory |
-| `THUNDERBIRD_MAILBOXES` | Yes | — | Comma-separated mailbox names, e.g. `INBOX,Archives` |
-| `THUNDERBIRD_INTERVAL` | No | `60` | Polling interval (seconds) |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `THUNDERBIRD_PROFILE` | — | Path to Thunderbird profile directory |
+| `THUNDERBIRD_MAILBOXES` | — | Comma-separated mailbox names, e.g. `INBOX,Archives` |
+| `THUNDERBIRD_INTERVAL` | `60` | Polling interval (seconds) |
 
-### PostgreSQL writer
+### PostgreSQL
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `POSTGRES_HOST` | Yes | — | Database host |
-| `POSTGRES_DB` | Yes | — | Database name |
-| `POSTGRES_USER` | Yes | — | Database user |
-| `POSTGRES_PASSWORD` | No | — | Database password |
-| `POSTGRES_PORT` | No | `5432` | Database port |
-| `POSTGRES_SSLMODE` | No | `disable` | SSL mode |
-| `POSTGRES_BATCH_SIZE` | No | `10` | Rows to buffer before flushing |
-| `POSTGRES_FLUSH_INTERVAL` | No | `30` | Max seconds between flushes |
-| `POSTGRES_MAX_POOL_SIZE` | No | `10` | Connection pool size |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POSTGRES_HOST` | — | **Required.** Database host |
+| `POSTGRES_DB` | — | **Required.** Database name |
+| `POSTGRES_USER` | — | **Required.** Database user |
+| `POSTGRES_PASSWORD` | — | Database password |
+| `POSTGRES_PORT` | `5432` | Database port |
+| `POSTGRES_SSLMODE` | `disable` | SSL mode |
+| `POSTGRES_BATCH_SIZE` | `10` | Rows to buffer before flushing |
+| `POSTGRES_FLUSH_INTERVAL` | `30` | Max seconds between flushes |
+| `POSTGRES_MAX_POOL_SIZE` | `10` | Connection pool size |
 
 ### Logging
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `LOG_LEVEL` | No | `INFO` | Log level: `DEBUG`, `INFO`, `WARN`, `ERROR` |
-| `LOG_JSON` | No | `false` | Emit JSON logs |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARN`, or `ERROR` |
+| `LOG_JSON` | `false` | Emit structured JSON logs |
 
 ## Development
 
-This project uses [Task](https://taskfile.dev) for automation. All task targets run from the `backend/` directory automatically.
+This project uses [Task](https://taskfile.dev) for automation.
 
 ```bash
-# Format code (gci + gofumpt)
-task fmt
+task dev            # Start postgres + backend + frontend (full stack)
+task run            # Backend only (loads tests/.env)
+task run:frontend   # Frontend Vite dev server only
 
-# Lint (local config)
-task lint
+task fmt            # Format code (gci + gofumpt)
+task lint           # Lint with local config
+task lint:prod      # Lint with strict CI config
+task test           # Run tests (unit; integration tests require Docker)
+task test:cover     # Run tests with coverage report
+task build:binary   # Build optimized binary → bin/expensor
+task build:docker   # Build Docker image locally
+task vulncheck      # Run govulncheck vulnerability scanner
+task ci             # Run lint:prod + test (matches CI pipeline)
 
-# Run tests
-task test
-
-# Run tests with coverage
-task test:cover
-
-# Vulnerability scan
-task vulncheck
-
-# Build binary
-task build:binary
-
-# Run all CI checks
-task ci
+task db:start       # Start local dev postgres container
+task db:stop        # Stop local dev postgres container
 ```
+
+Integration tests (in `backend/internal/store/` and `backend/pkg/writer/postgres/`) spin up a real Postgres container via testcontainers. Run them with:
+
+```bash
+go test ./backend/internal/store/... ./backend/pkg/writer/postgres/...
+```
+
+Skip them in short mode: `go test -short ./...`
 
 ## Adding Rules
 
@@ -215,8 +192,7 @@ Rules live in [`backend/cmd/server/content/rules.json`](backend/cmd/server/conte
   "subjectContains": "Alert",
   "amountRegex": "Rs\\.\\s?([\\d,]+\\.\\d{2})",
   "merchantInfoRegex": "at ([^.]+)\\.",
-  "enabled": true,
-  "source": "ICICI CC"
+  "enabled": true
 }
 ```
 
@@ -240,7 +216,7 @@ for\s+([A-Z\s]+)            → for UBER TRIP
 to\s+([A-Z\s]+)             → to NETFLIX COM
 ```
 
-Each pattern must have exactly one capture group — that group is used as the extracted value. Test patterns at [regex101.com](https://regex101.com) with Go flavour selected.
+Each pattern must have exactly one capture group. Test patterns at [regex101.com](https://regex101.com) with Go flavour selected.
 
 ## Expensor doesn't recognise transactions from my bank
 
