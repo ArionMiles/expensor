@@ -7,6 +7,7 @@ export const queryKeys = {
   status: ['status'] as const,
   chartData: ['stats', 'charts'] as const,
   heatmap: (from?: string, to?: string) => ['stats', 'heatmap', from ?? null, to ?? null] as const,
+  annualHeatmap: (year: number) => ['stats', 'heatmap', 'annual', year] as const,
   readers: ['plugins', 'readers'] as const,
   readerCredentialsStatus: (name: string) => ['readers', name, 'credentials', 'status'] as const,
   readerAuthStatus: (name: string) => ['readers', name, 'auth', 'status'] as const,
@@ -48,6 +49,14 @@ export function useHeatmapData(from?: string, to?: string, enabled = true) {
     queryFn: () => api.stats.heatmap(from, to).then((r) => r.data),
     staleTime: 5 * 60 * 1000,
     enabled,
+  })
+}
+
+export function useAnnualHeatmapData(year: number) {
+  return useQuery({
+    queryKey: queryKeys.annualHeatmap(year),
+    queryFn: () => api.stats.annualHeatmap(year).then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
   })
 }
 

@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type {
+  AnnualHeatmapData,
   AuthStartResponse,
   AuthStatus,
   Bucket,
@@ -63,6 +64,8 @@ export const api = {
       const qs = params.toString()
       return apiClient.get<HeatmapData>(qs ? `/stats/heatmap?${qs}` : '/stats/heatmap')
     },
+    annualHeatmap: (year: number) =>
+      apiClient.get<AnnualHeatmapData>(`/stats/heatmap/annual?year=${year}`),
   },
 
   daemon: {

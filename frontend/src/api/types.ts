@@ -74,6 +74,17 @@ export interface HeatmapData {
   by_day_of_month: DayOfMonthBucket[]
 }
 
+export interface DailyBucket {
+  date: string   // RFC3339 date string — parse with new Date(b.date)
+  amount: number
+  count: number
+}
+
+export interface AnnualHeatmapData {
+  year: number
+  buckets: DailyBucket[]
+}
+
 export interface StatusResponse {
   daemon: DaemonStatus
   stats?: Stats
