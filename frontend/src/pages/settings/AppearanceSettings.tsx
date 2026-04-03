@@ -21,12 +21,16 @@ function SettingField({
   )
 }
 
+const numberInput =
+  'w-full rounded-md border border-border bg-input px-3 py-2 text-sm ' +
+  '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
+
 export function AppearanceSettings() {
   const [currency, setCurrency] = useState('')
-  const [scanInterval, setScanInterval] = useState('')
-  const [lookbackDays, setLookbackDays] = useState('')
+  const [scanInterval, setScanInterval] = useState('60')
+  const [lookbackDays, setLookbackDays] = useState('180')
   const [loading, setLoading] = useState(true)
-  const [saved, setSaved] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -39,18 +43,36 @@ export function AppearanceSettings() {
         const c = statusRes.value.data.stats?.base_currency
         if (c) setCurrency(c)
       }
-      if (intervalRes.status === 'fulfilled') setScanInterval(intervalRes.value.data.scan_interval)
-      if (lookbackRes.status === 'fulfilled') setLookbackDays(lookbackRes.value.data.lookback_days)
+      if (intervalRes.status === 'fulfilled' && intervalRes.value.data.scan_interval)
+        setScanInterval(intervalRes.value.data.scan_interval)
+      if (lookbackRes.status === 'fulfilled' && lookbackRes.value.data.lookback_days)
+        setLookbackDays(lookbackRes.value.data.lookback_days)
       setLoading(false)
     })
   }, [])
 
-  const saveField = async (key: string, action: () => Promise<unknown>) => {
-    setSaved(null)
+  const interval = parseInt(scanInterval, 10)
+  const lookback = parseInt(lookbackDays, 10)
+
+  const isValid =
+    currency.length === 3 &&
+    !isNaN(interval) &&
+    interval >= 10 &&
+    interval <= 3600 &&
+    !isNaN(lookback) &&
+    lookback >= 1 &&
+    lookback <= 3650
+
+  const handleSave = async () => {
+    setSaved(false)
     setError(null)
     try {
-      await action()
-      setSaved(key)
+      await Promise.all([
+        api.config.setBaseCurrency(currency.toUpperCase().trim()),
+        api.config.setScanInterval(interval),
+        api.config.setLookbackDays(lookback),
+      ])
+      setSaved(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
     }
@@ -60,116 +82,77 @@ export function AppearanceSettings() {
 
   return (
     <div className="max-w-sm space-y-6">
-      {/* Base currency */}
-      <div className="space-y-3">
-        <SettingField
-          label="Base currency"
-          hint="3-letter ISO 4217 code used for aggregate totals (e.g. INR, USD, EUR)."
-        >
+      <SettingField
+        label="Base currency"
+        hint="3-letter ISO 4217 code used for aggregate totals (e.g. INR, USD, EUR)."
+      >
+        <input
+          value={currency}
+          onChange={(e) => {
+            setCurrency(e.target.value)
+            setSaved(false)
+          }}
+          placeholder="INR"
+          maxLength={3}
+          className="w-full rounded-md border border-border bg-input px-3 py-2 font-mono text-sm uppercase"
+        />
+      </SettingField>
+
+      <SettingField
+        label="Scan interval"
+        hint="How often the daemon checks for new emails (10–3600 seconds)."
+      >
+        <div className="flex items-center gap-2">
           <input
-            value={currency}
+            type="number"
+            value={scanInterval}
             onChange={(e) => {
-              setCurrency(e.target.value)
-              setSaved(null)
+              setScanInterval(e.target.value)
+              setSaved(false)
             }}
-            placeholder="INR"
-            maxLength={3}
-            className="w-full rounded-md border border-border bg-input px-3 py-2 font-mono text-sm uppercase"
+            min={10}
+            max={3600}
+            className={numberInput}
           />
-        </SettingField>
-        <button
-          onClick={() =>
-            saveField('currency', () => api.config.setBaseCurrency(currency.toUpperCase().trim()))
-          }
-          disabled={currency.length !== 3}
-          className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Save
-        </button>
-        {saved === 'currency' && <p className="text-xs text-success">Saved.</p>}
-      </div>
+          <span className="flex-shrink-0 text-xs text-muted-foreground">seconds</span>
+        </div>
+      </SettingField>
 
-      <div className="space-y-3 border-t border-border pt-6">
-        <SettingField
-          label="Scan interval"
-          hint="How often the daemon checks for new emails (10–3600 seconds)."
-        >
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              value={scanInterval}
-              onChange={(e) => {
-                setScanInterval(e.target.value)
-                setSaved(null)
-              }}
-              min={10}
-              max={3600}
-              className="w-full rounded-md border border-border bg-input px-3 py-2 text-sm"
-            />
-            <span className="flex-shrink-0 text-xs text-muted-foreground">seconds</span>
-          </div>
-        </SettingField>
+      <SettingField
+        label="Lookback days"
+        hint="How far back to import emails on the first run (1–3650 days)."
+      >
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            value={lookbackDays}
+            onChange={(e) => {
+              setLookbackDays(e.target.value)
+              setSaved(false)
+            }}
+            min={1}
+            max={3650}
+            className={numberInput}
+          />
+          <span className="flex-shrink-0 text-xs text-muted-foreground">days</span>
+        </div>
+      </SettingField>
+
+      <div className="space-y-2">
         <button
-          onClick={() => {
-            const n = parseInt(scanInterval, 10)
-            saveField('scan', () => api.config.setScanInterval(n))
-          }}
-          disabled={
-            !scanInterval ||
-            isNaN(parseInt(scanInterval, 10)) ||
-            parseInt(scanInterval, 10) < 10 ||
-            parseInt(scanInterval, 10) > 3600
-          }
+          onClick={handleSave}
+          disabled={!isValid}
           className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Save
         </button>
-        {saved === 'scan' && (
-          <p className="text-xs text-success">Saved. Takes effect on next daemon start.</p>
+        {saved && (
+          <p className="text-xs text-success">
+            Saved. Scan interval and lookback days take effect on next daemon start.
+          </p>
         )}
+        {error && <p className="text-xs text-destructive">{error}</p>}
       </div>
-
-      <div className="space-y-3 border-t border-border pt-6">
-        <SettingField
-          label="Lookback days"
-          hint="How far back to import emails on the first run (1–3650 days)."
-        >
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              value={lookbackDays}
-              onChange={(e) => {
-                setLookbackDays(e.target.value)
-                setSaved(null)
-              }}
-              min={1}
-              max={3650}
-              className="w-full rounded-md border border-border bg-input px-3 py-2 text-sm"
-            />
-            <span className="flex-shrink-0 text-xs text-muted-foreground">days</span>
-          </div>
-        </SettingField>
-        <button
-          onClick={() => {
-            const n = parseInt(lookbackDays, 10)
-            saveField('lookback', () => api.config.setLookbackDays(n))
-          }}
-          disabled={
-            !lookbackDays ||
-            isNaN(parseInt(lookbackDays, 10)) ||
-            parseInt(lookbackDays, 10) < 1 ||
-            parseInt(lookbackDays, 10) > 3650
-          }
-          className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Save
-        </button>
-        {saved === 'lookback' && (
-          <p className="text-xs text-success">Saved. Takes effect on next daemon start.</p>
-        )}
-      </div>
-
-      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   )
 }
