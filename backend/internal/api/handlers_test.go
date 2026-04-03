@@ -45,6 +45,7 @@ type mockStore struct {
 	statsErr     error
 	appConfig    map[string]string
 	setConfigErr error
+	getFacetsErr error
 }
 
 func (m *mockStore) ListTransactions(_ context.Context, _ store.ListFilter) ([]store.Transaction, int, error) {
@@ -113,6 +114,18 @@ func (m *mockStore) SetAppConfig(_ context.Context, key, value string) error {
 	}
 	m.appConfig[key] = value
 	return nil
+}
+
+func (m *mockStore) GetFacets(_ context.Context) (*store.Facets, error) {
+	if m.getFacetsErr != nil {
+		return nil, m.getFacetsErr
+	}
+	return &store.Facets{
+		Sources:    []string{},
+		Categories: []string{},
+		Currencies: []string{},
+		Labels:     []string{},
+	}, nil
 }
 
 // newTestHandlers returns a Handlers wired with a real (minimal) plugin registry,
@@ -796,5 +809,42 @@ func TestHandleSetBaseCurrency_NoStore(t *testing.T) {
 
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", rr.Code)
+	}
+}
+
+func TestHandleGetFacets_NoStore(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/facets", nil)
+	rr := httptest.NewRecorder()
+	h.HandleGetFacets(rr, req)
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", rr.Code)
+	}
+}
+
+func TestHandleGetFacets_ReturnsEmptySlices(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/facets", nil)
+	rr := httptest.NewRecorder()
+	h.HandleGetFacets(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var resp map[string][]string
+	decodeJSON(t, rr.Body.String(), &resp)
+	for _, key := range []string{"sources", "categories", "currencies", "labels"} {
+		if resp[key] == nil {
+			t.Errorf("expected %q to be an empty slice, got nil", key)
+		}
+	}
+}
+
+func TestHandleGetFacets_StoreError(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{getFacetsErr: errors.New("db error")}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/facets", nil)
+	rr := httptest.NewRecorder()
+	h.HandleGetFacets(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rr.Code)
 	}
 }

@@ -599,18 +599,26 @@ func (h *Handlers) HandleListTransactions(w http.ResponseWriter, r *http.Request
 		PageSize: queryInt(r, "page_size", 20),
 		Category: r.URL.Query().Get("category"),
 		Currency: r.URL.Query().Get("currency"),
+		Source:   r.URL.Query().Get("source"),
 		Label:    r.URL.Query().Get("label"),
 	}
-	if v := r.URL.Query().Get("from"); v != "" {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
+	if v := r.URL.Query().Get("date_from"); v != "" {
+		// JavaScript toISOString() includes milliseconds (RFC3339Nano); try that first.
+		if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
+			f.From = &t
+		} else if t, err := time.Parse(time.RFC3339, v); err == nil {
 			f.From = &t
 		}
 	}
-	if v := r.URL.Query().Get("to"); v != "" {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
+	if v := r.URL.Query().Get("date_to"); v != "" {
+		if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
+			f.To = &t
+		} else if t, err := time.Parse(time.RFC3339, v); err == nil {
 			f.To = &t
 		}
 	}
+	f.SortBy = r.URL.Query().Get("sort_by")
+	f.SortDir = r.URL.Query().Get("sort_dir")
 
 	txns, total, err := h.store.ListTransactions(r.Context(), f)
 	if err != nil {
@@ -774,6 +782,23 @@ func (h *Handlers) HandleSearchTransactions(w http.ResponseWriter, r *http.Reque
 		"page_size":    f.PageSize,
 		"query":        q,
 	})
+}
+
+// HandleGetFacets handles GET /api/transactions/facets.
+// Returns distinct values for source, category, currency, and label — used to
+// populate filter dropdowns in the UI.
+func (h *Handlers) HandleGetFacets(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	facets, err := h.store.GetFacets(r.Context())
+	if err != nil {
+		h.logger.Error("get facets", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to fetch facets")
+		return
+	}
+	writeJSON(w, http.StatusOK, facets)
 }
 
 // HandleGetBaseCurrency handles GET /api/config/base-currency.

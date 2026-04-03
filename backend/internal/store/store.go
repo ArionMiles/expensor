@@ -69,9 +69,12 @@ type ListFilter struct {
 	PageSize int    // max rows per page
 	Category string // exact match, empty = all
 	Currency string // exact match, empty = all
+	Source   string // exact match, empty = all
 	Label    string // filter by label, empty = all
 	From     *time.Time
 	To       *time.Time
+	SortBy   string // "timestamp" (only supported value for now); default = "timestamp"
+	SortDir  string // "asc" | "desc"; default = "desc"
 }
 
 // Store wraps a pgxpool.Pool and provides query operations for the API layer.
@@ -155,6 +158,11 @@ func (s *Store) ListTransactions(ctx context.Context, f ListFilter) ([]Transacti
 	limitArg := len(args) - 1
 	offsetArg := len(args)
 
+	orderClause := "t.timestamp DESC"
+	if strings.ToLower(f.SortDir) == "asc" {
+		orderClause = "t.timestamp ASC"
+	}
+
 	dataSQL := fmt.Sprintf(`
 		SELECT DISTINCT t.id, t.message_id, t.amount, t.currency,
 		       t.original_amount, t.original_currency, t.exchange_rate,
@@ -162,9 +170,9 @@ func (s *Store) ListTransactions(ctx context.Context, f ListFilter) ([]Transacti
 		       COALESCE(t.category, ''), COALESCE(t.bucket, ''), t.source,
 		       COALESCE(t.description, ''), t.created_at, t.updated_at
 		FROM transactions t%s%s
-		ORDER BY t.timestamp DESC
+		ORDER BY %s
 		LIMIT $%d OFFSET $%d
-	`, joinLabel(f.Label), where, limitArg, offsetArg)
+	`, joinLabel(f.Label), where, orderClause, limitArg, offsetArg)
 
 	rows, err := s.pool.Query(ctx, dataSQL, args...)
 	if err != nil {
@@ -503,6 +511,85 @@ func (s *Store) GetChartData(ctx context.Context) (*ChartData, error) {
 	return cd, nil
 }
 
+// Facets holds distinct filter values for the transactions UI dropdowns.
+type Facets struct {
+	Sources    []string `json:"sources"`
+	Categories []string `json:"categories"`
+	Currencies []string `json:"currencies"`
+	Labels     []string `json:"labels"`
+}
+
+// GetFacets returns the distinct non-empty values for source, category, currency, and label
+// across all transactions. Used to populate filter dropdowns in the UI.
+func (s *Store) GetFacets(ctx context.Context) (*Facets, error) {
+	var f Facets
+
+	queries := []struct {
+		sql  string
+		dest *[]string
+	}{
+		{
+			`SELECT DISTINCT source FROM transactions
+             WHERE source IS NOT NULL AND source != ''
+             ORDER BY source`,
+			&f.Sources,
+		},
+		{
+			`SELECT DISTINCT category FROM transactions
+             WHERE category IS NOT NULL AND category != ''
+             ORDER BY category`,
+			&f.Categories,
+		},
+		{
+			`SELECT DISTINCT currency FROM transactions
+             WHERE currency IS NOT NULL AND currency != ''
+             ORDER BY currency`,
+			&f.Currencies,
+		},
+		{
+			`SELECT DISTINCT label FROM transaction_labels
+             ORDER BY label`,
+			&f.Labels,
+		},
+	}
+
+	for _, q := range queries {
+		rows, err := s.pool.Query(ctx, q.sql)
+		if err != nil {
+			return nil, fmt.Errorf("fetching facets: %w", err)
+		}
+		var vals []string
+		for rows.Next() {
+			var v string
+			if err := rows.Scan(&v); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("scanning facet value: %w", err)
+			}
+			vals = append(vals, v)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("iterating facet rows: %w", err)
+		}
+		*q.dest = vals
+	}
+
+	if f.Sources == nil {
+		f.Sources = []string{}
+	}
+	if f.Categories == nil {
+		f.Categories = []string{}
+	}
+	if f.Currencies == nil {
+		f.Currencies = []string{}
+	}
+	if f.Labels == nil {
+		f.Labels = []string{}
+	}
+
+	return &f, nil
+}
+
 func (s *Store) queryTimeBuckets(ctx context.Context, q string) ([]TimeBucket, error) {
 	rows, err := s.pool.Query(ctx, q)
 	if err != nil {
@@ -601,13 +688,16 @@ func buildListWhere(f ListFilter) (string, []any) {
 	}
 
 	if f.Label != "" {
-		conds = append(conds, fmt.Sprintf("tl.label = %s", next(f.Label)))
+		conds = append(conds, fmt.Sprintf("tl.label ILIKE %s", next("%"+f.Label+"%")))
 	}
 	if f.Category != "" {
-		conds = append(conds, fmt.Sprintf("t.category = %s", next(f.Category)))
+		conds = append(conds, fmt.Sprintf("t.category ILIKE %s", next("%"+f.Category+"%")))
 	}
 	if f.Currency != "" {
-		conds = append(conds, fmt.Sprintf("t.currency = %s", next(f.Currency)))
+		conds = append(conds, fmt.Sprintf("t.currency ILIKE %s", next("%"+f.Currency+"%")))
+	}
+	if f.Source != "" {
+		conds = append(conds, fmt.Sprintf("t.source ILIKE %s", next("%"+f.Source+"%")))
 	}
 	if f.From != nil {
 		conds = append(conds, fmt.Sprintf("t.timestamp >= %s", next(*f.From)))

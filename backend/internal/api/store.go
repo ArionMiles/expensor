@@ -20,6 +20,7 @@ type Storer interface {
 	GetChartData(ctx context.Context) (*store.ChartData, error)
 	GetAppConfig(ctx context.Context, key string) (string, error)
 	SetAppConfig(ctx context.Context, key, value string) error
+	GetFacets(ctx context.Context) (*store.Facets, error)
 }
 
 // compile-time check: *store.Store must satisfy Storer.

@@ -35,13 +35,15 @@ export function getReaderDisplayName(name: string): string {
     .join(' ')
 }
 
-export function formatDate(isoString: string): string {
+export function formatDate(isoString: string, includeTime = false): string {
   const date = new Date(isoString)
-  return new Intl.DateTimeFormat('en-IN', {
+  const opts: Intl.DateTimeFormatOptions = {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
-  }).format(date)
+    ...(includeTime ? { hour: '2-digit', minute: '2-digit', hour12: false } : {}),
+  }
+  return new Intl.DateTimeFormat('en-IN', opts).format(date)
 }
 
 export function formatDateShort(isoString: string): string {
@@ -66,6 +68,41 @@ export function formatRelative(isoString: string): string {
   if (diffHr < 24) return `${diffHr}h ago`
   if (diffDay < 7) return `${diffDay}d ago`
   return formatDate(isoString)
+}
+
+// Bank brand colors keyed by a lowercase fragment present in the source string.
+// Order matters: more specific fragments should come before broader ones.
+const SOURCE_BRAND_COLORS: Array<{ fragment: string; color: string }> = [
+  { fragment: 'hdfc', color: '#E31837' }, // HDFC Bank — red
+  { fragment: 'icici', color: '#F47B20' }, // ICICI Bank — orange
+  { fragment: 'sbi', color: '#22409A' }, // State Bank of India — blue
+  { fragment: 'axis', color: '#97144D' }, // Axis Bank — burgundy
+  { fragment: 'kotak', color: '#EE3124' }, // Kotak Mahindra — red-orange
+  { fragment: 'indusind', color: '#5C2D91' }, // IndusInd Bank — purple
+  { fragment: 'yes bank', color: '#003087' }, // Yes Bank — navy
+  { fragment: 'idfc', color: '#007A4D' }, // IDFC First — green
+]
+
+const SOURCE_FALLBACK_COLORS = [
+  '#3b82f6', // blue
+  '#8b5cf6', // violet
+  '#ec4899', // pink
+  '#f59e0b', // amber
+  '#06b6d4', // cyan
+  '#14b8a6', // teal
+]
+
+export function getSourceColor(source: string): string {
+  const lower = source.toLowerCase()
+  for (const { fragment, color } of SOURCE_BRAND_COLORS) {
+    if (lower.includes(fragment)) return color
+  }
+  let hash = 0
+  for (let i = 0; i < source.length; i++) {
+    hash = (hash << 5) - hash + source.charCodeAt(i)
+    hash |= 0
+  }
+  return SOURCE_FALLBACK_COLORS[Math.abs(hash) % SOURCE_FALLBACK_COLORS.length]
 }
 
 const LABEL_COLORS = [

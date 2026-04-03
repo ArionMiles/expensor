@@ -1,14 +1,20 @@
 import {
   useAddLabels,
+  useFacets,
   useRemoveLabel,
   useTransactions,
   useUpdateTransactionDescription,
 } from '@/api/queries'
 import type { Transaction, TransactionFilters } from '@/api/types'
+import { DateRangePicker } from '@/components/DateRangePicker'
+import { FilterCombobox } from '@/components/FilterCombobox'
 import { LabelChip } from '@/components/LabelChip'
+import { LabelSearch } from '@/components/LabelSearch'
 import { Pagination } from '@/components/Pagination'
-import { cn, formatCurrency, formatDate } from '@/lib/utils'
+import { cn, formatCurrency, formatDate, getSourceColor } from '@/lib/utils'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -158,10 +164,22 @@ function TransactionRow({ tx }: { tx: Transaction }) {
   return (
     <tr className="border-b border-border transition-colors hover:bg-accent/50">
       <td className="whitespace-nowrap px-3 py-2.5">
-        <span className="font-mono text-xs text-muted-foreground">{formatDate(tx.timestamp)}</span>
+        <span className="font-mono text-xs text-muted-foreground">
+          {formatDate(tx.timestamp, true)}
+        </span>
       </td>
       <td className="max-w-[200px] px-3 py-2.5">
         <span className="block truncate text-sm text-foreground">{tx.merchant_info}</span>
+      </td>
+      <td className="whitespace-nowrap px-3 py-2.5">
+        {tx.source && (
+          <span
+            className="inline-block rounded-sm border border-border py-0.5 pl-1.5 pr-2 font-mono text-[10px] text-muted-foreground"
+            style={{ borderLeftColor: getSourceColor(tx.source), borderLeftWidth: '2px' }}
+          >
+            {tx.source}
+          </span>
+        )}
       </td>
       <td className="px-3 py-2.5">
         <AmountCell tx={tx} />
@@ -181,17 +199,85 @@ function TransactionRow({ tx }: { tx: Transaction }) {
 }
 
 export function Transactions() {
-  const [searchInput, setSearchInput] = useState('')
-  const debouncedSearch = useDebounce(searchInput, 300)
-  const [page, setPage] = useState(1)
-  const [filters, setFilters] = useState<Omit<TransactionFilters, 'page' | 'page_size'>>({})
-  const [showFilters, setShowFilters] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
 
+  // Local state for the raw search input (controlled input); debounced value syncs to URL.
+  const [inputValue, setInputValue] = useState(() => searchParams.get('q') ?? '')
+  const debouncedSearch = useDebounce(inputValue, 300)
+  const isFirstRender = useRef(true)
+
+  // Derive all other state from URL params.
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
+  const rawPageSize = parseInt(searchParams.get('page_size') ?? '20', 10)
+  const pageSize = ([20, 50, 100] as const).includes(rawPageSize as 20 | 50 | 100)
+    ? (rawPageSize as 20 | 50 | 100)
+    : 20
+  const sortDir = searchParams.get('sort_dir') === 'asc' ? ('asc' as const) : ('desc' as const)
+  const filters = {
+    category: searchParams.get('category') || undefined,
+    currency: searchParams.get('currency') || undefined,
+    source: searchParams.get('source') || undefined,
+    label: searchParams.get('label') || undefined,
+    date_from: searchParams.get('date_from') || undefined,
+    date_to: searchParams.get('date_to') || undefined,
+  }
+
+  // Auto-open filter panel on load when URL contains active filters.
+  const [showFilters, setShowFilters] = useState(
+    () =>
+      Boolean(searchParams.get('category')) ||
+      Boolean(searchParams.get('currency')) ||
+      Boolean(searchParams.get('source')) ||
+      Boolean(searchParams.get('label')) ||
+      Boolean(searchParams.get('date_from')) ||
+      Boolean(searchParams.get('date_to')),
+  )
+
+  // Sync debounced search to URL (skip the initial mount to avoid a spurious write).
   useEffect(() => {
-    setPage(1)
-  }, [debouncedSearch, filters])
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (debouncedSearch) next.set('q', debouncedSearch)
+        else next.delete('q')
+        next.set('page', '1')
+        return next
+      },
+      { replace: true },
+    )
+  }, [debouncedSearch])
 
-  const activeFilters: TransactionFilters = { ...filters, page, page_size: 20 }
+  const { data: facets } = useFacets()
+
+  // Helper: update one or more URL params at once (pass undefined to delete a key).
+  const updateParams = useCallback(
+    (updates: Record<string, string | undefined>) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          Object.entries(updates).forEach(([k, v]) => {
+            if (v !== undefined && v !== '') next.set(k, v)
+            else next.delete(k)
+          })
+          return next
+        },
+        { replace: true },
+      )
+    },
+    [setSearchParams],
+  )
+
+  const activeFilters: TransactionFilters = {
+    ...filters,
+    page,
+    page_size: pageSize,
+    sort_by: 'timestamp',
+    sort_dir: sortDir,
+  }
   const { data, isLoading, isFetching, error } = useTransactions(activeFilters, debouncedSearch)
 
   const transactions = data?.transactions ?? []
@@ -201,18 +287,30 @@ export function Transactions() {
     key: keyof Omit<TransactionFilters, 'page' | 'page_size'>,
     value: string,
   ) => {
-    setFilters((prev) => ({ ...prev, [key]: value || undefined }))
+    updateParams({ [key]: value || undefined, page: '1' })
   }
 
   const clearFilters = () => {
-    setFilters({})
-    setSearchInput('')
+    setInputValue('')
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams()
+        if (prev.get('page_size')) next.set('page_size', prev.get('page_size')!)
+        if (prev.get('sort_dir')) next.set('sort_dir', prev.get('sort_dir')!)
+        return next
+      },
+      { replace: true },
+    )
   }
 
+  const toggleSort = () =>
+    updateParams({ sort_dir: sortDir === 'desc' ? 'asc' : 'desc', page: '1' })
+
   const hasActiveFilters = Boolean(
-    searchInput ||
+    inputValue ||
     filters.category ||
     filters.currency ||
+    filters.source ||
     filters.label ||
     filters.date_from ||
     filters.date_to,
@@ -226,15 +324,15 @@ export function Transactions() {
           <div className="relative max-w-md flex-1">
             <input
               type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
               placeholder="Search transactions..."
               className="w-full rounded-md border border-border bg-secondary py-2 pl-3 pr-8 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
               aria-label="Search transactions"
             />
-            {searchInput && (
+            {inputValue && (
               <button
-                onClick={() => setSearchInput('')}
+                onClick={() => setInputValue('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-base leading-none text-muted-foreground hover:text-foreground"
                 aria-label="Clear search"
               >
@@ -246,7 +344,7 @@ export function Transactions() {
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
               'rounded-md border px-3 py-2 text-xs transition-colors',
-              showFilters || (hasActiveFilters && !searchInput)
+              showFilters || (hasActiveFilters && !inputValue)
                 ? 'border-primary bg-primary/10 text-primary'
                 : 'border-border text-muted-foreground hover:border-border hover:text-foreground',
             )}
@@ -268,58 +366,83 @@ export function Transactions() {
 
         {showFilters && (
           <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-card p-3 sm:grid-cols-3 lg:grid-cols-5">
-            <input
-              type="date"
-              value={filters.date_from ?? ''}
-              onChange={(e) => updateFilter('date_from', e.target.value)}
-              className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              aria-label="From date"
-              title="From date"
+            <DateRangePicker
+              value={{
+                from: filters.date_from ? new Date(filters.date_from) : undefined,
+                to: filters.date_to ? new Date(filters.date_to) : undefined,
+              }}
+              onChange={(range) => {
+                let dateTo: string | undefined
+                if (range.to) {
+                  const end = new Date(range.to)
+                  end.setHours(23, 59, 59, 999)
+                  dateTo = end.toISOString()
+                }
+                updateParams({
+                  date_from: range.from ? range.from.toISOString() : undefined,
+                  date_to: dateTo,
+                  page: '1',
+                })
+              }}
             />
-            <input
-              type="date"
-              value={filters.date_to ?? ''}
-              onChange={(e) => updateFilter('date_to', e.target.value)}
-              className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              aria-label="To date"
-              title="To date"
+            <FilterCombobox
+              value={filters.source ?? ''}
+              onChange={(v) => updateFilter('source', v)}
+              options={facets?.sources ?? []}
+              placeholder="Source"
+              label="Filter by source"
             />
-            <input
-              type="text"
+            <FilterCombobox
               value={filters.category ?? ''}
-              onChange={(e) => updateFilter('category', e.target.value)}
+              onChange={(v) => updateFilter('category', v)}
+              options={facets?.categories ?? []}
               placeholder="Category"
-              className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              aria-label="Filter by category"
+              label="Filter by category"
             />
-            <input
-              type="text"
+            <FilterCombobox
               value={filters.currency ?? ''}
-              onChange={(e) => updateFilter('currency', e.target.value)}
+              onChange={(v) => updateFilter('currency', v)}
+              options={facets?.currencies ?? []}
               placeholder="Currency"
-              className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              aria-label="Filter by currency"
+              label="Filter by currency"
             />
-            <input
-              type="text"
+            <LabelSearch
               value={filters.label ?? ''}
-              onChange={(e) => updateFilter('label', e.target.value)}
-              placeholder="Label"
-              className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              aria-label="Filter by label"
+              onChange={(v) => updateFilter('label', v)}
+              options={facets?.labels ?? []}
             />
           </div>
         )}
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">
-            {isLoading
-              ? 'Loading...'
-              : `${total.toLocaleString('en-IN')} ${total === 1 ? 'transaction' : 'transactions'}`}
-          </span>
-          {isFetching && !isLoading && (
-            <span className="text-xs text-muted-foreground">· Refreshing...</span>
-          )}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {isLoading
+                ? 'Loading...'
+                : `${total.toLocaleString('en-IN')} ${total === 1 ? 'transaction' : 'transactions'}`}
+            </span>
+            {isFetching && !isLoading && (
+              <span className="text-xs text-muted-foreground">· Refreshing...</span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground">Per page:</span>
+            {([20, 50, 100] as const).map((n) => (
+              <button
+                key={n}
+                onClick={() => updateParams({ page_size: String(n), page: '1' })}
+                className={cn(
+                  'rounded px-2 py-0.5 text-xs transition-colors',
+                  pageSize === n
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+                aria-pressed={pageSize === n}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -334,10 +457,20 @@ export function Transactions() {
           <thead>
             <tr className="border-b border-border bg-secondary/50">
               <th className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Date
+                <button
+                  onClick={toggleSort}
+                  className="flex items-center gap-1 transition-colors hover:text-foreground"
+                  aria-label={`Sort by date ${sortDir === 'desc' ? 'ascending' : 'descending'}`}
+                >
+                  Date
+                  {sortDir === 'desc' ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
+                </button>
               </th>
               <th className="px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                 Merchant
+              </th>
+              <th className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Source
               </th>
               <th className="whitespace-nowrap px-3 py-2.5 text-right text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                 Amount
@@ -357,7 +490,7 @@ export function Transactions() {
             {isLoading
               ? Array.from({ length: 10 }).map((_, i) => (
                   <tr key={i} className="animate-pulse border-b border-border">
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 7 }).map((_, j) => (
                       <td key={j} className="px-3 py-3">
                         <div className="h-3 rounded-sm bg-secondary" />
                       </td>
@@ -367,7 +500,7 @@ export function Transactions() {
               : transactions.map((tx) => <TransactionRow key={tx.id} tx={tx} />)}
             {!isLoading && transactions.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-12 text-center text-xs text-muted-foreground">
+                <td colSpan={7} className="px-3 py-12 text-center text-xs text-muted-foreground">
                   {hasActiveFilters
                     ? 'No transactions match the current filters'
                     : 'No transactions found'}
@@ -377,7 +510,12 @@ export function Transactions() {
           </tbody>
         </table>
 
-        <Pagination page={page} pageSize={20} total={total} onPage={setPage} />
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPage={(n) => updateParams({ page: String(n) })}
+        />
       </div>
     </div>
   )

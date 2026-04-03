@@ -4,6 +4,7 @@ import type {
   AuthStatus,
   ChartData,
   CredentialsStatus,
+  Facets,
   HealthResponse,
   PluginInfo,
   ReaderConfig,
@@ -106,9 +107,12 @@ export const api = {
       if (filters.page_size) params.set('page_size', String(filters.page_size))
       if (filters.category) params.set('category', filters.category)
       if (filters.currency) params.set('currency', filters.currency)
+      if (filters.source) params.set('source', filters.source)
       if (filters.label) params.set('label', filters.label)
       if (filters.date_from) params.set('date_from', filters.date_from)
       if (filters.date_to) params.set('date_to', filters.date_to)
+      if (filters.sort_by) params.set('sort_by', filters.sort_by)
+      if (filters.sort_dir) params.set('sort_dir', filters.sort_dir)
       return apiClient.get<TransactionsResponse>(`/transactions?${params.toString()}`)
     },
 
@@ -116,6 +120,8 @@ export const api = {
       const params = new URLSearchParams({ q, page: String(page), page_size: String(pageSize) })
       return apiClient.get<TransactionsResponse>(`/transactions/search?${params.toString()}`)
     },
+
+    facets: () => apiClient.get<Facets>('/transactions/facets'),
 
     get: (id: string) => apiClient.get<Transaction>(`/transactions/${id}`),
 

@@ -76,14 +76,26 @@ Rs.868.00 is debited from your HDFC Bank Credit Card ending 1234 towards WWW SWI
 		},
 		{
 			// tests/data/emails/hdfc_upi_01.txt
-			name: "HDFC UPI (INR, VPA-based merchant)",
-			body: `Dear Customer, Rs.1200.00 has been debited from account 1234 to VPA timhortons.42654008@hdfcbank TIM HORTONS on 30-03-26. Your UPI transaction reference number is 123456789012. If you did not authorize this transaction, please report it immediately by calling 18002586161 Or SMS BLOCK UPI to 7308080808. Warm Regards, HDFC Bank
+			name: "HDFC UPI (INR, @hdfcbank VPA)",
+			body: `Dear Customer, Rs.1200.00 has been debited from account XXXX to VPA timhortons.42654008@hdfcbank TIM HORTONS on 30-03-26. Your UPI transaction reference number is 123456789012. If you did not authorize this transaction, please report it immediately by calling 1800XXXXXXX Or SMS BLOCK UPI to 73XXXXXXXX. Warm Regards, HDFC Bank
 `,
 			amountPattern:   `Rs\.([\d,]+(?:\.\d+)?)`,
-			merchantPattern: `@hdfcbank\s+(.*?)\s+on\s`,
+			merchantPattern: `VPA \S+\s+(.*?)\s+on\s`,
 			currencyPattern: "",
 			wantAmount:      1200.00,
 			wantMerchant:    "TIM HORTONS",
+			wantCurrency:    "",
+		},
+		{
+			// tests/data/emails/hdfc_upi_02.txt
+			name: "HDFC UPI (INR, third-party UPI provider)",
+			body: `Dear Customer, Rs.500.00 has been debited from account XXXX to VPA testmerchant@okicici SAMPLE MERCHANT NAME on 01-01-24. Your UPI transaction reference number is 999999999999. If you did not authorize this transaction, please report it immediately by calling 1800XXXXXXX Or SMS BLOCK UPI to 73XXXXXXXX. Warm Regards, HDFC Bank
+`,
+			amountPattern:   `Rs\.([\d,]+(?:\.\d+)?)`,
+			merchantPattern: `VPA \S+\s+(.*?)\s+on\s`,
+			currencyPattern: "",
+			wantAmount:      500.00,
+			wantMerchant:    "SAMPLE MERCHANT NAME",
 			wantCurrency:    "",
 		},
 		{

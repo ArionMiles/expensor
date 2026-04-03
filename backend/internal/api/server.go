@@ -93,8 +93,9 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("PUT /api/config/base-currency", h.HandleSetBaseCurrency)
 
 	// Transactions
-	// /search must be registered before /{id} to avoid the wildcard swallowing it.
+	// /search and /facets must be registered before /{id} to avoid the wildcard swallowing them.
 	mux.HandleFunc("GET /api/transactions/search", h.HandleSearchTransactions)
+	mux.HandleFunc("GET /api/transactions/facets", h.HandleGetFacets)
 	mux.HandleFunc("GET /api/transactions", h.HandleListTransactions)
 	mux.HandleFunc("GET /api/transactions/{id}", h.HandleGetTransaction)
 	mux.HandleFunc("PUT /api/transactions/{id}", h.HandleUpdateTransaction)
