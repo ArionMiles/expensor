@@ -112,6 +112,7 @@ export interface TransactionFilters {
   page_size?: number
   category?: string
   currency?: string
+  source?: string
   label?: string
   date_from?: string
   date_to?: string

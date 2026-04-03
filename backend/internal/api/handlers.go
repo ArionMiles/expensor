@@ -599,6 +599,7 @@ func (h *Handlers) HandleListTransactions(w http.ResponseWriter, r *http.Request
 		PageSize: queryInt(r, "page_size", 20),
 		Category: r.URL.Query().Get("category"),
 		Currency: r.URL.Query().Get("currency"),
+		Source:   r.URL.Query().Get("source"),
 		Label:    r.URL.Query().Get("label"),
 	}
 	if v := r.URL.Query().Get("from"); v != "" {

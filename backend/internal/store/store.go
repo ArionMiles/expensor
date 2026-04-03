@@ -69,6 +69,7 @@ type ListFilter struct {
 	PageSize int    // max rows per page
 	Category string // exact match, empty = all
 	Currency string // exact match, empty = all
+	Source   string // exact match, empty = all
 	Label    string // filter by label, empty = all
 	From     *time.Time
 	To       *time.Time
@@ -608,6 +609,9 @@ func buildListWhere(f ListFilter) (string, []any) {
 	}
 	if f.Currency != "" {
 		conds = append(conds, fmt.Sprintf("t.currency = %s", next(f.Currency)))
+	}
+	if f.Source != "" {
+		conds = append(conds, fmt.Sprintf("t.source = %s", next(f.Source)))
 	}
 	if f.From != nil {
 		conds = append(conds, fmt.Sprintf("t.timestamp >= %s", next(*f.From)))

@@ -106,6 +106,7 @@ export const api = {
       if (filters.page_size) params.set('page_size', String(filters.page_size))
       if (filters.category) params.set('category', filters.category)
       if (filters.currency) params.set('currency', filters.currency)
+      if (filters.source) params.set('source', filters.source)
       if (filters.label) params.set('label', filters.label)
       if (filters.date_from) params.set('date_from', filters.date_from)
       if (filters.date_to) params.set('date_to', filters.date_to)

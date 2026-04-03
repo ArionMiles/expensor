@@ -163,6 +163,13 @@ function TransactionRow({ tx }: { tx: Transaction }) {
       <td className="max-w-[200px] px-3 py-2.5">
         <span className="block truncate text-sm text-foreground">{tx.merchant_info}</span>
       </td>
+      <td className="whitespace-nowrap px-3 py-2.5">
+        {tx.source && (
+          <span className="inline-block rounded-sm border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+            {tx.source}
+          </span>
+        )}
+      </td>
       <td className="px-3 py-2.5">
         <AmountCell tx={tx} />
       </td>
@@ -213,6 +220,7 @@ export function Transactions() {
     searchInput ||
     filters.category ||
     filters.currency ||
+    filters.source ||
     filters.label ||
     filters.date_from ||
     filters.date_to,
@@ -267,7 +275,7 @@ export function Transactions() {
         </div>
 
         {showFilters && (
-          <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-card p-3 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-card p-3 sm:grid-cols-3 lg:grid-cols-6">
             <input
               type="date"
               value={filters.date_from ?? ''}
@@ -283,6 +291,14 @@ export function Transactions() {
               className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               aria-label="To date"
               title="To date"
+            />
+            <input
+              type="text"
+              value={filters.source ?? ''}
+              onChange={(e) => updateFilter('source', e.target.value)}
+              placeholder="Source"
+              className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              aria-label="Filter by source"
             />
             <input
               type="text"
@@ -339,6 +355,9 @@ export function Transactions() {
               <th className="px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                 Merchant
               </th>
+              <th className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Source
+              </th>
               <th className="whitespace-nowrap px-3 py-2.5 text-right text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                 Amount
               </th>
@@ -357,7 +376,7 @@ export function Transactions() {
             {isLoading
               ? Array.from({ length: 10 }).map((_, i) => (
                   <tr key={i} className="animate-pulse border-b border-border">
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 7 }).map((_, j) => (
                       <td key={j} className="px-3 py-3">
                         <div className="h-3 rounded-sm bg-secondary" />
                       </td>
@@ -367,7 +386,7 @@ export function Transactions() {
               : transactions.map((tx) => <TransactionRow key={tx.id} tx={tx} />)}
             {!isLoading && transactions.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-12 text-center text-xs text-muted-foreground">
+                <td colSpan={7} className="px-3 py-12 text-center text-xs text-muted-foreground">
                   {hasActiveFilters
                     ? 'No transactions match the current filters'
                     : 'No transactions found'}
