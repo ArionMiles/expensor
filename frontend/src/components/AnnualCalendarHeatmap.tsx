@@ -63,12 +63,11 @@ interface TooltipState {
 }
 
 interface Props {
+  year: number
   metric: 'amount' | 'count'
 }
 
-export function AnnualCalendarHeatmap({ metric }: Props) {
-  const currentYear = new Date().getFullYear()
-  const [year, setYear] = useState(currentYear)
+export function AnnualCalendarHeatmap({ year, metric }: Props) {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
   const { data, isLoading } = useAnnualHeatmapData(year)
@@ -107,107 +106,84 @@ export function AnnualCalendarHeatmap({ metric }: Props) {
     })
   }
 
+  if (isLoading) {
+    return <div className="h-28 animate-pulse rounded bg-secondary" />
+  }
+
   return (
-    <div className="space-y-3">
-      {/* Year navigation */}
-      <div className="flex items-center gap-3 text-sm">
-        <button
-          onClick={() => setYear((y) => y - 1)}
-          className="rounded px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-          aria-label="Previous year"
-        >
-          ←
-        </button>
-        <span className="font-medium tabular-nums text-foreground">{year}</span>
-        <button
-          onClick={() => setYear((y) => y + 1)}
-          disabled={year >= currentYear}
-          className="rounded px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-          aria-label="Next year"
-        >
-          →
-        </button>
-      </div>
+    <div className="relative">
+      <svg
+        style={{ width: '100%', height: 'auto' }}
+        viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+        aria-label={`Annual spending heatmap for ${year}`}
+      >
+        {/* Day-of-week labels: Mon, Wed, Fri */}
+        {LABELED_ROWS.map(({ row, label }) => (
+          <text
+            key={label}
+            x={DAY_LABEL_WIDTH - 4}
+            y={MONTH_LABEL_HEIGHT + row * STEP + CELL / 2 + 3}
+            textAnchor="end"
+            fontSize={8}
+            className="fill-muted-foreground"
+          >
+            {label}
+          </text>
+        ))}
 
-      {isLoading && <div className="h-28 animate-pulse rounded bg-secondary" />}
+        {/* Month labels */}
+        {monthLabels.map(({ col, month }) => (
+          <text
+            key={`month-${month}`}
+            x={DAY_LABEL_WIDTH + col * STEP}
+            y={MONTH_LABEL_HEIGHT - 3}
+            fontSize={8}
+            className="fill-muted-foreground"
+          >
+            {MONTH_NAMES[month]}
+          </text>
+        ))}
 
-      {!isLoading && (
-        <div className="overflow-x-auto">
-        <svg
-          width={svgWidth}
-          height={svgHeight}
-          viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-          aria-label={`Annual spending heatmap for ${year}`}
-        >
-            {/* Day-of-week labels: Mon, Wed, Fri */}
-            {LABELED_ROWS.map(({ row, label }) => (
-              <text
-                key={label}
-                x={DAY_LABEL_WIDTH - 4}
-                y={MONTH_LABEL_HEIGHT + row * STEP + CELL / 2 + 3}
-                textAnchor="end"
-                fontSize={8}
-                className="fill-muted-foreground"
-              >
-                {label}
-              </text>
-            ))}
-
-            {/* Month labels */}
-            {monthLabels.map(({ col, month }) => (
-              <text
-                key={`month-${month}`}
-                x={DAY_LABEL_WIDTH + col * STEP}
-                y={MONTH_LABEL_HEIGHT - 3}
-                fontSize={8}
-                className="fill-muted-foreground"
-              >
-                {MONTH_NAMES[month]}
-              </text>
-            ))}
-
-            {/* Calendar cells */}
-            {grid.map((col, colIdx) =>
-              col.map(({ date }, rowIdx) => {
-                const x = DAY_LABEL_WIDTH + colIdx * STEP
-                const y = MONTH_LABEL_HEIGHT + rowIdx * STEP
-                if (date === null) {
-                  return (
-                    <rect
-                      key={`${colIdx}-${rowIdx}`}
-                      x={x}
-                      y={y}
-                      width={CELL}
-                      height={CELL}
-                      rx={2}
-                      fill="transparent"
-                    />
-                  )
+        {/* Calendar cells */}
+        {grid.map((col, colIdx) =>
+          col.map(({ date }, rowIdx) => {
+            const x = DAY_LABEL_WIDTH + colIdx * STEP
+            const y = MONTH_LABEL_HEIGHT + rowIdx * STEP
+            if (date === null) {
+              return (
+                <rect
+                  key={`${colIdx}-${rowIdx}`}
+                  x={x}
+                  y={y}
+                  width={CELL}
+                  height={CELL}
+                  rx={2}
+                  fill="transparent"
+                />
+              )
+            }
+            const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+            const bucket = lookup.get(key)
+            const amount = bucket?.amount ?? 0
+            const value = metric === 'amount' ? amount : (bucket?.count ?? 0)
+            return (
+              <rect
+                key={`${colIdx}-${rowIdx}`}
+                x={x}
+                y={y}
+                width={CELL}
+                height={CELL}
+                rx={2}
+                fill={intensityColor(value, maxValue)}
+                onMouseEnter={(e) =>
+                  setTooltip({ x: e.clientX, y: e.clientY, date, amount, count: bucket?.count ?? 0 })
                 }
-                const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-                const bucket = lookup.get(key)
-                const amount = bucket?.amount ?? 0
-                const value = metric === 'amount' ? amount : (bucket?.count ?? 0)
-                return (
-                  <rect
-                    key={`${colIdx}-${rowIdx}`}
-                    x={x}
-                    y={y}
-                    width={CELL}
-                    height={CELL}
-                    rx={2}
-                    fill={intensityColor(value, maxValue)}
-                    onMouseEnter={(e) =>
-                      setTooltip({ x: e.clientX, y: e.clientY, date, amount, count: bucket?.count ?? 0 })
-                    }
-                    onMouseLeave={() => setTooltip(null)}
-                  />
-                )
-              }),
-            )}
-        </svg>
-        </div>
-      )}
+                onMouseLeave={() => setTooltip(null)}
+              />
+            )
+          }),
+        )}
+      </svg>
 
       {tooltip && (
         <div

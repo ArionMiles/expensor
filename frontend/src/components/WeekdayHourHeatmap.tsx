@@ -49,8 +49,7 @@ export function WeekdayHourHeatmap({ data, metric, monthLabel }: Props) {
         </div>
       )}
       <svg
-        width={totalWidth}
-        height={totalHeight}
+        style={{ width: '100%', height: 'auto' }}
         viewBox={`0 0 ${totalWidth} ${totalHeight}`}
         aria-label="Spending heatmap by weekday and hour"
       >

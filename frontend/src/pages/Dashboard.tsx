@@ -370,6 +370,8 @@ function SpendingPatternsSection() {
   const [metric, setMetric] = useState<'amount' | 'count'>('amount')
   const now = new Date()
   const [monthNav, setMonthNav] = useState<MonthNav | null>(null)
+  const currentYear = now.getFullYear()
+  const [year, setYear] = useState(currentYear)
 
   const dateRange = monthNav ? monthRangeISO(monthNav) : undefined
   const { data: heatmap, isLoading } = useHeatmapData(dateRange?.from, dateRange?.to)
@@ -394,39 +396,53 @@ function SpendingPatternsSection() {
         <MetricToggle value={metric} onChange={setMetric} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-xs uppercase tracking-wider text-muted-foreground">By weekday &amp; hour</h3>
-            <div className="flex items-center gap-1.5">
+      <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-xs uppercase tracking-wider text-muted-foreground">By weekday &amp; hour</h3>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setMonthNav((p) => prevMonth(p ?? { year: now.getFullYear(), month: now.getMonth() + 1 }))}
+              className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+              aria-label="Previous month"
+            >←</button>
+            <span className="min-w-[5rem] text-center text-xs font-medium text-foreground">
+              {monthLabel ?? 'All time'}
+            </span>
+            <button
+              onClick={() => setMonthNav((p) => nextMonth(p ?? { year: now.getFullYear(), month: now.getMonth() + 1 }))}
+              disabled={isCurrentMonth}
+              className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Next month"
+            >→</button>
+            {monthNav !== null && (
               <button
-                onClick={() => setMonthNav((p) => prevMonth(p ?? { year: now.getFullYear(), month: now.getMonth() + 1 }))}
+                onClick={() => setMonthNav(null)}
                 className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
-                aria-label="Previous month"
-              >←</button>
-              <span className="min-w-[5rem] text-center text-xs font-medium text-foreground">
-                {monthLabel ?? 'All time'}
-              </span>
-              <button
-                onClick={() => setMonthNav((p) => nextMonth(p ?? { year: now.getFullYear(), month: now.getMonth() + 1 }))}
-                disabled={isCurrentMonth}
-                className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Next month"
-              >→</button>
-              {monthNav !== null && (
-                <button
-                  onClick={() => setMonthNav(null)}
-                  className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
-                >All time</button>
-              )}
-            </div>
+              >All time</button>
+            )}
           </div>
-          <WeekdayHourHeatmap data={heatmap.by_weekday_hour} metric={metric} monthLabel={monthLabel} />
         </div>
-        <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-          <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">By day of year</h3>
-          <AnnualCalendarHeatmap metric={metric} />
+        <WeekdayHourHeatmap data={heatmap.by_weekday_hour} metric={metric} monthLabel={monthLabel} />
+      </div>
+      <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-xs uppercase tracking-wider text-muted-foreground">By day of year</h3>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setYear((y) => y - 1)}
+              className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+              aria-label="Previous year"
+            >←</button>
+            <span className="min-w-[3rem] text-center text-xs font-medium text-foreground tabular-nums">{year}</span>
+            <button
+              onClick={() => setYear((y) => y + 1)}
+              disabled={year >= currentYear}
+              className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Next year"
+            >→</button>
+          </div>
         </div>
+        <AnnualCalendarHeatmap year={year} metric={metric} />
       </div>
       <HeatmapLegend />
     </div>
