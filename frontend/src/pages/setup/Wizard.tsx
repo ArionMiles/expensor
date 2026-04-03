@@ -450,7 +450,7 @@ function ReaderCard({
 
       {confirmAction === 'disconnect' && (
         <ConfirmModal
-          title={`Disconnect ${reader.name}?`}
+          title={`Disconnect ${getReaderDisplayName(reader.name)}?`}
           message="This revokes the OAuth token. Your credentials file is kept, so you can re-authorize without re-uploading."
           confirmLabel="Disconnect"
           variant="destructive"
@@ -460,7 +460,7 @@ function ReaderCard({
       )}
       {confirmAction === 'removeAll' && (
         <ConfirmModal
-          title={`Remove all data for ${reader.name}?`}
+          title={`Remove all data for ${getReaderDisplayName(reader.name)}?`}
           message="This permanently deletes the credentials file, token, and saved config. You will need to go through the full setup again."
           confirmLabel="Remove all data"
           variant="destructive"

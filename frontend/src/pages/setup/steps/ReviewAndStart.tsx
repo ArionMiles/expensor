@@ -1,7 +1,7 @@
 import { api } from '@/api/client'
 import { useStatus } from '@/api/queries'
 import type { PluginInfo } from '@/api/types'
-import { cn } from '@/lib/utils'
+import { cn, getReaderDisplayName } from '@/lib/utils'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -56,7 +56,7 @@ export function ReviewAndStart({ reader, onBack }: ReviewAndStartProps) {
 
       <div className="overflow-hidden rounded-lg border border-border">
         {[
-          ['Reader', reader.name],
+          ['Reader', getReaderDisplayName(reader.name)],
           ['Auth type', reader.auth_type],
           ['Credentials', reader.requires_credentials_upload ? 'Uploaded' : 'Not required'],
           [

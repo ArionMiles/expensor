@@ -22,7 +22,7 @@ export function formatCurrency(amount: number, currency: string): string {
 }
 
 const READER_DISPLAY_NAMES: Record<string, string> = {
-  gmail: 'Gmail',
+  gmail: 'GMail',
   thunderbird: 'Thunderbird',
 }
 
