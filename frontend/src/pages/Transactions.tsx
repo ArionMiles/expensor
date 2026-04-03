@@ -1,14 +1,16 @@
 import {
-  useAddLabels,
+  useBuckets,
+  useCategories,
   useFacets,
-  useRemoveLabel,
   useTransactions,
   useUpdateTransactionDescription,
+  useUpdateTransactionFields,
 } from '@/api/queries'
 import type { Transaction, TransactionFilters } from '@/api/types'
 import { DateRangePicker } from '@/components/DateRangePicker'
 import { FilterCombobox } from '@/components/FilterCombobox'
-import { LabelChip } from '@/components/LabelChip'
+import { InlineSelect } from '@/components/InlineSelect'
+import { LabelCombobox } from '@/components/LabelCombobox'
 import { LabelSearch } from '@/components/LabelSearch'
 import { Pagination } from '@/components/Pagination'
 import { cn, formatCurrency, formatDate, getSourceColor } from '@/lib/utils'
@@ -103,59 +105,28 @@ function DescriptionCell({ tx }: { tx: Transaction }) {
 }
 
 function LabelsCell({ tx }: { tx: Transaction }) {
-  const [adding, setAdding] = useState(false)
-  const [newLabel, setNewLabel] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
-  const { mutate: addLabels } = useAddLabels()
-  const { mutate: removeLabel } = useRemoveLabel()
+  return <LabelCombobox tx={tx} />
+}
 
-  useEffect(() => {
-    if (adding) inputRef.current?.focus()
-  }, [adding])
-
-  const commitAdd = useCallback(() => {
-    const trimmed = newLabel.trim()
-    if (trimmed && !tx.labels.includes(trimmed)) {
-      addLabels({ id: tx.id, labels: [trimmed] })
-    }
-    setNewLabel('')
-    setAdding(false)
-  }, [newLabel, tx.labels, tx.id, addLabels])
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') commitAdd()
-    if (e.key === 'Escape') {
-      setNewLabel('')
-      setAdding(false)
-    }
-  }
+function CategoryBucketCell({ tx }: { tx: Transaction }) {
+  const { data: categories = [] } = useCategories()
+  const { data: buckets = [] } = useBuckets()
+  const { mutate: updateFields } = useUpdateTransactionFields()
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1">
-      {tx.labels.map((label) => (
-        <LabelChip key={label} label={label} onRemove={() => removeLabel({ id: tx.id, label })} />
-      ))}
-      {adding ? (
-        <input
-          ref={inputRef}
-          type="text"
-          value={newLabel}
-          onChange={(e) => setNewLabel(e.target.value)}
-          onBlur={commitAdd}
-          onKeyDown={handleKeyDown}
-          placeholder="label..."
-          className="w-20 rounded-sm border border-primary bg-accent px-1.5 py-0.5 text-xs text-foreground focus:outline-none"
-          aria-label="New label"
-        />
-      ) : (
-        <button
-          onClick={() => setAdding(true)}
-          className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-          aria-label="Add label"
-        >
-          +
-        </button>
-      )}
+    <div className="flex flex-col gap-0.5">
+      <InlineSelect
+        value={tx.category}
+        options={categories.map((c) => c.name)}
+        onCommit={(category) => updateFields({ id: tx.id, patch: { category } })}
+        className="text-foreground"
+      />
+      <InlineSelect
+        value={tx.bucket}
+        options={buckets.map((b) => b.name)}
+        onCommit={(bucket) => updateFields({ id: tx.id, patch: { bucket } })}
+        className="text-muted-foreground"
+      />
     </div>
   )
 }
@@ -185,8 +156,7 @@ function TransactionRow({ tx }: { tx: Transaction }) {
         <AmountCell tx={tx} />
       </td>
       <td className="px-3 py-2.5">
-        <span className="block text-xs text-foreground">{tx.category}</span>
-        {tx.bucket && <span className="text-[10px] text-muted-foreground">{tx.bucket}</span>}
+        <CategoryBucketCell tx={tx} />
       </td>
       <td className="min-w-[120px] max-w-[200px] px-3 py-2.5">
         <LabelsCell tx={tx} />

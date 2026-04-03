@@ -4,6 +4,7 @@ package thunderbird
 import (
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
@@ -73,7 +74,7 @@ func (p *Plugin) NewReader( //nolint:revive // interface method; argument count 
 		Rules:       rules,
 		Labels:      labels,
 		State:       stateManager,
-		Interval:    cfg.Thunderbird.GetInterval(),
+		Interval:    time.Duration(cfg.ScanInterval) * time.Second,
 	}
 
 	return tbreader.New(readerCfg, logger)

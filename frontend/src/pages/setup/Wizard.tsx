@@ -9,6 +9,7 @@ import {
   useStatus,
 } from '@/api/queries'
 import type { PluginInfo } from '@/api/types'
+import { ConfirmModal } from '@/components/ConfirmModal'
 import { ReaderLogo } from '@/components/ReaderLogo'
 import { cn, getReaderDisplayName } from '@/lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
@@ -229,6 +230,7 @@ function ReaderCard({
   const revokeToken = useRevokeToken()
   const removeAll = useDisconnectReader()
   const [showAuthPanel, setShowAuthPanel] = useState(false)
+  const [confirmAction, setConfirmAction] = useState<'disconnect' | 'removeAll' | null>(null)
 
   const isOAuth = reader.auth_type === 'oauth'
   const ready = status?.ready ?? false
@@ -245,27 +247,24 @@ function ReaderCard({
 
   const { data: authDetails } = useReaderAuthStatus(reader.name, undefined, ready && isOAuth)
 
-  const handleDisconnect = useCallback(async () => {
-    if (
-      !window.confirm(
-        `Disconnect ${reader.name}?\n\nThis revokes the OAuth token. Your credentials file is kept, so you can re-authorize without re-uploading.`,
-      )
-    )
-      return
-    await revokeToken.mutateAsync(reader.name)
-    setShowAuthPanel(false)
-  }, [reader.name, revokeToken])
+  const handleDisconnect = useCallback(() => {
+    setConfirmAction('disconnect')
+  }, [])
 
-  const handleRemoveAll = useCallback(async () => {
-    if (
-      !window.confirm(
-        `Remove all data for ${reader.name}?\n\nThis permanently deletes the credentials file, token, and saved config. You will need to go through the full setup again.`,
-      )
-    )
-      return
-    await removeAll.mutateAsync(reader.name)
-    setShowAuthPanel(false)
-  }, [reader.name, removeAll])
+  const handleRemoveAll = useCallback(() => {
+    setConfirmAction('removeAll')
+  }, [])
+
+  const executeConfirm = useCallback(async () => {
+    if (confirmAction === 'disconnect') {
+      await revokeToken.mutateAsync(reader.name)
+      setShowAuthPanel(false)
+    } else if (confirmAction === 'removeAll') {
+      await removeAll.mutateAsync(reader.name)
+      setShowAuthPanel(false)
+    }
+    setConfirmAction(null)
+  }, [confirmAction, reader.name, revokeToken, removeAll])
 
   const handleAuthSuccess = useCallback(() => {
     setShowAuthPanel(false)
@@ -312,141 +311,164 @@ function ReaderCard({
   }[readerState]
 
   return (
-    <div
-      className={cn(
-        'overflow-hidden rounded-lg border bg-card shadow-sm transition-colors',
-        justAuthorized ? 'border-success/50' : 'border-border',
-      )}
-    >
-      {/* Colored left stripe */}
-      <div className="flex">
-        <div
-          className={cn(
-            'w-0.5 flex-shrink-0',
-            readerState === 'connected'
-              ? 'bg-success'
-              : readerState === 'needs-auth'
-                ? 'bg-warning'
-                : 'bg-border',
-          )}
-        />
+    <>
+      <div
+        className={cn(
+          'overflow-hidden rounded-lg border bg-card shadow-sm transition-colors',
+          justAuthorized ? 'border-success/50' : 'border-border',
+        )}
+      >
+        {/* Colored left stripe */}
+        <div className="flex">
+          <div
+            className={cn(
+              'w-0.5 flex-shrink-0',
+              readerState === 'connected'
+                ? 'bg-success'
+                : readerState === 'needs-auth'
+                  ? 'bg-warning'
+                  : 'bg-border',
+            )}
+          />
 
-        <div className="min-w-0 flex-1">
-          {/* Header */}
-          <div className="flex items-start justify-between gap-4 px-5 pb-3 pt-4">
-            <div className="flex min-w-0 items-start gap-3">
-              <ReaderLogo name={reader.name} className="mt-0.5 h-8 w-8 flex-shrink-0" />
-              <div className="min-w-0">
-                <div className="mb-0.5 flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold text-foreground">
-                    {getReaderDisplayName(reader.name)}
-                  </span>
-                  {!isLoading && stateBadge}
-                  {justAuthorized && (
-                    <span className="text-[10px] text-success">✓ just authorized</span>
+          <div className="min-w-0 flex-1">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 px-5 pb-3 pt-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <ReaderLogo name={reader.name} className="mt-0.5 h-8 w-8 flex-shrink-0" />
+                <div className="min-w-0">
+                  <div className="mb-0.5 flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground">
+                      {getReaderDisplayName(reader.name)}
+                    </span>
+                    {!isLoading && stateBadge}
+                    {justAuthorized && (
+                      <span className="text-[10px] text-success">✓ just authorized</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{reader.description}</p>
+                </div>
+              </div>
+              {readerState === 'connected' && isOAuth && authDetails?.expiry && (
+                <span className="mt-0.5 flex-shrink-0 text-[10px] text-muted-foreground">
+                  {formatExpiry(authDetails.expiry)}
+                </span>
+              )}
+            </div>
+
+            {/* Context message */}
+            {!isLoading && readerState === 'needs-auth' && !showAuthPanel && (
+              <div className="px-5 pb-3">
+                <p className="text-xs text-warning/90">
+                  Credentials uploaded. Complete OAuth authorization to grant read access to Gmail.
+                </p>
+              </div>
+            )}
+            {!isLoading && readerState === 'unconfigured' && (
+              <div className="px-5 pb-3">
+                <p className="text-xs text-muted-foreground">
+                  {isOAuth
+                    ? 'Requires a Google OAuth client secret file and account authorization.'
+                    : 'Requires mailbox configuration to specify which emails to read.'}
+                </p>
+              </div>
+            )}
+
+            {/* Inline OAuth panel */}
+            {showAuthPanel && (
+              <div className="px-5 pb-4">
+                <InlineOAuthPanel readerName={reader.name} onSuccess={handleAuthSuccess} />
+              </div>
+            )}
+
+            {/* Actions */}
+            {!isLoading && (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-4">
+                  <div className="flex items-center gap-2">
+                    {readerState === 'unconfigured' && (
+                      <button
+                        onClick={() => onConfigure(reader)}
+                        className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
+                      >
+                        Set up →
+                      </button>
+                    )}
+
+                    {readerState === 'connected' && !daemonRunning && (
+                      <button
+                        onClick={handleStartDaemon}
+                        disabled={isStarting || isBusy}
+                        className="rounded-md bg-success px-3 py-1.5 text-xs text-success-foreground transition-colors hover:bg-success/90 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {isStarting ? 'Starting...' : 'Start tracking →'}
+                      </button>
+                    )}
+
+                    {(readerState === 'needs-auth' || readerState === 'connected') && isOAuth && (
+                      <button
+                        onClick={() => setShowAuthPanel(!showAuthPanel)}
+                        disabled={isBusy}
+                        className={cn(
+                          'rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-40',
+                          showAuthPanel
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-primary text-primary hover:bg-primary hover:text-primary-foreground',
+                        )}
+                      >
+                        {readerState === 'connected' ? 'Re-authorize' : 'Authorize →'}
+                      </button>
+                    )}
+
+                    {readerState === 'connected' && (
+                      <button
+                        onClick={handleDisconnect}
+                        disabled={isBusy}
+                        className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:opacity-40"
+                      >
+                        {revokeToken.isPending ? '...' : 'Disconnect'}
+                      </button>
+                    )}
+                  </div>
+
+                  {readerState !== 'unconfigured' && (
+                    <button
+                      onClick={handleRemoveAll}
+                      disabled={isBusy}
+                      className="text-[10px] text-muted-foreground transition-colors hover:text-destructive disabled:opacity-40"
+                    >
+                      {removeAll.isPending ? 'Removing...' : 'Remove all data'}
+                    </button>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">{reader.description}</p>
-              </div>
-            </div>
-            {readerState === 'connected' && isOAuth && authDetails?.expiry && (
-              <span className="mt-0.5 flex-shrink-0 text-[10px] text-muted-foreground">
-                {formatExpiry(authDetails.expiry)}
-              </span>
+                {startError && <p className="px-5 pb-3 text-xs text-destructive">{startError}</p>}
+              </>
             )}
           </div>
-
-          {/* Context message */}
-          {!isLoading && readerState === 'needs-auth' && !showAuthPanel && (
-            <div className="px-5 pb-3">
-              <p className="text-xs text-warning/90">
-                Credentials uploaded. Complete OAuth authorization to grant read access to Gmail.
-              </p>
-            </div>
-          )}
-          {!isLoading && readerState === 'unconfigured' && (
-            <div className="px-5 pb-3">
-              <p className="text-xs text-muted-foreground">
-                {isOAuth
-                  ? 'Requires a Google OAuth client secret file and account authorization.'
-                  : 'Requires mailbox configuration to specify which emails to read.'}
-              </p>
-            </div>
-          )}
-
-          {/* Inline OAuth panel */}
-          {showAuthPanel && (
-            <div className="px-5 pb-4">
-              <InlineOAuthPanel readerName={reader.name} onSuccess={handleAuthSuccess} />
-            </div>
-          )}
-
-          {/* Actions */}
-          {!isLoading && (
-            <>
-              <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-4">
-                <div className="flex items-center gap-2">
-                  {readerState === 'unconfigured' && (
-                    <button
-                      onClick={() => onConfigure(reader)}
-                      className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
-                    >
-                      Set up →
-                    </button>
-                  )}
-
-                  {readerState === 'connected' && !daemonRunning && (
-                    <button
-                      onClick={handleStartDaemon}
-                      disabled={isStarting || isBusy}
-                      className="rounded-md bg-success px-3 py-1.5 text-xs text-success-foreground transition-colors hover:bg-success/90 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {isStarting ? 'Starting...' : 'Start tracking →'}
-                    </button>
-                  )}
-
-                  {(readerState === 'needs-auth' || readerState === 'connected') && isOAuth && (
-                    <button
-                      onClick={() => setShowAuthPanel(!showAuthPanel)}
-                      disabled={isBusy}
-                      className={cn(
-                        'rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-40',
-                        showAuthPanel
-                          ? 'border-primary bg-primary/10 text-primary'
-                          : 'border-primary text-primary hover:bg-primary hover:text-primary-foreground',
-                      )}
-                    >
-                      {readerState === 'connected' ? 'Re-authorize' : 'Authorize →'}
-                    </button>
-                  )}
-
-                  {readerState === 'connected' && (
-                    <button
-                      onClick={handleDisconnect}
-                      disabled={isBusy}
-                      className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:opacity-40"
-                    >
-                      {revokeToken.isPending ? '...' : 'Disconnect'}
-                    </button>
-                  )}
-                </div>
-
-                {readerState !== 'unconfigured' && (
-                  <button
-                    onClick={handleRemoveAll}
-                    disabled={isBusy}
-                    className="text-[10px] text-muted-foreground transition-colors hover:text-destructive disabled:opacity-40"
-                  >
-                    {removeAll.isPending ? 'Removing...' : 'Remove all data'}
-                  </button>
-                )}
-              </div>
-              {startError && <p className="px-5 pb-3 text-xs text-destructive">{startError}</p>}
-            </>
-          )}
         </div>
       </div>
-    </div>
+
+      {confirmAction === 'disconnect' && (
+        <ConfirmModal
+          title={`Disconnect ${getReaderDisplayName(reader.name)}?`}
+          message="This revokes the OAuth token. Your credentials file is kept, so you can re-authorize without re-uploading."
+          confirmLabel="Disconnect"
+          variant="destructive"
+          onConfirm={executeConfirm}
+          onCancel={() => setConfirmAction(null)}
+        />
+      )}
+      {confirmAction === 'removeAll' && (
+        <ConfirmModal
+          title={`Remove all data for ${getReaderDisplayName(reader.name)}?`}
+          message="This permanently deletes the credentials file, token, and saved config. You will need to go through the full setup again."
+          confirmLabel="Remove all data"
+          variant="destructive"
+          onConfirm={executeConfirm}
+          onCancel={() => setConfirmAction(null)}
+        />
+      )}
+    </>
   )
 }
 

@@ -1,6 +1,9 @@
-import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { useState } from 'react'
 import { AppearanceSettings } from './settings/AppearanceSettings'
+import { BucketsSettings } from './settings/BucketsSettings'
+import { CategoriesSettings } from './settings/CategoriesSettings'
+import { LabelsSettings } from './settings/LabelsSettings'
 
 type SettingsTab = 'appearance' | 'categories' | 'buckets' | 'labels' | 'webhooks'
 
@@ -12,16 +15,12 @@ const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'webhooks', label: 'Webhooks' },
 ]
 
-const COMING_SOON_TABS: SettingsTab[] = ['categories', 'buckets', 'labels', 'webhooks']
-
 export default function Settings() {
   const [tab, setTab] = useState<SettingsTab>('appearance')
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-6">
       <h1 className="mb-6 text-lg font-semibold text-foreground">Settings</h1>
-
-      {/* Tab bar */}
       <div className="mb-6 flex gap-1 border-b border-border">
         {TABS.map((t) => (
           <button
@@ -38,12 +37,11 @@ export default function Settings() {
           </button>
         ))}
       </div>
-
-      {/* Tab content */}
       {tab === 'appearance' && <AppearanceSettings />}
-      {COMING_SOON_TABS.includes(tab) && (
-        <p className="text-sm text-muted-foreground">Coming soon.</p>
-      )}
+      {tab === 'categories' && <CategoriesSettings />}
+      {tab === 'buckets' && <BucketsSettings />}
+      {tab === 'labels' && <LabelsSettings />}
+      {tab === 'webhooks' && <p className="text-sm text-muted-foreground">Coming soon.</p>}
     </div>
   )
 }

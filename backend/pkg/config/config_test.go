@@ -2,7 +2,6 @@ package config_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 )
@@ -64,11 +63,11 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 		if cfg.StateFile != config.DefaultStateFile {
 			t.Errorf("StateFile: got %q, want %q", cfg.StateFile, config.DefaultStateFile)
 		}
-		if cfg.Gmail.Interval != 60 {
-			t.Errorf("Gmail.Interval: got %d, want 60", cfg.Gmail.Interval)
+		if cfg.ScanInterval != 60 {
+			t.Errorf("ScanInterval: got %d, want 60", cfg.ScanInterval)
 		}
-		if cfg.Thunderbird.Interval != 60 {
-			t.Errorf("Thunderbird.Interval: got %d, want 60", cfg.Thunderbird.Interval)
+		if cfg.LookbackDays != 180 {
+			t.Errorf("LookbackDays: got %d, want 180", cfg.LookbackDays)
 		}
 		if cfg.Postgres.Port != 5432 {
 			t.Errorf("Postgres.Port: got %d, want 5432", cfg.Postgres.Port)
@@ -89,11 +88,9 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 
 	t.Run("pre-set values are not overwritten", func(t *testing.T) {
 		cfg := config.Config{
-			StateFile: "custom/state.json",
-			Gmail:     config.GmailConfig{Interval: 120},
-			Thunderbird: config.ThunderbirdConfig{
-				Interval: 300,
-			},
+			StateFile:    "custom/state.json",
+			ScanInterval: 120,
+			LookbackDays: 365,
 			Postgres: config.PostgresConfig{
 				Port:          5433,
 				SSLMode:       "require",
@@ -107,11 +104,11 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 		if cfg.StateFile != "custom/state.json" {
 			t.Errorf("StateFile: got %q, want \"custom/state.json\"", cfg.StateFile)
 		}
-		if cfg.Gmail.Interval != 120 {
-			t.Errorf("Gmail.Interval: got %d, want 120", cfg.Gmail.Interval)
+		if cfg.ScanInterval != 120 {
+			t.Errorf("ScanInterval: got %d, want 120", cfg.ScanInterval)
 		}
-		if cfg.Thunderbird.Interval != 300 {
-			t.Errorf("Thunderbird.Interval: got %d, want 300", cfg.Thunderbird.Interval)
+		if cfg.LookbackDays != 365 {
+			t.Errorf("LookbackDays: got %d, want 365", cfg.LookbackDays)
 		}
 		if cfg.Postgres.Port != 5433 {
 			t.Errorf("Postgres.Port: got %d, want 5433", cfg.Postgres.Port)
@@ -132,17 +129,17 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 
 	t.Run("negative intervals get defaults", func(t *testing.T) {
 		cfg := config.Config{
-			Gmail:       config.GmailConfig{Interval: -1},
-			Thunderbird: config.ThunderbirdConfig{Interval: -5},
-			Postgres:    config.PostgresConfig{Port: -1, BatchSize: -1, FlushInterval: -1, MaxPoolSize: -1},
+			ScanInterval: -1,
+			LookbackDays: -5,
+			Postgres:     config.PostgresConfig{Port: -1, BatchSize: -1, FlushInterval: -1, MaxPoolSize: -1},
 		}
 		cfg.ApplyDefaults()
 
-		if cfg.Gmail.Interval != 60 {
-			t.Errorf("Gmail.Interval: got %d, want 60", cfg.Gmail.Interval)
+		if cfg.ScanInterval != 60 {
+			t.Errorf("ScanInterval: got %d, want 60", cfg.ScanInterval)
 		}
-		if cfg.Thunderbird.Interval != 60 {
-			t.Errorf("Thunderbird.Interval: got %d, want 60", cfg.Thunderbird.Interval)
+		if cfg.LookbackDays != 180 {
+			t.Errorf("LookbackDays: got %d, want 180", cfg.LookbackDays)
 		}
 		if cfg.Postgres.Port != 5432 {
 			t.Errorf("Postgres.Port: got %d, want 5432", cfg.Postgres.Port)
@@ -198,25 +195,13 @@ func TestThunderbirdConfig_GetMailboxes(t *testing.T) {
 	}
 }
 
-func TestThunderbirdConfig_GetInterval(t *testing.T) {
-	tests := []struct {
-		name     string
-		interval int
-		want     time.Duration
-	}{
-		{name: "positive interval", interval: 120, want: 120 * time.Second},
-		{name: "one second", interval: 1, want: time.Second},
-		{name: "zero returns default 60s", interval: 0, want: 60 * time.Second},
-		{name: "negative returns default 60s", interval: -10, want: 60 * time.Second},
+func TestApplyDefaults_ScanSettings(t *testing.T) {
+	c := config.Config{}
+	c.ApplyDefaults()
+	if c.ScanInterval != 60 {
+		t.Errorf("expected ScanInterval=60, got %d", c.ScanInterval)
 	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			cfg := &config.ThunderbirdConfig{Interval: tc.interval}
-			got := cfg.GetInterval()
-			if got != tc.want {
-				t.Errorf("got %v, want %v", got, tc.want)
-			}
-		})
+	if c.LookbackDays != 180 {
+		t.Errorf("expected LookbackDays=180, got %d", c.LookbackDays)
 	}
 }

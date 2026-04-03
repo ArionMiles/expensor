@@ -2,12 +2,13 @@ import { getLabelColor } from '@/lib/utils'
 
 interface LabelChipProps {
   label: string
+  color?: string
   onRemove?: () => void
   className?: string
 }
 
-export function LabelChip({ label, onRemove, className }: LabelChipProps) {
-  const color = getLabelColor(label)
+export function LabelChip({ label, color, onRemove, className }: LabelChipProps) {
+  const resolvedColor = color ?? getLabelColor(label)
 
   return (
     <span
@@ -18,9 +19,9 @@ export function LabelChip({ label, onRemove, className }: LabelChipProps) {
         gap: '4px',
         padding: '2px 8px',
         fontSize: '11px',
-        border: `1px solid ${color}40`,
-        backgroundColor: `${color}18`,
-        color: color,
+        border: `1px solid ${resolvedColor}40`,
+        backgroundColor: `${resolvedColor}18`,
+        color: resolvedColor,
         borderRadius: 'calc(var(--radius) - 2px)',
         whiteSpace: 'nowrap',
         lineHeight: '1.4',

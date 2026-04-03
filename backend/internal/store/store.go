@@ -63,6 +63,35 @@ type ChartData struct {
 	ByLabel      map[string]float64 `json:"by_label"`
 }
 
+// Label is a managed label in the taxonomy.
+type Label struct {
+	Name      string    `json:"name"`
+	Color     string    `json:"color"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// Category is a managed transaction category.
+type Category struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	IsDefault   bool   `json:"is_default"`
+}
+
+// Bucket is a managed spend bucket (needs / wants / savings / income).
+type Bucket struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	IsDefault   bool   `json:"is_default"`
+}
+
+// TransactionUpdate carries optional fields for updating a transaction.
+// Only non-nil fields are written.
+type TransactionUpdate struct {
+	Description *string
+	Category    *string
+	Bucket      *string
+}
+
 // ListFilter controls pagination and filtering for ListTransactions.
 type ListFilter struct {
 	Page     int    // 1-based
@@ -122,6 +151,14 @@ func New(cfg config.PostgresConfig, logger *slog.Logger) (*Store, error) {
 	if err := s.initAppConfig(ctx); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("initializing app_config table: %w", err)
+	}
+	if err := s.initLabels(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("initializing labels table: %w", err)
+	}
+	if err := s.initCategoriesBuckets(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("initializing categories/buckets tables: %w", err)
 	}
 	logger.Info("store connected to PostgreSQL", "host", cfg.Host, "database", cfg.Database)
 	return s, nil
@@ -634,7 +671,10 @@ func (s *Store) initAppConfig(ctx context.Context) error {
 		    key   TEXT PRIMARY KEY,
 		    value TEXT NOT NULL
 		);
-		INSERT INTO app_config (key, value) VALUES ('base_currency', 'INR')
+		INSERT INTO app_config (key, value) VALUES
+		    ('base_currency', 'INR'),
+		    ('scan_interval', '60'),
+		    ('lookback_days', '180')
 		ON CONFLICT (key) DO NOTHING;
 	`)
 	return err
@@ -660,6 +700,276 @@ func (s *Store) SetAppConfig(ctx context.Context, key, value string) error {
 	)
 	if err != nil {
 		return fmt.Errorf("setting app config %q: %w", key, err)
+	}
+	return nil
+}
+
+// initLabels creates the labels table and seeds the default rows. Idempotent.
+func (s *Store) initLabels(ctx context.Context) error {
+	_, err := s.pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS labels (
+			name        TEXT PRIMARY KEY,
+			color       TEXT NOT NULL DEFAULT '#6366f1',
+			created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);
+		INSERT INTO labels (name, color) VALUES
+			('Food',          '#f59e0b'),
+			('Transport',     '#3b82f6'),
+			('Shopping',      '#8b5cf6'),
+			('Utilities',     '#06b6d4'),
+			('Healthcare',    '#10b981'),
+			('Entertainment', '#ec4899'),
+			('Travel',        '#f97316'),
+			('Recurring',     '#6366f1')
+		ON CONFLICT (name) DO NOTHING;
+	`)
+	return err
+}
+
+// initCategoriesBuckets creates the categories and buckets tables and seeds defaults. Idempotent.
+func (s *Store) initCategoriesBuckets(ctx context.Context) error {
+	_, err := s.pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS categories (
+			name        TEXT PRIMARY KEY,
+			description TEXT,
+			is_default  BOOLEAN NOT NULL DEFAULT false,
+			created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);
+		CREATE TABLE IF NOT EXISTS buckets (
+			name        TEXT PRIMARY KEY,
+			description TEXT,
+			is_default  BOOLEAN NOT NULL DEFAULT false,
+			created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);
+		INSERT INTO categories (name, is_default) VALUES
+			('Food & Dining', true),('Transport', true),('Shopping', true),
+			('Utilities', true),('Healthcare', true),('Entertainment', true),
+			('Travel', true),('Finance', true),('Uncategorized', true)
+		ON CONFLICT (name) DO NOTHING;
+		INSERT INTO buckets (name, is_default) VALUES
+			('Needs', true),('Wants', true),('Savings', true),('Income', true)
+		ON CONFLICT (name) DO NOTHING;
+	`)
+	return err
+}
+
+// --- Labels ---
+
+// ListLabels returns all labels ordered by name.
+func (s *Store) ListLabels(ctx context.Context) ([]Label, error) {
+	rows, err := s.pool.Query(ctx, `SELECT name, color, created_at FROM labels ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("listing labels: %w", err)
+	}
+	defer rows.Close()
+	var labels []Label
+	for rows.Next() {
+		var l Label
+		if err := rows.Scan(&l.Name, &l.Color, &l.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scanning label: %w", err)
+		}
+		labels = append(labels, l)
+	}
+	if labels == nil {
+		labels = []Label{}
+	}
+	return labels, rows.Err()
+}
+
+// CreateLabel inserts a new label. Silently ignores duplicate names.
+func (s *Store) CreateLabel(ctx context.Context, name, color string) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO labels (name, color) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING`,
+		name, color,
+	)
+	if err != nil {
+		return fmt.Errorf("creating label: %w", err)
+	}
+	return nil
+}
+
+// UpdateLabel changes the color of an existing label. Returns ErrNotFound if no row matched.
+func (s *Store) UpdateLabel(ctx context.Context, name, color string) error {
+	tag, err := s.pool.Exec(ctx, `UPDATE labels SET color = $1 WHERE name = $2`, color, name)
+	if err != nil {
+		return fmt.Errorf("updating label: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteLabel removes a label by name.
+func (s *Store) DeleteLabel(ctx context.Context, name string) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM labels WHERE name = $1`, name)
+	if err != nil {
+		return fmt.Errorf("deleting label: %w", err)
+	}
+	return nil
+}
+
+// ApplyLabelByMerchant bulk-applies a label to all transactions whose
+// merchant_info matches the given pattern (case-insensitive contains).
+// Returns the number of rows inserted.
+func (s *Store) ApplyLabelByMerchant(ctx context.Context, label, pattern string) (int64, error) {
+	tag, err := s.pool.Exec(ctx,
+		`INSERT INTO transaction_labels (transaction_id, label)
+		 SELECT id, $1 FROM transactions
+		 WHERE merchant_info ILIKE '%' || $2 || '%'
+		 ON CONFLICT (transaction_id, label) DO NOTHING`,
+		label, pattern,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("applying label by merchant: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+// --- Categories ---
+
+// ListCategories returns all categories ordered by name.
+func (s *Store) ListCategories(ctx context.Context) ([]Category, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT name, COALESCE(description,''), is_default FROM categories ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("listing categories: %w", err)
+	}
+	defer rows.Close()
+	var cats []Category
+	for rows.Next() {
+		var c Category
+		if err := rows.Scan(&c.Name, &c.Description, &c.IsDefault); err != nil {
+			return nil, fmt.Errorf("scanning category: %w", err)
+		}
+		cats = append(cats, c)
+	}
+	if cats == nil {
+		cats = []Category{}
+	}
+	return cats, rows.Err()
+}
+
+// CreateCategory inserts a new category. Silently ignores duplicate names.
+func (s *Store) CreateCategory(ctx context.Context, name, description string) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO categories (name, description) VALUES ($1, NULLIF($2,''))
+		 ON CONFLICT (name) DO NOTHING`,
+		name, description,
+	)
+	if err != nil {
+		return fmt.Errorf("creating category: %w", err)
+	}
+	return nil
+}
+
+// DeleteCategory removes a category by name. Returns ErrNotFound if it does not exist.
+// Returns an error if the category is a default one.
+func (s *Store) DeleteCategory(ctx context.Context, name string) error {
+	var isDefault bool
+	err := s.pool.QueryRow(ctx, `SELECT is_default FROM categories WHERE name = $1`, name).Scan(&isDefault)
+	if err != nil {
+		return ErrNotFound
+	}
+	if isDefault {
+		return fmt.Errorf("cannot delete default category %q", name)
+	}
+	_, err = s.pool.Exec(ctx, `DELETE FROM categories WHERE name = $1`, name)
+	if err != nil {
+		return fmt.Errorf("deleting category: %w", err)
+	}
+	return nil
+}
+
+// --- Buckets ---
+
+// ListBuckets returns all buckets ordered by name.
+func (s *Store) ListBuckets(ctx context.Context) ([]Bucket, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT name, COALESCE(description,''), is_default FROM buckets ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("listing buckets: %w", err)
+	}
+	defer rows.Close()
+	var buckets []Bucket
+	for rows.Next() {
+		var b Bucket
+		if err := rows.Scan(&b.Name, &b.Description, &b.IsDefault); err != nil {
+			return nil, fmt.Errorf("scanning bucket: %w", err)
+		}
+		buckets = append(buckets, b)
+	}
+	if buckets == nil {
+		buckets = []Bucket{}
+	}
+	return buckets, rows.Err()
+}
+
+// CreateBucket inserts a new bucket. Silently ignores duplicate names.
+func (s *Store) CreateBucket(ctx context.Context, name, description string) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO buckets (name, description) VALUES ($1, NULLIF($2,''))
+		 ON CONFLICT (name) DO NOTHING`,
+		name, description,
+	)
+	if err != nil {
+		return fmt.Errorf("creating bucket: %w", err)
+	}
+	return nil
+}
+
+// DeleteBucket removes a bucket by name. Returns ErrNotFound if it does not exist.
+// Returns an error if the bucket is a default one.
+func (s *Store) DeleteBucket(ctx context.Context, name string) error {
+	var isDefault bool
+	err := s.pool.QueryRow(ctx, `SELECT is_default FROM buckets WHERE name = $1`, name).Scan(&isDefault)
+	if err != nil {
+		return ErrNotFound
+	}
+	if isDefault {
+		return fmt.Errorf("cannot delete default bucket %q", name)
+	}
+	_, err = s.pool.Exec(ctx, `DELETE FROM buckets WHERE name = $1`, name)
+	if err != nil {
+		return fmt.Errorf("deleting bucket: %w", err)
+	}
+	return nil
+}
+
+// --- Transaction update ---
+
+// UpdateTransaction updates one or more optional fields on a transaction.
+// Only non-nil pointer fields are written. Returns ErrNotFound if no row matched.
+func (s *Store) UpdateTransaction(ctx context.Context, id string, u TransactionUpdate) error {
+	if u.Description == nil && u.Category == nil && u.Bucket == nil {
+		return nil
+	}
+	var setClauses []string
+	var args []any
+	n := func(v any) string {
+		args = append(args, v)
+		return fmt.Sprintf("$%d", len(args))
+	}
+	if u.Description != nil {
+		setClauses = append(setClauses, "description = "+n(*u.Description))
+	}
+	if u.Category != nil {
+		setClauses = append(setClauses, "category = "+n(*u.Category))
+	}
+	if u.Bucket != nil {
+		setClauses = append(setClauses, "bucket = "+n(*u.Bucket))
+	}
+	args = append(args, id)
+	q := fmt.Sprintf(
+		"UPDATE transactions SET %s, updated_at = NOW() WHERE id = $%d",
+		strings.Join(setClauses, ", "), len(args),
+	)
+	tag, err := s.pool.Exec(ctx, q, args...)
+	if err != nil {
+		return fmt.Errorf("updating transaction: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
 	}
 	return nil
 }

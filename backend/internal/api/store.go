@@ -21,6 +21,22 @@ type Storer interface {
 	GetAppConfig(ctx context.Context, key string) (string, error)
 	SetAppConfig(ctx context.Context, key, value string) error
 	GetFacets(ctx context.Context) (*store.Facets, error)
+	// Labels
+	ListLabels(ctx context.Context) ([]store.Label, error)
+	CreateLabel(ctx context.Context, name, color string) error
+	UpdateLabel(ctx context.Context, name, color string) error
+	DeleteLabel(ctx context.Context, name string) error
+	ApplyLabelByMerchant(ctx context.Context, label, pattern string) (int64, error)
+	// Categories
+	ListCategories(ctx context.Context) ([]store.Category, error)
+	CreateCategory(ctx context.Context, name, description string) error
+	DeleteCategory(ctx context.Context, name string) error
+	// Buckets
+	ListBuckets(ctx context.Context) ([]store.Bucket, error)
+	CreateBucket(ctx context.Context, name, description string) error
+	DeleteBucket(ctx context.Context, name string) error
+	// Extended transaction update
+	UpdateTransaction(ctx context.Context, id string, u store.TransactionUpdate) error
 }
 
 // compile-time check: *store.Store must satisfy Storer.

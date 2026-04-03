@@ -130,3 +130,27 @@ export interface TransactionFilters {
 export interface HealthResponse {
   status: string
 }
+
+export interface Label {
+  name: string
+  color: string
+  created_at: string
+}
+
+export interface Category {
+  name: string
+  description?: string
+  is_default: boolean
+}
+
+export interface Bucket {
+  name: string
+  description?: string
+  is_default: boolean
+}
+
+export interface TransactionPatch {
+  description?: string
+  category?: string
+  bucket?: string
+}
