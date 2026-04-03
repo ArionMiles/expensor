@@ -1034,19 +1034,48 @@ func (h *Handlers) HandleGetChartData(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleGetHeatmap handles GET /api/stats/heatmap.
-// Returns transaction totals aggregated by weekday×hour and by day-of-month.
+// Optional query params: from=<RFC3339>, to=<RFC3339> (both or neither).
+// Returns 400 if either param is present but malformed.
 func (h *Handlers) HandleGetHeatmap(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
 	}
-	data, err := h.store.GetSpendingHeatmap(r.Context())
+
+	from, to, err := parseHeatmapRange(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	data, err := h.store.GetSpendingHeatmap(r.Context(), from, to)
 	if err != nil {
 		h.logger.Error("get heatmap", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch heatmap data")
 		return
 	}
 	writeJSON(w, http.StatusOK, data)
+}
+
+// parseHeatmapRange parses optional ?from= and ?to= RFC3339 query parameters.
+// Returns nil, nil when neither is provided. Returns an error if either is
+// present but cannot be parsed as RFC3339.
+func parseHeatmapRange(r *http.Request) (from, to *time.Time, err error) {
+	if v := r.URL.Query().Get("from"); v != "" {
+		t, parseErr := time.Parse(time.RFC3339, v)
+		if parseErr != nil {
+			return nil, nil, fmt.Errorf("invalid 'from' param: must be RFC3339 (e.g. 2026-04-01T00:00:00Z)")
+		}
+		from = &t
+	}
+	if v := r.URL.Query().Get("to"); v != "" {
+		t, parseErr := time.Parse(time.RFC3339, v)
+		if parseErr != nil {
+			return nil, nil, fmt.Errorf("invalid 'to' param: must be RFC3339 (e.g. 2026-04-30T23:59:59Z)")
+		}
+		to = &t
+	}
+	return from, to, nil
 }
 
 // HandleSearchTransactions handles GET /api/transactions/search?q=...

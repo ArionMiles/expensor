@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
@@ -18,7 +19,7 @@ type Storer interface {
 	SearchTransactions(ctx context.Context, query string, f store.ListFilter) ([]store.Transaction, int, error)
 	GetStats(ctx context.Context, baseCurrency string) (*store.Stats, error)
 	GetChartData(ctx context.Context) (*store.ChartData, error)
-	GetSpendingHeatmap(ctx context.Context) (*store.HeatmapData, error)
+	GetSpendingHeatmap(ctx context.Context, from, to *time.Time) (*store.HeatmapData, error)
 	GetAppConfig(ctx context.Context, key string) (string, error)
 	SetAppConfig(ctx context.Context, key, value string) error
 	GetFacets(ctx context.Context) (*store.Facets, error)

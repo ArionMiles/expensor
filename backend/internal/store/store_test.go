@@ -402,7 +402,7 @@ func TestGetSpendingHeatmap_EmptyDB(t *testing.T) {
 	ts := newTestStore(t) // skips automatically when -short is passed
 	defer ts.cleanup()
 
-	hd, err := ts.GetSpendingHeatmap(context.Background())
+	hd, err := ts.GetSpendingHeatmap(context.Background(), nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

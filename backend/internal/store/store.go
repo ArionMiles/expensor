@@ -571,24 +571,28 @@ func (s *Store) GetChartData(ctx context.Context) (*ChartData, error) {
 }
 
 // GetSpendingHeatmap returns transaction totals aggregated by weekday×hour and
-// by day-of-month. Both datasets span all-time data with no date filter.
-func (s *Store) GetSpendingHeatmap(ctx context.Context) (*HeatmapData, error) {
+// by day-of-month. When from and to are both non-nil, only transactions within
+// [from, to] (inclusive) are included; nil/nil returns all-time data.
+func (s *Store) GetSpendingHeatmap(ctx context.Context, from, to *time.Time) (*HeatmapData, error) {
 	hd := &HeatmapData{
 		ByWeekdayHour: []WeekdayHourBucket{},
 		ByDayOfMonth:  []DayOfMonthBucket{},
 	}
 
+	where, args := buildHeatmapWhere(from, to)
+
 	// Weekday × hour grid (7 rows × 24 columns = up to 168 buckets).
-	wdhRows, err := s.pool.Query(ctx, `
+	wdhQuery := fmt.Sprintf(`
 		SELECT
 			EXTRACT(DOW  FROM timestamp)::int AS weekday,
 			EXTRACT(HOUR FROM timestamp)::int AS hour,
 			COALESCE(SUM(amount), 0)          AS amount,
 			COUNT(*)                          AS count
-		FROM transactions
+		FROM transactions%s
 		GROUP BY 1, 2
 		ORDER BY 1, 2
-	`)
+	`, where)
+	wdhRows, err := s.pool.Query(ctx, wdhQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("fetching weekday/hour heatmap: %w", err)
 	}
@@ -606,15 +610,16 @@ func (s *Store) GetSpendingHeatmap(ctx context.Context) (*HeatmapData, error) {
 	wdhRows.Close() // release connection before opening second query
 
 	// Day of month strip (up to 31 buckets, one per calendar day).
-	domRows, err := s.pool.Query(ctx, `
+	domQuery := fmt.Sprintf(`
 		SELECT
 			EXTRACT(DAY FROM timestamp)::int AS day,
 			COALESCE(SUM(amount), 0)         AS amount,
 			COUNT(*)                         AS count
-		FROM transactions
+		FROM transactions%s
 		GROUP BY 1
 		ORDER BY 1
-	`)
+	`, where)
+	domRows, err := s.pool.Query(ctx, domQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("fetching day-of-month heatmap: %w", err)
 	}
@@ -631,6 +636,15 @@ func (s *Store) GetSpendingHeatmap(ctx context.Context) (*HeatmapData, error) {
 	}
 
 	return hd, nil
+}
+
+// buildHeatmapWhere returns a WHERE clause and positional args for
+// GetSpendingHeatmap. Returns empty string and nil args when both are nil.
+func buildHeatmapWhere(from, to *time.Time) (string, []any) {
+	if from == nil && to == nil {
+		return "", nil
+	}
+	return " WHERE timestamp >= $1 AND timestamp <= $2", []any{*from, *to}
 }
 
 // Facets holds distinct filter values for the transactions UI dropdowns.
