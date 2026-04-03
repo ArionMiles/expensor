@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 
@@ -36,6 +37,11 @@ func New(registry *plugins.Registry, httpClient *http.Client, logger *slog.Logge
 
 // RunConfig holds the configuration for running the daemon.
 type RunConfig struct {
+	// ReaderName is the plugin name of the reader to use (e.g. "gmail").
+	// Set by the web UI via POST /api/daemon/start.
+	ReaderName string
+	// WriterName is the plugin name of the writer to use (e.g. "postgres").
+	WriterName   string
 	Config       *config.Config
 	Rules        []api.Rule
 	Labels       api.Labels
@@ -48,19 +54,19 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 	cfg := runCfg.Config
 
 	r.logger.Info("starting expensor daemon",
-		"reader", cfg.ReaderPlugin,
-		"writer", cfg.WriterPlugin,
+		"reader", runCfg.ReaderName,
+		"writer", runCfg.WriterName,
 	)
 
 	// Create reader from plugin
 	reader, err := r.registry.CreateReader(
-		cfg.ReaderPlugin,
+		runCfg.ReaderName,
 		r.httpClient,
 		cfg,
 		runCfg.Rules,
 		runCfg.Labels,
 		runCfg.StateManager,
-		r.logger.With("component", "reader", "plugin", cfg.ReaderPlugin),
+		r.logger.With("component", "reader", "plugin", runCfg.ReaderName),
 	)
 	if err != nil {
 		return fmt.Errorf("creating reader: %w", err)
@@ -68,10 +74,10 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 
 	// Create writer from plugin
 	writer, err := r.registry.CreateWriter(
-		cfg.WriterPlugin,
+		runCfg.WriterName,
 		r.httpClient,
 		cfg,
-		r.logger.With("component", "writer", "plugin", cfg.WriterPlugin),
+		r.logger.With("component", "writer", "plugin", runCfg.WriterName),
 	)
 	if err != nil {
 		return fmt.Errorf("creating writer: %w", err)
@@ -109,10 +115,13 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 		}
 	}
 
-	// Close writer if it implements io.Closer
-	if closer, ok := writer.(interface{ Close() }); ok {
-		closer.Close()
-		r.logger.Info("closed writer resources")
+	// Close writer if it implements io.Closer.
+	if closer, ok := writer.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			r.logger.Warn("error closing writer", "error", err)
+		} else {
+			r.logger.Info("closed writer resources")
+		}
 	}
 
 	r.logger.Info("daemon stopped")
