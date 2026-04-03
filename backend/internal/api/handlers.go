@@ -1033,6 +1033,22 @@ func (h *Handlers) HandleGetChartData(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, cd)
 }
 
+// HandleGetHeatmap handles GET /api/stats/heatmap.
+// Returns transaction totals aggregated by weekday×hour and by day-of-month.
+func (h *Handlers) HandleGetHeatmap(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	data, err := h.store.GetSpendingHeatmap(r.Context())
+	if err != nil {
+		h.logger.Error("get heatmap", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to fetch heatmap data")
+		return
+	}
+	writeJSON(w, http.StatusOK, data)
+}
+
 // HandleSearchTransactions handles GET /api/transactions/search?q=...
 func (h *Handlers) HandleSearchTransactions(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {

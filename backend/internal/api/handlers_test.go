@@ -54,6 +54,8 @@ type mockStore struct {
 	buckets      []store.Bucket
 	bucketsErr   error
 	updateTxErr  error
+	heatmapData  *store.HeatmapData
+	heatmapErr   error
 }
 
 func (m *mockStore) ListTransactions(_ context.Context, _ store.ListFilter) ([]store.Transaction, int, error) {
@@ -189,6 +191,19 @@ func (m *mockStore) DeleteBucket(_ context.Context, _ string) error { return m.b
 
 func (m *mockStore) UpdateTransaction(_ context.Context, _ string, _ store.TransactionUpdate) error {
 	return m.updateTxErr
+}
+
+func (m *mockStore) GetSpendingHeatmap(_ context.Context) (*store.HeatmapData, error) {
+	if m.heatmapErr != nil {
+		return nil, m.heatmapErr
+	}
+	if m.heatmapData != nil {
+		return m.heatmapData, nil
+	}
+	return &store.HeatmapData{
+		ByWeekdayHour: []store.WeekdayHourBucket{},
+		ByDayOfMonth:  []store.DayOfMonthBucket{},
+	}, nil
 }
 
 // newTestHandlers returns a Handlers wired with a real (minimal) plugin registry,
@@ -1091,5 +1106,65 @@ func TestHandleSetScanInterval_TooHigh(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+// --- heatmap ---
+
+func TestHandleGetHeatmap_Success(t *testing.T) {
+	ms := &mockStore{
+		heatmapData: &store.HeatmapData{
+			ByWeekdayHour: []store.WeekdayHourBucket{
+				{Weekday: 1, Hour: 14, Amount: 500.0, Count: 3},
+			},
+			ByDayOfMonth: []store.DayOfMonthBucket{
+				{Day: 15, Amount: 1200.0, Count: 5},
+			},
+		},
+	}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap", nil)
+	rr := httptest.NewRecorder()
+	h.HandleGetHeatmap(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp store.HeatmapData
+	decodeJSON(t, rr.Body.String(), &resp)
+	if len(resp.ByWeekdayHour) != 1 {
+		t.Errorf("expected 1 weekday/hour bucket, got %d", len(resp.ByWeekdayHour))
+	}
+	if resp.ByWeekdayHour[0].Hour != 14 {
+		t.Errorf("expected Hour=14, got %d", resp.ByWeekdayHour[0].Hour)
+	}
+	if len(resp.ByDayOfMonth) != 1 {
+		t.Errorf("expected 1 day-of-month bucket, got %d", len(resp.ByDayOfMonth))
+	}
+}
+
+func TestHandleGetHeatmap_StoreError_Returns500(t *testing.T) {
+	ms := &mockStore{heatmapErr: errors.New("db connection lost")}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap", nil)
+	rr := httptest.NewRecorder()
+	h.HandleGetHeatmap(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleGetHeatmap_NoStore_Returns503(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap", nil)
+	rr := httptest.NewRecorder()
+	h.HandleGetHeatmap(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
