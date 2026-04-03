@@ -50,7 +50,20 @@ const LABELED_ROWS: { row: number; label: string }[] = [
   { row: 4, label: 'Fri' },
 ]
 
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const MONTH_NAMES = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+]
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -176,7 +189,13 @@ export function AnnualCalendarHeatmap({ year, metric }: Props) {
                 rx={2}
                 fill={intensityColor(value, maxValue)}
                 onMouseEnter={(e) =>
-                  setTooltip({ x: e.clientX, y: e.clientY, date, amount, count: bucket?.count ?? 0 })
+                  setTooltip({
+                    x: e.clientX,
+                    y: e.clientY,
+                    date,
+                    amount,
+                    count: bucket?.count ?? 0,
+                  })
                 }
                 onMouseLeave={() => setTooltip(null)}
               />

@@ -58,13 +58,13 @@ export interface ChartData {
 
 export interface WeekdayHourBucket {
   weekday: number // 0=Sunday … 6=Saturday
-  hour: number    // 0–23
+  hour: number // 0–23
   amount: number
   count: number
 }
 
 export interface DayOfMonthBucket {
-  day: number     // 1–31
+  day: number // 1–31
   amount: number
   count: number
 }
@@ -75,7 +75,7 @@ export interface HeatmapData {
 }
 
 export interface DailyBucket {
-  date: string   // RFC3339 date string — parse with new Date(b.date)
+  date: string // RFC3339 date string — parse with new Date(b.date)
   amount: number
   count: number
 }

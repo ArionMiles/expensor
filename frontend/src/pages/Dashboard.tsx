@@ -314,9 +314,25 @@ function StatsSection() {
 
 // ─── Month navigation ─────────────────────────────────────────────────────────
 
-interface MonthNav { year: number; month: number }
+interface MonthNav {
+  year: number
+  month: number
+}
 
-const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+const MONTH_NAMES = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+]
 
 function monthRangeISO(nav: MonthNav): { from: string; to: string } {
   const from = new Date(Date.UTC(nav.year, nav.month - 1, 1))
@@ -392,37 +408,59 @@ function SpendingPatternsSection() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xs uppercase tracking-wider text-muted-foreground">Spending Patterns</h2>
+        <h2 className="text-xs uppercase tracking-wider text-muted-foreground">
+          Spending Patterns
+        </h2>
         <MetricToggle value={metric} onChange={setMetric} />
       </div>
 
       <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-xs uppercase tracking-wider text-muted-foreground">By weekday &amp; hour</h3>
+          <h3 className="text-xs uppercase tracking-wider text-muted-foreground">
+            By weekday &amp; hour
+          </h3>
           <div className="flex items-center gap-1.5">
             {monthNav !== null && (
               <button
                 onClick={() => setMonthNav(null)}
                 className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
-              >All time</button>
+              >
+                All time
+              </button>
             )}
             <button
-              onClick={() => setMonthNav((p) => prevMonth(p ?? { year: now.getFullYear(), month: now.getMonth() + 1 }))}
+              onClick={() =>
+                setMonthNav((p) =>
+                  prevMonth(p ?? { year: now.getFullYear(), month: now.getMonth() + 1 }),
+                )
+              }
               className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
               aria-label="Previous month"
-            >←</button>
+            >
+              ←
+            </button>
             <span className="min-w-[5rem] text-center text-xs font-medium text-foreground">
               {monthLabel ?? 'All time'}
             </span>
             <button
-              onClick={() => setMonthNav((p) => nextMonth(p ?? { year: now.getFullYear(), month: now.getMonth() + 1 }))}
+              onClick={() =>
+                setMonthNav((p) =>
+                  nextMonth(p ?? { year: now.getFullYear(), month: now.getMonth() + 1 }),
+                )
+              }
               disabled={isCurrentMonth}
               className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Next month"
-            >→</button>
+            >
+              →
+            </button>
           </div>
         </div>
-        <WeekdayHourHeatmap data={heatmap.by_weekday_hour} metric={metric} monthLabel={monthLabel} />
+        <WeekdayHourHeatmap
+          data={heatmap.by_weekday_hour}
+          metric={metric}
+          monthLabel={monthLabel}
+        />
       </div>
       <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
@@ -432,14 +470,20 @@ function SpendingPatternsSection() {
               onClick={() => setYear((y) => y - 1)}
               className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
               aria-label="Previous year"
-            >←</button>
-            <span className="min-w-[3rem] text-center text-xs font-medium text-foreground tabular-nums">{year}</span>
+            >
+              ←
+            </button>
+            <span className="min-w-[3rem] text-center text-xs font-medium tabular-nums text-foreground">
+              {year}
+            </span>
             <button
               onClick={() => setYear((y) => y + 1)}
               disabled={year >= currentYear}
               className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Next year"
-            >→</button>
+            >
+              →
+            </button>
           </div>
         </div>
         <AnnualCalendarHeatmap year={year} metric={metric} />
@@ -575,21 +619,31 @@ export function Dashboard() {
     <div className="mx-auto w-full max-w-6xl space-y-6 px-6 py-6">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <ErrorBoundary><StatsSection /></ErrorBoundary>
+          <ErrorBoundary>
+            <StatsSection />
+          </ErrorBoundary>
         </div>
         <div className="lg:col-span-1">
           <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-xs uppercase tracking-wider text-muted-foreground">Recent transactions</h2>
+              <h2 className="text-xs uppercase tracking-wider text-muted-foreground">
+                Recent transactions
+              </h2>
             </div>
-            <ErrorBoundary><RecentTransactions /></ErrorBoundary>
+            <ErrorBoundary>
+              <RecentTransactions />
+            </ErrorBoundary>
           </div>
         </div>
       </div>
       {chartData && (
-        <ErrorBoundary><ChartsSection charts={chartData} /></ErrorBoundary>
+        <ErrorBoundary>
+          <ChartsSection charts={chartData} />
+        </ErrorBoundary>
       )}
-      <ErrorBoundary><SpendingPatternsSection /></ErrorBoundary>
+      <ErrorBoundary>
+        <SpendingPatternsSection />
+      </ErrorBoundary>
     </div>
   )
 }

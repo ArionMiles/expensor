@@ -10,14 +10,7 @@ export function HeatmapLegend() {
       <span>Less</span>
       {[0, 1, 2, 3, 4].map((step) => (
         <svg key={step} width={12} height={12} aria-hidden="true">
-          <rect
-            x={0}
-            y={0}
-            width={12}
-            height={12}
-            rx={2}
-            fill={intensityColor(step, 4)}
-          />
+          <rect x={0} y={0} width={12} height={12} rx={2} fill={intensityColor(step, 4)} />
         </svg>
       ))}
       <span>More</span>

@@ -85,8 +85,14 @@ export function WeekdayHourHeatmap({ data, metric, monthLabel }: Props) {
                 fill={intensityColor(value, max)}
                 onMouseEnter={(e) => {
                   if (!bucket) return
-                  setTooltip({ x: e.clientX, y: e.clientY, day: DAY_LABELS[weekday], hour,
-                    amount: bucket.amount, count: bucket.count })
+                  setTooltip({
+                    x: e.clientX,
+                    y: e.clientY,
+                    day: DAY_LABELS[weekday],
+                    hour,
+                    amount: bucket.amount,
+                    count: bucket.count,
+                  })
                 }}
                 onMouseLeave={() => setTooltip(null)}
               />
@@ -114,9 +120,7 @@ export function WeekdayHourHeatmap({ data, metric, monthLabel }: Props) {
           className="pointer-events-none fixed z-50 rounded border border-border bg-secondary px-2 py-1 text-xs shadow-lg"
           style={{ left: tooltip.x + 8, top: tooltip.y - 8 }}
         >
-          {monthLabel && (
-            <span className="block text-muted-foreground">{monthLabel}</span>
-          )}
+          {monthLabel && <span className="block text-muted-foreground">{monthLabel}</span>}
           <span className="font-medium text-foreground">
             {tooltip.day} {String(tooltip.hour).padStart(2, '0')}:00
           </span>
