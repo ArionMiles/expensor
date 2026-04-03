@@ -8,6 +8,7 @@ import (
 
 	gmailapi "google.golang.org/api/gmail/v1"
 
+	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 	gmailreader "github.com/ArionMiles/expensor/backend/pkg/reader/gmail"
@@ -35,6 +36,21 @@ func (p *Plugin) RequiredScopes() []string {
 	}
 }
 
+// AuthType returns the authentication type for Gmail (OAuth2).
+func (p *Plugin) AuthType() plugins.AuthType {
+	return plugins.AuthTypeOAuth
+}
+
+// RequiresCredentialsUpload reports that Gmail needs a client_secret.json upload.
+func (p *Plugin) RequiresCredentialsUpload() bool {
+	return true
+}
+
+// ConfigSchema returns an empty schema — Gmail is configured via OAuth, not form fields.
+func (p *Plugin) ConfigSchema() []plugins.ConfigField {
+	return []plugins.ConfigField{}
+}
+
 // NewReader creates a new Gmail reader instance.
 func (p *Plugin) NewReader( //nolint:revive // interface method; argument count dictated by ReaderPlugin
 	httpClient *http.Client, cfg *config.Config, rules []api.Rule,
@@ -47,10 +63,11 @@ func (p *Plugin) NewReader( //nolint:revive // interface method; argument count 
 	}
 
 	readerCfg := gmailreader.Config{
-		Rules:    rules,
-		Labels:   labels,
-		Interval: interval,
-		State:    stateManager,
+		Rules:        rules,
+		Labels:       labels,
+		Interval:     interval,
+		State:        stateManager,
+		LookbackDays: cfg.Gmail.LookbackDays,
 	}
 
 	return gmailreader.New(httpClient, readerCfg, logger)

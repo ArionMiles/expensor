@@ -1,3 +1,6 @@
+Subject: Alert : Update on your HDFC Bank Credit Card
+
+Body:
 Alert: Your HDFC Bank Credit Card ending 5678 has been used for Rs.999.00 at SWIGGY on 20-Jan-2024.
 
 Available Credit Limit: Rs.45,000.00

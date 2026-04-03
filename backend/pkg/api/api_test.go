@@ -16,22 +16,22 @@ func TestRule_BuildGmailQuery(t *testing.T) {
 		{
 			name: "both sender and subject",
 			rule: api.Rule{SenderEmail: "alerts@bank.com", SubjectContains: "Transaction Alert"},
-			want: `is:unread from:alerts@bank.com subject:"Transaction Alert"`,
+			want: `from:alerts@bank.com subject:"Transaction Alert"`,
 		},
 		{
 			name: "only sender",
 			rule: api.Rule{SenderEmail: "alerts@bank.com"},
-			want: "is:unread from:alerts@bank.com",
+			want: "from:alerts@bank.com",
 		},
 		{
 			name: "only subject",
 			rule: api.Rule{SubjectContains: "Transaction Alert"},
-			want: `is:unread subject:"Transaction Alert"`,
+			want: `subject:"Transaction Alert"`,
 		},
 		{
 			name: "neither sender nor subject",
 			rule: api.Rule{},
-			want: "is:unread",
+			want: "",
 		},
 	}
 
