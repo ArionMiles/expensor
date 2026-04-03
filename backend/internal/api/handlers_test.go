@@ -144,7 +144,7 @@ func (p *testWriterPlugin) NewWriter(_ *http.Client, _ *config.Config, _ *slog.L
 }
 
 func get(h http.HandlerFunc, target string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodGet, target, nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, target, nil)
 	rr := httptest.NewRecorder()
 	h(rr, req)
 	return rr
@@ -255,7 +255,7 @@ func TestHandleListWriters(t *testing.T) {
 func TestHandleCredentialsStatus_Missing(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	// h.dataDir is t.TempDir() — no credentials file exists there.
-	req := httptest.NewRequest(http.MethodGet, "/api/readers/gmail/credentials/status", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/gmail/credentials/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.HandleCredentialsStatus(rr, req)
@@ -279,7 +279,7 @@ func TestHandleCredentialsStatus_Present(t *testing.T) {
 	_ = os.WriteFile(credFile, []byte(`{"installed":{}}`), 0o600)
 	// No t.Cleanup needed — t.TempDir() handles it.
 
-	req := httptest.NewRequest(http.MethodGet, "/api/readers/gmail/credentials/status", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/gmail/credentials/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.HandleCredentialsStatus(rr, req)
@@ -293,7 +293,7 @@ func TestHandleCredentialsStatus_Present(t *testing.T) {
 
 func TestHandleCredentialsStatus_UnknownReader(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	req := httptest.NewRequest(http.MethodGet, "/api/readers/noexist/credentials/status", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/noexist/credentials/status", nil)
 	req.SetPathValue("name", "noexist")
 	rr := httptest.NewRecorder()
 	h.HandleCredentialsStatus(rr, req)
@@ -307,7 +307,7 @@ func TestHandleCredentialsStatus_UnknownReader(t *testing.T) {
 
 func TestHandleAuthStatus_NoToken(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	req := httptest.NewRequest(http.MethodGet, "/api/readers/gmail/auth/status", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/gmail/auth/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.HandleAuthStatus(rr, req)
@@ -324,7 +324,7 @@ func TestHandleAuthStatus_NoToken(t *testing.T) {
 
 func TestHandleAuthStatus_ConfigReader(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	req := httptest.NewRequest(http.MethodGet, "/api/readers/thunderbird/auth/status", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/thunderbird/auth/status", nil)
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
 	h.HandleAuthStatus(rr, req)
@@ -343,7 +343,7 @@ func TestHandleAuthStatus_ConfigReader(t *testing.T) {
 
 func TestHandleReaderStatus_Thunderbird_NotConfigured(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	req := httptest.NewRequest(http.MethodGet, "/api/readers/thunderbird/status", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/thunderbird/status", nil)
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
 	h.HandleReaderStatus(rr, req)
@@ -367,7 +367,7 @@ func TestHandleReaderStatus_Thunderbird_Configured(t *testing.T) {
 	_ = os.WriteFile(cfgFile, []byte(`{"profilePath":"/tmp/tb"}`), 0o600)
 	// No t.Cleanup needed — t.TempDir() handles it.
 
-	req := httptest.NewRequest(http.MethodGet, "/api/readers/thunderbird/status", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/thunderbird/status", nil)
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
 	h.HandleReaderStatus(rr, req)
@@ -440,7 +440,7 @@ func TestHandleGetTransaction_Found(t *testing.T) {
 	st := &mockStore{getResult: txn}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/transactions/abc", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/abc", nil)
 	req.SetPathValue("id", "abc")
 	rr := httptest.NewRecorder()
 	h.HandleGetTransaction(rr, req)
@@ -459,7 +459,7 @@ func TestHandleGetTransaction_NotFound(t *testing.T) {
 	st := &mockStore{getErr: store.ErrNotFound}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/transactions/noexist", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/noexist", nil)
 	req.SetPathValue("id", "noexist")
 	rr := httptest.NewRecorder()
 	h.HandleGetTransaction(rr, req)
@@ -475,7 +475,7 @@ func TestHandleUpdateTransaction_Success(t *testing.T) {
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	body := `{"description":"Updated"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/transactions/abc", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/abc", strings.NewReader(body))
 	req.SetPathValue("id", "abc")
 	rr := httptest.NewRecorder()
 	h.HandleUpdateTransaction(rr, req)
@@ -490,7 +490,7 @@ func TestHandleUpdateTransaction_NotFound(t *testing.T) {
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	body := `{"description":"x"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/transactions/noexist", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/noexist", strings.NewReader(body))
 	req.SetPathValue("id", "noexist")
 	rr := httptest.NewRecorder()
 	h.HandleUpdateTransaction(rr, req)
@@ -502,7 +502,7 @@ func TestHandleUpdateTransaction_NotFound(t *testing.T) {
 
 func TestHandleUpdateTransaction_InvalidJSON(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	req := httptest.NewRequest(http.MethodPut, "/api/transactions/abc", strings.NewReader("not-json"))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/abc", strings.NewReader("not-json"))
 	req.SetPathValue("id", "abc")
 	rr := httptest.NewRecorder()
 	h.HandleUpdateTransaction(rr, req)
@@ -515,7 +515,7 @@ func TestHandleUpdateTransaction_InvalidJSON(t *testing.T) {
 func TestHandleAddLabels_Success(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	body := `{"labels":["food","work"]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/transactions/abc/labels", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/abc/labels", strings.NewReader(body))
 	req.SetPathValue("id", "abc")
 	rr := httptest.NewRecorder()
 	h.HandleAddLabels(rr, req)
@@ -527,7 +527,7 @@ func TestHandleAddLabels_Success(t *testing.T) {
 
 func TestHandleAddLabels_InvalidJSON(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	req := httptest.NewRequest(http.MethodPost, "/api/transactions/abc/labels", strings.NewReader("bad"))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/abc/labels", strings.NewReader("bad"))
 	req.SetPathValue("id", "abc")
 	rr := httptest.NewRecorder()
 	h.HandleAddLabels(rr, req)
@@ -541,7 +541,7 @@ func TestHandleAddLabels_BatchSuccess(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 
 	body := `{"labels":["food","work","recurring"]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/transactions/abc/labels", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/abc/labels", strings.NewReader(body))
 	req.SetPathValue("id", "abc")
 	rr := httptest.NewRecorder()
 	h.HandleAddLabels(rr, req)
@@ -555,7 +555,7 @@ func TestHandleAddLabels_StoreError_Returns500(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{addLabelsErr: errors.New("db error")}, &mockDaemon{})
 
 	body := `{"labels":["food"]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/transactions/abc/labels", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/abc/labels", strings.NewReader(body))
 	req.SetPathValue("id", "abc")
 	rr := httptest.NewRecorder()
 	h.HandleAddLabels(rr, req)
@@ -567,7 +567,7 @@ func TestHandleAddLabels_StoreError_Returns500(t *testing.T) {
 
 func TestHandleRemoveLabel_Success(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	req := httptest.NewRequest(http.MethodDelete, "/api/transactions/abc/labels/food", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/transactions/abc/labels/food", nil)
 	req.SetPathValue("id", "abc")
 	req.SetPathValue("label", "food")
 	rr := httptest.NewRecorder()
@@ -580,7 +580,7 @@ func TestHandleRemoveLabel_Success(t *testing.T) {
 
 func TestHandleRemoveLabel_NotFound(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{removeLblErr: store.ErrNotFound}, &mockDaemon{})
-	req := httptest.NewRequest(http.MethodDelete, "/api/transactions/abc/labels/missing", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/transactions/abc/labels/missing", nil)
 	req.SetPathValue("id", "abc")
 	req.SetPathValue("label", "missing")
 	rr := httptest.NewRecorder()
@@ -645,7 +645,7 @@ func TestGenerateState_IsNotPureTimestamp(t *testing.T) {
 		t.Errorf("expected 32-char hex suffix, got %q (len=%d)", suffix, len(suffix))
 	}
 	for _, c := range suffix {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			t.Errorf("suffix %q contains non-hex character %q", suffix, c)
 		}
 	}
@@ -666,7 +666,7 @@ func TestGenerateState_ContainsReaderName(t *testing.T) {
 func TestHandleAuthCallback_RejectsUnknownState(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/auth/callback?state=doesnotexist&code=xyz", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/auth/callback?state=doesnotexist&code=xyz", nil)
 	rr := httptest.NewRecorder()
 	h.HandleAuthCallback(rr, req)
 
@@ -687,7 +687,7 @@ func TestHandleAuthCallback_RejectsExpiredState(t *testing.T) {
 	}
 	h.mu.Unlock()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/auth/callback?state="+expiredState+"&code=xyz", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/auth/callback?state="+expiredState+"&code=xyz", nil)
 	rr := httptest.NewRecorder()
 	h.HandleAuthCallback(rr, req)
 

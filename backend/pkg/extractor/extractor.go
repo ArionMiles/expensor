@@ -25,38 +25,56 @@ func ExtractTransactionDetails(
 	amountRegex, merchantRegex, currencyRegex *regexp.Regexp,
 	receivedTime time.Time,
 ) *api.TransactionDetails {
-	transaction := &api.TransactionDetails{
-		Timestamp: receivedTime.Format(time.RFC3339),
+	return &api.TransactionDetails{
+		Timestamp:    receivedTime.Format(time.RFC3339),
+		Amount:       extractAmount(emailBody, amountRegex),
+		MerchantInfo: extractMerchant(emailBody, merchantRegex),
+		Currency:     extractCurrency(emailBody, currencyRegex),
 	}
+}
 
-	if amountRegex != nil {
-		if m := amountRegex.FindStringSubmatch(emailBody); len(m) > 1 {
-			amountStr := strings.ReplaceAll(m[1], ",", "")
-			if amount, err := strconv.ParseFloat(amountStr, 64); err == nil {
-				transaction.Amount = amount
-			}
+// extractAmount returns the parsed amount from group 1 of amountRegex, or 0.
+func extractAmount(body string, re *regexp.Regexp) float64 {
+	if re == nil {
+		return 0
+	}
+	m := re.FindStringSubmatch(body)
+	if len(m) <= 1 {
+		return 0
+	}
+	amount, err := strconv.ParseFloat(strings.ReplaceAll(m[1], ",", ""), 64)
+	if err != nil {
+		return 0
+	}
+	return amount
+}
+
+// extractMerchant returns the first non-empty capture group of merchantRegex.
+// This supports alternation patterns where only one branch produces a match.
+func extractMerchant(body string, re *regexp.Regexp) string {
+	if re == nil {
+		return ""
+	}
+	m := re.FindStringSubmatch(body)
+	if len(m) <= 1 {
+		return ""
+	}
+	for _, group := range m[1:] {
+		if g := strings.TrimSpace(group); g != "" {
+			return g
 		}
 	}
+	return ""
+}
 
-	if merchantRegex != nil {
-		if m := merchantRegex.FindStringSubmatch(emailBody); len(m) > 1 {
-			// Pick the first non-empty capture group to support alternation-based regexes.
-			for _, group := range m[1:] {
-				if g := strings.TrimSpace(group); g != "" {
-					transaction.MerchantInfo = g
-					break
-				}
-			}
-		}
+// extractCurrency returns the trimmed currency code from group 1 of currencyRegex, or "".
+func extractCurrency(body string, re *regexp.Regexp) string {
+	if re == nil {
+		return ""
 	}
-
-	if currencyRegex != nil {
-		if m := currencyRegex.FindStringSubmatch(emailBody); len(m) > 1 {
-			if code := strings.TrimSpace(m[1]); code != "" {
-				transaction.Currency = code
-			}
-		}
+	m := re.FindStringSubmatch(body)
+	if len(m) <= 1 {
+		return ""
 	}
-
-	return transaction
+	return strings.TrimSpace(m[1])
 }

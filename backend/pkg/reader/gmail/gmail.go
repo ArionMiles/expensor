@@ -182,7 +182,7 @@ func (r *Reader) processRule(ctx context.Context, rule api.Rule, out chan<- *api
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Info("context cancelled, stopping rule processing", "rule", rule.Name)
+			logger.Info("context canceled, stopping rule processing", "rule", rule.Name)
 			return
 		default:
 		}

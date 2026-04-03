@@ -100,7 +100,7 @@ func newTestStore(t *testing.T) *testStore {
 }
 
 // seedTransaction inserts one transaction directly via pgxpool and returns its UUID.
-func seedTransaction(t *testing.T, ctx context.Context, st *store.Store, msg string, amount float64, currency, merchant, category string) string {
+func seedTransaction(t *testing.T, ctx context.Context, st *store.Store, msg string, amount float64, currency, merchant, category string) string { //nolint:revive // test helper requires many params to cover all fixture dimensions
 	t.Helper()
 	// We use the store's exported pool indirectly by going through a helper writer query.
 	// Instead, expose a small seed helper in the test package using a raw pgx query.
@@ -112,7 +112,7 @@ func seedTransaction(t *testing.T, ctx context.Context, st *store.Store, msg str
 
 // seedTxn uses a hack-free approach: it calls the store's internal pool via a
 // package-level helper exposed only in tests (see seed_test.go).
-func seedTxn(t *testing.T, ctx context.Context, st *store.Store, msgID string, amount float64, currency, merchant, category, description string) string {
+func seedTxn(t *testing.T, ctx context.Context, st *store.Store, msgID string, amount float64, currency, merchant, category, description string) string { //nolint:revive // test helper requires many params to cover all fixture dimensions
 	t.Helper()
 	id, err := st.InsertForTest(ctx, store.InsertParams{
 		MessageID:    msgID,
@@ -217,7 +217,7 @@ func TestListTransactions_FilterByLabel(t *testing.T) {
 		t.Fatalf("ListTransactions: %v", err)
 	}
 	if total != 1 || txns[0].ID != id {
-		t.Errorf("want 1 labelled transaction, got total=%d", total)
+		t.Errorf("want 1 labeled transaction, got total=%d", total)
 	}
 }
 

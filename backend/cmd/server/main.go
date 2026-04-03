@@ -159,7 +159,7 @@ func main() {
 	}
 	logger.Info("loaded embedded content", "rules", len(rules), "labels", len(labels))
 
-	// Root context — cancelled on SIGINT/SIGTERM.
+	// Root context — canceled on SIGINT/SIGTERM.
 	ctx, cancel := context.WithCancel(context.Background())
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -218,13 +218,13 @@ func main() {
 
 	if err := server.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("HTTP server error", "error", err)
-		os.Exit(1)
+		return // allow deferred cleanup (pgStore.Close) to run
 	}
 	logger.Info("shutdown complete")
 }
 
 // runDaemon builds the OAuth client and daemon runner, then blocks until ctx is done.
-func runDaemon(
+func runDaemon( //nolint:revive // all parameters are required; splitting further would obscure the call site
 	ctx context.Context,
 	registry *plugins.Registry,
 	readerName string,

@@ -68,7 +68,7 @@ type Handlers struct {
 // NewHandlers creates a Handlers instance.
 // Pass nil for st when no database is configured; transaction endpoints will return 503.
 // Pass nil for startFn to disable the daemon start endpoint.
-func NewHandlers(
+func NewHandlers( //nolint:revive // dependency injection requires all these parameters; callers use named fields
 	registry *plugins.Registry,
 	st Storer,
 	daemon DaemonStatusProvider,
@@ -221,7 +221,8 @@ func (h *Handlers) HandleUploadCredentials(w http.ResponseWriter, r *http.Reques
 	}
 	if creds.Web == nil && creds.Installed == nil {
 		writeError(w, http.StatusUnprocessableEntity,
-			`invalid credentials file: expected a Google OAuth2 client_secret.json with a "web" or "installed" top-level key — download it from Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client IDs`)
+			`invalid credentials file: expected a Google OAuth2 client_secret.json with a "web" or "installed"`+
+				` top-level key — download it from Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client IDs`)
 		return
 	}
 
@@ -230,7 +231,7 @@ func (h *Handlers) HandleUploadCredentials(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusInternalServerError, "failed to create data directory")
 		return
 	}
-	if err := os.WriteFile(dest, body, 0o600); err != nil {
+	if err := os.WriteFile(dest, body, 0o600); err != nil { //nolint:gosec // dest is built from validated reader name and configured data dir
 		writeError(w, http.StatusInternalServerError, "failed to save credentials")
 		return
 	}
@@ -247,7 +248,7 @@ func (h *Handlers) HandleCredentialsStatus(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	_, err := os.Stat(filepath.Join(h.dataDir, fmt.Sprintf("client_secret_%s.json", name)))
+	_, err := os.Stat(filepath.Join(h.dataDir, fmt.Sprintf("client_secret_%s.json", name))) //nolint:gosec // validated reader name
 	writeJSON(w, http.StatusOK, map[string]bool{"exists": err == nil})
 }
 
@@ -269,7 +270,7 @@ func (h *Handlers) HandleAuthStart(w http.ResponseWriter, r *http.Request) {
 
 	credFile := filepath.Join(h.dataDir, fmt.Sprintf("client_secret_%s.json", name))
 	h.logger.Debug("reading credentials file", "reader", name, "path", credFile)
-	secretJSON, err := os.ReadFile(credFile)
+	secretJSON, err := os.ReadFile(credFile) //nolint:gosec // path built from validated reader name and configured data dir
 	if err != nil {
 		h.logger.Debug("credentials file not found", "reader", name, "path", credFile, "error", err)
 		writeError(w, http.StatusPreconditionFailed, "credentials not uploaded — upload client credentials first")
@@ -308,9 +309,9 @@ func (h *Handlers) HandleAuthStart(w http.ResponseWriter, r *http.Request) {
 	// prompt=consent forces Google to always return a refresh token, even if the
 	// user has previously authorized this app. Without it, re-authorizations only
 	// return an access token, which cannot be refreshed after expiry.
-	url := oauthCfg.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "consent"))
+	authURL := oauthCfg.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "consent"))
 	h.logger.Debug("OAuth URL generated", "reader", name, "state", state)
-	writeJSON(w, http.StatusOK, map[string]string{"url": url})
+	writeJSON(w, http.StatusOK, map[string]string{"url": authURL})
 }
 
 // HandleAuthCallback handles GET /api/auth/callback.
@@ -413,7 +414,7 @@ func (h *Handlers) HandleDisconnectReader(w http.ResponseWriter, r *http.Request
 
 	var removed []string
 	for _, f := range files {
-		if err := os.Remove(f); err == nil {
+		if err := os.Remove(f); err == nil { //nolint:gosec // paths built from validated reader name and configured data dir
 			removed = append(removed, filepath.Base(f))
 		}
 	}
@@ -431,7 +432,7 @@ func (h *Handlers) HandleRevokeToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tokenFile := filepath.Join(h.dataDir, fmt.Sprintf("token_%s.json", name))
-	if err := os.Remove(tokenFile); err != nil {
+	if err := os.Remove(tokenFile); err != nil { //nolint:gosec // path built from validated reader name and configured data dir
 		if os.IsNotExist(err) {
 			writeError(w, http.StatusNotFound, "no token found")
 			return
@@ -455,7 +456,7 @@ func (h *Handlers) HandleGetReaderConfig(w http.ResponseWriter, r *http.Request)
 	}
 
 	cfgFile := filepath.Join(h.dataDir, fmt.Sprintf("config_%s.json", name))
-	data, err := os.ReadFile(cfgFile)
+	data, err := os.ReadFile(cfgFile) //nolint:gosec // path built from validated reader name and configured data dir
 	if err != nil {
 		if os.IsNotExist(err) {
 			writeJSON(w, http.StatusOK, map[string]any{})
@@ -467,7 +468,7 @@ func (h *Handlers) HandleGetReaderConfig(w http.ResponseWriter, r *http.Request)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
+	_, _ = w.Write(data) //nolint:gosec // data is JSON read from a known config file; Content-Type is already set to application/json
 }
 
 // HandleSaveReaderConfig handles POST /api/readers/{name}/config.
@@ -497,7 +498,7 @@ func (h *Handlers) HandleSaveReaderConfig(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, "failed to create data directory")
 		return
 	}
-	if err := os.WriteFile(cfgFile, body, 0o600); err != nil {
+	if err := os.WriteFile(cfgFile, body, 0o600); err != nil { //nolint:gosec // path built from validated reader name and configured data dir
 		writeError(w, http.StatusInternalServerError, "failed to save config")
 		return
 	}
@@ -527,7 +528,7 @@ func (h *Handlers) HandleReaderStatus(w http.ResponseWriter, r *http.Request) {
 	st := readerStatus{AuthType: plugin.AuthType()}
 
 	if plugin.RequiresCredentialsUpload() {
-		_, err := os.Stat(filepath.Join(h.dataDir, fmt.Sprintf("client_secret_%s.json", name)))
+		_, err := os.Stat(filepath.Join(h.dataDir, fmt.Sprintf("client_secret_%s.json", name))) //nolint:gosec // validated reader name
 		st.CredentialsUploaded = err == nil
 	} else {
 		st.CredentialsUploaded = true
@@ -541,7 +542,7 @@ func (h *Handlers) HandleReaderStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cfgFile := filepath.Join(h.dataDir, fmt.Sprintf("config_%s.json", name))
-	_, err = os.Stat(cfgFile)
+	_, err = os.Stat(cfgFile) //nolint:gosec // path built from validated reader name and configured data dir
 	st.ConfigPresent = err == nil || len(plugin.ConfigSchema()) == 0
 
 	st.Ready = st.CredentialsUploaded && st.Authenticated && st.ConfigPresent
