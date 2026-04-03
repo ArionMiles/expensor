@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(task lint:*)",
+      "Bash(go build:*)",
+      "Bash(task test:*)",
+      "Bash(task build:*)",
+      "Bash(task --list:*)",
+      "Bash(task lint:prod:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(go get:*)",
+      "Bash(find:*)",
+      "Bash(xargs:*)",
+      "Bash(task build:binary:*)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}
