@@ -13,20 +13,20 @@ CREATE TABLE IF NOT EXISTS buckets (
 );
 
 INSERT INTO categories (name, is_default) VALUES
-    ('food & dining', true),
-    ('transport',     true),
-    ('shopping',      true),
-    ('utilities',     true),
-    ('healthcare',    true),
-    ('entertainment', true),
-    ('travel',        true),
-    ('finance',       true),
-    ('uncategorized', true)
+    ('Food & Dining', true),
+    ('Transport',     true),
+    ('Shopping',      true),
+    ('Utilities',     true),
+    ('Healthcare',    true),
+    ('Entertainment', true),
+    ('Travel',        true),
+    ('Finance',       true),
+    ('Uncategorized', true)
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO buckets (name, is_default) VALUES
-    ('needs',   true),
-    ('wants',   true),
-    ('savings', true),
-    ('income',  true)
+    ('Needs',   true),
+    ('Wants',   true),
+    ('Savings', true),
+    ('Income',  true)
 ON CONFLICT (name) DO NOTHING;

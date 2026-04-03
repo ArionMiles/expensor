@@ -710,14 +710,14 @@ func (s *Store) initLabels(ctx context.Context) error {
 			created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);
 		INSERT INTO labels (name, color) VALUES
-			('food',          '#f59e0b'),
-			('transport',     '#3b82f6'),
-			('shopping',      '#8b5cf6'),
-			('utilities',     '#06b6d4'),
-			('healthcare',    '#10b981'),
-			('entertainment', '#ec4899'),
-			('travel',        '#f97316'),
-			('recurring',     '#6366f1')
+			('Food',          '#f59e0b'),
+			('Transport',     '#3b82f6'),
+			('Shopping',      '#8b5cf6'),
+			('Utilities',     '#06b6d4'),
+			('Healthcare',    '#10b981'),
+			('Entertainment', '#ec4899'),
+			('Travel',        '#f97316'),
+			('Recurring',     '#6366f1')
 		ON CONFLICT (name) DO NOTHING;
 	`)
 	return err
@@ -739,12 +739,12 @@ func (s *Store) initCategoriesBuckets(ctx context.Context) error {
 			created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);
 		INSERT INTO categories (name, is_default) VALUES
-			('food & dining', true),('transport', true),('shopping', true),
-			('utilities', true),('healthcare', true),('entertainment', true),
-			('travel', true),('finance', true),('uncategorized', true)
+			('Food & Dining', true),('Transport', true),('Shopping', true),
+			('Utilities', true),('Healthcare', true),('Entertainment', true),
+			('Travel', true),('Finance', true),('Uncategorized', true)
 		ON CONFLICT (name) DO NOTHING;
 		INSERT INTO buckets (name, is_default) VALUES
-			('needs', true),('wants', true),('savings', true),('income', true)
+			('Needs', true),('Wants', true),('Savings', true),('Income', true)
 		ON CONFLICT (name) DO NOTHING;
 	`)
 	return err
