@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -46,6 +47,13 @@ type mockStore struct {
 	appConfig    map[string]string
 	setConfigErr error
 	getFacetsErr error
+	labels       []store.Label
+	labelsErr    error
+	categories   []store.Category
+	catsErr      error
+	buckets      []store.Bucket
+	bucketsErr   error
+	updateTxErr  error
 }
 
 func (m *mockStore) ListTransactions(_ context.Context, _ store.ListFilter) ([]store.Transaction, int, error) {
@@ -126,6 +134,61 @@ func (m *mockStore) GetFacets(_ context.Context) (*store.Facets, error) {
 		Currencies: []string{},
 		Labels:     []string{},
 	}, nil
+}
+
+func (m *mockStore) ListLabels(_ context.Context) ([]store.Label, error) {
+	if m.labelsErr != nil {
+		return nil, m.labelsErr
+	}
+	if m.labels == nil {
+		return []store.Label{}, nil
+	}
+	return m.labels, nil
+}
+
+func (m *mockStore) CreateLabel(_ context.Context, _, _ string) error { return m.labelsErr }
+
+func (m *mockStore) UpdateLabel(_ context.Context, _, _ string) error { return m.updateErr }
+
+func (m *mockStore) DeleteLabel(_ context.Context, _ string) error { return m.labelsErr }
+
+func (m *mockStore) ApplyLabelByMerchant(_ context.Context, _, _ string) (int64, error) {
+	if m.labelsErr != nil {
+		return 0, m.labelsErr
+	}
+	return 0, nil
+}
+
+func (m *mockStore) ListCategories(_ context.Context) ([]store.Category, error) {
+	if m.catsErr != nil {
+		return nil, m.catsErr
+	}
+	if m.categories == nil {
+		return []store.Category{}, nil
+	}
+	return m.categories, nil
+}
+
+func (m *mockStore) CreateCategory(_ context.Context, _, _ string) error { return m.catsErr }
+
+func (m *mockStore) DeleteCategory(_ context.Context, _ string) error { return m.catsErr }
+
+func (m *mockStore) ListBuckets(_ context.Context) ([]store.Bucket, error) {
+	if m.bucketsErr != nil {
+		return nil, m.bucketsErr
+	}
+	if m.buckets == nil {
+		return []store.Bucket{}, nil
+	}
+	return m.buckets, nil
+}
+
+func (m *mockStore) CreateBucket(_ context.Context, _, _ string) error { return m.bucketsErr }
+
+func (m *mockStore) DeleteBucket(_ context.Context, _ string) error { return m.bucketsErr }
+
+func (m *mockStore) UpdateTransaction(_ context.Context, _ string, _ store.TransactionUpdate) error {
+	return m.updateTxErr
 }
 
 // newTestHandlers returns a Handlers wired with a real (minimal) plugin registry,
@@ -521,7 +584,7 @@ func TestHandleUpdateTransaction_Success(t *testing.T) {
 }
 
 func TestHandleUpdateTransaction_NotFound(t *testing.T) {
-	st := &mockStore{updateErr: store.ErrNotFound}
+	st := &mockStore{updateTxErr: store.ErrNotFound}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	body := `{"description":"x"}`
@@ -846,5 +909,120 @@ func TestHandleGetFacets_StoreError(t *testing.T) {
 	h.HandleGetFacets(rr, req)
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d", rr.Code)
+	}
+}
+
+// --- labels ---
+
+func TestHandleListLabels_NoStore(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+	rr := get(h.HandleListLabels, "/api/config/labels")
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", rr.Code)
+	}
+}
+
+func TestHandleListLabels_Success(t *testing.T) {
+	ms := &mockStore{labels: []store.Label{{Name: "food", Color: "#f59e0b"}}}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	rr := get(h.HandleListLabels, "/api/config/labels")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var resp []store.Label
+	decodeJSON(t, rr.Body.String(), &resp)
+	if len(resp) != 1 || resp[0].Name != "food" {
+		t.Errorf("unexpected response: %v", resp)
+	}
+}
+
+func TestHandleCreateLabel_Success(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	body := strings.NewReader(`{"name":"groceries","color":"#aabbcc"}`)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/config/labels", body)
+	rr := httptest.NewRecorder()
+	h.HandleCreateLabel(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp map[string]string
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp["name"] != "groceries" {
+		t.Errorf("expected name=groceries, got %q", resp["name"])
+	}
+}
+
+func TestHandleDeleteLabel_NotFound(t *testing.T) {
+	ms := &mockStore{labelsErr: store.ErrNotFound}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/config/labels/missing", nil)
+	req.SetPathValue("name", "missing")
+	rr := httptest.NewRecorder()
+	// DeleteLabel returns the labelsErr directly; since it's ErrNotFound the handler
+	// logs and returns 500 (DeleteLabel has no ErrNotFound branch in the handler).
+	// The store just returns the error; handler writes 500. Verify non-204.
+	h.HandleDeleteLabel(rr, req)
+	if rr.Code == http.StatusNoContent {
+		t.Fatalf("expected non-204 on error, got 204")
+	}
+}
+
+// --- categories ---
+
+func TestHandleListCategories_Success(t *testing.T) {
+	ms := &mockStore{categories: []store.Category{{Name: "food & dining", IsDefault: true}}}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	rr := get(h.HandleListCategories, "/api/config/categories")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var resp []store.Category
+	decodeJSON(t, rr.Body.String(), &resp)
+	if len(resp) != 1 || resp[0].Name != "food & dining" {
+		t.Errorf("unexpected response: %v", resp)
+	}
+}
+
+func TestHandleDeleteCategory_DefaultRejected(t *testing.T) {
+	ms := &mockStore{catsErr: fmt.Errorf("cannot delete default category \"food\"")}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/config/categories/food", nil)
+	req.SetPathValue("name", "food")
+	rr := httptest.NewRecorder()
+	h.HandleDeleteCategory(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+// --- buckets ---
+
+func TestHandleListBuckets_Success(t *testing.T) {
+	ms := &mockStore{buckets: []store.Bucket{{Name: "needs", IsDefault: true}}}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	rr := get(h.HandleListBuckets, "/api/config/buckets")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var resp []store.Bucket
+	decodeJSON(t, rr.Body.String(), &resp)
+	if len(resp) != 1 || resp[0].Name != "needs" {
+		t.Errorf("unexpected response: %v", resp)
+	}
+}
+
+// --- extended update transaction ---
+
+func TestHandleUpdateTransaction_InvalidCategory(t *testing.T) {
+	// Store returns empty category list, so any category name is invalid.
+	ms := &mockStore{categories: []store.Category{}}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	body := strings.NewReader(`{"category":"nonexistent"}`)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/abc", body)
+	req.SetPathValue("id", "abc")
+	rr := httptest.NewRecorder()
+	h.HandleUpdateTransaction(rr, req)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }

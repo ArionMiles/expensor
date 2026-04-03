@@ -92,6 +92,21 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("GET /api/config/base-currency", h.HandleGetBaseCurrency)
 	mux.HandleFunc("PUT /api/config/base-currency", h.HandleSetBaseCurrency)
 
+	// Labels taxonomy
+	mux.HandleFunc("GET /api/config/labels", h.HandleListLabels)
+	mux.HandleFunc("POST /api/config/labels", h.HandleCreateLabel)
+	mux.HandleFunc("PUT /api/config/labels/{name}", h.HandleUpdateLabel)
+	mux.HandleFunc("DELETE /api/config/labels/{name}", h.HandleDeleteLabel)
+	mux.HandleFunc("POST /api/config/labels/{name}/apply", h.HandleApplyLabel)
+
+	// Categories and buckets
+	mux.HandleFunc("GET /api/config/categories", h.HandleListCategories)
+	mux.HandleFunc("POST /api/config/categories", h.HandleCreateCategory)
+	mux.HandleFunc("DELETE /api/config/categories/{name}", h.HandleDeleteCategory)
+	mux.HandleFunc("GET /api/config/buckets", h.HandleListBuckets)
+	mux.HandleFunc("POST /api/config/buckets", h.HandleCreateBucket)
+	mux.HandleFunc("DELETE /api/config/buckets/{name}", h.HandleDeleteBucket)
+
 	// Transactions
 	// /search and /facets must be registered before /{id} to avoid the wildcard swallowing them.
 	mux.HandleFunc("GET /api/transactions/search", h.HandleSearchTransactions)

@@ -656,39 +656,305 @@ func (h *Handlers) HandleGetTransaction(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, txn)
 }
 
+// validateCategory checks that the given category name exists in the store.
+// Returns false and writes an error response if validation fails.
+func (h *Handlers) validateCategory(w http.ResponseWriter, r *http.Request, name string) bool {
+	cats, err := h.store.ListCategories(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to validate category")
+		return false
+	}
+	for _, c := range cats {
+		if c.Name == name {
+			return true
+		}
+	}
+	writeError(w, http.StatusUnprocessableEntity, fmt.Sprintf("category %q does not exist", name))
+	return false
+}
+
+// validateBucket checks that the given bucket name exists in the store.
+// Returns false and writes an error response if validation fails.
+func (h *Handlers) validateBucket(w http.ResponseWriter, r *http.Request, name string) bool {
+	bkts, err := h.store.ListBuckets(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to validate bucket")
+		return false
+	}
+	for _, b := range bkts {
+		if b.Name == name {
+			return true
+		}
+	}
+	writeError(w, http.StatusUnprocessableEntity, fmt.Sprintf("bucket %q does not exist", name))
+	return false
+}
+
 // HandleUpdateTransaction handles PUT /api/transactions/{id}.
-// Body: {"description": "..."}
+// Body: {"description": "...", "category": "...", "bucket": "..."}
+// All fields are optional; only non-nil fields are written.
 func (h *Handlers) HandleUpdateTransaction(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
 	}
-
 	id := r.PathValue("id")
 	var body struct {
-		Description string `json:"description"`
+		Description *string `json:"description"`
+		Category    *string `json:"category"`
+		Bucket      *string `json:"bucket"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
 		return
 	}
 
-	if err := h.store.UpdateDescription(r.Context(), id, body.Description); err != nil {
+	if body.Category != nil && *body.Category != "" && !h.validateCategory(w, r, *body.Category) {
+		return
+	}
+	if body.Bucket != nil && *body.Bucket != "" && !h.validateBucket(w, r, *body.Bucket) {
+		return
+	}
+
+	u := store.TransactionUpdate{
+		Description: body.Description,
+		Category:    body.Category,
+		Bucket:      body.Bucket,
+	}
+	if err := h.store.UpdateTransaction(r.Context(), id, u); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "transaction not found")
 			return
 		}
-		h.logger.Error("update description", "error", err)
+		h.logger.Error("update transaction", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to update transaction")
 		return
 	}
 
-	txn, err := h.store.GetTransaction(r.Context(), id)
-	if err != nil || txn == nil {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+	tx, err := h.store.GetTransaction(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to fetch updated transaction")
 		return
 	}
-	writeJSON(w, http.StatusOK, txn)
+	writeJSON(w, http.StatusOK, tx)
+}
+
+// HandleListLabels handles GET /api/config/labels.
+func (h *Handlers) HandleListLabels(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	labels, err := h.store.ListLabels(r.Context())
+	if err != nil {
+		h.logger.Error("list labels", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to list labels")
+		return
+	}
+	writeJSON(w, http.StatusOK, labels)
+}
+
+// HandleCreateLabel handles POST /api/config/labels.
+// Body: {"name": "food", "color": "#f59e0b"}
+func (h *Handlers) HandleCreateLabel(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	var body struct {
+		Name  string `json:"name"`
+		Color string `json:"color"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
+		writeError(w, http.StatusUnprocessableEntity, "body must be {\"name\": \"<name>\", \"color\": \"<hex>\"}")
+		return
+	}
+	if body.Color == "" {
+		body.Color = "#6366f1"
+	}
+	if err := h.store.CreateLabel(r.Context(), body.Name, body.Color); err != nil {
+		h.logger.Error("create label", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to create label")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]string{"name": body.Name, "color": body.Color})
+}
+
+// HandleUpdateLabel handles PUT /api/config/labels/{name}.
+// Body: {"color": "#f59e0b"}
+func (h *Handlers) HandleUpdateLabel(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	name := r.PathValue("name")
+	var body struct {
+		Color string `json:"color"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Color == "" {
+		writeError(w, http.StatusUnprocessableEntity, "body must be {\"color\": \"<hex>\"}")
+		return
+	}
+	if err := h.store.UpdateLabel(r.Context(), name, body.Color); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "label not found")
+			return
+		}
+		h.logger.Error("update label", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to update label")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"name": name, "color": body.Color})
+}
+
+// HandleDeleteLabel handles DELETE /api/config/labels/{name}.
+func (h *Handlers) HandleDeleteLabel(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	name := r.PathValue("name")
+	if err := h.store.DeleteLabel(r.Context(), name); err != nil {
+		h.logger.Error("delete label", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to delete label")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleApplyLabel handles POST /api/config/labels/{name}/apply.
+// Body: {"merchant_pattern": "swiggy"}
+func (h *Handlers) HandleApplyLabel(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	name := r.PathValue("name")
+	var body struct {
+		MerchantPattern string `json:"merchant_pattern"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.MerchantPattern == "" {
+		writeError(w, http.StatusUnprocessableEntity, "body must be {\"merchant_pattern\": \"<pattern>\"}")
+		return
+	}
+	affected, err := h.store.ApplyLabelByMerchant(r.Context(), name, body.MerchantPattern)
+	if err != nil {
+		h.logger.Error("apply label", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to apply label")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"applied": affected})
+}
+
+// HandleListCategories handles GET /api/config/categories.
+func (h *Handlers) HandleListCategories(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	cats, err := h.store.ListCategories(r.Context())
+	if err != nil {
+		h.logger.Error("list categories", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to list categories")
+		return
+	}
+	writeJSON(w, http.StatusOK, cats)
+}
+
+// HandleCreateCategory handles POST /api/config/categories.
+func (h *Handlers) HandleCreateCategory(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	var body struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
+		writeError(w, http.StatusUnprocessableEntity, "body must include \"name\"")
+		return
+	}
+	if err := h.store.CreateCategory(r.Context(), body.Name, body.Description); err != nil {
+		h.logger.Error("create category", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to create category")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]string{"name": body.Name})
+}
+
+// HandleDeleteCategory handles DELETE /api/config/categories/{name}.
+func (h *Handlers) HandleDeleteCategory(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	name := r.PathValue("name")
+	if err := h.store.DeleteCategory(r.Context(), name); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "category not found")
+			return
+		}
+		// Default categories return a plain error string.
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleListBuckets handles GET /api/config/buckets.
+func (h *Handlers) HandleListBuckets(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	bkts, err := h.store.ListBuckets(r.Context())
+	if err != nil {
+		h.logger.Error("list buckets", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to list buckets")
+		return
+	}
+	writeJSON(w, http.StatusOK, bkts)
+}
+
+// HandleCreateBucket handles POST /api/config/buckets.
+func (h *Handlers) HandleCreateBucket(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	var body struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
+		writeError(w, http.StatusUnprocessableEntity, "body must include \"name\"")
+		return
+	}
+	if err := h.store.CreateBucket(r.Context(), body.Name, body.Description); err != nil {
+		h.logger.Error("create bucket", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to create bucket")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]string{"name": body.Name})
+}
+
+// HandleDeleteBucket handles DELETE /api/config/buckets/{name}.
+func (h *Handlers) HandleDeleteBucket(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	name := r.PathValue("name")
+	if err := h.store.DeleteBucket(r.Context(), name); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "bucket not found")
+			return
+		}
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // HandleAddLabels handles POST /api/transactions/{id}/labels.

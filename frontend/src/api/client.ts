@@ -2,16 +2,20 @@ import axios from 'axios'
 import type {
   AuthStartResponse,
   AuthStatus,
+  Bucket,
+  Category,
   ChartData,
   CredentialsStatus,
   Facets,
   HealthResponse,
+  Label,
   PluginInfo,
   ReaderConfig,
   ReaderStatus,
   StatusResponse,
   Transaction,
   TransactionFilters,
+  TransactionPatch,
   TransactionsResponse,
 } from './types'
 
@@ -98,6 +102,36 @@ export const api = {
       apiClient.put<{ base_currency: string }>('/config/base-currency', {
         base_currency: currency,
       }),
+
+    labels: {
+      list: () => apiClient.get<Label[]>('/config/labels'),
+      create: (name: string, color: string) =>
+        apiClient.post<{ name: string; color: string }>('/config/labels', { name, color }),
+      update: (name: string, color: string) =>
+        apiClient.put<{ name: string; color: string }>(
+          `/config/labels/${encodeURIComponent(name)}`,
+          { color },
+        ),
+      delete: (name: string) => apiClient.delete(`/config/labels/${encodeURIComponent(name)}`),
+      apply: (name: string, merchantPattern: string) =>
+        apiClient.post<{ applied: number }>(`/config/labels/${encodeURIComponent(name)}/apply`, {
+          merchant_pattern: merchantPattern,
+        }),
+    },
+
+    categories: {
+      list: () => apiClient.get<Category[]>('/config/categories'),
+      create: (name: string, description?: string) =>
+        apiClient.post<{ name: string }>('/config/categories', { name, description }),
+      delete: (name: string) => apiClient.delete(`/config/categories/${encodeURIComponent(name)}`),
+    },
+
+    buckets: {
+      list: () => apiClient.get<Bucket[]>('/config/buckets'),
+      create: (name: string, description?: string) =>
+        apiClient.post<{ name: string }>('/config/buckets', { name, description }),
+      delete: (name: string) => apiClient.delete(`/config/buckets/${encodeURIComponent(name)}`),
+    },
   },
 
   transactions: {
@@ -125,8 +159,8 @@ export const api = {
 
     get: (id: string) => apiClient.get<Transaction>(`/transactions/${id}`),
 
-    update: (id: string, description: string) =>
-      apiClient.put<Transaction>(`/transactions/${id}`, { description }),
+    update: (id: string, patch: TransactionPatch) =>
+      apiClient.put<Transaction>(`/transactions/${id}`, patch),
 
     addLabels: (id: string, labels: string[]) =>
       apiClient.post<Transaction>(`/transactions/${id}/labels`, { labels }),

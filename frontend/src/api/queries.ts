@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
-import type { TransactionFilters } from './types'
+import type { TransactionFilters, TransactionPatch } from './types'
 
 export const queryKeys = {
   health: ['health'] as const,
@@ -16,6 +16,9 @@ export const queryKeys = {
   transactionSearch: (q: string, page: number, pageSize: number) =>
     ['transactions', 'search', q, page, pageSize] as const,
   transaction: (id: string) => ['transactions', id] as const,
+  labels: ['config', 'labels'] as const,
+  categories: ['config', 'categories'] as const,
+  buckets: ['config', 'buckets'] as const,
 }
 
 export function useStatus(enabled = true) {
@@ -118,7 +121,7 @@ export function useUpdateTransactionDescription() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, description }: { id: string; description: string }) =>
-      api.transactions.update(id, description).then((r) => r.data),
+      api.transactions.update(id, { description }).then((r) => r.data),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: queryKeys.transaction(data.id) })
       qc.invalidateQueries({ queryKey: ['transactions'] })
@@ -179,6 +182,117 @@ export function useSaveReaderConfig() {
     onSuccess: (_, { readerName }) => {
       qc.invalidateQueries({ queryKey: queryKeys.readerConfig(readerName) })
       qc.invalidateQueries({ queryKey: queryKeys.readerStatus(readerName) })
+    },
+  })
+}
+
+export function useLabels() {
+  return useQuery({
+    queryKey: queryKeys.labels,
+    queryFn: () => api.config.labels.list().then((r) => r.data),
+    staleTime: 60_000,
+  })
+}
+
+export function useCategories() {
+  return useQuery({
+    queryKey: queryKeys.categories,
+    queryFn: () => api.config.categories.list().then((r) => r.data),
+    staleTime: 60_000,
+  })
+}
+
+export function useBuckets() {
+  return useQuery({
+    queryKey: queryKeys.buckets,
+    queryFn: () => api.config.buckets.list().then((r) => r.data),
+    staleTime: 60_000,
+  })
+}
+
+export function useCreateLabel() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, color }: { name: string; color: string }) =>
+      api.config.labels.create(name, color),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.labels }),
+  })
+}
+
+export function useUpdateLabel() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, color }: { name: string; color: string }) =>
+      api.config.labels.update(name, color),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.labels }),
+  })
+}
+
+export function useDeleteLabel() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => api.config.labels.delete(name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.labels }),
+  })
+}
+
+export function useApplyLabel() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, pattern }: { name: string; pattern: string }) =>
+      api.config.labels.apply(name, pattern),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
+  })
+}
+
+export function useCreateCategory() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, description }: { name: string; description?: string }) =>
+      api.config.categories.create(name, description),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.categories })
+      qc.invalidateQueries({ queryKey: queryKeys.facets })
+    },
+  })
+}
+
+export function useDeleteCategory() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => api.config.categories.delete(name),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.categories })
+      qc.invalidateQueries({ queryKey: queryKeys.facets })
+    },
+  })
+}
+
+export function useCreateBucket() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, description }: { name: string; description?: string }) =>
+      api.config.buckets.create(name, description),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.buckets }),
+  })
+}
+
+export function useDeleteBucket() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => api.config.buckets.delete(name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.buckets }),
+  })
+}
+
+export function useUpdateTransactionFields() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: TransactionPatch }) =>
+      api.transactions.update(id, patch).then((r) => r.data),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['transactions'] })
+      qc.invalidateQueries({ queryKey: queryKeys.transaction(data.id) })
     },
   })
 }
