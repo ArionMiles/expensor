@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"sync"
@@ -35,7 +36,6 @@ import (
 )
 
 const (
-	activeReaderFile = "data/active_reader"
 	pgConnectTimeout = 30 * time.Second
 	pgRetryInterval  = 2 * time.Second
 )
@@ -196,20 +196,22 @@ func main() {
 		if dm.Status().Running {
 			return
 		}
-		if err := saveActiveReader(readerName); err != nil {
+		if err := saveActiveReader(cfg.DataDir, readerName); err != nil {
 			logger.Warn("failed to persist active reader", "error", err)
 		}
 		go runDaemon(ctx, registry, readerName, cfg, rules, labels, dm, logger)
 	}
 
 	// Auto-start daemon if a previous reader selection was persisted.
-	if savedReader := loadActiveReader(logger); savedReader != "" {
+	if savedReader := loadActiveReader(cfg.DataDir, logger); savedReader != "" {
 		logger.Info("resuming daemon from previous session", "reader", savedReader)
 		startDaemon(savedReader)
 	}
 
 	handlers := httpapi.NewHandlers(
-		registry, st, dm, baseURL, frontendURL, startDaemon,
+		registry, st, dm, baseURL, frontendURL,
+		cfg.DataDir, cfg.BaseCurrency,
+		startDaemon,
 		logger.With("component", "api"),
 	)
 	server := httpapi.NewServer(port, handlers, logger.With("component", "http"))
@@ -236,7 +238,7 @@ func runDaemon(
 	logger.Debug("runDaemon starting", "reader", readerName, "writer", writerName)
 
 	// Resolve the credentials file for the configured reader.
-	credFile := fmt.Sprintf("data/client_secret_%s.json", readerName)
+	credFile := filepath.Join(cfg.DataDir, fmt.Sprintf("client_secret_%s.json", readerName))
 	if _, err := os.Stat(credFile); os.IsNotExist(err) {
 		logger.Debug("per-reader cred file not found, falling back to legacy path",
 			"tried", credFile, "fallback", config.ClientSecretFile)
@@ -252,7 +254,7 @@ func runDaemon(
 	}
 	logger.Debug("resolved OAuth scopes", "scopes", scopes)
 
-	tokenFile := fmt.Sprintf("data/token_%s.json", readerName)
+	tokenFile := filepath.Join(cfg.DataDir, fmt.Sprintf("token_%s.json", readerName))
 	logger.Debug("using token file", "path", tokenFile)
 
 	var httpClient *http.Client
@@ -327,16 +329,16 @@ func waitForPostgres(pgCfg config.PostgresConfig, logger *slog.Logger) error {
 
 // saveActiveReader persists the reader name to disk so it can be resumed on
 // the next startup.
-func saveActiveReader(readerName string) error {
-	if err := os.MkdirAll("data", 0o700); err != nil {
+func saveActiveReader(dataDir, readerName string) error {
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return err
 	}
-	return os.WriteFile(activeReaderFile, []byte(readerName), 0o600)
+	return os.WriteFile(filepath.Join(dataDir, "active_reader"), []byte(readerName), 0o600)
 }
 
 // loadActiveReader reads the persisted reader name. Returns "" if absent.
-func loadActiveReader(logger *slog.Logger) string {
-	b, err := os.ReadFile(activeReaderFile)
+func loadActiveReader(dataDir string, logger *slog.Logger) string {
+	b, err := os.ReadFile(filepath.Join(dataDir, "active_reader"))
 	if err != nil {
 		if !os.IsNotExist(err) {
 			logger.Warn("failed to read active reader file", "error", err)

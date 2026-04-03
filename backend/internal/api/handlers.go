@@ -27,7 +27,6 @@ import (
 
 const (
 	maxCredentialsSize = 5 << 20 // 5 MB
-	dataDir            = "data"
 	oauthStateTTL      = 10 * time.Minute
 )
 
@@ -35,16 +34,6 @@ const (
 type oauthStateEntry struct {
 	readerName string
 	expiresAt  time.Time
-}
-
-// credentialsFileName returns the per-reader credentials file path.
-func credentialsFileName(readerName string) string {
-	return filepath.Join(dataDir, fmt.Sprintf("client_secret_%s.json", readerName))
-}
-
-// tokenFileName returns the per-reader token file path.
-func tokenFileName(readerName string) string {
-	return filepath.Join(dataDir, fmt.Sprintf("token_%s.json", readerName))
 }
 
 // DaemonStatus represents the state of the background daemon.
@@ -61,13 +50,15 @@ type DaemonStatusProvider interface {
 
 // Handlers holds all dependencies for HTTP endpoint handlers.
 type Handlers struct {
-	registry    *plugins.Registry
-	store       Storer
-	daemon      DaemonStatusProvider
-	baseURL     string // e.g. "http://localhost:8080"
-	frontendURL string // e.g. "http://localhost:5173" — used for OAuth redirects
-	startFn     func(reader string) // called by POST /api/daemon/start; may be nil
-	logger      *slog.Logger
+	registry     *plugins.Registry
+	store        Storer
+	daemon       DaemonStatusProvider
+	baseURL      string // e.g. "http://localhost:8080"
+	frontendURL  string // e.g. "http://localhost:5173" — used for OAuth redirects
+	dataDir      string
+	baseCurrency string
+	startFn      func(reader string) // called by POST /api/daemon/start; may be nil
+	logger       *slog.Logger
 
 	// oauthStates maps state token → entry for in-flight OAuth flows.
 	mu          sync.Mutex
@@ -83,21 +74,31 @@ func NewHandlers(
 	daemon DaemonStatusProvider,
 	baseURL string,
 	frontendURL string,
+	dataDir string,
+	baseCurrency string,
 	startFn func(reader string),
 	logger *slog.Logger,
 ) *Handlers {
 	if frontendURL == "" {
 		frontendURL = baseURL
 	}
+	if dataDir == "" {
+		dataDir = "data"
+	}
+	if baseCurrency == "" {
+		baseCurrency = "INR"
+	}
 	return &Handlers{
-		registry:    registry,
-		store:       st,
-		daemon:      daemon,
-		baseURL:     strings.TrimRight(baseURL, "/"),
-		frontendURL: strings.TrimRight(frontendURL, "/"),
-		startFn:     startFn,
-		logger:      logger,
-		oauthStates: make(map[string]oauthStateEntry),
+		registry:     registry,
+		store:        st,
+		daemon:       daemon,
+		baseURL:      strings.TrimRight(baseURL, "/"),
+		frontendURL:  strings.TrimRight(frontendURL, "/"),
+		dataDir:      dataDir,
+		baseCurrency: baseCurrency,
+		startFn:      startFn,
+		logger:       logger,
+		oauthStates:  make(map[string]oauthStateEntry),
 	}
 }
 
@@ -131,7 +132,7 @@ func (h *Handlers) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	resp := statusResponse{Daemon: ds}
 
 	if h.store != nil {
-		if stats, err := h.store.GetStats(r.Context()); err == nil {
+		if stats, err := h.store.GetStats(r.Context(), h.baseCurrency); err == nil {
 			resp.Stats = stats
 		}
 	}
@@ -224,8 +225,8 @@ func (h *Handlers) HandleUploadCredentials(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	dest := credentialsFileName(name)
-	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+	dest := filepath.Join(h.dataDir, fmt.Sprintf("client_secret_%s.json", name))
+	if err := os.MkdirAll(h.dataDir, 0o700); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create data directory")
 		return
 	}
@@ -246,7 +247,7 @@ func (h *Handlers) HandleCredentialsStatus(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	_, err := os.Stat(credentialsFileName(name))
+	_, err := os.Stat(filepath.Join(h.dataDir, fmt.Sprintf("client_secret_%s.json", name)))
 	writeJSON(w, http.StatusOK, map[string]bool{"exists": err == nil})
 }
 
@@ -266,7 +267,7 @@ func (h *Handlers) HandleAuthStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	credFile := credentialsFileName(name)
+	credFile := filepath.Join(h.dataDir, fmt.Sprintf("client_secret_%s.json", name))
 	h.logger.Debug("reading credentials file", "reader", name, "path", credFile)
 	secretJSON, err := os.ReadFile(credFile)
 	if err != nil {
@@ -338,7 +339,7 @@ func (h *Handlers) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	credFile := credentialsFileName(name)
+	credFile := filepath.Join(h.dataDir, fmt.Sprintf("client_secret_%s.json", name))
 	secretJSON, err := os.ReadFile(credFile)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "credentials file missing")
@@ -359,7 +360,7 @@ func (h *Handlers) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := client.SaveToken(tokenFileName(name), tok); err != nil {
+	if err := client.SaveToken(filepath.Join(h.dataDir, fmt.Sprintf("token_%s.json", name)), tok); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save token")
 		return
 	}
@@ -383,7 +384,7 @@ func (h *Handlers) HandleAuthStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tok, err := client.TokenFromFile(tokenFileName(name))
+	tok, err := client.TokenFromFile(filepath.Join(h.dataDir, fmt.Sprintf("token_%s.json", name)))
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"authenticated": false})
 		return
@@ -405,9 +406,9 @@ func (h *Handlers) HandleDisconnectReader(w http.ResponseWriter, r *http.Request
 	}
 
 	files := []string{
-		credentialsFileName(name),
-		tokenFileName(name),
-		filepath.Join(dataDir, fmt.Sprintf("config_%s.json", name)),
+		filepath.Join(h.dataDir, fmt.Sprintf("client_secret_%s.json", name)),
+		filepath.Join(h.dataDir, fmt.Sprintf("token_%s.json", name)),
+		filepath.Join(h.dataDir, fmt.Sprintf("config_%s.json", name)),
 	}
 
 	var removed []string
@@ -429,7 +430,7 @@ func (h *Handlers) HandleRevokeToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenFile := tokenFileName(name)
+	tokenFile := filepath.Join(h.dataDir, fmt.Sprintf("token_%s.json", name))
 	if err := os.Remove(tokenFile); err != nil {
 		if os.IsNotExist(err) {
 			writeError(w, http.StatusNotFound, "no token found")
@@ -453,7 +454,7 @@ func (h *Handlers) HandleGetReaderConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	cfgFile := filepath.Join(dataDir, fmt.Sprintf("config_%s.json", name))
+	cfgFile := filepath.Join(h.dataDir, fmt.Sprintf("config_%s.json", name))
 	data, err := os.ReadFile(cfgFile)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -491,8 +492,8 @@ func (h *Handlers) HandleSaveReaderConfig(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	cfgFile := filepath.Join(dataDir, fmt.Sprintf("config_%s.json", name))
-	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+	cfgFile := filepath.Join(h.dataDir, fmt.Sprintf("config_%s.json", name))
+	if err := os.MkdirAll(h.dataDir, 0o700); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create data directory")
 		return
 	}
@@ -526,20 +527,20 @@ func (h *Handlers) HandleReaderStatus(w http.ResponseWriter, r *http.Request) {
 	st := readerStatus{AuthType: plugin.AuthType()}
 
 	if plugin.RequiresCredentialsUpload() {
-		_, err := os.Stat(credentialsFileName(name))
+		_, err := os.Stat(filepath.Join(h.dataDir, fmt.Sprintf("client_secret_%s.json", name)))
 		st.CredentialsUploaded = err == nil
 	} else {
 		st.CredentialsUploaded = true
 	}
 
 	if plugin.AuthType() == plugins.AuthTypeOAuth {
-		tok, err := client.TokenFromFile(tokenFileName(name))
+		tok, err := client.TokenFromFile(filepath.Join(h.dataDir, fmt.Sprintf("token_%s.json", name)))
 		st.Authenticated = err == nil && tok.Valid()
 	} else {
 		st.Authenticated = true
 	}
 
-	cfgFile := filepath.Join(dataDir, fmt.Sprintf("config_%s.json", name))
+	cfgFile := filepath.Join(h.dataDir, fmt.Sprintf("config_%s.json", name))
 	_, err = os.Stat(cfgFile)
 	st.ConfigPresent = err == nil || len(plugin.ConfigSchema()) == 0
 

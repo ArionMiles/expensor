@@ -383,14 +383,17 @@ func TestGetStats(t *testing.T) {
 	seedTransaction(t, ctx, ts.Store, "stats-2", 200, "INR", "M2", "Food")
 	seedTransaction(t, ctx, ts.Store, "stats-3", 50, "USD", "M3", "Other") // excluded from INR total
 
-	stats, err := ts.GetStats(ctx)
+	stats, err := ts.GetStats(ctx, "INR")
 	if err != nil {
 		t.Fatalf("GetStats: %v", err)
 	}
 	if stats.TotalCount != 3 {
 		t.Errorf("want TotalCount=3 (all currencies), got %d", stats.TotalCount)
 	}
-	if stats.TotalINR != 300 {
-		t.Errorf("want TotalINR=300, got %f", stats.TotalINR)
+	if stats.TotalBase != 300 {
+		t.Errorf("want TotalBase=300, got %f", stats.TotalBase)
+	}
+	if stats.BaseCurrency != "INR" {
+		t.Errorf("want BaseCurrency=INR, got %s", stats.BaseCurrency)
 	}
 }

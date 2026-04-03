@@ -16,7 +16,7 @@ type Storer interface {
 	AddLabels(ctx context.Context, transactionID string, labels []string) error
 	RemoveLabel(ctx context.Context, transactionID, label string) error
 	SearchTransactions(ctx context.Context, query string, f store.ListFilter) ([]store.Transaction, int, error)
-	GetStats(ctx context.Context) (*store.Stats, error)
+	GetStats(ctx context.Context, baseCurrency string) (*store.Stats, error)
 	GetChartData(ctx context.Context) (*store.ChartData, error)
 }
 

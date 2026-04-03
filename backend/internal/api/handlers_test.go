@@ -79,7 +79,7 @@ func (m *mockStore) SearchTransactions(_ context.Context, _ string, _ store.List
 	return m.searchResult, m.searchTotal, nil
 }
 
-func (m *mockStore) GetStats(_ context.Context) (*store.Stats, error) {
+func (m *mockStore) GetStats(_ context.Context, _ string) (*store.Stats, error) {
 	return m.stats, m.statsErr
 }
 
@@ -103,7 +103,7 @@ func newTestHandlers(t *testing.T, st Storer, dm DaemonStatusProvider) *Handlers
 		{Key: "profilePath", Label: "Profile Directory", Type: "path", Required: true},
 	}})
 	_ = registry.RegisterWriter(&testWriterPlugin{name: "postgres"})
-	return NewHandlers(registry, st, dm, "http://localhost:8080", "http://localhost:5173", nil, slog.Default()) //nolint:staticcheck
+	return NewHandlers(registry, st, dm, "http://localhost:8080", "http://localhost:5173", t.TempDir(), "INR", nil, slog.Default())
 }
 
 // --- minimal plugin stubs ---
@@ -191,7 +191,7 @@ func TestHandleStatus_NilStore(t *testing.T) {
 }
 
 func TestHandleStatus_WithStats(t *testing.T) {
-	st := &mockStore{stats: &store.Stats{TotalCount: 42, TotalINR: 99999}}
+	st := &mockStore{stats: &store.Stats{TotalCount: 42, TotalBase: 99999, BaseCurrency: "INR"}}
 	h := newTestHandlers(t, st, &mockDaemon{})
 	rr := get(h.HandleStatus, "/api/status")
 
@@ -253,9 +253,7 @@ func TestHandleListWriters(t *testing.T) {
 
 func TestHandleCredentialsStatus_Missing(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	// Use a temp dir so we don't touch the real data dir.
-	t.Setenv("DATA_DIR", t.TempDir())
-
+	// h.dataDir is t.TempDir() — no credentials file exists there.
 	req := httptest.NewRequest(http.MethodGet, "/api/readers/gmail/credentials/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
@@ -273,13 +271,12 @@ func TestHandleCredentialsStatus_Missing(t *testing.T) {
 
 func TestHandleCredentialsStatus_Present(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	// Write a fake credentials file to the expected path.
-	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+	credFile := filepath.Join(h.dataDir, "client_secret_gmail.json")
+	if err := os.MkdirAll(h.dataDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	credFile := credentialsFileName("gmail")
 	_ = os.WriteFile(credFile, []byte(`{"installed":{}}`), 0o600)
-	t.Cleanup(func() { _ = os.Remove(credFile) })
+	// No t.Cleanup needed — t.TempDir() handles it.
 
 	req := httptest.NewRequest(http.MethodGet, "/api/readers/gmail/credentials/status", nil)
 	req.SetPathValue("name", "gmail")
@@ -362,13 +359,12 @@ func TestHandleReaderStatus_Thunderbird_NotConfigured(t *testing.T) {
 
 func TestHandleReaderStatus_Thunderbird_Configured(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	// Write a config file.
-	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+	cfgFile := filepath.Join(h.dataDir, "config_thunderbird.json")
+	if err := os.MkdirAll(h.dataDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	cfgFile := filepath.Join(dataDir, "config_thunderbird.json")
 	_ = os.WriteFile(cfgFile, []byte(`{"profilePath":"/tmp/tb"}`), 0o600)
-	t.Cleanup(func() { _ = os.Remove(cfgFile) })
+	// No t.Cleanup needed — t.TempDir() handles it.
 
 	req := httptest.NewRequest(http.MethodGet, "/api/readers/thunderbird/status", nil)
 	req.SetPathValue("name", "thunderbird")

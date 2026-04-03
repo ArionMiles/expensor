@@ -42,7 +42,8 @@ type Transaction struct {
 // Stats holds aggregate statistics about stored transactions.
 type Stats struct {
 	TotalCount      int                `json:"total_count"`
-	TotalINR        float64            `json:"total_inr"`
+	TotalBase       float64            `json:"total_base"`
+	BaseCurrency    string             `json:"base_currency"`
 	TotalByCategory map[string]float64 `json:"total_by_category"`
 }
 
@@ -328,14 +329,15 @@ func (s *Store) SearchTransactions(ctx context.Context, query string, f ListFilt
 }
 
 // GetStats returns aggregate counts and totals across all transactions.
-func (s *Store) GetStats(ctx context.Context) (*Stats, error) {
+func (s *Store) GetStats(ctx context.Context, baseCurrency string) (*Stats, error) {
 	const mainQ = `
 		SELECT COUNT(*),
-		       COALESCE(SUM(CASE WHEN currency = 'INR' THEN amount ELSE 0 END), 0)
+		       COALESCE(SUM(CASE WHEN currency = $1 THEN amount ELSE 0 END), 0)
 		FROM transactions
 	`
 	var st Stats
-	if err := s.pool.QueryRow(ctx, mainQ).Scan(&st.TotalCount, &st.TotalINR); err != nil {
+	st.BaseCurrency = baseCurrency
+	if err := s.pool.QueryRow(ctx, mainQ, baseCurrency).Scan(&st.TotalCount, &st.TotalBase); err != nil {
 		return nil, fmt.Errorf("fetching stats: %w", err)
 	}
 
