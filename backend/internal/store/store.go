@@ -85,6 +85,13 @@ type HeatmapData struct {
 	ByDayOfMonth  []DayOfMonthBucket  `json:"by_day_of_month"`
 }
 
+// DailyBucket holds transaction totals for a single calendar date.
+type DailyBucket struct {
+	Date   time.Time `json:"date"`
+	Amount float64   `json:"amount"`
+	Count  int       `json:"count"`
+}
+
 // Label is a managed label in the taxonomy.
 type Label struct {
 	Name      string    `json:"name"`
@@ -636,6 +643,40 @@ func (s *Store) GetSpendingHeatmap(ctx context.Context, from, to *time.Time) (*H
 	}
 
 	return hd, nil
+}
+
+// GetAnnualSpend returns per-day transaction totals for a given calendar year.
+// Results are ordered by date ascending. Returns an empty (non-nil) slice when
+// the year has no transactions.
+func (s *Store) GetAnnualSpend(ctx context.Context, year int) ([]DailyBucket, error) {
+	buckets := []DailyBucket{}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT
+			timestamp::date          AS date,
+			COALESCE(SUM(amount), 0) AS amount,
+			COUNT(*)                 AS count
+		FROM transactions
+		WHERE EXTRACT(YEAR FROM timestamp) = $1
+		GROUP BY date
+		ORDER BY date
+	`, year)
+	if err != nil {
+		return nil, fmt.Errorf("fetching annual spend for %d: %w", year, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var b DailyBucket
+		if err := rows.Scan(&b.Date, &b.Amount, &b.Count); err != nil {
+			return nil, fmt.Errorf("scanning daily bucket: %w", err)
+		}
+		buckets = append(buckets, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating annual spend rows: %w", err)
+	}
+
+	return buckets, nil
 }
 
 // buildHeatmapWhere returns a WHERE clause and positional args for

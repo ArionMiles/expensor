@@ -419,3 +419,19 @@ func TestGetSpendingHeatmap_EmptyDB(t *testing.T) {
 		t.Errorf("expected 0 day-of-month buckets in empty DB, got %d", len(hd.ByDayOfMonth))
 	}
 }
+
+func TestGetAnnualSpend_EmptyDB(t *testing.T) {
+	ts := newTestStore(t) // skips when -short
+	defer ts.cleanup()
+
+	buckets, err := ts.GetAnnualSpend(context.Background(), 2026)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if buckets == nil {
+		t.Error("GetAnnualSpend must return a non-nil slice, got nil")
+	}
+	if len(buckets) != 0 {
+		t.Errorf("expected 0 buckets in empty DB, got %d", len(buckets))
+	}
+}
