@@ -38,7 +38,7 @@ function buildCalendarGrid(year: number): { date: Date | null }[][] {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CELL = 11
+const CELL = 14
 const GAP = 2
 const STEP = CELL + GAP
 const DAY_LABEL_WIDTH = 28
@@ -62,7 +62,11 @@ interface TooltipState {
   count: number
 }
 
-export function AnnualCalendarHeatmap() {
+interface Props {
+  metric: 'amount' | 'count'
+}
+
+export function AnnualCalendarHeatmap({ metric }: Props) {
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
@@ -77,7 +81,9 @@ export function AnnualCalendarHeatmap() {
     }
   }
 
-  const maxAmount = data ? Math.max(...data.buckets.map((b) => b.amount), 1) : 1
+  const maxValue = data
+    ? Math.max(...data.buckets.map((b) => (metric === 'amount' ? b.amount : b.count)), 1)
+    : 1
   const grid = buildCalendarGrid(year)
   const numCols = grid.length
   const svgWidth = DAY_LABEL_WIDTH + numCols * STEP - GAP
@@ -126,8 +132,10 @@ export function AnnualCalendarHeatmap() {
       {isLoading && <div className="h-28 animate-pulse rounded bg-secondary" />}
 
       {!isLoading && (
+        <div className="overflow-x-auto">
         <svg
-          style={{ width: '100%', height: 'auto' }}
+          width={svgWidth}
+          height={svgHeight}
           viewBox={`0 0 ${svgWidth} ${svgHeight}`}
           aria-label={`Annual spending heatmap for ${year}`}
         >
@@ -179,6 +187,7 @@ export function AnnualCalendarHeatmap() {
                 const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
                 const bucket = lookup.get(key)
                 const amount = bucket?.amount ?? 0
+                const value = metric === 'amount' ? amount : (bucket?.count ?? 0)
                 return (
                   <rect
                     key={`${colIdx}-${rowIdx}`}
@@ -187,7 +196,7 @@ export function AnnualCalendarHeatmap() {
                     width={CELL}
                     height={CELL}
                     rx={2}
-                    fill={intensityColor(amount, maxAmount)}
+                    fill={intensityColor(value, maxValue)}
                     onMouseEnter={(e) =>
                       setTooltip({ x: e.clientX, y: e.clientY, date, amount, count: bucket?.count ?? 0 })
                     }
@@ -197,6 +206,7 @@ export function AnnualCalendarHeatmap() {
               }),
             )}
         </svg>
+        </div>
       )}
 
       {tooltip && (
