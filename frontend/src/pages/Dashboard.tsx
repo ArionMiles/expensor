@@ -1,5 +1,9 @@
-import { useChartData, useStatus, useTransactions } from '@/api/queries'
-import type { ChartData, TimeBucket } from '@/api/types'
+import { useState } from 'react'
+import { useChartData, useHeatmapData, useStatus, useTransactions } from '@/api/queries'
+import type { ChartData, HeatmapData, TimeBucket } from '@/api/types'
+import { DayOfMonthHeatmap } from '@/components/DayOfMonthHeatmap'
+import { HeatmapLegend } from '@/components/HeatmapLegend'
+import { WeekdayHourHeatmap } from '@/components/WeekdayHourHeatmap'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { formatCurrency, formatRelative } from '@/lib/utils'
 import { Link } from 'react-router-dom'
@@ -308,6 +312,65 @@ function StatsSection() {
   )
 }
 
+// ─── Metric toggle ────────────────────────────────────────────────────────────
+
+function MetricToggle({
+  value,
+  onChange,
+}: {
+  value: 'amount' | 'count'
+  onChange: (v: 'amount' | 'count') => void
+}) {
+  return (
+    <div className="flex rounded-md border border-border text-xs">
+      {(['amount', 'count'] as const).map((opt) => (
+        <button
+          key={opt}
+          onClick={() => onChange(opt)}
+          className={[
+            'px-2 py-0.5 capitalize transition-colors first:rounded-l-md last:rounded-r-md',
+            value === opt
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground',
+          ].join(' ')}
+        >
+          {opt}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ─── Spending patterns ────────────────────────────────────────────────────────
+
+function SpendingPatternsSection({ heatmap }: { heatmap: HeatmapData }) {
+  const [metric, setMetric] = useState<'amount' | 'count'>('amount')
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs uppercase tracking-wider text-muted-foreground">
+          Spending Patterns
+        </h2>
+        <MetricToggle value={metric} onChange={setMetric} />
+      </div>
+      <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+        <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">
+          By weekday &amp; hour
+        </h3>
+        <WeekdayHourHeatmap data={heatmap.by_weekday_hour} metric={metric} />
+      </div>
+      <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+        <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">
+          By day of month
+        </h3>
+        <DayOfMonthHeatmap data={heatmap.by_day_of_month} metric={metric} />
+      </div>
+      <HeatmapLegend />
+    </div>
+  )
+}
+
 // ─── Chart section ────────────────────────────────────────────────────────────
 
 function formatMonthLabel(period: string): string {
@@ -429,6 +492,7 @@ function RecentTransactions() {
 
 export function Dashboard() {
   const { data: chartData } = useChartData()
+  const { data: heatmapData, isLoading: heatmapLoading } = useHeatmapData()
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 px-6 py-6">
@@ -456,6 +520,15 @@ export function Dashboard() {
       {chartData && (
         <ErrorBoundary>
           <ChartsSection charts={chartData} />
+        </ErrorBoundary>
+      )}
+
+      {heatmapLoading && (
+        <div className="h-40 animate-pulse rounded-lg border border-border bg-card shadow-sm" />
+      )}
+      {heatmapData && (
+        <ErrorBoundary>
+          <SpendingPatternsSection heatmap={heatmapData} />
         </ErrorBoundary>
       )}
     </div>
