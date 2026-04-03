@@ -400,6 +400,12 @@ function SpendingPatternsSection() {
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-xs uppercase tracking-wider text-muted-foreground">By weekday &amp; hour</h3>
           <div className="flex items-center gap-1.5">
+            {monthNav !== null && (
+              <button
+                onClick={() => setMonthNav(null)}
+                className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+              >All time</button>
+            )}
             <button
               onClick={() => setMonthNav((p) => prevMonth(p ?? { year: now.getFullYear(), month: now.getMonth() + 1 }))}
               className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
@@ -414,12 +420,6 @@ function SpendingPatternsSection() {
               className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Next month"
             >→</button>
-            {monthNav !== null && (
-              <button
-                onClick={() => setMonthNav(null)}
-                className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
-              >All time</button>
-            )}
           </div>
         </div>
         <WeekdayHourHeatmap data={heatmap.by_weekday_hour} metric={metric} monthLabel={monthLabel} />
