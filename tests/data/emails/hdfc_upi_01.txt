@@ -1,0 +1,4 @@
+Subject: ❗ You have done a UPI txn. Check details!
+
+Body:
+Dear Customer, Rs.1200.00 has been debited from account XXXX to VPA timhortons.42654008@hdfcbank TIM HORTONS on 30-03-26. Your UPI transaction reference number is 123456789012. If you did not authorize this transaction, please report it immediately by calling 1800XXXXXXX Or SMS BLOCK UPI to 73XXXXXXXX. Warm Regards, HDFC Bank

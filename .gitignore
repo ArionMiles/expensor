@@ -37,8 +37,8 @@ backend/server
 node_modules/
 frontend/.vite/
 
-# Expensor specific sensitive data files
-data/
+# Runtime data directory — credentials, tokens, and state files (EXPENSOR_DATA_DIR)
+backend/data/
 
 llm-output-files/
 
