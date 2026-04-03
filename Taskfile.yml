@@ -126,10 +126,19 @@ tasks:
       set +a
       cd backend && go run ./cmd/server
 
+  frontend:install:
+    summary: Install frontend npm dependencies (skipped if node_modules already exists).
+    desc: Runs npm install in the frontend directory. Idempotent — skipped automatically when node_modules is present.
+    dir: frontend
+    status:
+      - test -d node_modules
+    cmd: npm install
+
   run:frontend:
     summary: Start the frontend dev server.
     desc: Run the Vite dev server for local development.
     dir: frontend
+    deps: [frontend:install]
     cmd: npm run dev
 
   dev:
@@ -156,6 +165,7 @@ tasks:
       done
       echo "Backend is up — starting frontend"
 
+      [ -d frontend/node_modules ] || (cd frontend && npm install)
       (cd frontend && npm run dev) || true
       kill "$BACKEND_PID" 2>/dev/null || true
 

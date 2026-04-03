@@ -36,7 +36,8 @@ export interface TopMerchant {
 
 export interface Stats {
   total_count: number
-  total_inr: number
+  total_base: number
+  base_currency: string
   total_by_category: Record<string, number> | null
   top_merchants: TopMerchant[] | null
 }

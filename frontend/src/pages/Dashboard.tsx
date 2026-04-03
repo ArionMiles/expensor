@@ -279,10 +279,10 @@ function StatsSection() {
         </div>
         <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
           <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
-            Total spend (INR)
+            Total spend ({stats.base_currency})
           </p>
           <p className="text-2xl font-semibold text-primary font-mono tabular-nums break-all">
-            {formatCurrency(stats.total_inr, 'INR')}
+            {formatCurrency(stats.total_base, stats.base_currency)}
           </p>
         </div>
       </div>

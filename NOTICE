@@ -1,0 +1,24 @@
+Expensor
+Copyright (c) Kanishk Singh and contributors
+
+---
+
+THIRD-PARTY TRADEMARK NOTICES
+
+The following trademarks are used in this project to identify third-party
+services that Expensor integrates with. Use of these marks is solely to
+indicate integration and compatibility; no affiliation with or endorsement
+by the respective trademark owners is implied.
+
+Google and Gmail
+  The Gmail icon (frontend/public/readers/gmail.svg) is a trademark of
+  Google LLC. Used in accordance with Google's Brand Guidelines for
+  applications that integrate with Google APIs and services:
+  https://developers.google.com/terms/api-services-user-data-policy
+  https://about.google/brand-resource-center/
+
+Mozilla Thunderbird
+  The Thunderbird icon (frontend/public/readers/thunderbird.svg) is a
+  trademark of MZLA Technologies Corporation. Used to identify Thunderbird
+  integration in accordance with Mozilla's trademark policy:
+  https://www.mozilla.org/en-US/foundation/trademarks/policy/

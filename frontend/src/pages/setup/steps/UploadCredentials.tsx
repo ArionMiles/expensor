@@ -68,7 +68,12 @@ export function UploadCredentials({ readerName, onNext, onBack }: UploadCredenti
       >
         {file ? (
           <div className="space-y-2">
-            <p className="text-sm text-success">✓ {file.name}</p>
+            <div className="flex items-center justify-center gap-1.5 min-w-0">
+              <span className="text-success flex-shrink-0 text-sm">✓</span>
+              <span className="text-sm text-success font-mono truncate" title={file.name}>
+                {file.name}
+              </span>
+            </div>
             <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</p>
             <button
               onClick={() => setFile(null)}

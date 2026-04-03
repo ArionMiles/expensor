@@ -19,13 +19,19 @@ export function ReviewAndStart({ reader, onBack }: ReviewAndStartProps) {
 
   const { data: statusData } = useStatus(startState === 'polling')
 
+  // Transition to 'done' once the daemon is confirmed running.
   useEffect(() => {
     if (startState === 'polling' && statusData?.daemon?.running) {
       setStartState('done')
-      const timer = setTimeout(() => navigate('/'), 1500)
-      return () => clearTimeout(timer)
     }
-  }, [startState, statusData?.daemon?.running, navigate])
+  }, [startState, statusData?.daemon?.running])
+
+  // Navigate to dashboard after the 'done' banner has been visible briefly.
+  useEffect(() => {
+    if (startState !== 'done') return
+    const timer = setTimeout(() => navigate('/'), 1500)
+    return () => clearTimeout(timer)
+  }, [startState, navigate])
 
   const handleStart = async () => {
     setStartError(null)

@@ -221,3 +221,10 @@ Each pattern must have exactly one capture group. Test patterns at [regex101.com
 ## Expensor doesn't recognise transactions from my bank
 
 Open an issue with the email body content and I'll take a look.
+
+## Third-party notices
+
+The Gmail and Thunderbird icons used in this project are trademarks of their
+respective owners (Google LLC and MZLA Technologies Corporation). They are used
+solely to identify the services Expensor integrates with. See [NOTICE](NOTICE)
+for full attribution.

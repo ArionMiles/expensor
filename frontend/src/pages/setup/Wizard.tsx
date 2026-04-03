@@ -6,6 +6,7 @@ import {
   useReaderStatus,
   useReaders,
   useRevokeToken,
+  useStatus,
 } from '@/api/queries'
 import type { PluginInfo } from '@/api/types'
 import { ReaderLogo } from '@/components/ReaderLogo'
@@ -56,7 +57,13 @@ const STEP_LABELS: Record<WizardStep, string> = {
 
 function WizardFlow({ initialReader }: { initialReader?: PluginInfo }) {
   const [selectedReader, setSelectedReader] = useState<PluginInfo | null>(initialReader ?? null)
-  const [currentStep, setCurrentStep] = useState<WizardStep>('select')
+  const [currentStep, setCurrentStep] = useState<WizardStep>(() => {
+    if (initialReader) {
+      const s = getSteps(initialReader)
+      return s[1] ?? 'select'
+    }
+    return 'select'
+  })
 
   const steps = getSteps(selectedReader)
   const currentIndex = steps.indexOf(currentStep)
@@ -268,6 +275,24 @@ function ReaderCard({
 
   const isBusy = revokeToken.isPending || removeAll.isPending
 
+  const { data: statusData } = useStatus()
+  const daemonRunning = statusData?.daemon?.running ?? false
+  const [isStarting, setIsStarting] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
+
+  const handleStartDaemon = useCallback(async () => {
+    setIsStarting(true)
+    setStartError(null)
+    try {
+      await api.daemon.start(reader.name)
+      qc.invalidateQueries({ queryKey: queryKeys.status })
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : 'Failed to start daemon')
+    } finally {
+      setIsStarting(false)
+    }
+  }, [reader.name, qc])
+
   const stateBadge = {
     connected: (
       <span className="text-[10px] px-1.5 py-0.5 rounded-sm border border-success/50 text-success bg-success/10">
@@ -356,6 +381,7 @@ function ReaderCard({
 
           {/* Actions */}
           {!isLoading && (
+            <>
             <div className="px-5 pb-4 flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-2">
                 {readerState === 'unconfigured' && (
@@ -364,6 +390,16 @@ function ReaderCard({
                     className="px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
                   >
                     Set up →
+                  </button>
+                )}
+
+                {readerState === 'connected' && !daemonRunning && (
+                  <button
+                    onClick={handleStartDaemon}
+                    disabled={isStarting || isBusy}
+                    className="px-3 py-1.5 text-xs rounded-md bg-success text-success-foreground hover:bg-success/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {isStarting ? 'Starting...' : 'Start tracking →'}
                   </button>
                 )}
 
@@ -403,6 +439,10 @@ function ReaderCard({
                 </button>
               )}
             </div>
+            {startError && (
+              <p className="px-5 pb-3 text-xs text-destructive">{startError}</p>
+            )}
+            </>
           )}
         </div>
       </div>
