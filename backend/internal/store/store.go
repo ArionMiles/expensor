@@ -63,6 +63,28 @@ type ChartData struct {
 	ByLabel      map[string]float64 `json:"by_label"`
 }
 
+// WeekdayHourBucket holds transaction totals for a (weekday, hour) cell.
+// Weekday follows PostgreSQL DOW convention: 0=Sunday … 6=Saturday.
+type WeekdayHourBucket struct {
+	Weekday int     `json:"weekday"` // 0–6 (0=Sunday)
+	Hour    int     `json:"hour"`    // 0–23
+	Amount  float64 `json:"amount"`
+	Count   int     `json:"count"`
+}
+
+// DayOfMonthBucket holds transaction totals for a single calendar day (1–31).
+type DayOfMonthBucket struct {
+	Day    int     `json:"day"` // 1–31
+	Amount float64 `json:"amount"`
+	Count  int     `json:"count"`
+}
+
+// HeatmapData contains both heatmap datasets returned by GetSpendingHeatmap.
+type HeatmapData struct {
+	ByWeekdayHour []WeekdayHourBucket `json:"by_weekday_hour"`
+	ByDayOfMonth  []DayOfMonthBucket  `json:"by_day_of_month"`
+}
+
 // Label is a managed label in the taxonomy.
 type Label struct {
 	Name      string    `json:"name"`
@@ -546,6 +568,69 @@ func (s *Store) GetChartData(ctx context.Context) (*ChartData, error) {
 		return nil, firstErr
 	}
 	return cd, nil
+}
+
+// GetSpendingHeatmap returns transaction totals aggregated by weekday×hour and
+// by day-of-month. Both datasets span all-time data with no date filter.
+func (s *Store) GetSpendingHeatmap(ctx context.Context) (*HeatmapData, error) {
+	hd := &HeatmapData{
+		ByWeekdayHour: []WeekdayHourBucket{},
+		ByDayOfMonth:  []DayOfMonthBucket{},
+	}
+
+	// Weekday × hour grid (7 rows × 24 columns = up to 168 buckets).
+	wdhRows, err := s.pool.Query(ctx, `
+		SELECT
+			EXTRACT(DOW  FROM timestamp)::int AS weekday,
+			EXTRACT(HOUR FROM timestamp)::int AS hour,
+			COALESCE(SUM(amount), 0)          AS amount,
+			COUNT(*)                          AS count
+		FROM transactions
+		GROUP BY 1, 2
+		ORDER BY 1, 2
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("fetching weekday/hour heatmap: %w", err)
+	}
+	defer wdhRows.Close()
+	for wdhRows.Next() {
+		var b WeekdayHourBucket
+		if err := wdhRows.Scan(&b.Weekday, &b.Hour, &b.Amount, &b.Count); err != nil {
+			return nil, fmt.Errorf("scanning weekday/hour bucket: %w", err)
+		}
+		hd.ByWeekdayHour = append(hd.ByWeekdayHour, b)
+	}
+	if err := wdhRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating weekday/hour rows: %w", err)
+	}
+	wdhRows.Close() // release connection before opening second query
+
+	// Day of month strip (up to 31 buckets, one per calendar day).
+	domRows, err := s.pool.Query(ctx, `
+		SELECT
+			EXTRACT(DAY FROM timestamp)::int AS day,
+			COALESCE(SUM(amount), 0)         AS amount,
+			COUNT(*)                         AS count
+		FROM transactions
+		GROUP BY 1
+		ORDER BY 1
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("fetching day-of-month heatmap: %w", err)
+	}
+	defer domRows.Close()
+	for domRows.Next() {
+		var b DayOfMonthBucket
+		if err := domRows.Scan(&b.Day, &b.Amount, &b.Count); err != nil {
+			return nil, fmt.Errorf("scanning day-of-month bucket: %w", err)
+		}
+		hd.ByDayOfMonth = append(hd.ByDayOfMonth, b)
+	}
+	if err := domRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating day-of-month rows: %w", err)
+	}
+
+	return hd, nil
 }
 
 // Facets holds distinct filter values for the transactions UI dropdowns.
