@@ -688,16 +688,16 @@ func buildListWhere(f ListFilter) (string, []any) {
 	}
 
 	if f.Label != "" {
-		conds = append(conds, fmt.Sprintf("tl.label = %s", next(f.Label)))
+		conds = append(conds, fmt.Sprintf("tl.label ILIKE %s", next("%"+f.Label+"%")))
 	}
 	if f.Category != "" {
-		conds = append(conds, fmt.Sprintf("t.category = %s", next(f.Category)))
+		conds = append(conds, fmt.Sprintf("t.category ILIKE %s", next("%"+f.Category+"%")))
 	}
 	if f.Currency != "" {
-		conds = append(conds, fmt.Sprintf("t.currency = %s", next(f.Currency)))
+		conds = append(conds, fmt.Sprintf("t.currency ILIKE %s", next("%"+f.Currency+"%")))
 	}
 	if f.Source != "" {
-		conds = append(conds, fmt.Sprintf("t.source = %s", next(f.Source)))
+		conds = append(conds, fmt.Sprintf("t.source ILIKE %s", next("%"+f.Source+"%")))
 	}
 	if f.From != nil {
 		conds = append(conds, fmt.Sprintf("t.timestamp >= %s", next(*f.From)))

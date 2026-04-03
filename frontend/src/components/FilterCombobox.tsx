@@ -83,9 +83,11 @@ export function FilterCombobox({
           type="text"
           value={input}
           onChange={(e) => {
-            setInput(e.target.value)
+            const v = e.target.value
+            setInput(v)
             setOpen(true)
             setHighlighted(-1)
+            onChange(v)
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}

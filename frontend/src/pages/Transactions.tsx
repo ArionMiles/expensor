@@ -300,10 +300,16 @@ export function Transactions() {
                 to: filters.date_to ? new Date(filters.date_to) : undefined,
               }}
               onChange={(range) => {
+                let dateTo: string | undefined
+                if (range.to) {
+                  const end = new Date(range.to)
+                  end.setHours(23, 59, 59, 999)
+                  dateTo = end.toISOString()
+                }
                 setFilters((prev) => ({
                   ...prev,
                   date_from: range.from ? range.from.toISOString() : undefined,
-                  date_to: range.to ? range.to.toISOString() : undefined,
+                  date_to: dateTo,
                 }))
               }}
             />

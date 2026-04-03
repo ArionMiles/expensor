@@ -602,13 +602,18 @@ func (h *Handlers) HandleListTransactions(w http.ResponseWriter, r *http.Request
 		Source:   r.URL.Query().Get("source"),
 		Label:    r.URL.Query().Get("label"),
 	}
-	if v := r.URL.Query().Get("from"); v != "" {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
+	if v := r.URL.Query().Get("date_from"); v != "" {
+		// JavaScript toISOString() includes milliseconds (RFC3339Nano); try that first.
+		if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
+			f.From = &t
+		} else if t, err := time.Parse(time.RFC3339, v); err == nil {
 			f.From = &t
 		}
 	}
-	if v := r.URL.Query().Get("to"); v != "" {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
+	if v := r.URL.Query().Get("date_to"); v != "" {
+		if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
+			f.To = &t
+		} else if t, err := time.Parse(time.RFC3339, v); err == nil {
 			f.To = &t
 		}
 	}
