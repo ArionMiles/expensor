@@ -33,8 +33,9 @@ dist/
 backend/auth
 backend/server
 
-# Frontend dependencies
+# Frontend dependencies and build cache
 node_modules/
+frontend/.vite/
 
 # Expensor specific sensitive data files
 data/
