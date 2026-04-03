@@ -120,7 +120,7 @@ export function WeekdayHourHeatmap({ data, metric }: Props) {
 
       {tooltip && (
         <div
-          className="pointer-events-none fixed z-50 rounded border border-border bg-popover px-2 py-1 text-xs shadow-sm"
+          className="pointer-events-none fixed z-50 rounded border border-border bg-secondary px-2 py-1 text-xs shadow-lg"
           style={{ left: tooltip.x + 8, top: tooltip.y - 8 }}
         >
           <span className="font-medium text-foreground">
