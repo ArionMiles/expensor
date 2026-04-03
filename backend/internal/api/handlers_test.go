@@ -56,11 +56,11 @@ func (m *mockStore) GetTransaction(_ context.Context, _ string) (*store.Transact
 	return m.getResult, m.getErr
 }
 
-func (m *mockStore) UpdateDescription(_ context.Context, _ string, _ string) error {
+func (m *mockStore) UpdateDescription(_ context.Context, _, _ string) error {
 	return m.updateErr
 }
 
-func (m *mockStore) AddLabel(_ context.Context, _ string, _ string) error {
+func (m *mockStore) AddLabel(_ context.Context, _, _ string) error {
 	return m.addLabelErr
 }
 
@@ -68,7 +68,7 @@ func (m *mockStore) AddLabels(_ context.Context, _ string, _ []string) error {
 	return m.addLabelsErr
 }
 
-func (m *mockStore) RemoveLabel(_ context.Context, _ string, _ string) error {
+func (m *mockStore) RemoveLabel(_ context.Context, _, _ string) error {
 	return m.removeLblErr
 }
 
@@ -126,6 +126,7 @@ func (p *testReaderPlugin) ConfigSchema() []plugins.ConfigField {
 	}
 	return p.schema
 }
+
 func (p *testReaderPlugin) NewReader( //nolint:revive
 	_ *http.Client, _ *config.Config, _ []pkgapi.Rule,
 	_ pkgapi.Labels, _ *pkgstate.Manager, _ *slog.Logger,

@@ -144,10 +144,10 @@ func (h *Handlers) HandleStatus(w http.ResponseWriter, r *http.Request) {
 
 // ReaderInfo is the API representation of a reader plugin.
 type ReaderInfo struct {
-	Name                      string               `json:"name"`
-	Description               string               `json:"description"`
-	AuthType                  plugins.AuthType     `json:"auth_type"`
-	RequiresCredentialsUpload bool                 `json:"requires_credentials_upload"`
+	Name                      string                `json:"name"`
+	Description               string                `json:"description"`
+	AuthType                  plugins.AuthType      `json:"auth_type"`
+	RequiresCredentialsUpload bool                  `json:"requires_credentials_upload"`
 	ConfigSchema              []plugins.ConfigField `json:"config_schema"`
 }
 

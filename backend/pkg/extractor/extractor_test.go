@@ -33,14 +33,14 @@ func TestExtractFromEmailFiles(t *testing.T) {
 	fixedTime := time.Date(2024, 1, 15, 14, 30, 45, 0, time.UTC)
 
 	tests := []struct {
-		name           string
-		body           string // body section only (after "Body:\n")
-		amountPattern  string
+		name            string
+		body            string // body section only (after "Body:\n")
+		amountPattern   string
 		merchantPattern string
 		currencyPattern string
-		wantAmount     float64
-		wantMerchant   string
-		wantCurrency   string
+		wantAmount      float64
+		wantMerchant    string
+		wantCurrency    string
 	}{
 		{
 			// tests/data/emails/hdfc_credit_card_01.txt
@@ -51,12 +51,12 @@ Available Credit Limit: Rs.45,000.00
 
 If not done by you, call 1800-XXX-XXXX immediately.
 `,
-			amountPattern:  `Rs\.([\d,]+(?:\.\d+)?)`,
+			amountPattern:   `Rs\.([\d,]+(?:\.\d+)?)`,
 			merchantPattern: `at (.*?) on`,
 			currencyPattern: "",
-			wantAmount:   999.00,
-			wantMerchant: "SWIGGY",
-			wantCurrency: "",
+			wantAmount:      999.00,
+			wantMerchant:    "SWIGGY",
+			wantCurrency:    "",
 		},
 		{
 			// tests/data/emails/hdfc_credit_card_02.txt
@@ -67,24 +67,24 @@ Greetings from HDFC Bank!
 
 Rs.868.00 is debited from your HDFC Bank Credit Card ending 1234 towards WWW SWIGGY IN on 31 Mar, 2026 at 21:55:50.
 `,
-			amountPattern:  `Rs\.([\d,]+(?:\.\d+)?)`,
+			amountPattern:   `Rs\.([\d,]+(?:\.\d+)?)`,
 			merchantPattern: `towards (.*?) on`,
 			currencyPattern: "",
-			wantAmount:   868.00,
-			wantMerchant: "WWW SWIGGY IN",
-			wantCurrency: "",
+			wantAmount:      868.00,
+			wantMerchant:    "WWW SWIGGY IN",
+			wantCurrency:    "",
 		},
 		{
 			// tests/data/emails/hdfc_upi_01.txt
 			name: "HDFC UPI (INR, VPA-based merchant)",
 			body: `Dear Customer, Rs.1200.00 has been debited from account 1234 to VPA timhortons.42654008@hdfcbank TIM HORTONS on 30-03-26. Your UPI transaction reference number is 123456789012. If you did not authorize this transaction, please report it immediately by calling 18002586161 Or SMS BLOCK UPI to 7308080808. Warm Regards, HDFC Bank
 `,
-			amountPattern:  `Rs\.([\d,]+(?:\.\d+)?)`,
+			amountPattern:   `Rs\.([\d,]+(?:\.\d+)?)`,
 			merchantPattern: `@hdfcbank\s+(.*?)\s+on\s`,
 			currencyPattern: "",
-			wantAmount:   1200.00,
-			wantMerchant: "TIM HORTONS",
-			wantCurrency: "",
+			wantAmount:      1200.00,
+			wantMerchant:    "TIM HORTONS",
+			wantCurrency:    "",
 		},
 		{
 			// tests/data/emails/icici_credit_card_01.txt — INR domestic (at…on merchant)
@@ -97,12 +97,12 @@ If you did not authorize this transaction, please call our customer care immedia
 
 Thank you for banking with ICICI Bank.
 `,
-			amountPattern:  `(?:INR|USD|EUR) ([\d,]+(?:\.\d+)?)`,
+			amountPattern:   `(?:INR|USD|EUR) ([\d,]+(?:\.\d+)?)`,
 			merchantPattern: `(?:at ([A-Z][A-Z ]*?) on|Info: (.*?)\.)`,
 			currencyPattern: `(INR|USD|EUR)`,
-			wantAmount:   1234.56,
-			wantMerchant: "AMAZON",
-			wantCurrency: "INR",
+			wantAmount:      1234.56,
+			wantMerchant:    "AMAZON",
+			wantCurrency:    "INR",
 		},
 		{
 			// tests/data/emails/icici_credit_card_02_usd.txt — USD international (Info: merchant)
@@ -111,12 +111,12 @@ Thank you for banking with ICICI Bank.
 
 Your ICICI Bank Credit Card XX1234 has been used for a transaction of USD 5.90 on Apr 02, 2026 at 10:45:06. Info: ANTHROPIC.
 `,
-			amountPattern:  `(?:INR|USD|EUR) ([\d,]+(?:\.\d+)?)`,
+			amountPattern:   `(?:INR|USD|EUR) ([\d,]+(?:\.\d+)?)`,
 			merchantPattern: `(?:at ([A-Z][A-Z ]*?) on|Info: (.*?)\.)`,
 			currencyPattern: `(INR|USD|EUR)`,
-			wantAmount:   5.90,
-			wantMerchant: "ANTHROPIC",
-			wantCurrency: "USD",
+			wantAmount:      5.90,
+			wantMerchant:    "ANTHROPIC",
+			wantCurrency:    "USD",
 		},
 		{
 			// tests/data/emails/icici_credit_card_03_eur.txt — EUR international (Info: merchant)
@@ -125,12 +125,12 @@ Your ICICI Bank Credit Card XX1234 has been used for a transaction of USD 5.90 o
 
 Your ICICI Bank Credit Card XX1234 has been used for a transaction of EUR 20.10 on Mar 26, 2026 at 12:12:12. Info: NETCUP.
 `,
-			amountPattern:  `(?:INR|USD|EUR) ([\d,]+(?:\.\d+)?)`,
+			amountPattern:   `(?:INR|USD|EUR) ([\d,]+(?:\.\d+)?)`,
 			merchantPattern: `(?:at ([A-Z][A-Z ]*?) on|Info: (.*?)\.)`,
 			currencyPattern: `(INR|USD|EUR)`,
-			wantAmount:   20.10,
-			wantMerchant: "NETCUP",
-			wantCurrency: "EUR",
+			wantAmount:      20.10,
+			wantMerchant:    "NETCUP",
+			wantCurrency:    "EUR",
 		},
 		{
 			// tests/data/emails/icici_imobile_01.txt — INR fund transfer (towards…on merchant)
@@ -138,12 +138,12 @@ Your ICICI Bank Credit Card XX1234 has been used for a transaction of EUR 20.10 
 			body: `Dear Customer,
 
 You have made an online ICICI fund transfer payment of Rs 38,500.00 towards Luke Skywalker on Feb 04, 2026 at 12:51 a.m. from your ICICI Bank Savings Account XXXX1234. The Transaction ID is FB12345678.`,
-			amountPattern:  `Rs ([\d,]+(?:\.\d+)?)`,
+			amountPattern:   `Rs ([\d,]+(?:\.\d+)?)`,
 			merchantPattern: `towards (.*?) on`,
 			currencyPattern: "",
-			wantAmount:   38500.00,
-			wantMerchant: "Luke Skywalker",
-			wantCurrency: "",
+			wantAmount:      38500.00,
+			wantMerchant:    "Luke Skywalker",
+			wantCurrency:    "",
 		},
 	}
 

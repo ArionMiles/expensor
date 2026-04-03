@@ -59,11 +59,11 @@ type mockReaderPlugin struct {
 	createError error
 }
 
-func (m *mockReaderPlugin) Name() string                    { return m.name }
-func (m *mockReaderPlugin) Description() string             { return "mock reader" }
-func (m *mockReaderPlugin) RequiredScopes() []string        { return []string{"scope1"} }
-func (m *mockReaderPlugin) AuthType() plugins.AuthType      { return plugins.AuthTypeOAuth }
-func (m *mockReaderPlugin) RequiresCredentialsUpload() bool { return false }
+func (m *mockReaderPlugin) Name() string                        { return m.name }
+func (m *mockReaderPlugin) Description() string                 { return "mock reader" }
+func (m *mockReaderPlugin) RequiredScopes() []string            { return []string{"scope1"} }
+func (m *mockReaderPlugin) AuthType() plugins.AuthType          { return plugins.AuthTypeOAuth }
+func (m *mockReaderPlugin) RequiresCredentialsUpload() bool     { return false }
 func (m *mockReaderPlugin) ConfigSchema() []plugins.ConfigField { return nil }
 func (m *mockReaderPlugin) NewReader( //nolint:revive // interface method; argument count dictated by ReaderPlugin
 	httpClient *http.Client, cfg *config.Config, rules []api.Rule,
@@ -198,10 +198,7 @@ func TestRun_SuccessfulRun(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	runner := New(registry, &http.Client{}, logger)
 
-	cfg := &config.Config{
-		
-		
-	}
+	cfg := &config.Config{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
@@ -261,10 +258,7 @@ func TestRun_ReaderError(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	runner := New(registry, &http.Client{}, logger)
 
-	cfg := &config.Config{
-		
-		
-	}
+	cfg := &config.Config{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
@@ -311,10 +305,7 @@ func TestRun_WriterError(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	runner := New(registry, &http.Client{}, logger)
 
-	cfg := &config.Config{
-		
-		
-	}
+	cfg := &config.Config{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
@@ -371,10 +362,7 @@ func TestRun_ContextCancellation(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	runner := New(registry, &http.Client{}, logger)
 
-	cfg := &config.Config{
-		
-		
-	}
+	cfg := &config.Config{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
@@ -422,10 +410,7 @@ func TestRun_CreateReaderError(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	runner := New(registry, &http.Client{}, logger)
 
-	cfg := &config.Config{
-		
-		
-	}
+	cfg := &config.Config{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
@@ -469,10 +454,7 @@ func TestRun_CreateWriterError(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	runner := New(registry, &http.Client{}, logger)
 
-	cfg := &config.Config{
-		
-		
-	}
+	cfg := &config.Config{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
@@ -531,10 +513,7 @@ func TestRun_WriterResourceCleanup(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	runner := New(registry, &http.Client{}, logger)
 
-	cfg := &config.Config{
-		
-		
-	}
+	cfg := &config.Config{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",

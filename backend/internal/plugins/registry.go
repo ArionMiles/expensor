@@ -25,7 +25,7 @@ const (
 type ConfigField struct {
 	Key      string `json:"key"`
 	Label    string `json:"label"`
-	Type     string `json:"type"`           // "text", "password", "path"
+	Type     string `json:"type"` // "text", "password", "path"
 	Required bool   `json:"required"`
 	Help     string `json:"help,omitempty"`
 }
