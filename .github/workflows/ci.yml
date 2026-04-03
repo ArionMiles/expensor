@@ -59,7 +59,7 @@ jobs:
           version: 3.x
 
       - name: Run tests
-        run: task test
+        run: task test:be
 
       - name: Run govulncheck
-        run: task vulncheck
+        run: task audit:be

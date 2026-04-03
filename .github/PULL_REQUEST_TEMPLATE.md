@@ -32,8 +32,8 @@ Fixes #(issue)
 
 <!-- Describe the tests you ran to verify your changes -->
 
-- [ ] Unit tests pass (`task test`)
-- [ ] Linter passes (`task lint:prod`)
+- [ ] Unit tests pass (`task test:be`)
+- [ ] Linter passes (`task lint:be:prod` and `task lint:fe`)
 - [ ] Manual testing completed
 - [ ] Added new tests (if applicable)
 

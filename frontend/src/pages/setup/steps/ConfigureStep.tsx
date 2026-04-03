@@ -10,12 +10,7 @@ interface ConfigureStepProps {
   onBack: () => void
 }
 
-export function ConfigureStep({
-  readerName,
-  configSchema,
-  onNext,
-  onBack,
-}: ConfigureStepProps) {
+export function ConfigureStep({ readerName, configSchema, onNext, onBack }: ConfigureStepProps) {
   const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {}
     configSchema.forEach((field) => {
@@ -51,7 +46,7 @@ export function ConfigureStep({
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-base font-semibold text-foreground mb-1">Configure reader</h2>
+          <h2 className="mb-1 text-base font-semibold text-foreground">Configure reader</h2>
           <p className="text-sm text-muted-foreground">
             No configuration required for this reader.
           </p>
@@ -59,13 +54,13 @@ export function ConfigureStep({
         <div className="flex items-center justify-between">
           <button
             onClick={onBack}
-            className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            className="px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             ← Back
           </button>
           <button
             onClick={onNext}
-            className="px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90"
           >
             Next →
           </button>
@@ -77,7 +72,7 @@ export function ConfigureStep({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-foreground mb-1">Configure reader</h2>
+        <h2 className="mb-1 text-base font-semibold text-foreground">Configure reader</h2>
         <p className="text-sm text-muted-foreground">
           Set the required options for the{' '}
           <span className="font-mono text-primary">{readerName}</span> reader.
@@ -89,10 +84,10 @@ export function ConfigureStep({
           <div key={field.name} className="space-y-1.5">
             <label
               htmlFor={`config-${field.name}`}
-              className="block text-xs font-medium text-muted-foreground uppercase tracking-wider"
+              className="block text-xs font-medium uppercase tracking-wider text-muted-foreground"
             >
               {field.label}
-              {field.required && <span className="text-destructive ml-1">*</span>}
+              {field.required && <span className="ml-1 text-destructive">*</span>}
             </label>
             {field.type === 'textarea' ? (
               <textarea
@@ -126,7 +121,7 @@ export function ConfigureStep({
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
-          className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           ← Back
         </button>
@@ -134,9 +129,9 @@ export function ConfigureStep({
           onClick={handleSubmit}
           disabled={isPending}
           className={cn(
-            'px-4 py-2 text-sm rounded-md transition-colors',
+            'rounded-md px-4 py-2 text-sm transition-colors',
             isPending
-              ? 'bg-secondary text-muted-foreground cursor-not-allowed opacity-50'
+              ? 'cursor-not-allowed bg-secondary text-muted-foreground opacity-50'
               : 'bg-primary text-primary-foreground hover:bg-primary/90',
           )}
         >

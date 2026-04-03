@@ -18,19 +18,19 @@ export default function Settings() {
   const [tab, setTab] = useState<SettingsTab>('appearance')
 
   return (
-    <div className="px-6 py-6 max-w-4xl mx-auto w-full">
-      <h1 className="text-lg font-semibold text-foreground mb-6">Settings</h1>
+    <div className="mx-auto w-full max-w-4xl px-6 py-6">
+      <h1 className="mb-6 text-lg font-semibold text-foreground">Settings</h1>
 
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-border mb-6">
+      <div className="mb-6 flex gap-1 border-b border-border">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={cn(
-              'px-4 py-2 text-sm transition-colors border-b-2 -mb-px',
+              '-mb-px border-b-2 px-4 py-2 text-sm transition-colors',
               tab === t.id
-                ? 'border-primary text-foreground font-medium'
+                ? 'border-primary font-medium text-foreground'
                 : 'border-transparent text-muted-foreground hover:text-foreground',
             )}
           >

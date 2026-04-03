@@ -35,9 +35,9 @@ export function AppearanceSettings() {
   if (loading) return <p className="text-xs text-muted-foreground">Loading...</p>
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 max-w-sm">
+    <form onSubmit={handleSubmit} className="max-w-sm space-y-4">
       <div>
-        <label className="block text-xs text-muted-foreground uppercase tracking-wider mb-1.5">
+        <label className="mb-1.5 block text-xs uppercase tracking-wider text-muted-foreground">
           Base currency
         </label>
         <input
@@ -48,9 +48,9 @@ export function AppearanceSettings() {
           }}
           placeholder="INR"
           maxLength={3}
-          className="w-full rounded-md border border-border bg-input px-3 py-2 text-sm font-mono uppercase"
+          className="w-full rounded-md border border-border bg-input px-3 py-2 font-mono text-sm uppercase"
         />
-        <p className="text-xs text-muted-foreground mt-1">
+        <p className="mt-1 text-xs text-muted-foreground">
           3-letter ISO 4217 code used for aggregate totals (e.g. INR, USD, EUR).
         </p>
       </div>
@@ -59,7 +59,7 @@ export function AppearanceSettings() {
       <button
         type="submit"
         disabled={currency.length !== 3}
-        className="px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
       >
         Save
       </button>

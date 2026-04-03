@@ -80,11 +80,20 @@ func extract(s string) float64 {
 Before committing:
 
 ```bash
-# Format code (imports + gofumpt)
+# Format all source files (Go + TypeScript/frontend)
 task fmt
 
-# Run linter
+# Or target a specific stack
+task fmt:be   # Go only (gci + gofumpt)
+task fmt:fe   # Frontend only (prettier)
+
+# Lint all
 task lint
+
+# Or target a specific stack
+task lint:be        # Go with local config
+task lint:be:prod   # Go with strict CI config (must pass before commit)
+task lint:fe        # TypeScript type-check
 ```
 
 ### 4. Write Tests
@@ -132,10 +141,10 @@ Run tests:
 
 ```bash
 # Run all tests
-task test
+task test:be
 
 # Run with coverage
-task test:cover
+task test:be:cover
 ```
 
 ### 5. Commit Your Changes
@@ -307,7 +316,7 @@ The project uses golangci-lint with two configurations:
 Run incrementally for new code:
 
 ```bash
-task lint:new
+task lint:be:new
 ```
 
 ## Testing
@@ -344,10 +353,10 @@ func TestFunctionName(t *testing.T) {
 
 ```bash
 # All tests
-task test
+task test:be
 
 # With coverage
-task test:cover
+task test:be:cover
 
 # Specific package
 go test ./pkg/reader/gmail/...

@@ -6,9 +6,7 @@ import { AppLayout } from '@/components/AppLayout'
 
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const Transactions = lazy(() => import('@/pages/Transactions'))
-const Wizard = lazy(() =>
-  import('@/pages/setup/Wizard').then((m) => ({ default: m.Wizard })),
-)
+const Wizard = lazy(() => import('@/pages/setup/Wizard').then((m) => ({ default: m.Wizard })))
 const Settings = lazy(() => import('@/pages/Settings'))
 
 const queryClient = new QueryClient({
@@ -24,8 +22,8 @@ function PageSuspense({ children }: { children: React.ReactNode }) {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center h-full">
-          <span className="text-xs font-mono text-muted-foreground">loading...</span>
+        <div className="flex h-full items-center justify-center">
+          <span className="font-mono text-xs text-muted-foreground">loading...</span>
         </div>
       }
     >
@@ -43,19 +41,35 @@ export function App() {
             <Route element={<AppLayout />}>
               <Route
                 path="/"
-                element={<PageSuspense><Dashboard /></PageSuspense>}
+                element={
+                  <PageSuspense>
+                    <Dashboard />
+                  </PageSuspense>
+                }
               />
               <Route
                 path="/transactions"
-                element={<PageSuspense><Transactions /></PageSuspense>}
+                element={
+                  <PageSuspense>
+                    <Transactions />
+                  </PageSuspense>
+                }
               />
               <Route
                 path="/setup"
-                element={<PageSuspense><Wizard /></PageSuspense>}
+                element={
+                  <PageSuspense>
+                    <Wizard />
+                  </PageSuspense>
+                }
               />
               <Route
                 path="/settings"
-                element={<PageSuspense><Settings /></PageSuspense>}
+                element={
+                  <PageSuspense>
+                    <Settings />
+                  </PageSuspense>
+                }
               />
             </Route>
           </Routes>

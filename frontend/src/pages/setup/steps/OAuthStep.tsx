@@ -38,18 +38,18 @@ export function OAuthStep({ readerName, onNext, onBack }: OAuthStepProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-foreground mb-1">Authorize with Google</h2>
+        <h2 className="mb-1 text-base font-semibold text-foreground">Authorize with Google</h2>
         <p className="text-sm text-muted-foreground">
           Grant Expensor read access to your Gmail messages for bank transaction emails.
         </p>
       </div>
 
-      <div className="p-4 rounded-lg border border-border bg-secondary/30 space-y-3">
+      <div className="space-y-3 rounded-lg border border-border bg-secondary/30 p-4">
         <div className="flex items-center gap-2">
           <span
             className={cn(
-              'w-1.5 h-1.5 rounded-full',
-              polling ? 'bg-warning animate-pulse' : 'bg-muted-foreground',
+              'h-1.5 w-1.5 rounded-full',
+              polling ? 'animate-pulse bg-warning' : 'bg-muted-foreground',
             )}
             aria-hidden="true"
           />
@@ -63,9 +63,7 @@ export function OAuthStep({ readerName, onNext, onBack }: OAuthStepProps) {
                   : 'Not yet authorized'}
           </span>
         </div>
-        {polling && (
-          <p className="text-xs text-muted-foreground">Polling every 2s...</p>
-        )}
+        {polling && <p className="text-xs text-muted-foreground">Polling every 2s...</p>}
       </div>
 
       {authError && (
@@ -77,7 +75,7 @@ export function OAuthStep({ readerName, onNext, onBack }: OAuthStepProps) {
       <div className="space-y-2">
         <button
           onClick={handleAuthorize}
-          className="w-full px-4 py-2.5 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="w-full rounded-md bg-primary px-4 py-2.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {authStarted ? 'Reopen authorization tab' : 'Authorize with Google →'}
         </button>
@@ -85,7 +83,7 @@ export function OAuthStep({ readerName, onNext, onBack }: OAuthStepProps) {
         {authStarted && !polling && (
           <button
             onClick={() => setPolling(true)}
-            className="w-full px-4 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="w-full px-4 py-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             Already authorized — check again
           </button>
@@ -95,7 +93,7 @@ export function OAuthStep({ readerName, onNext, onBack }: OAuthStepProps) {
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
-          className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           ← Back
         </button>
