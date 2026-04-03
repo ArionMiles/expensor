@@ -59,9 +59,12 @@ type mockReaderPlugin struct {
 	createError error
 }
 
-func (m *mockReaderPlugin) Name() string             { return m.name }
-func (m *mockReaderPlugin) Description() string      { return "mock reader" }
-func (m *mockReaderPlugin) RequiredScopes() []string { return []string{"scope1"} }
+func (m *mockReaderPlugin) Name() string                    { return m.name }
+func (m *mockReaderPlugin) Description() string             { return "mock reader" }
+func (m *mockReaderPlugin) RequiredScopes() []string        { return []string{"scope1"} }
+func (m *mockReaderPlugin) AuthType() plugins.AuthType      { return plugins.AuthTypeOAuth }
+func (m *mockReaderPlugin) RequiresCredentialsUpload() bool { return false }
+func (m *mockReaderPlugin) ConfigSchema() []plugins.ConfigField { return nil }
 func (m *mockReaderPlugin) NewReader( //nolint:revive // interface method; argument count dictated by ReaderPlugin
 	httpClient *http.Client, cfg *config.Config, rules []api.Rule,
 	labels api.Labels, stateManager *state.Manager, logger *slog.Logger,
@@ -196,11 +199,13 @@ func TestRun_SuccessfulRun(t *testing.T) {
 	runner := New(registry, &http.Client{}, logger)
 
 	cfg := &config.Config{
-		ReaderPlugin: "test-reader",
-		WriterPlugin: "test-writer",
+		
+		
 	}
 
 	runCfg := RunConfig{
+		ReaderName:   "test-reader",
+		WriterName:   "test-writer",
 		Config:       cfg,
 		Rules:        []api.Rule{},
 		Labels:       make(api.Labels),
@@ -257,11 +262,13 @@ func TestRun_ReaderError(t *testing.T) {
 	runner := New(registry, &http.Client{}, logger)
 
 	cfg := &config.Config{
-		ReaderPlugin: "test-reader",
-		WriterPlugin: "test-writer",
+		
+		
 	}
 
 	runCfg := RunConfig{
+		ReaderName:   "test-reader",
+		WriterName:   "test-writer",
 		Config:       cfg,
 		Rules:        []api.Rule{},
 		Labels:       make(api.Labels),
@@ -305,11 +312,13 @@ func TestRun_WriterError(t *testing.T) {
 	runner := New(registry, &http.Client{}, logger)
 
 	cfg := &config.Config{
-		ReaderPlugin: "test-reader",
-		WriterPlugin: "test-writer",
+		
+		
 	}
 
 	runCfg := RunConfig{
+		ReaderName:   "test-reader",
+		WriterName:   "test-writer",
 		Config:       cfg,
 		Rules:        []api.Rule{},
 		Labels:       make(api.Labels),
@@ -363,11 +372,13 @@ func TestRun_ContextCancellation(t *testing.T) {
 	runner := New(registry, &http.Client{}, logger)
 
 	cfg := &config.Config{
-		ReaderPlugin: "test-reader",
-		WriterPlugin: "test-writer",
+		
+		
 	}
 
 	runCfg := RunConfig{
+		ReaderName:   "test-reader",
+		WriterName:   "test-writer",
 		Config:       cfg,
 		Rules:        []api.Rule{},
 		Labels:       make(api.Labels),
@@ -412,11 +423,13 @@ func TestRun_CreateReaderError(t *testing.T) {
 	runner := New(registry, &http.Client{}, logger)
 
 	cfg := &config.Config{
-		ReaderPlugin: "test-reader",
-		WriterPlugin: "test-writer",
+		
+		
 	}
 
 	runCfg := RunConfig{
+		ReaderName:   "test-reader",
+		WriterName:   "test-writer",
 		Config:       cfg,
 		Rules:        []api.Rule{},
 		Labels:       make(api.Labels),
@@ -457,11 +470,13 @@ func TestRun_CreateWriterError(t *testing.T) {
 	runner := New(registry, &http.Client{}, logger)
 
 	cfg := &config.Config{
-		ReaderPlugin: "test-reader",
-		WriterPlugin: "test-writer",
+		
+		
 	}
 
 	runCfg := RunConfig{
+		ReaderName:   "test-reader",
+		WriterName:   "test-writer",
 		Config:       cfg,
 		Rules:        []api.Rule{},
 		Labels:       make(api.Labels),
@@ -517,11 +532,13 @@ func TestRun_WriterResourceCleanup(t *testing.T) {
 	runner := New(registry, &http.Client{}, logger)
 
 	cfg := &config.Config{
-		ReaderPlugin: "test-reader",
-		WriterPlugin: "test-writer",
+		
+		
 	}
 
 	runCfg := RunConfig{
+		ReaderName:   "test-reader",
+		WriterName:   "test-writer",
 		Config:       cfg,
 		Rules:        []api.Rule{},
 		Labels:       make(api.Labels),

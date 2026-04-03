@@ -11,6 +11,25 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/state"
 )
 
+// AuthType describes how a reader plugin authenticates.
+type AuthType string
+
+const (
+	// AuthTypeOAuth indicates the reader uses an OAuth2 flow (e.g. Gmail, ProtonMail).
+	AuthTypeOAuth AuthType = "oauth"
+	// AuthTypeConfig indicates the reader only requires local configuration (e.g. Thunderbird).
+	AuthTypeConfig AuthType = "config"
+)
+
+// ConfigField describes a single user-provided configuration field for a plugin.
+type ConfigField struct {
+	Key      string `json:"key"`
+	Label    string `json:"label"`
+	Type     string `json:"type"`           // "text", "password", "path"
+	Required bool   `json:"required"`
+	Help     string `json:"help,omitempty"`
+}
+
 // ReaderPlugin defines the interface for transaction reader plugins.
 type ReaderPlugin interface {
 	// Name returns the plugin name (e.g., "gmail", "thunderbird").
@@ -19,6 +38,15 @@ type ReaderPlugin interface {
 	Description() string
 	// RequiredScopes returns the OAuth scopes needed by this plugin.
 	RequiredScopes() []string
+	// AuthType returns how this reader authenticates.
+	AuthType() AuthType
+	// RequiresCredentialsUpload reports whether the user must upload an OAuth
+	// client credentials file (e.g. client_secret.json for Gmail).
+	RequiresCredentialsUpload() bool
+	// ConfigSchema returns the configuration fields the user must provide.
+	// For OAuth readers this is typically empty; for config-only readers
+	// (e.g. Thunderbird) it describes the required fields.
+	ConfigSchema() []ConfigField
 	// NewReader creates a new reader instance with the given config.
 	NewReader(
 		httpClient *http.Client, cfg *config.Config, rules []api.Rule,

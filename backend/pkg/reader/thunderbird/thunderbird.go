@@ -269,7 +269,7 @@ func (r *Reader) extractTransaction(msg *mail.Message, rule api.Rule) (*api.Tran
 	}
 
 	// Use extractor package for consistent extraction
-	transaction := extractor.ExtractTransactionDetails(body, rule.Amount, rule.MerchantInfo, receivedTime)
+	transaction := extractor.ExtractTransactionDetails(body, rule.Amount, rule.MerchantInfo, rule.Currency, receivedTime)
 	transaction.Category, transaction.Bucket = r.labels.LabelLookup(transaction.MerchantInfo)
 	transaction.Source = rule.Source
 

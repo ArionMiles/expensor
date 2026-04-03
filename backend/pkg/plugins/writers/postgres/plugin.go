@@ -33,6 +33,13 @@ func (p *Plugin) RequiredScopes() []string {
 // NewWriter creates a new PostgreSQL writer instance.
 // Note: httpClient is ignored as PostgreSQL doesn't need OAuth.
 func (p *Plugin) NewWriter(httpClient *http.Client, cfg *config.Config, logger *slog.Logger) (api.Writer, error) {
+	logger.Debug("postgres writer config",
+		"host", cfg.Postgres.Host,
+		"port", cfg.Postgres.Port,
+		"database", cfg.Postgres.Database,
+		"user", cfg.Postgres.User,
+		"sslmode", cfg.Postgres.SSLMode,
+	)
 	// Convert flush interval to duration
 	flushInterval := time.Duration(cfg.Postgres.FlushInterval) * time.Second
 

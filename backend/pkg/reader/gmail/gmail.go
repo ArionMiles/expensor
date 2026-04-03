@@ -4,13 +4,17 @@ package gmail
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"google.golang.org/api/gmail/v1"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
 	"github.com/ArionMiles/expensor/backend/pkg/api"
@@ -20,12 +24,13 @@ import (
 
 // Reader reads transactions from Gmail messages.
 type Reader struct {
-	client   *gmail.Service
-	rules    []api.Rule
-	labels   api.Labels
-	interval time.Duration
-	state    *state.Manager
-	logger   *slog.Logger
+	client       *gmail.Service
+	rules        []api.Rule
+	labels       api.Labels
+	interval     time.Duration
+	lookbackDays int
+	state        *state.Manager
+	logger       *slog.Logger
 }
 
 // Config holds configuration for the Gmail reader.
@@ -36,6 +41,9 @@ type Config struct {
 	Labels api.Labels
 	// Interval between rule evaluations. Defaults to 60 seconds.
 	Interval time.Duration
+	// LookbackDays limits how far back in time to search for emails.
+	// Defaults to 180 days (6 months). Set to 0 to use the default.
+	LookbackDays int
 	// State is the state manager for tracking processed messages.
 	State *state.Manager
 }
@@ -58,13 +66,19 @@ func New(httpClient *http.Client, cfg Config, logger *slog.Logger) (*Reader, err
 		interval = 60 * time.Second
 	}
 
+	lookback := cfg.LookbackDays
+	if lookback <= 0 {
+		lookback = 180
+	}
+
 	return &Reader{
-		client:   client,
-		rules:    cfg.Rules,
-		labels:   cfg.Labels,
-		interval: interval,
-		state:    cfg.State,
-		logger:   logger,
+		client:       client,
+		rules:        cfg.Rules,
+		labels:       cfg.Labels,
+		interval:     interval,
+		lookbackDays: lookback,
+		state:        cfg.State,
+		logger:       logger,
 	}, nil
 }
 
@@ -153,35 +167,56 @@ func (r *Reader) evaluateRules(ctx context.Context, out chan<- *api.TransactionD
 func (r *Reader) processRule(ctx context.Context, rule api.Rule, out chan<- *api.TransactionDetails) {
 	logger := r.logger.With("rule", rule.Name, "source", rule.Source)
 
-	// Build Gmail query from rule fields
+	// Build Gmail query: rule fields + lookback date filter.
 	query := rule.BuildGmailQuery()
-	logger.Debug("executing gmail query", "query", query)
-
-	resp, err := r.client.Users.Messages.List("me").Q(query).Context(ctx).Do()
-	if err != nil {
-		logger.Error("failed to list messages", "error", err)
-		return
+	since := time.Now().AddDate(0, 0, -r.lookbackDays)
+	if query != "" {
+		query += " "
 	}
+	query += fmt.Sprintf("after:%s", since.Format("2006/01/02"))
+	logger.Debug("executing gmail query", "query", query, "lookback_days", r.lookbackDays)
 
-	if len(resp.Messages) == 0 {
-		logger.Info("no messages found for rule. Skipping....")
-		return
-	}
-
-	logger.Info("found messages", "count", len(resp.Messages))
-
-	for _, msg := range resp.Messages {
-		// Skip if already processed
-		if r.state != nil && r.state.IsProcessed(msg.Id) {
-			logger.Debug("skipping already processed message", "message_id", msg.Id)
-			continue
+	// Paginate through all matching messages.
+	var pageToken string
+	totalFound := 0
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Info("context cancelled, stopping rule processing", "rule", rule.Name)
+			return
+		default:
 		}
 
-		if err := r.processMessage(ctx, msg.Id, rule, out); err != nil {
-			logger.Error("failed to process message", "message_id", msg.Id, "error", err)
-			continue
+		req := r.client.Users.Messages.List("me").Q(query).Context(ctx)
+		if pageToken != "" {
+			req = req.PageToken(pageToken)
 		}
+
+		resp, err := req.Do()
+		if err != nil {
+			logAPIError(logger, "failed to list messages", err)
+			return
+		}
+
+		for _, msg := range resp.Messages {
+			if r.state != nil && r.state.IsProcessed(msg.Id) {
+				logger.Debug("skipping already processed message", "message_id", msg.Id)
+				continue
+			}
+			if err := r.processMessage(ctx, msg.Id, rule, out); err != nil {
+				logger.Error("failed to process message", "message_id", msg.Id, "error", err)
+				continue
+			}
+			totalFound++
+		}
+
+		if resp.NextPageToken == "" {
+			break
+		}
+		pageToken = resp.NextPageToken
 	}
+
+	logger.Info("rule processing complete", "rule", rule.Name, "messages_processed", totalFound)
 }
 
 func (r *Reader) processMessage(ctx context.Context, msgID string, rule api.Rule, out chan<- *api.TransactionDetails) error {
@@ -207,7 +242,7 @@ func (r *Reader) processMessage(ctx context.Context, msgID string, rule api.Rule
 	}
 
 	receivedTime := time.Unix(msg.InternalDate/1000, 0)
-	transaction := extractor.ExtractTransactionDetails(body, rule.Amount, rule.MerchantInfo, receivedTime)
+	transaction := extractor.ExtractTransactionDetails(body, rule.Amount, rule.MerchantInfo, rule.Currency, receivedTime)
 	transaction.Category, transaction.Bucket = r.labels.LabelLookup(transaction.MerchantInfo)
 	transaction.Source = rule.Source
 	transaction.MessageID = msgID // Store message ID for later acknowledgment
@@ -229,6 +264,46 @@ func (r *Reader) processMessage(ctx context.Context, msgID string, rule api.Rule
 	}
 
 	return nil
+}
+
+// logAPIError logs a Gmail API error at the appropriate level.
+// Transient network failures (no connectivity, timeouts) are logged at Warn
+// because they resolve on the next poll. Auth errors and unexpected API
+// failures are logged at Error because they require user action.
+func logAPIError(logger *slog.Logger, msg string, err error) {
+	if isNetworkError(err) {
+		logger.Warn(msg+" (network unavailable, will retry on next poll)", "error", err)
+		return
+	}
+	var apiErr *googleapi.Error
+	if errors.As(err, &apiErr) && apiErr.Code == http.StatusUnauthorized {
+		logger.Error(msg+" (unauthorized — re-run onboarding to refresh credentials)", "error", err)
+		return
+	}
+	// oauth2 token errors (expired with no refresh token)
+	if strings.Contains(err.Error(), "token expired") || strings.Contains(err.Error(), "refresh token") {
+		logger.Error(msg+" (OAuth token invalid — re-run onboarding to re-authorize)", "error", err)
+		return
+	}
+	logger.Error(msg, "error", err)
+}
+
+// isNetworkError returns true for transient connectivity failures.
+func isNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return true
+	}
+	// Covers "no such host", "connection refused", "no route to host", etc.
+	s := err.Error()
+	return strings.Contains(s, "no such host") ||
+		strings.Contains(s, "connection refused") ||
+		strings.Contains(s, "no route to host") ||
+		strings.Contains(s, "network is unreachable") ||
+		strings.Contains(s, "dial tcp")
 }
 
 func extractBody(msg *gmail.Message) string {
