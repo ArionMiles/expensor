@@ -107,6 +107,13 @@ export interface TransactionsResponse {
   total: number
 }
 
+export interface Facets {
+  sources: string[]
+  categories: string[]
+  currencies: string[]
+  labels: string[]
+}
+
 export interface TransactionFilters {
   page?: number
   page_size?: number
@@ -116,6 +123,8 @@ export interface TransactionFilters {
   label?: string
   date_from?: string
   date_to?: string
+  sort_by?: string
+  sort_dir?: 'asc' | 'desc'
 }
 
 export interface HealthResponse {

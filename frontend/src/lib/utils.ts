@@ -35,13 +35,15 @@ export function getReaderDisplayName(name: string): string {
     .join(' ')
 }
 
-export function formatDate(isoString: string): string {
+export function formatDate(isoString: string, includeTime = false): string {
   const date = new Date(isoString)
-  return new Intl.DateTimeFormat('en-IN', {
+  const opts: Intl.DateTimeFormatOptions = {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
-  }).format(date)
+    ...(includeTime ? { hour: '2-digit', minute: '2-digit', hour12: false } : {}),
+  }
+  return new Intl.DateTimeFormat('en-IN', opts).format(date)
 }
 
 export function formatDateShort(isoString: string): string {

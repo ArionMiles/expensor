@@ -1,13 +1,18 @@
 import {
   useAddLabels,
+  useFacets,
   useRemoveLabel,
   useTransactions,
   useUpdateTransactionDescription,
 } from '@/api/queries'
 import type { Transaction, TransactionFilters } from '@/api/types'
+import { DateRangePicker } from '@/components/DateRangePicker'
+import { FilterCombobox } from '@/components/FilterCombobox'
 import { LabelChip } from '@/components/LabelChip'
+import { LabelSearch } from '@/components/LabelSearch'
 import { Pagination } from '@/components/Pagination'
 import { cn, formatCurrency, formatDate } from '@/lib/utils'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -158,7 +163,9 @@ function TransactionRow({ tx }: { tx: Transaction }) {
   return (
     <tr className="border-b border-border transition-colors hover:bg-accent/50">
       <td className="whitespace-nowrap px-3 py-2.5">
-        <span className="font-mono text-xs text-muted-foreground">{formatDate(tx.timestamp)}</span>
+        <span className="font-mono text-xs text-muted-foreground">
+          {formatDate(tx.timestamp, true)}
+        </span>
       </td>
       <td className="max-w-[200px] px-3 py-2.5">
         <span className="block truncate text-sm text-foreground">{tx.merchant_info}</span>
@@ -193,12 +200,21 @@ export function Transactions() {
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState<Omit<TransactionFilters, 'page' | 'page_size'>>({})
   const [showFilters, setShowFilters] = useState(false)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+
+  const { data: facets } = useFacets()
 
   useEffect(() => {
     setPage(1)
   }, [debouncedSearch, filters])
 
-  const activeFilters: TransactionFilters = { ...filters, page, page_size: 20 }
+  const activeFilters: TransactionFilters = {
+    ...filters,
+    page,
+    page_size: 20,
+    sort_by: 'timestamp',
+    sort_dir: sortDir,
+  }
   const { data, isLoading, isFetching, error } = useTransactions(activeFilters, debouncedSearch)
 
   const transactions = data?.transactions ?? []
@@ -215,6 +231,8 @@ export function Transactions() {
     setFilters({})
     setSearchInput('')
   }
+
+  const toggleSort = () => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
 
   const hasActiveFilters = Boolean(
     searchInput ||
@@ -275,54 +293,45 @@ export function Transactions() {
         </div>
 
         {showFilters && (
-          <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-card p-3 sm:grid-cols-3 lg:grid-cols-6">
-            <input
-              type="date"
-              value={filters.date_from ?? ''}
-              onChange={(e) => updateFilter('date_from', e.target.value)}
-              className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              aria-label="From date"
-              title="From date"
+          <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-card p-3 sm:grid-cols-3 lg:grid-cols-5">
+            <DateRangePicker
+              value={{
+                from: filters.date_from ? new Date(filters.date_from) : undefined,
+                to: filters.date_to ? new Date(filters.date_to) : undefined,
+              }}
+              onChange={(range) => {
+                setFilters((prev) => ({
+                  ...prev,
+                  date_from: range.from ? range.from.toISOString() : undefined,
+                  date_to: range.to ? range.to.toISOString() : undefined,
+                }))
+              }}
             />
-            <input
-              type="date"
-              value={filters.date_to ?? ''}
-              onChange={(e) => updateFilter('date_to', e.target.value)}
-              className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              aria-label="To date"
-              title="To date"
-            />
-            <input
-              type="text"
+            <FilterCombobox
               value={filters.source ?? ''}
-              onChange={(e) => updateFilter('source', e.target.value)}
+              onChange={(v) => updateFilter('source', v)}
+              options={facets?.sources ?? []}
               placeholder="Source"
-              className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              aria-label="Filter by source"
+              label="Filter by source"
             />
-            <input
-              type="text"
+            <FilterCombobox
               value={filters.category ?? ''}
-              onChange={(e) => updateFilter('category', e.target.value)}
+              onChange={(v) => updateFilter('category', v)}
+              options={facets?.categories ?? []}
               placeholder="Category"
-              className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              aria-label="Filter by category"
+              label="Filter by category"
             />
-            <input
-              type="text"
+            <FilterCombobox
               value={filters.currency ?? ''}
-              onChange={(e) => updateFilter('currency', e.target.value)}
+              onChange={(v) => updateFilter('currency', v)}
+              options={facets?.currencies ?? []}
               placeholder="Currency"
-              className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              aria-label="Filter by currency"
+              label="Filter by currency"
             />
-            <input
-              type="text"
+            <LabelSearch
               value={filters.label ?? ''}
-              onChange={(e) => updateFilter('label', e.target.value)}
-              placeholder="Label"
-              className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              aria-label="Filter by label"
+              onChange={(v) => updateFilter('label', v)}
+              options={facets?.labels ?? []}
             />
           </div>
         )}
@@ -350,7 +359,14 @@ export function Transactions() {
           <thead>
             <tr className="border-b border-border bg-secondary/50">
               <th className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Date
+                <button
+                  onClick={toggleSort}
+                  className="flex items-center gap-1 transition-colors hover:text-foreground"
+                  aria-label={`Sort by date ${sortDir === 'desc' ? 'ascending' : 'descending'}`}
+                >
+                  Date
+                  {sortDir === 'desc' ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
+                </button>
               </th>
               <th className="px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                 Merchant

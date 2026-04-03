@@ -612,6 +612,8 @@ func (h *Handlers) HandleListTransactions(w http.ResponseWriter, r *http.Request
 			f.To = &t
 		}
 	}
+	f.SortBy = r.URL.Query().Get("sort_by")
+	f.SortDir = r.URL.Query().Get("sort_dir")
 
 	txns, total, err := h.store.ListTransactions(r.Context(), f)
 	if err != nil {
@@ -775,6 +777,23 @@ func (h *Handlers) HandleSearchTransactions(w http.ResponseWriter, r *http.Reque
 		"page_size":    f.PageSize,
 		"query":        q,
 	})
+}
+
+// HandleGetFacets handles GET /api/transactions/facets.
+// Returns distinct values for source, category, currency, and label — used to
+// populate filter dropdowns in the UI.
+func (h *Handlers) HandleGetFacets(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	facets, err := h.store.GetFacets(r.Context())
+	if err != nil {
+		h.logger.Error("get facets", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to fetch facets")
+		return
+	}
+	writeJSON(w, http.StatusOK, facets)
 }
 
 // HandleGetBaseCurrency handles GET /api/config/base-currency.

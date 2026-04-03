@@ -11,6 +11,7 @@ export const queryKeys = {
   readerAuthStatus: (name: string) => ['readers', name, 'auth', 'status'] as const,
   readerConfig: (name: string) => ['readers', name, 'config'] as const,
   readerStatus: (name: string) => ['readers', name, 'status'] as const,
+  facets: ['transactions', 'facets'] as const,
   transactions: (filters: TransactionFilters) => ['transactions', filters] as const,
   transactionSearch: (q: string, page: number, pageSize: number) =>
     ['transactions', 'search', q, page, pageSize] as const,
@@ -86,6 +87,14 @@ export function useReaderStatus(name: string, enabled = true) {
     queryKey: queryKeys.readerStatus(name),
     queryFn: () => api.readers.status(name).then((r) => r.data),
     enabled: enabled && name.length > 0,
+  })
+}
+
+export function useFacets() {
+  return useQuery({
+    queryKey: queryKeys.facets,
+    queryFn: () => api.transactions.facets().then((r) => r.data),
+    staleTime: 300_000,
   })
 }
 
