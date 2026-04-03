@@ -88,6 +88,7 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	// Chart data
 	mux.HandleFunc("GET /api/stats/charts", h.HandleGetChartData)
 	mux.HandleFunc("GET /api/stats/heatmap", h.HandleGetHeatmap)
+	mux.HandleFunc("GET /api/stats/heatmap/annual", h.HandleGetAnnualHeatmap)
 
 	// App configuration
 	mux.HandleFunc("GET /api/config/base-currency", h.HandleGetBaseCurrency)

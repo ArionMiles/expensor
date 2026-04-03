@@ -1057,6 +1057,34 @@ func (h *Handlers) HandleGetHeatmap(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, data)
 }
 
+// HandleGetAnnualHeatmap handles GET /api/stats/heatmap/annual?year=YYYY.
+// Returns per-day transaction totals for the requested calendar year.
+// Defaults to the current year when ?year is absent or invalid.
+func (h *Handlers) HandleGetAnnualHeatmap(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+
+	yearStr := r.URL.Query().Get("year")
+	year, err := strconv.Atoi(yearStr)
+	if err != nil || year < 1 {
+		year = time.Now().Year()
+	}
+
+	buckets, err := h.store.GetAnnualSpend(r.Context(), year)
+	if err != nil {
+		h.logger.Error("get annual heatmap", "error", err, "year", year)
+		writeError(w, http.StatusInternalServerError, "failed to fetch annual heatmap data")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"year":    year,
+		"buckets": buckets,
+	})
+}
+
 // parseHeatmapRange parses optional ?from= and ?to= RFC3339 query parameters.
 // Returns nil, nil when neither is provided. Returns an error if either is
 // present but cannot be parsed as RFC3339.
