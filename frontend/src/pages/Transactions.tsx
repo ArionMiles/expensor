@@ -11,7 +11,7 @@ import { FilterCombobox } from '@/components/FilterCombobox'
 import { LabelChip } from '@/components/LabelChip'
 import { LabelSearch } from '@/components/LabelSearch'
 import { Pagination } from '@/components/Pagination'
-import { cn, formatCurrency, formatDate } from '@/lib/utils'
+import { cn, formatCurrency, formatDate, getSourceColor } from '@/lib/utils'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -172,7 +172,10 @@ function TransactionRow({ tx }: { tx: Transaction }) {
       </td>
       <td className="whitespace-nowrap px-3 py-2.5">
         {tx.source && (
-          <span className="inline-block rounded-sm border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+          <span
+            className="inline-block rounded-sm border border-border py-0.5 pl-1.5 pr-2 font-mono text-[10px] text-muted-foreground"
+            style={{ borderLeftColor: getSourceColor(tx.source), borderLeftWidth: '2px' }}
+          >
             {tx.source}
           </span>
         )}
