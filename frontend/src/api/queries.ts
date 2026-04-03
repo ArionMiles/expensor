@@ -6,6 +6,7 @@ export const queryKeys = {
   health: ['health'] as const,
   status: ['status'] as const,
   chartData: ['stats', 'charts'] as const,
+  heatmap: ['stats', 'heatmap'] as const,
   readers: ['plugins', 'readers'] as const,
   readerCredentialsStatus: (name: string) => ['readers', name, 'credentials', 'status'] as const,
   readerAuthStatus: (name: string) => ['readers', name, 'auth', 'status'] as const,
@@ -37,6 +38,15 @@ export function useChartData(enabled = true) {
     queryFn: () => api.stats.charts().then((r) => r.data),
     staleTime: 300_000,
     refetchInterval: 300_000,
+    enabled,
+  })
+}
+
+export function useHeatmapData(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.heatmap,
+    queryFn: () => api.stats.heatmap().then((r) => r.data),
+    staleTime: 5 * 60 * 1000, // 5 minutes
     enabled,
   })
 }
