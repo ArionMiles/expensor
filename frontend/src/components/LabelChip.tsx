@@ -42,10 +42,10 @@ export function LabelChip({ label, onRemove, className }: LabelChipProps) {
             fontSize: '13px',
           }}
           onMouseOver={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.opacity = '1'
+            ;(e.currentTarget as HTMLButtonElement).style.opacity = '1'
           }}
           onMouseOut={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.opacity = '0.6'
+            ;(e.currentTarget as HTMLButtonElement).style.opacity = '0.6'
           }}
         >
           ×

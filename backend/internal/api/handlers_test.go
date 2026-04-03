@@ -43,6 +43,8 @@ type mockStore struct {
 	searchErr    error
 	stats        *store.Stats
 	statsErr     error
+	appConfig    map[string]string
+	setConfigErr error
 }
 
 func (m *mockStore) ListTransactions(_ context.Context, _ store.ListFilter) ([]store.Transaction, int, error) {
@@ -91,6 +93,26 @@ func (m *mockStore) GetChartData(_ context.Context) (*store.ChartData, error) {
 		ByBucket:     map[string]float64{},
 		ByLabel:      map[string]float64{},
 	}, nil
+}
+
+func (m *mockStore) GetAppConfig(_ context.Context, key string) (string, error) {
+	if m.appConfig != nil {
+		if v, ok := m.appConfig[key]; ok {
+			return v, nil
+		}
+	}
+	return "", errors.New("not found")
+}
+
+func (m *mockStore) SetAppConfig(_ context.Context, key, value string) error {
+	if m.setConfigErr != nil {
+		return m.setConfigErr
+	}
+	if m.appConfig == nil {
+		m.appConfig = make(map[string]string)
+	}
+	m.appConfig[key] = value
+	return nil
 }
 
 // newTestHandlers returns a Handlers wired with a real (minimal) plugin registry,
@@ -693,5 +715,86 @@ func TestHandleAuthCallback_RejectsExpiredState(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for expired state, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+// --- app config / base currency ---
+
+func TestHandleGetBaseCurrency_DefaultsToConfig(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/base-currency", nil)
+	rr := httptest.NewRecorder()
+	h.HandleGetBaseCurrency(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var resp map[string]string
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp["base_currency"] != "INR" {
+		t.Errorf("expected INR (from config), got %q", resp["base_currency"])
+	}
+}
+
+func TestHandleGetBaseCurrency_FromDB(t *testing.T) {
+	ms := &mockStore{appConfig: map[string]string{"base_currency": "USD"}}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/base-currency", nil)
+	rr := httptest.NewRecorder()
+	h.HandleGetBaseCurrency(rr, req)
+
+	var resp map[string]string
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp["base_currency"] != "USD" {
+		t.Errorf("expected USD from DB, got %q", resp["base_currency"])
+	}
+}
+
+func TestHandleSetBaseCurrency_Success(t *testing.T) {
+	ms := &mockStore{}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+
+	body := strings.NewReader(`{"base_currency":"usd"}`)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/base-currency", body)
+	rr := httptest.NewRecorder()
+	h.HandleSetBaseCurrency(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp map[string]string
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp["base_currency"] != "USD" {
+		t.Errorf("expected normalised USD, got %q", resp["base_currency"])
+	}
+	if ms.appConfig["base_currency"] != "USD" {
+		t.Errorf("store not updated, got %q", ms.appConfig["base_currency"])
+	}
+}
+
+func TestHandleSetBaseCurrency_InvalidCode(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+
+	for _, tc := range []string{`{"base_currency":"US"}`, `{"base_currency":"USDA"}`, `{"base_currency":"12A"}`} {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/base-currency", strings.NewReader(tc))
+		rr := httptest.NewRecorder()
+		h.HandleSetBaseCurrency(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("input %s: expected 400, got %d", tc, rr.Code)
+		}
+	}
+}
+
+func TestHandleSetBaseCurrency_NoStore(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/base-currency", strings.NewReader(`{"base_currency":"USD"}`))
+	rr := httptest.NewRecorder()
+	h.HandleSetBaseCurrency(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", rr.Code)
 	}
 }

@@ -88,6 +88,10 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	// Chart data
 	mux.HandleFunc("GET /api/stats/charts", h.HandleGetChartData)
 
+	// App configuration
+	mux.HandleFunc("GET /api/config/base-currency", h.HandleGetBaseCurrency)
+	mux.HandleFunc("PUT /api/config/base-currency", h.HandleSetBaseCurrency)
+
 	// Transactions
 	// /search must be registered before /{id} to avoid the wildcard swallowing it.
 	mux.HandleFunc("GET /api/transactions/search", h.HandleSearchTransactions)

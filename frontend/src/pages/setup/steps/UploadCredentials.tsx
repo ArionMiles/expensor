@@ -44,11 +44,10 @@ export function UploadCredentials({ readerName, onNext, onBack }: UploadCredenti
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-foreground mb-1">Upload credentials</h2>
+        <h2 className="mb-1 text-base font-semibold text-foreground">Upload credentials</h2>
         <p className="text-sm text-muted-foreground">
-          Upload your{' '}
-          <code className="font-mono text-primary text-xs">client_secret.json</code> from
-          the Google Cloud Console.
+          Upload your <code className="font-mono text-xs text-primary">client_secret.json</code>{' '}
+          from the Google Cloud Console.
         </p>
       </div>
 
@@ -60,7 +59,7 @@ export function UploadCredentials({ readerName, onNext, onBack }: UploadCredenti
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
         className={cn(
-          'border-2 border-dashed rounded-lg p-8 text-center transition-colors',
+          'rounded-lg border-2 border-dashed p-8 text-center transition-colors',
           dragOver
             ? 'border-primary bg-primary/10'
             : 'border-border bg-secondary/30 hover:bg-secondary/50',
@@ -68,16 +67,16 @@ export function UploadCredentials({ readerName, onNext, onBack }: UploadCredenti
       >
         {file ? (
           <div className="space-y-2">
-            <div className="flex items-center justify-center gap-1.5 min-w-0">
-              <span className="text-success flex-shrink-0 text-sm">✓</span>
-              <span className="text-sm text-success font-mono truncate" title={file.name}>
+            <div className="flex min-w-0 items-center justify-center gap-1.5">
+              <span className="flex-shrink-0 text-sm text-success">✓</span>
+              <span className="truncate font-mono text-sm text-success" title={file.name}>
                 {file.name}
               </span>
             </div>
             <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</p>
             <button
               onClick={() => setFile(null)}
-              className="text-xs text-muted-foreground hover:text-foreground underline"
+              className="text-xs text-muted-foreground underline hover:text-foreground"
             >
               Remove
             </button>
@@ -87,7 +86,7 @@ export function UploadCredentials({ readerName, onNext, onBack }: UploadCredenti
             <p className="text-sm text-muted-foreground">Drag & drop your JSON file here</p>
             <p className="text-xs text-muted-foreground">or</p>
             <label className="inline-block cursor-pointer">
-              <span className="px-3 py-1.5 text-xs rounded-md border border-border bg-card text-foreground hover:bg-accent transition-colors">
+              <span className="rounded-md border border-border bg-card px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-accent">
                 Browse files
               </span>
               <input
@@ -108,14 +107,12 @@ export function UploadCredentials({ readerName, onNext, onBack }: UploadCredenti
         </p>
       )}
 
-      {isSuccess && (
-        <p className="text-xs text-success">✓ Credentials uploaded successfully</p>
-      )}
+      {isSuccess && <p className="text-xs text-success">✓ Credentials uploaded successfully</p>}
 
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
-          className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           ← Back
         </button>
@@ -123,10 +120,10 @@ export function UploadCredentials({ readerName, onNext, onBack }: UploadCredenti
           onClick={handleUpload}
           disabled={!file || isPending}
           className={cn(
-            'px-4 py-2 text-sm rounded-md transition-colors',
+            'rounded-md px-4 py-2 text-sm transition-colors',
             file && !isPending
               ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-              : 'bg-secondary text-muted-foreground cursor-not-allowed opacity-50',
+              : 'cursor-not-allowed bg-secondary text-muted-foreground opacity-50',
           )}
         >
           {isPending ? 'Uploading...' : 'Upload & continue →'}

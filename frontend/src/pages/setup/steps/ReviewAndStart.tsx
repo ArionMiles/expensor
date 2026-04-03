@@ -48,13 +48,13 @@ export function ReviewAndStart({ reader, onBack }: ReviewAndStartProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-foreground mb-1">Review & start</h2>
+        <h2 className="mb-1 text-base font-semibold text-foreground">Review & start</h2>
         <p className="text-sm text-muted-foreground">
           Confirm your configuration and start the daemon.
         </p>
       </div>
 
-      <div className="rounded-lg border border-border overflow-hidden">
+      <div className="overflow-hidden rounded-lg border border-border">
         {[
           ['Reader', reader.name],
           ['Auth type', reader.auth_type],
@@ -73,22 +73,22 @@ export function ReviewAndStart({ reader, onBack }: ReviewAndStartProps) {
               i > 0 && 'border-t border-border',
             )}
           >
-            <span className="text-xs text-muted-foreground uppercase tracking-wider">{label}</span>
-            <span className="text-sm text-foreground font-mono">{value}</span>
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">{label}</span>
+            <span className="font-mono text-sm text-foreground">{value}</span>
           </div>
         ))}
       </div>
 
       {startState === 'polling' && (
-        <div className="flex items-center gap-2 p-3 rounded-lg border border-border bg-secondary/30">
-          <span className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse" aria-hidden="true" />
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/30 p-3">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" aria-hidden="true" />
           <span className="text-xs text-warning">Starting daemon, polling status...</span>
         </div>
       )}
 
       {startState === 'done' && (
-        <div className="flex items-center gap-2 p-3 rounded-lg border border-success/30 bg-success/10">
-          <span className="w-1.5 h-1.5 rounded-full bg-success" aria-hidden="true" />
+        <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 p-3">
+          <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
           <span className="text-xs text-success">Daemon running — redirecting to dashboard...</span>
         </div>
       )}
@@ -103,7 +103,7 @@ export function ReviewAndStart({ reader, onBack }: ReviewAndStartProps) {
         <button
           onClick={onBack}
           disabled={startState === 'polling' || startState === 'done'}
-          className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
         >
           ← Back
         </button>
@@ -111,10 +111,10 @@ export function ReviewAndStart({ reader, onBack }: ReviewAndStartProps) {
           onClick={handleStart}
           disabled={startState === 'polling' || startState === 'done' || startState === 'starting'}
           className={cn(
-            'px-5 py-2 text-sm rounded-md transition-colors',
+            'rounded-md px-5 py-2 text-sm transition-colors',
             startState === 'idle' || startState === 'error'
               ? 'bg-success text-success-foreground hover:bg-success/90'
-              : 'bg-secondary text-muted-foreground cursor-not-allowed opacity-50',
+              : 'cursor-not-allowed bg-secondary text-muted-foreground opacity-50',
           )}
         >
           {startState === 'idle' || startState === 'error' ? 'Start daemon' : 'Starting...'}

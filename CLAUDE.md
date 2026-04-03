@@ -31,17 +31,36 @@ tests/            Integration test helpers, local docker-compose
 Always prefer `task` over bare `go`/`npm` commands — task targets handle tooling, env loading, and working directory.
 
 ```bash
-task dev           # Start postgres + backend + frontend (full stack, loads tests/.env)
-task run           # Backend only
-task run:frontend  # Frontend Vite dev server only
-task fmt           # Format (gci import ordering + gofumpt)
-task lint          # Lint with local config (.golangci.toml)
-task lint:prod     # Strict CI lint (.golangci-prod.toml) — must be clean before commit
-task test          # All tests (integration tests require Docker; -short skips them)
-task build:binary  # Optimized binary → bin/expensor
-task ci            # lint:prod + test
-task db:start      # Start local dev postgres container
-task db:stop       # Stop local dev postgres container
+task dev              # Start postgres + backend + frontend (full stack, loads tests/.env)
+task run              # Backend only
+task run:frontend     # Frontend Vite dev server only
+
+# Formatting (aggregate runs both stacks)
+task fmt              # Format all (Go: gci + gofumpt; TS: prettier)
+task fmt:be           # Format Go only
+task fmt:fe           # Format frontend only (prettier)
+
+# Linting (aggregate runs both stacks)
+task lint             # Lint all (Go local config + TypeScript)
+task lint:be          # Lint Go with local config (.golangci.toml)
+task lint:be:prod     # Strict CI lint (.golangci-prod.toml) — must be clean before commit
+task lint:be:new      # Lint only new/changed Go files (compared to main)
+task lint:fe          # TypeScript type-check (tsc --noEmit)
+
+# Testing
+task test             # Run all tests
+task test:be          # Go unit tests (integration tests require Docker; -short skips them)
+task test:be:cover    # Go tests with HTML coverage report
+
+# Security audit (aggregate runs both stacks)
+task audit            # Audit all (Go: govulncheck; npm: npm audit)
+task audit:be         # govulncheck on Go source
+task audit:fe         # npm audit on production dependencies
+
+task build:binary     # Optimized Go binary → bin/expensor
+task ci               # Full CI gate: lint:be:prod + test:be + lint:fe + audit:fe
+task db:start         # Start local dev postgres container
+task db:stop          # Stop local dev postgres container
 ```
 
 ## Architecture Patterns

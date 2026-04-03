@@ -132,7 +132,11 @@ func (h *Handlers) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	resp := statusResponse{Daemon: ds}
 
 	if h.store != nil {
-		if stats, err := h.store.GetStats(r.Context(), h.baseCurrency); err == nil {
+		currency := h.baseCurrency
+		if dbCurrency, err := h.store.GetAppConfig(r.Context(), "base_currency"); err == nil && dbCurrency != "" {
+			currency = dbCurrency
+		}
+		if stats, err := h.store.GetStats(r.Context(), currency); err == nil {
 			resp.Stats = stats
 		}
 	}
@@ -770,6 +774,52 @@ func (h *Handlers) HandleSearchTransactions(w http.ResponseWriter, r *http.Reque
 		"page_size":    f.PageSize,
 		"query":        q,
 	})
+}
+
+// HandleGetBaseCurrency handles GET /api/config/base-currency.
+func (h *Handlers) HandleGetBaseCurrency(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	currency := h.baseCurrency
+	if dbVal, err := h.store.GetAppConfig(r.Context(), "base_currency"); err == nil && dbVal != "" {
+		currency = dbVal
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"base_currency": currency})
+}
+
+// HandleSetBaseCurrency handles PUT /api/config/base-currency.
+// Body: {"base_currency": "USD"}
+func (h *Handlers) HandleSetBaseCurrency(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	var body struct {
+		BaseCurrency string `json:"base_currency"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
+		return
+	}
+	currency := strings.ToUpper(strings.TrimSpace(body.BaseCurrency))
+	if len(currency) != 3 {
+		writeError(w, http.StatusBadRequest, "base_currency must be a 3-letter ISO 4217 code (e.g. INR, USD)")
+		return
+	}
+	for _, c := range currency {
+		if c < 'A' || c > 'Z' {
+			writeError(w, http.StatusBadRequest, "base_currency must be a 3-letter ISO 4217 code (e.g. INR, USD)")
+			return
+		}
+	}
+	if err := h.store.SetAppConfig(r.Context(), "base_currency", currency); err != nil {
+		h.logger.Error("set base currency", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to update base currency")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"base_currency": currency})
 }
 
 // --- helpers ---

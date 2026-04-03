@@ -15,7 +15,7 @@ export function Pagination({ page, pageSize, total, onPage }: PaginationProps) {
   if (totalPages <= 1) return null
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+    <div className="flex items-center justify-between border-t border-border px-4 py-3">
       <span className="text-xs text-muted-foreground">
         {start}–{end} of {total.toLocaleString('en-IN')}
       </span>
@@ -24,9 +24,9 @@ export function Pagination({ page, pageSize, total, onPage }: PaginationProps) {
           onClick={() => onPage(page - 1)}
           disabled={page <= 1}
           className={cn(
-            'px-3 py-1.5 text-xs rounded-md border border-border bg-card',
-            'text-foreground hover:bg-accent hover:text-accent-foreground transition-colors',
-            'disabled:opacity-40 disabled:cursor-not-allowed',
+            'rounded-md border border-border bg-card px-3 py-1.5 text-xs',
+            'text-foreground transition-colors hover:bg-accent hover:text-accent-foreground',
+            'disabled:cursor-not-allowed disabled:opacity-40',
           )}
           aria-label="Previous page"
         >
@@ -39,9 +39,9 @@ export function Pagination({ page, pageSize, total, onPage }: PaginationProps) {
           onClick={() => onPage(page + 1)}
           disabled={page >= totalPages}
           className={cn(
-            'px-3 py-1.5 text-xs rounded-md border border-border bg-card',
-            'text-foreground hover:bg-accent hover:text-accent-foreground transition-colors',
-            'disabled:opacity-40 disabled:cursor-not-allowed',
+            'rounded-md border border-border bg-card px-3 py-1.5 text-xs',
+            'text-foreground transition-colors hover:bg-accent hover:text-accent-foreground',
+            'disabled:cursor-not-allowed disabled:opacity-40',
           )}
           aria-label="Next page"
         >

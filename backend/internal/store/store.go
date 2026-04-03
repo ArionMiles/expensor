@@ -115,8 +115,13 @@ func New(cfg config.PostgresConfig, logger *slog.Logger) (*Store, error) {
 		return nil, fmt.Errorf("pinging store database: %w", err)
 	}
 
+	s := &Store{pool: pool, logger: logger}
+	if err := s.initAppConfig(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("initializing app_config table: %w", err)
+	}
 	logger.Info("store connected to PostgreSQL", "host", cfg.Host, "database", cfg.Database)
-	return &Store{pool: pool, logger: logger}, nil
+	return s, nil
 }
 
 // Close releases the store's connection pool.
@@ -532,6 +537,44 @@ func (s *Store) queryStringFloat(ctx context.Context, q string, dest map[string]
 		dest[k] = v
 	}
 	return rows.Err()
+}
+
+// initAppConfig creates the app_config table and seeds the default base_currency row.
+// It is called once from New and is idempotent.
+func (s *Store) initAppConfig(ctx context.Context) error {
+	_, err := s.pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS app_config (
+		    key   TEXT PRIMARY KEY,
+		    value TEXT NOT NULL
+		);
+		INSERT INTO app_config (key, value) VALUES ('base_currency', 'INR')
+		ON CONFLICT (key) DO NOTHING;
+	`)
+	return err
+}
+
+// GetAppConfig retrieves a configuration value by key.
+// Returns an error if the key does not exist.
+func (s *Store) GetAppConfig(ctx context.Context, key string) (string, error) {
+	var value string
+	err := s.pool.QueryRow(ctx, `SELECT value FROM app_config WHERE key = $1`, key).Scan(&value)
+	if err != nil {
+		return "", fmt.Errorf("getting app config %q: %w", key, err)
+	}
+	return value, nil
+}
+
+// SetAppConfig upserts a configuration value.
+func (s *Store) SetAppConfig(ctx context.Context, key, value string) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO app_config (key, value) VALUES ($1, $2)
+		 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+		key, value,
+	)
+	if err != nil {
+		return fmt.Errorf("setting app config %q: %w", key, err)
+	}
+	return nil
 }
 
 // ErrNotFound is returned when an operation targets a row that does not exist.

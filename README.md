@@ -155,22 +155,37 @@ OAuth credentials are uploaded through the web UI (`/setup`), not via env vars.
 This project uses [Task](https://taskfile.dev) for automation.
 
 ```bash
-task dev            # Start postgres + backend + frontend (full stack)
-task run            # Backend only (loads tests/.env)
-task run:frontend   # Frontend Vite dev server only
+task dev               # Start postgres + backend + frontend (full stack)
+task run               # Backend only (loads tests/.env)
+task run:frontend      # Frontend Vite dev server only
 
-task fmt            # Format code (gci + gofumpt)
-task lint           # Lint with local config
-task lint:prod      # Lint with strict CI config
-task test           # Run tests (unit; integration tests require Docker)
-task test:cover     # Run tests with coverage report
-task build:binary   # Build optimized binary → bin/expensor
-task build:docker   # Build Docker image locally
-task vulncheck      # Run govulncheck vulnerability scanner
-task ci             # Run lint:prod + test (matches CI pipeline)
+# Formatting — aggregate targets run both stacks
+task fmt               # Format all (Go: gci + gofumpt; TS: prettier)
+task fmt:be            # Format Go only
+task fmt:fe            # Format frontend only (prettier)
 
-task db:start       # Start local dev postgres container
-task db:stop        # Stop local dev postgres container
+# Linting — aggregate targets run both stacks
+task lint              # Lint all (Go + TypeScript)
+task lint:be           # Lint Go with local config
+task lint:be:prod      # Lint Go with strict CI config
+task lint:fe           # TypeScript type-check
+
+# Testing
+task test              # Run all tests
+task test:be           # Go unit tests (integration tests require Docker)
+task test:be:cover     # Go tests with coverage report
+
+# Security audit — aggregate targets run both stacks
+task audit             # Audit all (Go + npm)
+task audit:be          # govulncheck on Go source
+task audit:fe          # npm audit on production dependencies
+
+task build:binary      # Build optimized binary → bin/expensor
+task build:docker      # Build Docker image locally
+task ci                # Full CI gate: strict lint + tests + TS check + npm audit
+
+task db:start          # Start local dev postgres container
+task db:stop           # Stop local dev postgres container
 ```
 
 Integration tests (in `backend/internal/store/` and `backend/pkg/writer/postgres/`) spin up a real Postgres container via testcontainers. Run them with:

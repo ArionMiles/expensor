@@ -18,6 +18,8 @@ type Storer interface {
 	SearchTransactions(ctx context.Context, query string, f store.ListFilter) ([]store.Transaction, int, error)
 	GetStats(ctx context.Context, baseCurrency string) (*store.Stats, error)
 	GetChartData(ctx context.Context) (*store.ChartData, error)
+	GetAppConfig(ctx context.Context, key string) (string, error)
+	SetAppConfig(ctx context.Context, key, value string) error
 }
 
 // compile-time check: *store.Store must satisfy Storer.

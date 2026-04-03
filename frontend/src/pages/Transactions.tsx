@@ -5,12 +5,10 @@ import {
   useUpdateTransactionDescription,
 } from '@/api/queries'
 import type { Transaction, TransactionFilters } from '@/api/types'
-import { DaemonStatusBar } from '@/components/DaemonStatusBar'
 import { LabelChip } from '@/components/LabelChip'
 import { Pagination } from '@/components/Pagination'
 import { cn, formatCurrency, formatDate } from '@/lib/utils'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -29,11 +27,11 @@ function AmountCell({ tx }: { tx: Transaction }) {
 
   return (
     <div className="text-right">
-      <div className="text-sm font-mono text-primary tabular-nums">
+      <div className="font-mono text-sm tabular-nums text-primary">
         {formatCurrency(tx.amount, tx.currency)}
       </div>
       {hasOriginal && (
-        <div className="text-[10px] font-mono text-muted-foreground tabular-nums">
+        <div className="font-mono text-[10px] tabular-nums text-muted-foreground">
           {formatCurrency(tx.original_amount!, tx.original_currency!)}
           {tx.exchange_rate !== undefined && ` @ ${tx.exchange_rate.toFixed(2)}`}
         </div>
@@ -80,7 +78,7 @@ function DescriptionCell({ tx }: { tx: Transaction }) {
         onChange={(e) => setValue(e.target.value)}
         onBlur={commit}
         onKeyDown={handleKeyDown}
-        className="w-full px-2 py-1 text-xs rounded-sm bg-accent border border-primary text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        className="w-full rounded-sm border border-primary bg-accent px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         aria-label="Edit description"
       />
     )
@@ -89,7 +87,7 @@ function DescriptionCell({ tx }: { tx: Transaction }) {
   return (
     <button
       onClick={() => setEditing(true)}
-      className="w-full text-left text-xs text-muted-foreground hover:text-foreground truncate transition-colors"
+      className="w-full truncate text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
       title={value || 'click to add description'}
       aria-label={`Edit description: ${value || 'empty'}`}
     >
@@ -127,7 +125,7 @@ function LabelsCell({ tx }: { tx: Transaction }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1 min-w-0">
+    <div className="flex min-w-0 flex-wrap items-center gap-1">
       {tx.labels.map((label) => (
         <LabelChip key={label} label={label} onRemove={() => removeLabel({ id: tx.id, label })} />
       ))}
@@ -140,13 +138,13 @@ function LabelsCell({ tx }: { tx: Transaction }) {
           onBlur={commitAdd}
           onKeyDown={handleKeyDown}
           placeholder="label..."
-          className="px-1.5 py-0.5 text-xs rounded-sm bg-accent border border-primary text-foreground focus:outline-none w-20"
+          className="w-20 rounded-sm border border-primary bg-accent px-1.5 py-0.5 text-xs text-foreground focus:outline-none"
           aria-label="New label"
         />
       ) : (
         <button
           onClick={() => setAdding(true)}
-          className="text-[10px] text-muted-foreground hover:text-primary border border-border hover:border-primary rounded-sm px-1.5 py-0.5 transition-colors"
+          className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
           aria-label="Add label"
         >
           +
@@ -158,26 +156,24 @@ function LabelsCell({ tx }: { tx: Transaction }) {
 
 function TransactionRow({ tx }: { tx: Transaction }) {
   return (
-    <tr className="border-b border-border hover:bg-accent/50 transition-colors">
-      <td className="px-3 py-2.5 whitespace-nowrap">
-        <span className="text-xs font-mono text-muted-foreground">{formatDate(tx.timestamp)}</span>
+    <tr className="border-b border-border transition-colors hover:bg-accent/50">
+      <td className="whitespace-nowrap px-3 py-2.5">
+        <span className="font-mono text-xs text-muted-foreground">{formatDate(tx.timestamp)}</span>
       </td>
-      <td className="px-3 py-2.5 max-w-[200px]">
-        <span className="text-sm text-foreground truncate block">{tx.merchant_info}</span>
+      <td className="max-w-[200px] px-3 py-2.5">
+        <span className="block truncate text-sm text-foreground">{tx.merchant_info}</span>
       </td>
       <td className="px-3 py-2.5">
         <AmountCell tx={tx} />
       </td>
       <td className="px-3 py-2.5">
-        <span className="text-xs text-foreground block">{tx.category}</span>
-        {tx.bucket && (
-          <span className="text-[10px] text-muted-foreground">{tx.bucket}</span>
-        )}
+        <span className="block text-xs text-foreground">{tx.category}</span>
+        {tx.bucket && <span className="text-[10px] text-muted-foreground">{tx.bucket}</span>}
       </td>
-      <td className="px-3 py-2.5 min-w-[120px] max-w-[200px]">
+      <td className="min-w-[120px] max-w-[200px] px-3 py-2.5">
         <LabelsCell tx={tx} />
       </td>
-      <td className="px-3 py-2.5 min-w-[140px] max-w-[250px]">
+      <td className="min-w-[140px] max-w-[250px] px-3 py-2.5">
         <DescriptionCell tx={tx} />
       </td>
     </tr>
@@ -215,201 +211,174 @@ export function Transactions() {
 
   const hasActiveFilters = Boolean(
     searchInput ||
-      filters.category ||
-      filters.currency ||
-      filters.label ||
-      filters.date_from ||
-      filters.date_to,
+    filters.category ||
+    filters.currency ||
+    filters.label ||
+    filters.date_from ||
+    filters.date_to,
   )
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="border-b border-border px-6 py-3 flex items-center justify-between bg-card">
-        <Link
-          to="/"
-          className="text-sm font-semibold text-primary tracking-wide hover:text-primary/80 transition-colors"
-        >
-          Expensor
-        </Link>
-        <nav className="flex items-center gap-4">
-          <Link to="/transactions" className="text-xs text-foreground font-medium">
-            Transactions
-          </Link>
-          <Link
-            to="/setup"
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Setup
-          </Link>
-        </nav>
-      </header>
-
-      <DaemonStatusBar />
-
-      <main className="flex-1 flex flex-col px-6 py-4 max-w-full">
-        {/* Toolbar */}
-        <div className="mb-4 space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1 max-w-md">
-              <input
-                type="text"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search transactions..."
-                className="w-full pl-3 pr-8 py-2 text-sm rounded-md bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring focus:border-primary"
-                aria-label="Search transactions"
-              />
-              {searchInput && (
-                <button
-                  onClick={() => setSearchInput('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-base leading-none"
-                  aria-label="Clear search"
-                >
-                  ×
-                </button>
-              )}
-            </div>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={cn(
-                'px-3 py-2 text-xs rounded-md border transition-colors',
-                showFilters || (hasActiveFilters && !searchInput)
-                  ? 'border-primary text-primary bg-primary/10'
-                  : 'border-border text-muted-foreground hover:text-foreground hover:border-border',
-              )}
-              aria-label="Toggle filters"
-              aria-expanded={showFilters}
-            >
-              Filters{hasActiveFilters ? ' ●' : ''}
-            </button>
-            {hasActiveFilters && (
+    <div className="flex min-h-0 max-w-full flex-1 flex-col px-6 py-4">
+      {/* Toolbar */}
+      <div className="mb-4 space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="relative max-w-md flex-1">
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search transactions..."
+              className="w-full rounded-md border border-border bg-secondary py-2 pl-3 pr-8 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
+              aria-label="Search transactions"
+            />
+            {searchInput && (
               <button
-                onClick={clearFilters}
-                className="text-xs text-muted-foreground hover:text-destructive transition-colors"
-                aria-label="Clear all filters"
+                onClick={() => setSearchInput('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-base leading-none text-muted-foreground hover:text-foreground"
+                aria-label="Clear search"
               >
-                Clear all
+                ×
               </button>
             )}
           </div>
-
-          {showFilters && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 p-3 rounded-lg border border-border bg-card">
-              <input
-                type="date"
-                value={filters.date_from ?? ''}
-                onChange={(e) => updateFilter('date_from', e.target.value)}
-                className="px-2 py-1.5 text-xs rounded-md bg-secondary border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                aria-label="From date"
-                title="From date"
-              />
-              <input
-                type="date"
-                value={filters.date_to ?? ''}
-                onChange={(e) => updateFilter('date_to', e.target.value)}
-                className="px-2 py-1.5 text-xs rounded-md bg-secondary border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                aria-label="To date"
-                title="To date"
-              />
-              <input
-                type="text"
-                value={filters.category ?? ''}
-                onChange={(e) => updateFilter('category', e.target.value)}
-                placeholder="Category"
-                className="px-2 py-1.5 text-xs rounded-md bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                aria-label="Filter by category"
-              />
-              <input
-                type="text"
-                value={filters.currency ?? ''}
-                onChange={(e) => updateFilter('currency', e.target.value)}
-                placeholder="Currency"
-                className="px-2 py-1.5 text-xs rounded-md bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                aria-label="Filter by currency"
-              />
-              <input
-                type="text"
-                value={filters.label ?? ''}
-                onChange={(e) => updateFilter('label', e.target.value)}
-                placeholder="Label"
-                className="px-2 py-1.5 text-xs rounded-md bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                aria-label="Filter by label"
-              />
-            </div>
-          )}
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">
-              {isLoading
-                ? 'Loading...'
-                : `${total.toLocaleString('en-IN')} ${total === 1 ? 'transaction' : 'transactions'}`}
-            </span>
-            {isFetching && !isLoading && (
-              <span className="text-xs text-muted-foreground">· Refreshing...</span>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={cn(
+              'rounded-md border px-3 py-2 text-xs transition-colors',
+              showFilters || (hasActiveFilters && !searchInput)
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-border text-muted-foreground hover:border-border hover:text-foreground',
             )}
-          </div>
+            aria-label="Toggle filters"
+            aria-expanded={showFilters}
+          >
+            Filters{hasActiveFilters ? ' ●' : ''}
+          </button>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="text-xs text-muted-foreground transition-colors hover:text-destructive"
+              aria-label="Clear all filters"
+            >
+              Clear all
+            </button>
+          )}
         </div>
 
-        {error && (
-          <div className="p-4 rounded-lg border border-destructive text-xs text-destructive mb-4">
-            {error instanceof Error ? error.message : 'Failed to load transactions'}
+        {showFilters && (
+          <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-card p-3 sm:grid-cols-3 lg:grid-cols-5">
+            <input
+              type="date"
+              value={filters.date_from ?? ''}
+              onChange={(e) => updateFilter('date_from', e.target.value)}
+              className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              aria-label="From date"
+              title="From date"
+            />
+            <input
+              type="date"
+              value={filters.date_to ?? ''}
+              onChange={(e) => updateFilter('date_to', e.target.value)}
+              className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              aria-label="To date"
+              title="To date"
+            />
+            <input
+              type="text"
+              value={filters.category ?? ''}
+              onChange={(e) => updateFilter('category', e.target.value)}
+              placeholder="Category"
+              className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              aria-label="Filter by category"
+            />
+            <input
+              type="text"
+              value={filters.currency ?? ''}
+              onChange={(e) => updateFilter('currency', e.target.value)}
+              placeholder="Currency"
+              className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              aria-label="Filter by currency"
+            />
+            <input
+              type="text"
+              value={filters.label ?? ''}
+              onChange={(e) => updateFilter('label', e.target.value)}
+              placeholder="Label"
+              className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              aria-label="Filter by label"
+            />
           </div>
         )}
 
-        <div className="flex-1 rounded-lg border border-border overflow-x-auto bg-card shadow-sm">
-          <table className="w-full" style={{ borderCollapse: 'collapse' }}>
-            <thead>
-              <tr className="border-b border-border bg-secondary/50">
-                <th className="px-3 py-2.5 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
-                  Date
-                </th>
-                <th className="px-3 py-2.5 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                  Merchant
-                </th>
-                <th className="px-3 py-2.5 text-right text-[10px] font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
-                  Amount
-                </th>
-                <th className="px-3 py-2.5 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                  Category / Bucket
-                </th>
-                <th className="px-3 py-2.5 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                  Labels
-                </th>
-                <th className="px-3 py-2.5 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                  Description
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading
-                ? Array.from({ length: 10 }).map((_, i) => (
-                    <tr key={i} className="border-b border-border animate-pulse">
-                      {Array.from({ length: 6 }).map((_, j) => (
-                        <td key={j} className="px-3 py-3">
-                          <div className="h-3 bg-secondary rounded-sm" />
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                : transactions.map((tx) => <TransactionRow key={tx.id} tx={tx} />)}
-              {!isLoading && transactions.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-3 py-12 text-center text-xs text-muted-foreground"
-                  >
-                    {hasActiveFilters
-                      ? 'No transactions match the current filters'
-                      : 'No transactions found'}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-
-          <Pagination page={page} pageSize={20} total={total} onPage={setPage} />
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            {isLoading
+              ? 'Loading...'
+              : `${total.toLocaleString('en-IN')} ${total === 1 ? 'transaction' : 'transactions'}`}
+          </span>
+          {isFetching && !isLoading && (
+            <span className="text-xs text-muted-foreground">· Refreshing...</span>
+          )}
         </div>
-      </main>
+      </div>
+
+      {error && (
+        <div className="mb-4 rounded-lg border border-destructive p-4 text-xs text-destructive">
+          {error instanceof Error ? error.message : 'Failed to load transactions'}
+        </div>
+      )}
+
+      <div className="flex-1 overflow-x-auto rounded-lg border border-border bg-card shadow-sm">
+        <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+          <thead>
+            <tr className="border-b border-border bg-secondary/50">
+              <th className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Date
+              </th>
+              <th className="px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Merchant
+              </th>
+              <th className="whitespace-nowrap px-3 py-2.5 text-right text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Amount
+              </th>
+              <th className="px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Category / Bucket
+              </th>
+              <th className="px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Labels
+              </th>
+              <th className="px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Description
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading
+              ? Array.from({ length: 10 }).map((_, i) => (
+                  <tr key={i} className="animate-pulse border-b border-border">
+                    {Array.from({ length: 6 }).map((_, j) => (
+                      <td key={j} className="px-3 py-3">
+                        <div className="h-3 rounded-sm bg-secondary" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              : transactions.map((tx) => <TransactionRow key={tx.id} tx={tx} />)}
+            {!isLoading && transactions.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-3 py-12 text-center text-xs text-muted-foreground">
+                  {hasActiveFilters
+                    ? 'No transactions match the current filters'
+                    : 'No transactions found'}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+
+        <Pagination page={page} pageSize={20} total={total} onPage={setPage} />
+      </div>
     </div>
   )
 }

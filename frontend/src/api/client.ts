@@ -53,8 +53,7 @@ export const api = {
   },
 
   daemon: {
-    start: (reader: string) =>
-      apiClient.post<{ status: string }>('/daemon/start', { reader }),
+    start: (reader: string) => apiClient.post<{ status: string }>('/daemon/start', { reader }),
   },
 
   plugins: {
@@ -78,22 +77,26 @@ export const api = {
         apiClient.post<AuthStartResponse>(`/readers/${readerName}/auth/start`),
       status: (readerName: string) =>
         apiClient.get<AuthStatus>(`/readers/${readerName}/auth/status`),
-      revoke: (readerName: string) =>
-        apiClient.delete(`/readers/${readerName}/auth/token`),
+      revoke: (readerName: string) => apiClient.delete(`/readers/${readerName}/auth/token`),
     },
 
     config: {
-      get: (readerName: string) =>
-        apiClient.get<ReaderConfig>(`/readers/${readerName}/config`),
+      get: (readerName: string) => apiClient.get<ReaderConfig>(`/readers/${readerName}/config`),
       save: (readerName: string, config: Record<string, string>) =>
         apiClient.post(`/readers/${readerName}/config`, { config }),
     },
 
-    status: (readerName: string) =>
-      apiClient.get<ReaderStatus>(`/readers/${readerName}/status`),
+    status: (readerName: string) => apiClient.get<ReaderStatus>(`/readers/${readerName}/status`),
 
-    disconnect: (readerName: string) =>
-      apiClient.delete(`/readers/${readerName}`),
+    disconnect: (readerName: string) => apiClient.delete(`/readers/${readerName}`),
+  },
+
+  config: {
+    getBaseCurrency: () => apiClient.get<{ base_currency: string }>('/config/base-currency'),
+    setBaseCurrency: (currency: string) =>
+      apiClient.put<{ base_currency: string }>('/config/base-currency', {
+        base_currency: currency,
+      }),
   },
 
   transactions: {
