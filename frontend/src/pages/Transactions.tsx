@@ -201,17 +201,18 @@ export function Transactions() {
   const [filters, setFilters] = useState<Omit<TransactionFilters, 'page' | 'page_size'>>({})
   const [showFilters, setShowFilters] = useState(false)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [pageSize, setPageSize] = useState(20)
 
   const { data: facets } = useFacets()
 
   useEffect(() => {
     setPage(1)
-  }, [debouncedSearch, filters])
+  }, [debouncedSearch, filters, pageSize])
 
   const activeFilters: TransactionFilters = {
     ...filters,
     page,
-    page_size: 20,
+    page_size: pageSize,
     sort_by: 'timestamp',
     sort_dir: sortDir,
   }
@@ -342,15 +343,35 @@ export function Transactions() {
           </div>
         )}
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">
-            {isLoading
-              ? 'Loading...'
-              : `${total.toLocaleString('en-IN')} ${total === 1 ? 'transaction' : 'transactions'}`}
-          </span>
-          {isFetching && !isLoading && (
-            <span className="text-xs text-muted-foreground">· Refreshing...</span>
-          )}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {isLoading
+                ? 'Loading...'
+                : `${total.toLocaleString('en-IN')} ${total === 1 ? 'transaction' : 'transactions'}`}
+            </span>
+            {isFetching && !isLoading && (
+              <span className="text-xs text-muted-foreground">· Refreshing...</span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground">Per page:</span>
+            {([20, 50, 100] as const).map((n) => (
+              <button
+                key={n}
+                onClick={() => setPageSize(n)}
+                className={cn(
+                  'rounded px-2 py-0.5 text-xs transition-colors',
+                  pageSize === n
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+                aria-pressed={pageSize === n}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -418,7 +439,7 @@ export function Transactions() {
           </tbody>
         </table>
 
-        <Pagination page={page} pageSize={20} total={total} onPage={setPage} />
+        <Pagination page={page} pageSize={pageSize} total={total} onPage={setPage} />
       </div>
     </div>
   )
