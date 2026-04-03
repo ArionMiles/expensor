@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useChartData, useHeatmapData, useStatus, useTransactions } from '@/api/queries'
 import type { ChartData, TimeBucket } from '@/api/types'
-import { DayOfMonthHeatmap } from '@/components/DayOfMonthHeatmap'
+import { AnnualCalendarHeatmap } from '@/components/AnnualCalendarHeatmap'
 import { HeatmapLegend } from '@/components/HeatmapLegend'
 import { WeekdayHourHeatmap } from '@/components/WeekdayHourHeatmap'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -422,8 +422,8 @@ function SpendingPatternsSection() {
         <WeekdayHourHeatmap data={heatmap.by_weekday_hour} metric={metric} monthLabel={monthLabel} />
       </div>
       <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-        <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">By day of month</h3>
-        <DayOfMonthHeatmap data={heatmap.by_day_of_month} metric={metric} />
+        <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">By day of year</h3>
+        <AnnualCalendarHeatmap />
       </div>
       <HeatmapLegend />
     </div>
