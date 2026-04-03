@@ -21,6 +21,12 @@ tasks:
     deps: [frontend:install]
     cmd: npm run format
 
+  fmt:fe:check:
+    summary: Check frontend TypeScript/TSX files are formatted with Prettier (non-mutating, for CI).
+    dir: frontend
+    deps: [frontend:install]
+    cmd: npm run format:check
+
   fmt:
     summary: Format all source files (Go + frontend).
     cmds:

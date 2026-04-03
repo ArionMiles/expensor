@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type {
+  AnnualHeatmapData,
   AuthStartResponse,
   AuthStatus,
   Bucket,
@@ -7,6 +8,7 @@ import type {
   ChartData,
   CredentialsStatus,
   Facets,
+  HeatmapData,
   HealthResponse,
   Label,
   PluginInfo,
@@ -55,6 +57,15 @@ export const api = {
 
   stats: {
     charts: () => apiClient.get<ChartData>('/stats/charts'),
+    heatmap: (from?: string, to?: string) => {
+      const params = new URLSearchParams()
+      if (from) params.set('from', from)
+      if (to) params.set('to', to)
+      const qs = params.toString()
+      return apiClient.get<HeatmapData>(qs ? `/stats/heatmap?${qs}` : '/stats/heatmap')
+    },
+    annualHeatmap: (year: number) =>
+      apiClient.get<AnnualHeatmapData>(`/stats/heatmap/annual?year=${year}`),
   },
 
   daemon: {

@@ -1,5 +1,9 @@
-import { useChartData, useStatus, useTransactions } from '@/api/queries'
+import { useState } from 'react'
+import { useChartData, useHeatmapData, useStatus, useTransactions } from '@/api/queries'
 import type { ChartData, TimeBucket } from '@/api/types'
+import { AnnualCalendarHeatmap } from '@/components/AnnualCalendarHeatmap'
+import { HeatmapLegend } from '@/components/HeatmapLegend'
+import { WeekdayHourHeatmap } from '@/components/WeekdayHourHeatmap'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { formatCurrency, formatRelative } from '@/lib/utils'
 import { Link } from 'react-router-dom'
@@ -308,6 +312,187 @@ function StatsSection() {
   )
 }
 
+// ─── Month navigation ─────────────────────────────────────────────────────────
+
+interface MonthNav {
+  year: number
+  month: number
+}
+
+const MONTH_NAMES = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+]
+
+function monthRangeISO(nav: MonthNav): { from: string; to: string } {
+  const from = new Date(Date.UTC(nav.year, nav.month - 1, 1))
+  const to = new Date(Date.UTC(nav.year, nav.month, 0, 23, 59, 59))
+  return {
+    from: from.toISOString().split('.')[0] + 'Z',
+    to: to.toISOString().split('.')[0] + 'Z',
+  }
+}
+
+function prevMonth(n: MonthNav): MonthNav {
+  return n.month === 1 ? { year: n.year - 1, month: 12 } : { year: n.year, month: n.month - 1 }
+}
+
+function nextMonth(n: MonthNav): MonthNav {
+  return n.month === 12 ? { year: n.year + 1, month: 1 } : { year: n.year, month: n.month + 1 }
+}
+
+// ─── Metric toggle ────────────────────────────────────────────────────────────
+
+function MetricToggle({
+  value,
+  onChange,
+}: {
+  value: 'amount' | 'count'
+  onChange: (v: 'amount' | 'count') => void
+}) {
+  return (
+    <div className="flex rounded-md border border-border text-xs">
+      {(['amount', 'count'] as const).map((opt) => (
+        <button
+          key={opt}
+          onClick={() => onChange(opt)}
+          className={[
+            'px-2 py-0.5 capitalize transition-colors first:rounded-l-md last:rounded-r-md',
+            value === opt
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground',
+          ].join(' ')}
+        >
+          {opt}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ─── Spending patterns ────────────────────────────────────────────────────────
+
+function SpendingPatternsSection() {
+  const [metric, setMetric] = useState<'amount' | 'count'>('amount')
+  const now = new Date()
+  const [monthNav, setMonthNav] = useState<MonthNav | null>(null)
+  const currentYear = now.getFullYear()
+  const [year, setYear] = useState(currentYear)
+
+  const dateRange = monthNav ? monthRangeISO(monthNav) : undefined
+  const { data: heatmap, isLoading } = useHeatmapData(dateRange?.from, dateRange?.to)
+
+  const monthLabel = monthNav ? `${MONTH_NAMES[monthNav.month - 1]} ${monthNav.year}` : undefined
+
+  const isCurrentMonth =
+    monthNav !== null &&
+    monthNav.year === now.getFullYear() &&
+    monthNav.month === now.getMonth() + 1
+
+  if (isLoading) {
+    return <div className="h-40 animate-pulse rounded-lg border border-border bg-card shadow-sm" />
+  }
+
+  if (!heatmap) return null
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs uppercase tracking-wider text-muted-foreground">
+          Spending Patterns
+        </h2>
+        <MetricToggle value={metric} onChange={setMetric} />
+      </div>
+
+      <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-xs uppercase tracking-wider text-muted-foreground">
+            By weekday &amp; hour
+          </h3>
+          <div className="flex items-center gap-1.5">
+            {monthNav !== null && (
+              <button
+                onClick={() => setMonthNav(null)}
+                className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+              >
+                All time
+              </button>
+            )}
+            <button
+              onClick={() =>
+                setMonthNav((p) =>
+                  prevMonth(p ?? { year: now.getFullYear(), month: now.getMonth() + 1 }),
+                )
+              }
+              className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+              aria-label="Previous month"
+            >
+              ←
+            </button>
+            <span className="min-w-[5rem] text-center text-xs font-medium text-foreground">
+              {monthLabel ?? 'All time'}
+            </span>
+            <button
+              onClick={() =>
+                setMonthNav((p) =>
+                  nextMonth(p ?? { year: now.getFullYear(), month: now.getMonth() + 1 }),
+                )
+              }
+              disabled={isCurrentMonth}
+              className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Next month"
+            >
+              →
+            </button>
+          </div>
+        </div>
+        <WeekdayHourHeatmap
+          data={heatmap.by_weekday_hour}
+          metric={metric}
+          monthLabel={monthLabel}
+        />
+      </div>
+      <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-xs uppercase tracking-wider text-muted-foreground">By day of year</h3>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setYear((y) => y - 1)}
+              className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+              aria-label="Previous year"
+            >
+              ←
+            </button>
+            <span className="min-w-[3rem] text-center text-xs font-medium tabular-nums text-foreground">
+              {year}
+            </span>
+            <button
+              onClick={() => setYear((y) => y + 1)}
+              disabled={year >= currentYear}
+              className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Next year"
+            >
+              →
+            </button>
+          </div>
+        </div>
+        <AnnualCalendarHeatmap year={year} metric={metric} />
+      </div>
+      <HeatmapLegend />
+    </div>
+  )
+}
+
 // ─── Chart section ────────────────────────────────────────────────────────────
 
 function formatMonthLabel(period: string): string {
@@ -438,7 +623,6 @@ export function Dashboard() {
             <StatsSection />
           </ErrorBoundary>
         </div>
-
         <div className="lg:col-span-1">
           <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
@@ -452,12 +636,14 @@ export function Dashboard() {
           </div>
         </div>
       </div>
-
       {chartData && (
         <ErrorBoundary>
           <ChartsSection charts={chartData} />
         </ErrorBoundary>
       )}
+      <ErrorBoundary>
+        <SpendingPatternsSection />
+      </ErrorBoundary>
     </div>
   )
 }

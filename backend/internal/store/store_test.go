@@ -397,3 +397,41 @@ func TestGetStats(t *testing.T) {
 		t.Errorf("want BaseCurrency=INR, got %s", stats.BaseCurrency)
 	}
 }
+
+func TestGetSpendingHeatmap_EmptyDB(t *testing.T) {
+	ts := newTestStore(t) // skips automatically when -short is passed
+	defer ts.cleanup()
+
+	hd, err := ts.GetSpendingHeatmap(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hd.ByWeekdayHour == nil {
+		t.Error("ByWeekdayHour must be a non-nil slice, got nil")
+	}
+	if hd.ByDayOfMonth == nil {
+		t.Error("ByDayOfMonth must be a non-nil slice, got nil")
+	}
+	if len(hd.ByWeekdayHour) != 0 {
+		t.Errorf("expected 0 weekday/hour buckets in empty DB, got %d", len(hd.ByWeekdayHour))
+	}
+	if len(hd.ByDayOfMonth) != 0 {
+		t.Errorf("expected 0 day-of-month buckets in empty DB, got %d", len(hd.ByDayOfMonth))
+	}
+}
+
+func TestGetAnnualSpend_EmptyDB(t *testing.T) {
+	ts := newTestStore(t) // skips when -short
+	defer ts.cleanup()
+
+	buckets, err := ts.GetAnnualSpend(context.Background(), 2026)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if buckets == nil {
+		t.Error("GetAnnualSpend must return a non-nil slice, got nil")
+	}
+	if len(buckets) != 0 {
+		t.Errorf("expected 0 buckets in empty DB, got %d", len(buckets))
+	}
+}

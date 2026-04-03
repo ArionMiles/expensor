@@ -45,5 +45,8 @@ llm-output-files/
 # Local dev environment — copy from tests/.env.example
 tests/.env
 
+# Git worktrees
+.worktrees/
+
 # Claude
 .claude/settings.local.json

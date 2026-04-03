@@ -56,6 +56,35 @@ export interface ChartData {
   by_label: Record<string, number>
 }
 
+export interface WeekdayHourBucket {
+  weekday: number // 0=Sunday … 6=Saturday
+  hour: number // 0–23
+  amount: number
+  count: number
+}
+
+export interface DayOfMonthBucket {
+  day: number // 1–31
+  amount: number
+  count: number
+}
+
+export interface HeatmapData {
+  by_weekday_hour: WeekdayHourBucket[]
+  by_day_of_month: DayOfMonthBucket[]
+}
+
+export interface DailyBucket {
+  date: string // RFC3339 date string — parse with new Date(b.date)
+  amount: number
+  count: number
+}
+
+export interface AnnualHeatmapData {
+  year: number
+  buckets: DailyBucket[]
+}
+
 export interface StatusResponse {
   daemon: DaemonStatus
   stats?: Stats
