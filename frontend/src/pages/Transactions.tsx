@@ -114,7 +114,7 @@ function CategoryBucketCell({ tx }: { tx: Transaction }) {
   const { mutate: updateFields } = useUpdateTransactionFields()
 
   return (
-    <div className="space-y-0.5">
+    <div className="flex flex-col gap-0.5">
       <InlineSelect
         value={tx.category}
         options={categories.map((c) => c.name)}

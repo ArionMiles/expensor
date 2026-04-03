@@ -42,6 +42,7 @@ export function LabelCombobox({ tx }: LabelComboboxProps) {
     } else {
       addLabels({ id: tx.id, labels: [name] })
     }
+    setOpen(false)
     setInput('')
   }
 
