@@ -126,13 +126,11 @@ export function AnnualCalendarHeatmap() {
       {isLoading && <div className="h-28 animate-pulse rounded bg-secondary" />}
 
       {!isLoading && (
-        <div className="overflow-x-auto">
-          <svg
-            width={svgWidth}
-            height={svgHeight}
-            viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-            aria-label={`Annual spending heatmap for ${year}`}
-          >
+        <svg
+          style={{ width: '100%', height: 'auto' }}
+          viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+          aria-label={`Annual spending heatmap for ${year}`}
+        >
             {/* Day-of-week labels: Mon, Wed, Fri */}
             {LABELED_ROWS.map(({ row, label }) => (
               <text
@@ -198,8 +196,7 @@ export function AnnualCalendarHeatmap() {
                 )
               }),
             )}
-          </svg>
-        </div>
+        </svg>
       )}
 
       {tooltip && (

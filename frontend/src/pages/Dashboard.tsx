@@ -417,13 +417,15 @@ function SpendingPatternsSection() {
         )}
       </div>
 
-      <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-        <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">By weekday &amp; hour</h3>
-        <WeekdayHourHeatmap data={heatmap.by_weekday_hour} metric={metric} monthLabel={monthLabel} />
-      </div>
-      <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-        <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">By day of year</h3>
-        <AnnualCalendarHeatmap />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+          <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">By weekday &amp; hour</h3>
+          <WeekdayHourHeatmap data={heatmap.by_weekday_hour} metric={metric} monthLabel={monthLabel} />
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+          <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">By day of year</h3>
+          <AnnualCalendarHeatmap />
+        </div>
       </div>
       <HeatmapLegend />
     </div>
