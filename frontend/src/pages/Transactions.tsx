@@ -14,6 +14,7 @@ import { Pagination } from '@/components/Pagination'
 import { cn, formatCurrency, formatDate, getSourceColor } from '@/lib/utils'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -198,19 +199,77 @@ function TransactionRow({ tx }: { tx: Transaction }) {
 }
 
 export function Transactions() {
-  const [searchInput, setSearchInput] = useState('')
-  const debouncedSearch = useDebounce(searchInput, 300)
-  const [page, setPage] = useState(1)
-  const [filters, setFilters] = useState<Omit<TransactionFilters, 'page' | 'page_size'>>({})
-  const [showFilters, setShowFilters] = useState(false)
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-  const [pageSize, setPageSize] = useState(20)
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // Local state for the raw search input (controlled input); debounced value syncs to URL.
+  const [inputValue, setInputValue] = useState(() => searchParams.get('q') ?? '')
+  const debouncedSearch = useDebounce(inputValue, 300)
+  const isFirstRender = useRef(true)
+
+  // Derive all other state from URL params.
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
+  const rawPageSize = parseInt(searchParams.get('page_size') ?? '20', 10)
+  const pageSize = ([20, 50, 100] as const).includes(rawPageSize as 20 | 50 | 100)
+    ? (rawPageSize as 20 | 50 | 100)
+    : 20
+  const sortDir = searchParams.get('sort_dir') === 'asc' ? ('asc' as const) : ('desc' as const)
+  const filters = {
+    category: searchParams.get('category') || undefined,
+    currency: searchParams.get('currency') || undefined,
+    source: searchParams.get('source') || undefined,
+    label: searchParams.get('label') || undefined,
+    date_from: searchParams.get('date_from') || undefined,
+    date_to: searchParams.get('date_to') || undefined,
+  }
+
+  // Auto-open filter panel on load when URL contains active filters.
+  const [showFilters, setShowFilters] = useState(
+    () =>
+      Boolean(searchParams.get('category')) ||
+      Boolean(searchParams.get('currency')) ||
+      Boolean(searchParams.get('source')) ||
+      Boolean(searchParams.get('label')) ||
+      Boolean(searchParams.get('date_from')) ||
+      Boolean(searchParams.get('date_to')),
+  )
+
+  // Sync debounced search to URL (skip the initial mount to avoid a spurious write).
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (debouncedSearch) next.set('q', debouncedSearch)
+        else next.delete('q')
+        next.set('page', '1')
+        return next
+      },
+      { replace: true },
+    )
+  }, [debouncedSearch])
 
   const { data: facets } = useFacets()
 
-  useEffect(() => {
-    setPage(1)
-  }, [debouncedSearch, filters, pageSize])
+  // Helper: update one or more URL params at once (pass undefined to delete a key).
+  const updateParams = useCallback(
+    (updates: Record<string, string | undefined>) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          Object.entries(updates).forEach(([k, v]) => {
+            if (v !== undefined && v !== '') next.set(k, v)
+            else next.delete(k)
+          })
+          return next
+        },
+        { replace: true },
+      )
+    },
+    [setSearchParams],
+  )
 
   const activeFilters: TransactionFilters = {
     ...filters,
@@ -228,18 +287,27 @@ export function Transactions() {
     key: keyof Omit<TransactionFilters, 'page' | 'page_size'>,
     value: string,
   ) => {
-    setFilters((prev) => ({ ...prev, [key]: value || undefined }))
+    updateParams({ [key]: value || undefined, page: '1' })
   }
 
   const clearFilters = () => {
-    setFilters({})
-    setSearchInput('')
+    setInputValue('')
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams()
+        if (prev.get('page_size')) next.set('page_size', prev.get('page_size')!)
+        if (prev.get('sort_dir')) next.set('sort_dir', prev.get('sort_dir')!)
+        return next
+      },
+      { replace: true },
+    )
   }
 
-  const toggleSort = () => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+  const toggleSort = () =>
+    updateParams({ sort_dir: sortDir === 'desc' ? 'asc' : 'desc', page: '1' })
 
   const hasActiveFilters = Boolean(
-    searchInput ||
+    inputValue ||
     filters.category ||
     filters.currency ||
     filters.source ||
@@ -256,15 +324,15 @@ export function Transactions() {
           <div className="relative max-w-md flex-1">
             <input
               type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
               placeholder="Search transactions..."
               className="w-full rounded-md border border-border bg-secondary py-2 pl-3 pr-8 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
               aria-label="Search transactions"
             />
-            {searchInput && (
+            {inputValue && (
               <button
-                onClick={() => setSearchInput('')}
+                onClick={() => setInputValue('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-base leading-none text-muted-foreground hover:text-foreground"
                 aria-label="Clear search"
               >
@@ -276,7 +344,7 @@ export function Transactions() {
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
               'rounded-md border px-3 py-2 text-xs transition-colors',
-              showFilters || (hasActiveFilters && !searchInput)
+              showFilters || (hasActiveFilters && !inputValue)
                 ? 'border-primary bg-primary/10 text-primary'
                 : 'border-border text-muted-foreground hover:border-border hover:text-foreground',
             )}
@@ -310,11 +378,11 @@ export function Transactions() {
                   end.setHours(23, 59, 59, 999)
                   dateTo = end.toISOString()
                 }
-                setFilters((prev) => ({
-                  ...prev,
+                updateParams({
                   date_from: range.from ? range.from.toISOString() : undefined,
                   date_to: dateTo,
-                }))
+                  page: '1',
+                })
               }}
             />
             <FilterCombobox
@@ -362,7 +430,7 @@ export function Transactions() {
             {([20, 50, 100] as const).map((n) => (
               <button
                 key={n}
-                onClick={() => setPageSize(n)}
+                onClick={() => updateParams({ page_size: String(n), page: '1' })}
                 className={cn(
                   'rounded px-2 py-0.5 text-xs transition-colors',
                   pageSize === n
@@ -442,7 +510,12 @@ export function Transactions() {
           </tbody>
         </table>
 
-        <Pagination page={page} pageSize={pageSize} total={total} onPage={setPage} />
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPage={(n) => updateParams({ page: String(n) })}
+        />
       </div>
     </div>
   )
