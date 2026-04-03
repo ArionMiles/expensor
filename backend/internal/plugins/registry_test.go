@@ -35,9 +35,12 @@ type mockReaderPlugin struct {
 	createError error
 }
 
-func (m *mockReaderPlugin) Name() string             { return m.name }
-func (m *mockReaderPlugin) Description() string      { return m.description }
-func (m *mockReaderPlugin) RequiredScopes() []string { return m.scopes }
+func (m *mockReaderPlugin) Name() string                    { return m.name }
+func (m *mockReaderPlugin) Description() string             { return m.description }
+func (m *mockReaderPlugin) RequiredScopes() []string        { return m.scopes }
+func (m *mockReaderPlugin) AuthType() AuthType              { return AuthTypeOAuth }
+func (m *mockReaderPlugin) RequiresCredentialsUpload() bool { return false }
+func (m *mockReaderPlugin) ConfigSchema() []ConfigField     { return nil }
 func (m *mockReaderPlugin) NewReader( //nolint:revive // interface method; argument count dictated by ReaderPlugin
 	httpClient *http.Client, cfg *config.Config, rules []api.Rule,
 	labels api.Labels, stateManager *state.Manager, logger *slog.Logger,

@@ -90,12 +90,74 @@ tasks:
         --load \
         .
 
+  # DATABASE
+  db:start:
+    summary: Start the local development PostgreSQL container.
+    desc: >-
+      Starts the postgres:16-alpine container defined in tests/docker-compose.local.yml.
+      Idempotent — safe to run when the container is already running.
+      Pass RECREATE=1 to destroy the volume and recreate from scratch.
+    dir: tests
+    cmd: |
+      if [ "${RECREATE:-0}" = "1" ]; then
+        echo "Recreating dev postgres (RECREATE=1)..."
+        docker compose -f docker-compose.local.yml --env-file .env down -v
+      fi
+      docker compose -f docker-compose.local.yml --env-file .env up -d
+      echo "Waiting for postgres to be healthy..."
+      until docker inspect --format '{{.State.Health.Status}}' expensor-dev-postgres 2>/dev/null | grep -q "healthy"; do
+        sleep 1
+      done
+      echo "Postgres is healthy."
+
+  db:stop:
+    summary: Stop the local development PostgreSQL container.
+    desc: Stops the dev postgres container without removing the volume.
+    dir: tests
+    cmd: docker compose -f docker-compose.local.yml --env-file .env stop
+
   # RUN
   run:
-    summary: Start the backend server.
-    desc: Run the backend server for local development.
-    dir: backend
-    cmd: go run ./cmd/server
+    summary: Start the backend server with local dev environment.
+    desc: Run the backend server for local development, loading tests/.env.
+    cmd: |
+      set -a
+      [ -f tests/.env ] && . tests/.env
+      set +a
+      cd backend && go run ./cmd/server
+
+  run:frontend:
+    summary: Start the frontend dev server.
+    desc: Run the Vite dev server for local development.
+    dir: frontend
+    cmd: npm run dev
+
+  dev:
+    summary: Start postgres, backend, and frontend for local development.
+    desc: >-
+      Ensures the dev postgres container is running (idempotent), waits for it
+      to be healthy, starts the backend (loading tests/.env), waits for
+      /api/health, then starts the Vite dev server. Kills the backend when the
+      frontend exits. Pass RECREATE=1 to wipe and recreate the postgres volume.
+    cmd: |
+      set -a
+      [ -f tests/.env ] && . tests/.env
+      set +a
+
+      # Start postgres (idempotent)
+      RECREATE=${RECREATE:-0} task db:start
+
+      # Start backend in background
+      (set -a; [ -f tests/.env ] && . tests/.env; set +a; cd backend && go run ./cmd/server) &
+      BACKEND_PID=$!
+      echo "Backend started (pid $BACKEND_PID), waiting for /api/health..."
+      until curl -sf http://localhost:8080/api/health > /dev/null 2>&1; do
+        sleep 0.5
+      done
+      echo "Backend is up — starting frontend"
+
+      (cd frontend && npm run dev) || true
+      kill "$BACKEND_PID" 2>/dev/null || true
 
   # SECURITY
   vulncheck:

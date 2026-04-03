@@ -14,19 +14,22 @@ const ClientSecretFile = "data/client_secret.json"
 const DefaultStateFile = "data/state.json"
 
 // Config holds the application configuration loaded from environment variables.
+// Reader and writer plugin selection is driven by the web UI, not env vars.
 type Config struct {
-	// ReaderPlugin is the name of the reader plugin to use.
-	// Environment variable: EXPENSOR_READER
-	ReaderPlugin string `koanf:"EXPENSOR_READER"`
-
-	// WriterPlugin is the name of the writer plugin to use.
-	// Environment variable: EXPENSOR_WRITER
-	WriterPlugin string `koanf:"EXPENSOR_WRITER"`
-
 	// StateFile is the path to the state file for tracking processed messages.
 	// Environment variable: EXPENSOR_STATE_FILE
 	// Default: data/state.json
 	StateFile string `koanf:"EXPENSOR_STATE_FILE"`
+
+	// DataDir is the directory for state, token, and credential files.
+	// Environment variable: EXPENSOR_DATA_DIR
+	// Default: data
+	DataDir string `koanf:"EXPENSOR_DATA_DIR"`
+
+	// BaseCurrency is the primary currency used for aggregate stats.
+	// Environment variable: EXPENSOR_BASE_CURRENCY
+	// Default: INR
+	BaseCurrency string `koanf:"EXPENSOR_BASE_CURRENCY"`
 
 	// Reader-specific configurations (embedded to flatten the key namespace)
 	Gmail       GmailConfig       `koanf:",squash"`
@@ -42,6 +45,11 @@ type GmailConfig struct {
 	// Environment variable: GMAIL_INTERVAL
 	// Default: 60
 	Interval int `koanf:"GMAIL_INTERVAL"`
+
+	// LookbackDays is how far back in time (in days) to search for emails.
+	// Environment variable: GMAIL_LOOKBACK_DAYS
+	// Default: 180 (6 months)
+	LookbackDays int `koanf:"GMAIL_LOOKBACK_DAYS"`
 }
 
 // ThunderbirdConfig holds Thunderbird reader configuration.
@@ -106,43 +114,17 @@ type PostgresConfig struct {
 	MaxPoolSize int `koanf:"POSTGRES_MAX_POOL_SIZE"`
 }
 
-// Validate checks the configuration for required values based on selected plugins.
-func (c *Config) Validate() error {
-	// Validate reader configuration
-	switch c.ReaderPlugin {
-	case "gmail":
-		// Gmail only needs OAuth which is handled separately
-	case "thunderbird":
-		if c.Thunderbird.ProfilePath == "" {
-			return fmt.Errorf("THUNDERBIRD_PROFILE is required when using thunderbird reader")
-		}
-		if c.Thunderbird.Mailboxes == "" {
-			return fmt.Errorf("THUNDERBIRD_MAILBOXES is required when using thunderbird reader")
-		}
-	case "":
-		return fmt.Errorf("EXPENSOR_READER is required")
-	default:
-		return fmt.Errorf("unknown reader plugin: %s", c.ReaderPlugin)
+// ValidatePostgres checks that the minimum postgres connection fields are present.
+func (c *Config) ValidatePostgres() error {
+	if c.Postgres.Host == "" {
+		return fmt.Errorf("POSTGRES_HOST is required")
 	}
-
-	// Validate writer configuration
-	switch c.WriterPlugin {
-	case "postgres":
-		if c.Postgres.Host == "" {
-			return fmt.Errorf("POSTGRES_HOST is required when using postgres writer")
-		}
-		if c.Postgres.Database == "" {
-			return fmt.Errorf("POSTGRES_DB is required when using postgres writer")
-		}
-		if c.Postgres.User == "" {
-			return fmt.Errorf("POSTGRES_USER is required when using postgres writer")
-		}
-	case "":
-		return fmt.Errorf("EXPENSOR_WRITER is required")
-	default:
-		return fmt.Errorf("unknown writer plugin: %s", c.WriterPlugin)
+	if c.Postgres.Database == "" {
+		return fmt.Errorf("POSTGRES_DB is required")
 	}
-
+	if c.Postgres.User == "" {
+		return fmt.Errorf("POSTGRES_USER is required")
+	}
 	return nil
 }
 
@@ -151,10 +133,19 @@ func (c *Config) ApplyDefaults() {
 	if c.StateFile == "" {
 		c.StateFile = DefaultStateFile
 	}
+	if c.DataDir == "" {
+		c.DataDir = "data"
+	}
+	if c.BaseCurrency == "" {
+		c.BaseCurrency = "INR"
+	}
 
 	// Gmail defaults
 	if c.Gmail.Interval <= 0 {
 		c.Gmail.Interval = 60
+	}
+	if c.Gmail.LookbackDays <= 0 {
+		c.Gmail.LookbackDays = 180
 	}
 
 	// Thunderbird defaults

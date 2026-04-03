@@ -18,34 +18,33 @@ const (
 	TokenFile = "data/token.json"
 )
 
-// New creates a new HTTP client with OAuth2 credentials from a file path.
-// This version is designed for web-based OAuth flows - tokens must be managed
-// by the web application, not via CLI callback.
-func New(secretFilePath string, scope ...string) (*http.Client, error) {
+// New creates a new HTTP client with OAuth2 credentials from file paths.
+// tokenFilePath is the path to the persisted OAuth token (e.g. data/token_gmail.json).
+func New(secretFilePath, tokenFilePath string, scope ...string) (*http.Client, error) {
 	b, err := os.ReadFile(secretFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("reading client secret file: %w", err)
 	}
-
-	return NewFromJSON(b, scope...)
+	return NewFromJSON(b, tokenFilePath, scope...)
 }
 
 // NewFromJSON creates a new HTTP client with OAuth2 credentials from JSON content.
-func NewFromJSON(secretJSON []byte, scope ...string) (*http.Client, error) {
+// tokenFilePath is the path to the persisted OAuth token.
+func NewFromJSON(secretJSON []byte, tokenFilePath string, scope ...string) (*http.Client, error) {
 	config, err := google.ConfigFromJSON(secretJSON, scope...)
 	if err != nil {
 		return nil, fmt.Errorf("parsing client secret: %w", err)
 	}
 
-	tok, err := TokenFromFile(TokenFile)
+	tok, err := TokenFromFile(tokenFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("loading token: %w (use web interface to authenticate)", err)
+		return nil, fmt.Errorf("loading token from %s: %w (use web interface to authenticate)", tokenFilePath, err)
 	}
 
-	// Use a persisting token source that saves refreshed tokens to disk
+	// Use a persisting token source that saves refreshed tokens to disk.
 	tokenSource := &persistingTokenSource{
 		tokenSource: config.TokenSource(context.Background(), tok),
-		tokenFile:   TokenFile,
+		tokenFile:   tokenFilePath,
 	}
 
 	return oauth2.NewClient(context.Background(), tokenSource), nil

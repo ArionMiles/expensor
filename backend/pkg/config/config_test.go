@@ -7,98 +7,38 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 )
 
-func TestConfig_Validate(t *testing.T) {
-	validPostgres := config.PostgresConfig{
-		Host:     "localhost",
-		Database: "expensor",
-		User:     "user",
-	}
-
+func TestConfig_ValidatePostgres(t *testing.T) {
 	tests := []struct {
 		name    string
 		cfg     config.Config
 		wantErr string
 	}{
 		{
-			name: "valid gmail+postgres",
+			name: "valid postgres config",
 			cfg: config.Config{
-				ReaderPlugin: "gmail",
-				WriterPlugin: "postgres",
-				Postgres:     validPostgres,
+				Postgres: config.PostgresConfig{Host: "localhost", Database: "expensor", User: "user"},
 			},
 		},
 		{
-			name: "valid thunderbird+postgres",
-			cfg: config.Config{
-				ReaderPlugin: "thunderbird",
-				WriterPlugin: "postgres",
-				Postgres:     validPostgres,
-				Thunderbird: config.ThunderbirdConfig{
-					ProfilePath: "/home/user/.thunderbird/abc.default",
-					Mailboxes:   "INBOX",
-				},
-			},
+			name:    "missing host",
+			cfg:     config.Config{Postgres: config.PostgresConfig{Database: "db", User: "u"}},
+			wantErr: "POSTGRES_HOST is required",
 		},
 		{
-			name:    "missing reader plugin",
-			cfg:     config.Config{WriterPlugin: "postgres", Postgres: validPostgres},
-			wantErr: "EXPENSOR_READER is required",
+			name:    "missing database",
+			cfg:     config.Config{Postgres: config.PostgresConfig{Host: "h", User: "u"}},
+			wantErr: "POSTGRES_DB is required",
 		},
 		{
-			name:    "unknown reader plugin",
-			cfg:     config.Config{ReaderPlugin: "foobar", WriterPlugin: "postgres", Postgres: validPostgres},
-			wantErr: "unknown reader plugin: foobar",
-		},
-		{
-			name: "thunderbird missing profile path",
-			cfg: config.Config{
-				ReaderPlugin: "thunderbird",
-				WriterPlugin: "postgres",
-				Postgres:     validPostgres,
-				Thunderbird:  config.ThunderbirdConfig{Mailboxes: "INBOX"},
-			},
-			wantErr: "THUNDERBIRD_PROFILE is required when using thunderbird reader",
-		},
-		{
-			name: "thunderbird missing mailboxes",
-			cfg: config.Config{
-				ReaderPlugin: "thunderbird",
-				WriterPlugin: "postgres",
-				Postgres:     validPostgres,
-				Thunderbird:  config.ThunderbirdConfig{ProfilePath: "/some/path"},
-			},
-			wantErr: "THUNDERBIRD_MAILBOXES is required when using thunderbird reader",
-		},
-		{
-			name:    "missing writer plugin",
-			cfg:     config.Config{ReaderPlugin: "gmail"},
-			wantErr: "EXPENSOR_WRITER is required",
-		},
-		{
-			name:    "unknown writer plugin",
-			cfg:     config.Config{ReaderPlugin: "gmail", WriterPlugin: "sheets"},
-			wantErr: "unknown writer plugin: sheets",
-		},
-		{
-			name:    "postgres missing host",
-			cfg:     config.Config{ReaderPlugin: "gmail", WriterPlugin: "postgres", Postgres: config.PostgresConfig{Database: "db", User: "u"}},
-			wantErr: "POSTGRES_HOST is required when using postgres writer",
-		},
-		{
-			name:    "postgres missing database",
-			cfg:     config.Config{ReaderPlugin: "gmail", WriterPlugin: "postgres", Postgres: config.PostgresConfig{Host: "h", User: "u"}},
-			wantErr: "POSTGRES_DB is required when using postgres writer",
-		},
-		{
-			name:    "postgres missing user",
-			cfg:     config.Config{ReaderPlugin: "gmail", WriterPlugin: "postgres", Postgres: config.PostgresConfig{Host: "h", Database: "db"}},
-			wantErr: "POSTGRES_USER is required when using postgres writer",
+			name:    "missing user",
+			cfg:     config.Config{Postgres: config.PostgresConfig{Host: "h", Database: "db"}},
+			wantErr: "POSTGRES_USER is required",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := tc.cfg.Validate()
+			err := tc.cfg.ValidatePostgres()
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
@@ -219,32 +159,27 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 	})
 }
 
+func TestApplyDefaults_DataDirAndCurrency(t *testing.T) {
+	c := config.Config{}
+	c.ApplyDefaults()
+	if c.DataDir != "data" {
+		t.Errorf("expected DataDir=data, got %q", c.DataDir)
+	}
+	if c.BaseCurrency != "INR" {
+		t.Errorf("expected BaseCurrency=INR, got %q", c.BaseCurrency)
+	}
+}
+
 func TestThunderbirdConfig_GetMailboxes(t *testing.T) {
 	tests := []struct {
 		name      string
 		mailboxes string
 		want      []string
 	}{
-		{
-			name:      "empty string returns empty slice",
-			mailboxes: "",
-			want:      []string{},
-		},
-		{
-			name:      "single mailbox",
-			mailboxes: "INBOX",
-			want:      []string{"INBOX"},
-		},
-		{
-			name:      "multiple mailboxes",
-			mailboxes: "INBOX,Archives,Sent",
-			want:      []string{"INBOX", "Archives", "Sent"},
-		},
-		{
-			name:      "spaces around commas are trimmed",
-			mailboxes: "INBOX , Archives , Sent",
-			want:      []string{"INBOX", "Archives", "Sent"},
-		},
+		{name: "empty string returns empty slice", mailboxes: "", want: []string{}},
+		{name: "single mailbox", mailboxes: "INBOX", want: []string{"INBOX"}},
+		{name: "multiple mailboxes", mailboxes: "INBOX,Archives,Sent", want: []string{"INBOX", "Archives", "Sent"}},
+		{name: "spaces around commas are trimmed", mailboxes: "INBOX , Archives , Sent", want: []string{"INBOX", "Archives", "Sent"}},
 	}
 
 	for _, tc := range tests {

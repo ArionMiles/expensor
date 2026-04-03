@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: expensor-dev-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-expensor}
+      POSTGRES_USER: ${POSTGRES_USER:-expensor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - expensor_dev_postgres:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-expensor}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  expensor_dev_postgres:
+    driver: local

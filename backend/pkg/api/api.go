@@ -50,22 +50,24 @@ type Rule struct {
 	Name            string
 	SenderEmail     string         // Email sender to match (e.g., "alerts@icicibank.com")
 	SubjectContains string         // Subject substring to match
-	Amount          *regexp.Regexp // Regex to extract amount from email body
-	MerchantInfo    *regexp.Regexp // Regex to extract merchant info from email body
+	Amount          *regexp.Regexp // Regex to extract amount (group 1 = numeric amount, commas stripped)
+	MerchantInfo    *regexp.Regexp // Regex to extract merchant; first non-empty capture group is used
+	Currency        *regexp.Regexp // Regex to extract ISO currency code (group 1 = code, e.g. "INR", "USD")
 	Enabled         bool
 	Source          string // Transaction source identifier (e.g., "Credit Card - ICICI")
 }
 
 // BuildGmailQuery constructs a Gmail API query string from the rule's fields.
+// Note: the caller is responsible for appending date filters (e.g. after:YYYY/MM/DD).
 func (r *Rule) BuildGmailQuery() string {
-	query := "is:unread"
+	var parts []string
 	if r.SenderEmail != "" {
-		query += fmt.Sprintf(" from:%s", r.SenderEmail)
+		parts = append(parts, fmt.Sprintf("from:%s", r.SenderEmail))
 	}
 	if r.SubjectContains != "" {
-		query += fmt.Sprintf(" subject:%q", r.SubjectContains)
+		parts = append(parts, fmt.Sprintf("subject:%q", r.SubjectContains))
 	}
-	return query
+	return strings.Join(parts, " ")
 }
 
 // MatchesEmail checks if an email matches this rule based on sender and subject.

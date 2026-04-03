@@ -5,6 +5,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"io"
 	"log/slog"
 	"math"
 	"strings"
@@ -18,6 +19,16 @@ import (
 
 //go:embed 001_create_transactions.sql
 var migrationSQL string
+
+// RunMigrations executes the schema migrations against the given pool.
+// Exported so tests in other packages can set up the schema without importing
+// the full Writer (which requires a live connection on construction).
+func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
+	if _, err := pool.Exec(ctx, migrationSQL); err != nil {
+		return fmt.Errorf("running migrations: %w", err)
+	}
+	return nil
+}
 
 // Config holds the PostgreSQL writer configuration.
 type Config struct {
@@ -44,6 +55,9 @@ type Writer struct {
 	batchSize     int
 	flushInterval time.Duration
 }
+
+// compile-time check: *Writer must satisfy io.Closer.
+var _ io.Closer = (*Writer)(nil)
 
 // New creates a new PostgreSQL writer.
 func New(cfg Config, logger *slog.Logger) (*Writer, error) {
@@ -332,10 +346,11 @@ func (w *Writer) insertLabels(ctx context.Context, tx pgx.Tx, txnID string, labe
 	return nil
 }
 
-// Close closes the database connection pool.
-func (w *Writer) Close() {
+// Close releases the writer's connection pool. It implements io.Closer.
+func (w *Writer) Close() error {
 	if w.pool != nil {
 		w.pool.Close()
 		w.logger.Info("closed PostgreSQL connection pool")
 	}
+	return nil
 }
