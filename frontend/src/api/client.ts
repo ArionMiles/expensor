@@ -56,7 +56,13 @@ export const api = {
 
   stats: {
     charts: () => apiClient.get<ChartData>('/stats/charts'),
-    heatmap: () => apiClient.get<HeatmapData>('/stats/heatmap'),
+    heatmap: (from?: string, to?: string) => {
+      const params = new URLSearchParams()
+      if (from) params.set('from', from)
+      if (to) params.set('to', to)
+      const qs = params.toString()
+      return apiClient.get<HeatmapData>(qs ? `/stats/heatmap?${qs}` : '/stats/heatmap')
+    },
   },
 
   daemon: {

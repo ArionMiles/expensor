@@ -21,12 +21,13 @@ interface TooltipState {
 interface Props {
   data: WeekdayHourBucket[]
   metric: 'amount' | 'count'
+  /** When set, shown as the first line of the hover tooltip, e.g. "Apr 2026". */
+  monthLabel?: string
 }
 
-export function WeekdayHourHeatmap({ data, metric }: Props) {
+export function WeekdayHourHeatmap({ data, metric, monthLabel }: Props) {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
-  // Build a lookup: grid[weekday][hour] = bucket
   const grid: Record<number, Record<number, WeekdayHourBucket>> = {}
   for (const b of data) {
     if (!grid[b.weekday]) grid[b.weekday] = {}
@@ -41,19 +42,19 @@ export function WeekdayHourHeatmap({ data, metric }: Props) {
   const totalHeight = COL_LABEL_HEIGHT + 7 * (CELL_SIZE + CELL_GAP) - CELL_GAP
 
   return (
-    <div className="relative overflow-x-auto">
+    <div className="relative w-full">
       {allZero && (
         <div className="absolute inset-0 flex items-center justify-center bg-card/80">
           <span className="text-xs text-muted-foreground">No transaction data yet</span>
         </div>
       )}
       <svg
-        width={totalWidth}
+        width="100%"
         height={totalHeight}
         viewBox={`0 0 ${totalWidth} ${totalHeight}`}
+        preserveAspectRatio="xMinYMid meet"
         aria-label="Spending heatmap by weekday and hour"
       >
-        {/* Column labels: every 6 hours to avoid crowding */}
         {[0, 6, 12, 18].map((hour) => (
           <text
             key={hour}
@@ -68,7 +69,6 @@ export function WeekdayHourHeatmap({ data, metric }: Props) {
           </text>
         ))}
 
-        {/* Cells */}
         {Array.from({ length: 7 }, (_, weekday) =>
           Array.from({ length: 24 }, (_, hour) => {
             const bucket = grid[weekday]?.[hour]
@@ -87,14 +87,8 @@ export function WeekdayHourHeatmap({ data, metric }: Props) {
                 fill={intensityColor(value, max)}
                 onMouseEnter={(e) => {
                   if (!bucket) return
-                  setTooltip({
-                    x: e.clientX,
-                    y: e.clientY,
-                    day: DAY_LABELS[weekday],
-                    hour,
-                    amount: bucket.amount,
-                    count: bucket.count,
-                  })
+                  setTooltip({ x: e.clientX, y: e.clientY, day: DAY_LABELS[weekday], hour,
+                    amount: bucket.amount, count: bucket.count })
                 }}
                 onMouseLeave={() => setTooltip(null)}
               />
@@ -102,7 +96,6 @@ export function WeekdayHourHeatmap({ data, metric }: Props) {
           }),
         )}
 
-        {/* Row labels */}
         {DAY_LABELS.map((label, weekday) => (
           <text
             key={label}
@@ -123,6 +116,9 @@ export function WeekdayHourHeatmap({ data, metric }: Props) {
           className="pointer-events-none fixed z-50 rounded border border-border bg-secondary px-2 py-1 text-xs shadow-lg"
           style={{ left: tooltip.x + 8, top: tooltip.y - 8 }}
         >
+          {monthLabel && (
+            <span className="block text-muted-foreground">{monthLabel}</span>
+          )}
           <span className="font-medium text-foreground">
             {tooltip.day} {String(tooltip.hour).padStart(2, '0')}:00
           </span>

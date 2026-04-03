@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useChartData, useHeatmapData, useStatus, useTransactions } from '@/api/queries'
-import type { ChartData, HeatmapData, TimeBucket } from '@/api/types'
+import type { ChartData, TimeBucket } from '@/api/types'
 import { DayOfMonthHeatmap } from '@/components/DayOfMonthHeatmap'
 import { HeatmapLegend } from '@/components/HeatmapLegend'
 import { WeekdayHourHeatmap } from '@/components/WeekdayHourHeatmap'
@@ -312,6 +312,29 @@ function StatsSection() {
   )
 }
 
+// ─── Month navigation ─────────────────────────────────────────────────────────
+
+interface MonthNav { year: number; month: number }
+
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+function monthRangeISO(nav: MonthNav): { from: string; to: string } {
+  const from = new Date(Date.UTC(nav.year, nav.month - 1, 1))
+  const to = new Date(Date.UTC(nav.year, nav.month, 0, 23, 59, 59))
+  return {
+    from: from.toISOString().split('.')[0] + 'Z',
+    to: to.toISOString().split('.')[0] + 'Z',
+  }
+}
+
+function prevMonth(n: MonthNav): MonthNav {
+  return n.month === 1 ? { year: n.year - 1, month: 12 } : { year: n.year, month: n.month - 1 }
+}
+
+function nextMonth(n: MonthNav): MonthNav {
+  return n.month === 12 ? { year: n.year + 1, month: 1 } : { year: n.year, month: n.month + 1 }
+}
+
 // ─── Metric toggle ────────────────────────────────────────────────────────────
 
 function MetricToggle({
@@ -343,27 +366,63 @@ function MetricToggle({
 
 // ─── Spending patterns ────────────────────────────────────────────────────────
 
-function SpendingPatternsSection({ heatmap }: { heatmap: HeatmapData }) {
+function SpendingPatternsSection() {
   const [metric, setMetric] = useState<'amount' | 'count'>('amount')
+  const now = new Date()
+  const [monthNav, setMonthNav] = useState<MonthNav | null>(null)
+
+  const dateRange = monthNav ? monthRangeISO(monthNav) : undefined
+  const { data: heatmap, isLoading } = useHeatmapData(dateRange?.from, dateRange?.to)
+
+  const monthLabel = monthNav ? `${MONTH_NAMES[monthNav.month - 1]} ${monthNav.year}` : undefined
+
+  const isCurrentMonth =
+    monthNav !== null &&
+    monthNav.year === now.getFullYear() &&
+    monthNav.month === now.getMonth() + 1
+
+  if (isLoading) {
+    return <div className="h-40 animate-pulse rounded-lg border border-border bg-card shadow-sm" />
+  }
+
+  if (!heatmap) return null
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xs uppercase tracking-wider text-muted-foreground">
-          Spending Patterns
-        </h2>
+        <h2 className="text-xs uppercase tracking-wider text-muted-foreground">Spending Patterns</h2>
         <MetricToggle value={metric} onChange={setMetric} />
       </div>
+
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setMonthNav((p) => prevMonth(p ?? { year: now.getFullYear(), month: now.getMonth() + 1 }))}
+          className="rounded border border-border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+          aria-label="Previous month"
+        >←</button>
+        <span className="min-w-[6rem] text-center text-xs font-medium text-foreground">
+          {monthLabel ?? 'All time'}
+        </span>
+        <button
+          onClick={() => setMonthNav((p) => nextMonth(p ?? { year: now.getFullYear(), month: now.getMonth() + 1 }))}
+          disabled={isCurrentMonth}
+          className="rounded border border-border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label="Next month"
+        >→</button>
+        {monthNav !== null && (
+          <button
+            onClick={() => setMonthNav(null)}
+            className="ml-1 rounded border border-border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+          >All time</button>
+        )}
+      </div>
+
       <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-        <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">
-          By weekday &amp; hour
-        </h3>
-        <WeekdayHourHeatmap data={heatmap.by_weekday_hour} metric={metric} />
+        <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">By weekday &amp; hour</h3>
+        <WeekdayHourHeatmap data={heatmap.by_weekday_hour} metric={metric} monthLabel={monthLabel} />
       </div>
       <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-        <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">
-          By day of month
-        </h3>
+        <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">By day of month</h3>
         <DayOfMonthHeatmap data={heatmap.by_day_of_month} metric={metric} />
       </div>
       <HeatmapLegend />
@@ -492,45 +551,26 @@ function RecentTransactions() {
 
 export function Dashboard() {
   const { data: chartData } = useChartData()
-  const { data: heatmapData, isLoading: heatmapLoading } = useHeatmapData()
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 px-6 py-6">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <ErrorBoundary>
-            <StatsSection />
-          </ErrorBoundary>
+          <ErrorBoundary><StatsSection /></ErrorBoundary>
         </div>
-
         <div className="lg:col-span-1">
           <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-xs uppercase tracking-wider text-muted-foreground">
-                Recent transactions
-              </h2>
+              <h2 className="text-xs uppercase tracking-wider text-muted-foreground">Recent transactions</h2>
             </div>
-            <ErrorBoundary>
-              <RecentTransactions />
-            </ErrorBoundary>
+            <ErrorBoundary><RecentTransactions /></ErrorBoundary>
           </div>
         </div>
       </div>
-
       {chartData && (
-        <ErrorBoundary>
-          <ChartsSection charts={chartData} />
-        </ErrorBoundary>
+        <ErrorBoundary><ChartsSection charts={chartData} /></ErrorBoundary>
       )}
-
-      {heatmapLoading && (
-        <div className="h-40 animate-pulse rounded-lg border border-border bg-card shadow-sm" />
-      )}
-      {heatmapData && (
-        <ErrorBoundary>
-          <SpendingPatternsSection heatmap={heatmapData} />
-        </ErrorBoundary>
-      )}
+      <ErrorBoundary><SpendingPatternsSection /></ErrorBoundary>
     </div>
   )
 }
