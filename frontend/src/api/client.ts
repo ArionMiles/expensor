@@ -7,6 +7,7 @@ import type {
   ChartData,
   CredentialsStatus,
   Facets,
+  HeatmapData,
   HealthResponse,
   Label,
   PluginInfo,
@@ -55,6 +56,7 @@ export const api = {
 
   stats: {
     charts: () => apiClient.get<ChartData>('/stats/charts'),
+    heatmap: () => apiClient.get<HeatmapData>('/stats/heatmap'),
   },
 
   daemon: {
