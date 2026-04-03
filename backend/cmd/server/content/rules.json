@@ -11,7 +11,7 @@
     },
     {
         "name": "HDFC Credit Card",
-        "senderEmail": "alerts@hdfcbank.net",
+        "senderEmail": "@hdfcbank",
         "subjectContains": "Alert : Update on your HDFC Bank Credit Card",
         "amountRegex": "Rs\\.([\\d,]+(?:\\.\\d+)?)",
         "merchantInfoRegex": "at (.*?) on",
@@ -20,7 +20,7 @@
     },
     {
         "name": "HDFC Credit Card (debit alert)",
-        "senderEmail": "alerts@hdfcbank.net",
+        "senderEmail": "@hdfcbank",
         "subjectContains": "debited via Credit Card",
         "amountRegex": "Rs\\.([\\d,]+(?:\\.\\d+)?)",
         "merchantInfoRegex": "towards (.*?) on",
@@ -29,10 +29,10 @@
     },
     {
         "name": "HDFC UPI",
-        "senderEmail": "alerts@hdfcbank.net",
+        "senderEmail": "@hdfcbank",
         "subjectContains": "UPI txn",
         "amountRegex": "Rs\\.([\\d,]+(?:\\.\\d+)?)",
-        "merchantInfoRegex": "@hdfcbank\\s+(.*?)\\s+on\\s",
+        "merchantInfoRegex": "VPA \\S+\\s+(.*?)\\s+on\\s",
         "source": "UPI - HDFC",
         "enabled": true
     },
