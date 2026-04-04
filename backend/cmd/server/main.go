@@ -267,7 +267,10 @@ func main() {
 	// Start HTTP server.
 	port := envInt("PORT", 8080)
 	baseURL := envStr("BASE_URL", fmt.Sprintf("http://localhost:%d", port))
-	frontendURL := envStr("FRONTEND_URL", "http://localhost:5173")
+	// Default FRONTEND_URL to BASE_URL: in production the frontend is served by
+	// the same binary, so they share the same host. Local dev overrides this via
+	// FRONTEND_URL=http://localhost:5173 in tests/.env.
+	frontendURL := envStr("FRONTEND_URL", baseURL)
 
 	// dc coordinates daemon start and rescan requests with a shared mutex.
 	dc := &daemonCoordinator{

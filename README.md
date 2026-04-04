@@ -110,7 +110,7 @@ services:
       POSTGRES_USER: expensor
       POSTGRES_PASSWORD: expensor_password
       POSTGRES_SSLMODE: disable
-      FRONTEND_URL: http://localhost:8080
+      # BASE_URL: http://192.168.1.10:8080  # set this when hosting on a local network
     volumes:
       - ./data:/app/data
       # Thunderbird only: uncomment and set path to your Thunderbird profile
@@ -167,8 +167,8 @@ All configuration is via environment variables. Reader and writer selection is h
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `8080` | HTTP server port |
-| `BASE_URL` | `http://localhost:8080` | Public base URL (used for OAuth redirect) |
-| `FRONTEND_URL` | `http://localhost:5173` | Frontend URL (used for post-auth redirects) |
+| `BASE_URL` | `http://localhost:8080` | Public base URL (used for OAuth redirect URI). Set this when hosting on a local network, e.g. `http://192.168.1.10:8080` |
+| `FRONTEND_URL` | same as `BASE_URL` | Post-auth redirect target. Override only for local development (e.g. `http://localhost:5173` when running the Vite dev server separately) |
 
 ### Gmail reader
 
