@@ -84,6 +84,7 @@ func (p *Plugin) ApplyConfig(cfg *config.Config, raw map[string]any) {
 		cfg.Thunderbird.Mailboxes = v
 	}
 }
+
 // NewReader creates a new Thunderbird reader instance.
 // The httpClient parameter is unused for Thunderbird (no OAuth needed).
 func (p *Plugin) NewReader( //nolint:revive // interface method; argument count dictated by ReaderPlugin

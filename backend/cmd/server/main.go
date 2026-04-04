@@ -196,14 +196,14 @@ func main() {
 	// Prefix-based loads cover the majority of config. A separate pass picks up
 	// the small set of prefix-less server vars (PORT, BASE_URL, FRONTEND_URL).
 	k := koanf.New(".")
-	for _, prefix := range []string{"EXPENSOR_", "GMAIL_", "THUNDERBIRD_", "POSTGRES_"} {
+	for _, prefix := range []string{"EXPENSOR_", "POSTGRES_"} {
 		if err := k.Load(env.Provider(prefix, ".", func(s string) string { return s }), nil); err != nil {
 			logger.Error("failed to load env config", "prefix", prefix, "error", err)
 			os.Exit(1)
 		}
 	}
 	// Load prefix-less server vars by allowlist to avoid ingesting PATH, HOME, etc.
-	serverVars := map[string]bool{"PORT": true, "BASE_URL": true, "FRONTEND_URL": true}
+	serverVars := map[string]bool{"PORT": true, "BASE_URL": true, "FRONTEND_URL": true, "THUNDERBIRD_DATA_DIR": true}
 	if err := k.Load(env.Provider("", ".", func(s string) string {
 		if serverVars[s] {
 			return s

@@ -64,27 +64,22 @@ type Config struct {
 	// Default: "" (use embedded assets)
 	StaticDir string `koanf:"EXPENSOR_STATIC_DIR"`
 
-	// Reader-specific configurations (embedded to flatten the key namespace)
-	Gmail       GmailConfig       `koanf:",squash"`
+	// Thunderbird reader configuration (profile path/mailboxes set via UI wizard).
 	Thunderbird ThunderbirdConfig `koanf:",squash"`
 
 	// Writer-specific configurations (embedded to flatten the key namespace)
 	Postgres PostgresConfig `koanf:",squash"`
 }
 
-// GmailConfig holds Gmail reader configuration.
-type GmailConfig struct{}
-
 // ThunderbirdConfig holds Thunderbird reader configuration.
 type ThunderbirdConfig struct {
 	// ProfilePath is the path to the Thunderbird profile directory.
-	// Environment variable: THUNDERBIRD_PROFILE
-	ProfilePath string `koanf:"THUNDERBIRD_PROFILE"`
+	// Set via the web UI onboarding wizard; not loaded from env vars.
+	ProfilePath string
 
 	// Mailboxes is a comma-separated list of mailbox names to scan.
-	// Environment variable: THUNDERBIRD_MAILBOXES
-	// Example: "INBOX,Archives"
-	Mailboxes string `koanf:"THUNDERBIRD_MAILBOXES"`
+	// Set via the web UI onboarding wizard; not loaded from env vars.
+	Mailboxes string
 
 	// DataDir is an optional extra path hinting where Thunderbird profile
 	// directories can be found (used by the profile discovery endpoint).

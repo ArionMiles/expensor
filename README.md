@@ -172,20 +172,15 @@ All configuration is via environment variables. Reader and writer selection is h
 
 ### Gmail reader
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `GMAIL_INTERVAL` | `60` | Polling interval (seconds) |
-| `GMAIL_LOOKBACK_DAYS` | `180` | How far back to search for emails |
-
-OAuth credentials are uploaded through the web UI (`/setup`), not via env vars.
+Gmail credentials are uploaded and configured through the web UI onboarding wizard. No env vars are required.
 
 ### Thunderbird reader
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `THUNDERBIRD_PROFILE` | — | Path to Thunderbird profile directory |
-| `THUNDERBIRD_MAILBOXES` | — | Comma-separated mailbox names, e.g. `INBOX,Archives` |
-| `THUNDERBIRD_INTERVAL` | `60` | Polling interval (seconds) |
+| `THUNDERBIRD_DATA_DIR` | — | Extra path hint for profile discovery (Docker only). Set to the mount point if your profile is mounted at a non-default path. |
+
+Profile path and mailboxes are configured through the web UI onboarding wizard.
 
 ### PostgreSQL
 
