@@ -97,6 +97,53 @@ func (m *daemonManager) Status() httpapi.DaemonStatus {
 	}
 }
 
+// daemonCoordinator owns the mutex and shared dependencies for starting daemon runs.
+// It exposes start and rescan as plain methods so they can be passed as func(string)
+// values without adding closure complexity to main.
+type daemonCoordinator struct {
+	mu          sync.Mutex
+	ctx         context.Context
+	registry    *plugins.Registry
+	cfg         config.Config
+	systemRules []api.Rule
+	labels      api.Labels
+	st          httpapi.Storer
+	dm          *daemonManager
+	logger      *slog.Logger
+}
+
+// launch builds runtime config and merged rules then spawns runDaemon in a goroutine.
+func (c *daemonCoordinator) launch(readerName string, forceRescan bool) {
+	runtimeCfg := applyScanOverrides(c.cfg, c.st)
+	merged := pkgrules.FilterEnabled(pkgrules.MergeRules(c.systemRules, loadUserRules(c.ctx, c.st, c.logger)))
+	go runDaemon(c.ctx, c.registry, readerName, runtimeCfg, merged, c.labels, c.dm, c.logger, forceRescan)
+}
+
+// start is safe to call concurrently; it is a no-op when the daemon is already running.
+// It persists the reader name and checks the rescan_pending flag before launching.
+func (c *daemonCoordinator) start(readerName string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.dm.Status().Running {
+		return
+	}
+	if err := saveActiveReader(c.cfg.DataDir, readerName); err != nil {
+		c.logger.Warn("failed to persist active reader", "error", err)
+	}
+	c.launch(readerName, checkAndClearRescanPending(c.ctx, c.st, c.logger))
+}
+
+// rescan starts a daemon run with forceRescan=true, bypassing state deduplication.
+// Called by POST /api/daemon/rescan when the daemon is not running.
+func (c *daemonCoordinator) rescan(readerName string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.dm.Status().Running {
+		return
+	}
+	c.launch(readerName, true)
+}
+
 func main() {
 	logger := logging.Setup(logging.DefaultConfig())
 
@@ -191,36 +238,24 @@ func main() {
 	baseURL := envStr("BASE_URL", fmt.Sprintf("http://localhost:%d", port))
 	frontendURL := envStr("FRONTEND_URL", "http://localhost:5173")
 
-	// startDaemon is safe to call concurrently; it is a no-op when the daemon
-	// is already running. It persists the reader name so the daemon can be
-	// resumed automatically on next startup.
-	var startMu sync.Mutex
-	startDaemon := func(readerName string) {
-		startMu.Lock()
-		defer startMu.Unlock()
-		if dm.Status().Running {
-			return
-		}
-		if err := saveActiveReader(cfg.DataDir, readerName); err != nil {
-			logger.Warn("failed to persist active reader", "error", err)
-		}
-		runtimeCfg := applyScanOverrides(cfg, st)
-		merged := pkgrules.FilterEnabled(pkgrules.MergeRules(systemRules, loadUserRules(ctx, st, logger)))
-		go runDaemon(ctx, registry, readerName, runtimeCfg, merged, labels, dm, logger)
+	// dc coordinates daemon start and rescan requests with a shared mutex.
+	dc := &daemonCoordinator{
+		ctx: ctx, registry: registry, cfg: cfg,
+		systemRules: systemRules, labels: labels,
+		st: st, dm: dm, logger: logger,
 	}
 
 	// Auto-start daemon if a previous reader selection was persisted.
 	if savedReader := loadActiveReader(cfg.DataDir, logger); savedReader != "" {
 		logger.Info("resuming daemon from previous session", "reader", savedReader)
-		startDaemon(savedReader)
+		dc.start(savedReader)
 	}
 
 	handlers := httpapi.NewHandlers(
 		registry, st, dm, baseURL, frontendURL,
 		cfg.DataDir, cfg.BaseCurrency,
 		cfg.ScanInterval, cfg.LookbackDays,
-		startDaemon,
-		nil, // rescanFn: wired in a later task
+		dc.start, dc.rescan,
 		logger.With("component", "api"),
 	)
 	server := httpapi.NewServer(port, handlers, logger.With("component", "http"))
@@ -242,6 +277,7 @@ func runDaemon( //nolint:revive // all parameters are required; splitting furthe
 	labels api.Labels,
 	dm *daemonManager,
 	logger *slog.Logger,
+	forceRescan bool,
 ) {
 	const writerName = "postgres"
 	logger.Debug("runDaemon starting", "reader", readerName, "writer", writerName)
@@ -278,11 +314,17 @@ func runDaemon( //nolint:revive // all parameters are required; splitting furthe
 		logger.Debug("OAuth HTTP client created successfully")
 	}
 
-	stateManager, err := state.New(cfg.StateFile, logger)
-	if err != nil {
-		logger.Error("failed to create state manager", "error", err)
-		dm.setStopped(err)
-		return
+	// Create state manager. Skip for forced rescans — readers handle nil gracefully
+	// (they guard with `if r.state != nil && r.state.IsProcessed(...)`), allowing
+	// already-processed emails to be re-extracted and upserted into the DB.
+	var stateManager *state.Manager
+	if !forceRescan {
+		stateManager, err = state.New(cfg.StateFile, logger)
+		if err != nil {
+			logger.Error("failed to create state manager", "error", err)
+			dm.setStopped(err)
+			return
+		}
 	}
 
 	runner := daemon.New(registry, httpClient, logger)
@@ -293,6 +335,7 @@ func runDaemon( //nolint:revive // all parameters are required; splitting furthe
 		Rules:        rules,
 		Labels:       labels,
 		StateManager: stateManager,
+		ForceRescan:  forceRescan,
 	}
 
 	logger.Info("daemon starting", "reader", readerName, "writer", writerName)
@@ -477,6 +520,22 @@ func parseRules(rulesJSON string) ([]api.Rule, error) {
 		})
 	}
 	return rules, nil
+}
+
+// checkAndClearRescanPending reads the rescan_pending app_config flag.
+// If set to "true" it clears the flag (best-effort) and returns true so the
+// caller can start the daemon with forceRescan enabled.
+func checkAndClearRescanPending(ctx context.Context, st httpapi.Storer, logger *slog.Logger) bool {
+	if st == nil {
+		return false
+	}
+	val, err := st.GetAppConfig(ctx, "rescan_pending")
+	if err != nil || val != "true" {
+		return false
+	}
+	_ = st.SetAppConfig(ctx, "rescan_pending", "") // clear flag; best-effort
+	logger.Info("rescan_pending flag detected — starting with force rescan")
+	return true
 }
 
 func envInt(key string, def int) int {
