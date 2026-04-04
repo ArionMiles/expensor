@@ -197,6 +197,132 @@ func TestWrite_Batch(t *testing.T) {
 	assertWrite(t, w, txns, 10*time.Second)
 }
 
+// TestWrite_Upsert_PreservesUserEdits verifies that re-processing a transaction
+// (same message_id) does not overwrite user-edited description, category, or bucket.
+// Extracted fields (amount, merchant_info) must still be updated.
+func TestWrite_Upsert_PreservesUserEdits(t *testing.T) {
+	w := newTestWriter(t, Config{BatchSize: 1, FlushInterval: time.Second})
+	ctx := context.Background()
+
+	msgID := fmt.Sprintf("upsert-user-edits-%d", time.Now().UnixNano())
+
+	// Step 1: write the transaction with initial extracted values.
+	initial := &api.TransactionDetails{
+		MessageID:    msgID,
+		Amount:       500.00,
+		Currency:     "INR",
+		Timestamp:    time.Now().Format(time.RFC3339),
+		MerchantInfo: "Swiggy",
+		Category:     "Food",
+		Bucket:       "Wants",
+		Source:       "Credit Card - HDFC",
+		Description:  "",
+	}
+	assertWrite(t, w, []*api.TransactionDetails{initial}, 5*time.Second)
+
+	// Step 2: simulate user edits directly in the DB.
+	_, err := w.pool.Exec(ctx,
+		`UPDATE transactions SET description = $1, category = $2, bucket = $3 WHERE message_id = $4`,
+		"Anniversary dinner", "Dining Out", "Needs", msgID,
+	)
+	if err != nil {
+		t.Fatalf("failed to simulate user edits: %v", err)
+	}
+
+	// Step 3: re-process the same email with updated extracted values (simulates retroactive scan).
+	reprocessed := &api.TransactionDetails{
+		MessageID:    msgID,
+		Amount:       550.00, // amount changed (new regex)
+		Currency:     "INR",
+		Timestamp:    time.Now().Format(time.RFC3339),
+		MerchantInfo: "Swiggy Food",
+		Category:     "Food & Dining", // extraction now returns a different category
+		Bucket:       "Wants",
+		Source:       "Credit Card - HDFC",
+		Description:  "some extracted description", // extraction should never overwrite description
+	}
+	assertWrite(t, w, []*api.TransactionDetails{reprocessed}, 5*time.Second)
+
+	// Step 4: verify user-edited fields are preserved; extracted fields are updated.
+	var gotDesc, gotCategory, gotBucket string
+	var gotAmount float64
+	var gotMerchant string
+	err = w.pool.QueryRow(ctx,
+		`SELECT description, category, bucket, amount, merchant_info FROM transactions WHERE message_id = $1`,
+		msgID,
+	).Scan(&gotDesc, &gotCategory, &gotBucket, &gotAmount, &gotMerchant)
+	if err != nil {
+		t.Fatalf("failed to query transaction: %v", err)
+	}
+
+	// User-edited fields must be preserved.
+	if gotDesc != "Anniversary dinner" {
+		t.Errorf("description overwritten: got %q, want %q", gotDesc, "Anniversary dinner")
+	}
+	if gotCategory != "Dining Out" {
+		t.Errorf("category overwritten: got %q, want %q", gotCategory, "Dining Out")
+	}
+	if gotBucket != "Needs" {
+		t.Errorf("bucket overwritten: got %q, want %q", gotBucket, "Needs")
+	}
+
+	// Extracted fields must be updated from the re-processed values.
+	if gotAmount != 550.00 {
+		t.Errorf("amount not updated: got %f, want 550.00", gotAmount)
+	}
+	if gotMerchant != "Swiggy Food" {
+		t.Errorf("merchant_info not updated: got %q, want %q", gotMerchant, "Swiggy Food")
+	}
+}
+
+// TestWrite_Upsert_PopulatesEmptyCategoryBucket verifies that when a transaction has
+// no user-set category or bucket, re-processing updates them from the extracted values.
+func TestWrite_Upsert_PopulatesEmptyCategoryBucket(t *testing.T) {
+	w := newTestWriter(t, Config{BatchSize: 1, FlushInterval: time.Second})
+
+	msgID := fmt.Sprintf("upsert-empty-fields-%d", time.Now().UnixNano())
+
+	// Write with empty category and bucket.
+	initial := &api.TransactionDetails{
+		MessageID:    msgID,
+		Amount:       200.00,
+		Currency:     "INR",
+		Timestamp:    time.Now().Format(time.RFC3339),
+		MerchantInfo: "Uber",
+		Category:     "",
+		Bucket:       "",
+		Source:       "UPI",
+	}
+	assertWrite(t, w, []*api.TransactionDetails{initial}, 5*time.Second)
+
+	// Re-process: extraction now returns category and bucket.
+	reprocessed := &api.TransactionDetails{
+		MessageID:    msgID,
+		Amount:       200.00,
+		Currency:     "INR",
+		Timestamp:    time.Now().Format(time.RFC3339),
+		MerchantInfo: "Uber",
+		Category:     "Transport",
+		Bucket:       "Needs",
+		Source:       "UPI",
+	}
+	assertWrite(t, w, []*api.TransactionDetails{reprocessed}, 5*time.Second)
+
+	var gotCategory, gotBucket string
+	err := w.pool.QueryRow(context.Background(),
+		`SELECT category, bucket FROM transactions WHERE message_id = $1`, msgID,
+	).Scan(&gotCategory, &gotBucket)
+	if err != nil {
+		t.Fatalf("failed to query transaction: %v", err)
+	}
+	if gotCategory != "Transport" {
+		t.Errorf("category not populated from extraction: got %q, want %q", gotCategory, "Transport")
+	}
+	if gotBucket != "Needs" {
+		t.Errorf("bucket not populated from extraction: got %q, want %q", gotBucket, "Needs")
+	}
+}
+
 // assertWrite sends txns through the writer and verifies every message is acknowledged.
 func assertWrite(t *testing.T, w *Writer, txns []*api.TransactionDetails, timeout time.Duration) {
 	t.Helper()

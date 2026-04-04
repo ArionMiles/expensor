@@ -252,17 +252,19 @@ func (w *Writer) writeBatch(ctx context.Context, transactions []*api.Transaction
 				exchange_rate, timestamp, merchant_info, category, bucket, source, description
 			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 			ON CONFLICT (message_id) DO UPDATE SET
-				amount = EXCLUDED.amount,
-				currency = EXCLUDED.currency,
-				original_amount = EXCLUDED.original_amount,
+				amount            = EXCLUDED.amount,
+				currency          = EXCLUDED.currency,
+				original_amount   = EXCLUDED.original_amount,
 				original_currency = EXCLUDED.original_currency,
-				exchange_rate = EXCLUDED.exchange_rate,
-				timestamp = EXCLUDED.timestamp,
-				merchant_info = EXCLUDED.merchant_info,
-				category = EXCLUDED.category,
-				bucket = EXCLUDED.bucket,
-				source = EXCLUDED.source,
-				description = EXCLUDED.description,
+				exchange_rate     = EXCLUDED.exchange_rate,
+				timestamp         = EXCLUDED.timestamp,
+				merchant_info     = EXCLUDED.merchant_info,
+				source            = EXCLUDED.source,
+				-- Preserve user edits: only fall back to extracted value when the
+				-- stored value is NULL or empty (user has not yet set it).
+				category = COALESCE(NULLIF(transactions.category, ''), EXCLUDED.category),
+				bucket   = COALESCE(NULLIF(transactions.bucket, ''), EXCLUDED.bucket),
+				-- description is never produced by extraction; never overwrite it.
 				updated_at = NOW()
 			RETURNING id
 		`,
