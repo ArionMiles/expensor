@@ -1,0 +1,6 @@
+Subject: Alert for transaction through ICICI Bank iMobile.
+
+Body:
+Dear Customer,
+
+You have made an online ICICI fund transfer payment of Rs 38,500.00 towards Luke Skywalker on Feb 04, 2026 at 12:51 a.m. from your ICICI Bank Savings Account XXXX1234. The Transaction ID is FB12345678.
