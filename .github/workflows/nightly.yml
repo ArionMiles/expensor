@@ -1,0 +1,144 @@
+# Nightly build — runs at 02:00 UTC daily.
+# Skips when there are no commits since the previous nightly build.
+name: Nightly
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  check-changes:
+    name: Check for changes
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.diff.outputs.has_changes }}
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Compare HEAD to last nightly
+        id: diff
+        run: |
+          LAST=$(git rev-list -1 nightly 2>/dev/null || echo "none")
+          CURRENT=$(git rev-parse HEAD)
+          if [ "$LAST" = "$CURRENT" ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No commits since last nightly — skipping build."
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "New commits detected (last nightly: ${LAST:0:7}, HEAD: ${CURRENT:0:7})."
+          fi
+
+      - name: Compute version string
+        id: ver
+        run: |
+          DATE=$(date -u +%Y%m%d)
+          SHA=$(git rev-parse --short=7 HEAD)
+          echo "version=nightly-${DATE}-${SHA}" >> "$GITHUB_OUTPUT"
+
+  build-docker:
+    name: Build & push Docker image
+    needs: check-changes
+    if: needs.check-changes.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.check-changes.outputs.version }}
+          build-args: VERSION=${{ needs.check-changes.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
+
+      - name: Move nightly tag to HEAD
+        run: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git tag -f nightly
+          git push origin nightly --force
+
+  create-release:
+    name: Update nightly pre-release
+    needs: [check-changes, build-docker]
+    if: needs.check-changes.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Generate changelog since last nightly
+        id: log
+        run: |
+          LAST=$(git rev-list -1 nightly^ 2>/dev/null || echo "")
+          if [ -n "$LAST" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "${LAST}..HEAD" 2>/dev/null || echo "- Initial nightly build")
+          else
+            CHANGELOG="- Initial nightly build"
+          fi
+          echo "changelog<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$CHANGELOG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create/update nightly pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: Nightly (${{ needs.check-changes.outputs.version }})
+          prerelease: true
+          body: |
+            Automated nightly build — not recommended for production use.
+
+            ## Docker
+
+            ```bash
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly
+            ```
+
+            Or pin to today's build:
+            ```bash
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.check-changes.outputs.version }}
+            ```
+
+            ## Changes since last nightly
+
+            ${{ steps.log.outputs.changelog }}
+
+            **Built from:** `${{ github.sha }}`
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
