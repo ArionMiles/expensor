@@ -1,7 +1,7 @@
 # Multi-Tenant Architecture with Household Linking — Design Spec
 
 **Date:** 2026-04-04
-**Status:** DEFERRED — implement after backup/restore and Thunderbird discovery
+**Status:** DEFERRED — implement after Group F integrations; before backup/restore
 
 ---
 

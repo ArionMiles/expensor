@@ -1,7 +1,7 @@
 # Backup & Restore — Design Spec
 
 **Date:** 2026-04-04
-**Status:** DEFERRED — implement before any multi-tenant work begins
+**Status:** DEFERRED — implement **after** multi-tenant ships
 
 ---
 
@@ -292,9 +292,9 @@ This is the correct behaviour: the user's intent when editing category/bucket is
 
 ### Multi-tenant
 
-When multi-tenant is added (users with individual accounts on a shared instance), backups must be scoped per account. The backup format is designed for this: add an `"account_id"` field to the root object. The restore endpoint would only restore data belonging to the authenticated account.
+**Backup & Restore is intentionally implemented after multi-tenant ships.** This ensures backup v1 is the only format ever needed — it is designed multi-user-aware from day one. Shipping backup before multi-tenant would create a single-user v1 format that then requires a v1→v2 migration path to support per-account scoping, adding permanent backwards-compatibility complexity.
 
-The `backup_version` field will be incremented when multi-tenant scope is added, and the restore logic will enforce that a backup from account A cannot be restored into account B.
+Once multi-tenant is live, backup is scoped to the authenticated user's account. The `POST /api/backup` endpoint returns only the requesting user's data. `POST /api/restore` only restores into the requesting user's account. A backup from user A cannot be restored into user B's account (enforced via the authenticated `user_id` in the restore handler).
 
 ### Family linking / multi-account
 
