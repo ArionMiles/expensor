@@ -52,18 +52,19 @@ type DaemonStatusProvider interface {
 
 // Handlers holds all dependencies for HTTP endpoint handlers.
 type Handlers struct {
-	registry     *plugins.Registry
-	store        Storer
-	daemon       DaemonStatusProvider
-	baseURL      string // e.g. "http://localhost:8080"
-	frontendURL  string // e.g. "http://localhost:5173" — used for OAuth redirects
-	dataDir      string
-	baseCurrency string
-	scanInterval int                 // default scan interval in seconds
-	lookbackDays int                 // default lookback in days
-	startFn      func(reader string) // called by POST /api/daemon/start; may be nil
-	rescanFn     func(reader string) // called by POST /api/daemon/rescan; may be nil
-	logger       *slog.Logger
+	registry           *plugins.Registry
+	store              Storer
+	daemon             DaemonStatusProvider
+	baseURL            string // e.g. "http://localhost:8080"
+	frontendURL        string // e.g. "http://localhost:5173" — used for OAuth redirects
+	dataDir            string
+	thunderbirdDataDir string
+	baseCurrency       string
+	scanInterval       int                 // default scan interval in seconds
+	lookbackDays       int                 // default lookback in days
+	startFn            func(reader string) // called by POST /api/daemon/start; may be nil
+	rescanFn           func(reader string) // called by POST /api/daemon/rescan; may be nil
+	logger             *slog.Logger
 
 	// oauthStates maps state token → entry for in-flight OAuth flows.
 	mu          sync.Mutex
@@ -80,6 +81,7 @@ func NewHandlers( //nolint:revive // dependency injection requires all these par
 	baseURL string,
 	frontendURL string,
 	dataDir string,
+	thunderbirdDataDir string,
 	baseCurrency string,
 	scanInterval int,
 	lookbackDays int,
@@ -103,19 +105,20 @@ func NewHandlers( //nolint:revive // dependency injection requires all these par
 		lookbackDays = 180
 	}
 	return &Handlers{
-		registry:     registry,
-		store:        st,
-		daemon:       daemon,
-		baseURL:      strings.TrimRight(baseURL, "/"),
-		frontendURL:  strings.TrimRight(frontendURL, "/"),
-		dataDir:      dataDir,
-		baseCurrency: baseCurrency,
-		scanInterval: scanInterval,
-		lookbackDays: lookbackDays,
-		startFn:      startFn,
-		rescanFn:     rescanFn,
-		logger:       logger,
-		oauthStates:  make(map[string]oauthStateEntry),
+		registry:           registry,
+		store:              st,
+		daemon:             daemon,
+		baseURL:            strings.TrimRight(baseURL, "/"),
+		frontendURL:        strings.TrimRight(frontendURL, "/"),
+		dataDir:            dataDir,
+		thunderbirdDataDir: thunderbirdDataDir,
+		baseCurrency:       baseCurrency,
+		scanInterval:       scanInterval,
+		lookbackDays:       lookbackDays,
+		startFn:            startFn,
+		rescanFn:           rescanFn,
+		logger:             logger,
+		oauthStates:        make(map[string]oauthStateEntry),
 	}
 }
 
@@ -1366,7 +1369,7 @@ func (h *Handlers) HandleDiscoverProfiles(w http.ResponseWriter, _ *http.Request
 		if p == "" {
 			return
 		}
-		if _, err := os.Stat(p); err == nil { //nolint:gosec // p is from OS path or trusted env var
+		if _, err := os.Stat(p); err == nil {
 			if _, exists := seen[p]; !exists {
 				seen[p] = struct{}{}
 				paths = append(paths, p)
@@ -1380,7 +1383,7 @@ func (h *Handlers) HandleDiscoverProfiles(w http.ResponseWriter, _ *http.Request
 		}
 	}
 	addIfExists("/thunderbird-profile")
-	addIfExists(os.Getenv("THUNDERBIRD_DATA_DIR"))
+	addIfExists(h.thunderbirdDataDir)
 
 	if paths == nil {
 		paths = []string{}

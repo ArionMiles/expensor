@@ -290,7 +290,7 @@ func main() {
 
 	handlers := httpapi.NewHandlers(
 		registry, st, dm, cfg.BaseURL, cfg.FrontendURL,
-		cfg.DataDir, cfg.BaseCurrency,
+		cfg.DataDir, cfg.Thunderbird.DataDir, cfg.BaseCurrency,
 		cfg.ScanInterval, cfg.LookbackDays,
 		dc.start, dc.rescan,
 		logger.With("component", "api"),

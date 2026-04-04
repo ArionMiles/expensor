@@ -85,6 +85,12 @@ type ThunderbirdConfig struct {
 	// Environment variable: THUNDERBIRD_MAILBOXES
 	// Example: "INBOX,Archives"
 	Mailboxes string `koanf:"THUNDERBIRD_MAILBOXES"`
+
+	// DataDir is an optional extra path hinting where Thunderbird profile
+	// directories can be found (used by the profile discovery endpoint).
+	// Useful in Docker when a custom profile mount doesn't match platform defaults.
+	// Environment variable: THUNDERBIRD_DATA_DIR
+	DataDir string `koanf:"THUNDERBIRD_DATA_DIR"`
 }
 
 // GetMailboxes returns the mailboxes as a slice.

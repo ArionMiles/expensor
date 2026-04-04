@@ -282,7 +282,7 @@ func newTestHandlers(t *testing.T, st Storer, dm DaemonStatusProvider) *Handlers
 		{Key: "profilePath", Label: "Profile Directory", Type: "path", Required: true},
 	}})
 	_ = registry.RegisterWriter(&testWriterPlugin{name: "postgres"})
-	return NewHandlers(registry, st, dm, "http://localhost:8080", "http://localhost:5173", t.TempDir(), "INR", 60, 180, nil, nil, slog.Default())
+	return NewHandlers(registry, st, dm, "http://localhost:8080", "http://localhost:5173", t.TempDir(), "", "INR", 60, 180, nil, nil, slog.Default())
 }
 
 // --- minimal plugin stubs ---
