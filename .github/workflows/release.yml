@@ -134,9 +134,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}.{{minor}}
+            type=semver,pattern=v{{major}}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Get version
@@ -214,7 +214,7 @@ jobs:
 
           ### Docker
           \`\`\`bash
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION#v}
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}
           \`\`\`
 
           ### From Source
