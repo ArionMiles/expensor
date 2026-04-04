@@ -110,6 +110,7 @@ services:
       POSTGRES_USER: expensor
       POSTGRES_PASSWORD: expensor_password
       POSTGRES_SSLMODE: disable
+      FRONTEND_URL: http://localhost:8080
     volumes:
       - ./data:/app/data
       # Thunderbird only: uncomment and set path to your Thunderbird profile
