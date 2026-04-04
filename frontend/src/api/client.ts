@@ -14,6 +14,8 @@ import type {
   PluginInfo,
   ReaderConfig,
   ReaderStatus,
+  Rule,
+  RuleImport,
   StatusResponse,
   Transaction,
   TransactionFilters,
@@ -153,6 +155,19 @@ export const api = {
         apiClient.post<{ name: string }>('/config/buckets', { name, description }),
       delete: (name: string) => apiClient.delete(`/config/buckets/${encodeURIComponent(name)}`),
     },
+  },
+
+  rules: {
+    list: () => apiClient.get<Rule[]>('/rules'),
+    create: (body: Omit<Rule, 'id' | 'source' | 'created_at' | 'updated_at'>) =>
+      apiClient.post<Rule>('/rules', body),
+    update: (
+      id: string,
+      body: Partial<Omit<Rule, 'id' | 'source' | 'created_at' | 'updated_at'>>,
+    ) => apiClient.put<Rule>(`/rules/${id}`, body),
+    delete: (id: string) => apiClient.delete(`/rules/${id}`),
+    export: () => apiClient.get<RuleImport[]>('/rules/export'),
+    import: (rules: RuleImport[]) => apiClient.post<{ imported: number }>('/rules/import', rules),
   },
 
   transactions: {

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
-import type { TransactionFilters, TransactionPatch } from './types'
+import type { Rule, RuleImport, TransactionFilters, TransactionPatch } from './types'
 
 export const queryKeys = {
   health: ['health'] as const,
@@ -313,5 +313,52 @@ export function useUpdateTransactionFields() {
       qc.invalidateQueries({ queryKey: ['transactions'] })
       qc.invalidateQueries({ queryKey: queryKeys.transaction(data.id) })
     },
+  })
+}
+
+export function useRules() {
+  return useQuery({
+    queryKey: ['rules'] as const,
+    queryFn: () => api.rules.list().then((r) => r.data),
+    staleTime: 30_000,
+  })
+}
+
+export function useCreateRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: Omit<Rule, 'id' | 'source' | 'created_at' | 'updated_at'>) =>
+      api.rules.create(body).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rules'] }),
+  })
+}
+
+export function useUpdateRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      id,
+      body,
+    }: {
+      id: string
+      body: Partial<Omit<Rule, 'id' | 'source' | 'created_at' | 'updated_at'>>
+    }) => api.rules.update(id, body).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rules'] }),
+  })
+}
+
+export function useDeleteRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.rules.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rules'] }),
+  })
+}
+
+export function useImportRules() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (rules: RuleImport[]) => api.rules.import(rules).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rules'] }),
   })
 }
