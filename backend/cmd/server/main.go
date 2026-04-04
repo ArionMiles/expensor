@@ -355,7 +355,7 @@ func buildSystemRuleRows(raw []RuleJSON) []store.RuleRow {
 		rows = append(rows, store.RuleRow{
 			Name: r.Name, SenderEmail: r.SenderEmail, SubjectContains: r.SubjectContains,
 			AmountRegex: r.AmountRegex, MerchantRegex: r.MerchantRegex,
-			CurrencyRegex: r.CurrencyRegex, Enabled: r.Enabled,
+			CurrencyRegex: r.CurrencyRegex, TransactionSource: r.Source, Enabled: r.Enabled,
 		})
 	}
 	return rows
@@ -407,7 +407,7 @@ func compileRule(row store.RuleRow) (api.Rule, error) {
 	return api.Rule{
 		Name: row.Name, SenderEmail: row.SenderEmail, SubjectContains: row.SubjectContains,
 		Amount: amount, MerchantInfo: merchant, Currency: currency,
-		Enabled: row.Enabled, Source: row.Source,
+		Enabled: row.Enabled, Source: row.TransactionSource,
 	}, nil
 }
 

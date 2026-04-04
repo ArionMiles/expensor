@@ -115,18 +115,20 @@ type Bucket struct {
 
 // RuleRow is a rule as stored in the database.
 // Source is either "system" (seeded from embedded rules.json) or "user" (created via UI).
+// TransactionSource is the human-readable identifier written to transaction.source (e.g. "Credit Card - HDFC").
 type RuleRow struct {
-	ID              string    `json:"id"`
-	Name            string    `json:"name"`
-	SenderEmail     string    `json:"sender_email"`
-	SubjectContains string    `json:"subject_contains"`
-	AmountRegex     string    `json:"amount_regex"`
-	MerchantRegex   string    `json:"merchant_regex"`
-	CurrencyRegex   string    `json:"currency_regex"`
-	Enabled         bool      `json:"enabled"`
-	Source          string    `json:"source"` // "system" | "user"
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
+	SenderEmail       string    `json:"sender_email"`
+	SubjectContains   string    `json:"subject_contains"`
+	AmountRegex       string    `json:"amount_regex"`
+	MerchantRegex     string    `json:"merchant_regex"`
+	CurrencyRegex     string    `json:"currency_regex"`
+	TransactionSource string    `json:"transaction_source"`
+	Enabled           bool      `json:"enabled"`
+	Source            string    `json:"source"` // "system" | "user"
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 // TransactionUpdate carries optional fields for updating a transaction.
@@ -914,6 +916,7 @@ func (s *Store) initCategoriesBuckets(ctx context.Context) error {
 }
 
 // initRules creates the rule_source ENUM and rules table. Idempotent.
+// The ALTER TABLE is a no-op when the column already exists.
 func (s *Store) initRules(ctx context.Context) error {
 	_, err := s.pool.Exec(ctx, `
 		DO $$ BEGIN
@@ -922,19 +925,22 @@ func (s *Store) initRules(ctx context.Context) error {
 		END $$;
 
 		CREATE TABLE IF NOT EXISTS rules (
-			id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			name             TEXT NOT NULL,
-			sender_email     TEXT NOT NULL DEFAULT '',
-			subject_contains TEXT NOT NULL DEFAULT '',
-			amount_regex     TEXT NOT NULL,
-			merchant_regex   TEXT NOT NULL,
-			currency_regex   TEXT NOT NULL DEFAULT '',
-			enabled          BOOLEAN NOT NULL DEFAULT true,
-			source           rule_source NOT NULL DEFAULT 'user',
-			created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			name               TEXT NOT NULL,
+			sender_email       TEXT NOT NULL DEFAULT '',
+			subject_contains   TEXT NOT NULL DEFAULT '',
+			amount_regex       TEXT NOT NULL,
+			merchant_regex     TEXT NOT NULL,
+			currency_regex     TEXT NOT NULL DEFAULT '',
+			transaction_source TEXT NOT NULL DEFAULT '',
+			enabled            BOOLEAN NOT NULL DEFAULT true,
+			source             rule_source NOT NULL DEFAULT 'user',
+			created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			UNIQUE (name, source)
 		);
+
+		ALTER TABLE rules ADD COLUMN IF NOT EXISTS transaction_source TEXT NOT NULL DEFAULT '';
 	`)
 	return err
 }
@@ -1251,7 +1257,7 @@ func scanTransactions(rows pgx.Rows) ([]Transaction, error) {
 // --- Rules ---
 
 const ruleColumns = `id, name, sender_email, subject_contains, amount_regex, merchant_regex,
-	currency_regex, enabled, source::text, created_at, updated_at`
+	currency_regex, transaction_source, enabled, source::text, created_at, updated_at`
 
 func scanRuleRows(rows pgx.Rows) ([]RuleRow, error) {
 	var result []RuleRow
@@ -1260,7 +1266,8 @@ func scanRuleRows(rows pgx.Rows) ([]RuleRow, error) {
 		if err := rows.Scan(
 			&r.ID, &r.Name, &r.SenderEmail, &r.SubjectContains,
 			&r.AmountRegex, &r.MerchantRegex, &r.CurrencyRegex,
-			&r.Enabled, &r.Source, &r.CreatedAt, &r.UpdatedAt,
+			&r.TransactionSource, &r.Enabled, &r.Source,
+			&r.CreatedAt, &r.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scanning rule row: %w", err)
 		}
@@ -1310,11 +1317,12 @@ func (s *Store) GetRule(ctx context.Context, id string) (*RuleRow, error) {
 // CreateRule inserts a new user rule and returns the created row.
 func (s *Store) CreateRule(ctx context.Context, r RuleRow) (*RuleRow, error) {
 	rows, err := s.pool.Query(ctx,
-		`INSERT INTO rules (name, sender_email, subject_contains, amount_regex, merchant_regex, currency_regex, enabled)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`INSERT INTO rules (name, sender_email, subject_contains, amount_regex, merchant_regex, currency_regex, transaction_source, enabled)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 RETURNING `+ruleColumns,
 		r.Name, r.SenderEmail, r.SubjectContains,
-		r.AmountRegex, r.MerchantRegex, r.CurrencyRegex, r.Enabled,
+		r.AmountRegex, r.MerchantRegex, r.CurrencyRegex,
+		r.TransactionSource, r.Enabled,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("creating rule: %w", err)
@@ -1336,11 +1344,12 @@ func (s *Store) UpdateRule(ctx context.Context, id string, r RuleRow) (*RuleRow,
 		`UPDATE rules
 		 SET name=$2, sender_email=$3, subject_contains=$4,
 		     amount_regex=$5, merchant_regex=$6, currency_regex=$7,
-		     enabled=$8, updated_at=NOW()
+		     transaction_source=$8, enabled=$9, updated_at=NOW()
 		 WHERE id=$1 AND source='user'
 		 RETURNING `+ruleColumns,
 		id, r.Name, r.SenderEmail, r.SubjectContains,
-		r.AmountRegex, r.MerchantRegex, r.CurrencyRegex, r.Enabled,
+		r.AmountRegex, r.MerchantRegex, r.CurrencyRegex,
+		r.TransactionSource, r.Enabled,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("updating rule: %w", err)
@@ -1396,18 +1405,20 @@ func (s *Store) SeedSystemRules(ctx context.Context, rules []RuleRow) error {
 	for _, r := range rules {
 		_, err := s.pool.Exec(ctx, `
 			INSERT INTO rules
-			  (name, sender_email, subject_contains, amount_regex, merchant_regex, currency_regex, enabled, source)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, 'system')
+			  (name, sender_email, subject_contains, amount_regex, merchant_regex, currency_regex, transaction_source, enabled, source)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'system')
 			ON CONFLICT (name, source) DO UPDATE SET
-				sender_email     = EXCLUDED.sender_email,
-				subject_contains = EXCLUDED.subject_contains,
-				amount_regex     = EXCLUDED.amount_regex,
-				merchant_regex   = EXCLUDED.merchant_regex,
-				currency_regex   = EXCLUDED.currency_regex,
-				enabled          = EXCLUDED.enabled,
-				updated_at       = NOW()`,
+				sender_email       = EXCLUDED.sender_email,
+				subject_contains   = EXCLUDED.subject_contains,
+				amount_regex       = EXCLUDED.amount_regex,
+				merchant_regex     = EXCLUDED.merchant_regex,
+				currency_regex     = EXCLUDED.currency_regex,
+				transaction_source = EXCLUDED.transaction_source,
+				enabled            = EXCLUDED.enabled,
+				updated_at         = NOW()`,
 			r.Name, r.SenderEmail, r.SubjectContains,
-			r.AmountRegex, r.MerchantRegex, r.CurrencyRegex, r.Enabled,
+			r.AmountRegex, r.MerchantRegex, r.CurrencyRegex,
+			r.TransactionSource, r.Enabled,
 		)
 		if err != nil {
 			return fmt.Errorf("seeding system rule %q: %w", r.Name, err)
@@ -1427,18 +1438,20 @@ func (s *Store) ImportUserRules(ctx context.Context, rules []RuleRow) error {
 	for _, r := range rules {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO rules
-			  (name, sender_email, subject_contains, amount_regex, merchant_regex, currency_regex, enabled)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			  (name, sender_email, subject_contains, amount_regex, merchant_regex, currency_regex, transaction_source, enabled)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			ON CONFLICT (name, source) DO UPDATE SET
-				sender_email     = EXCLUDED.sender_email,
-				subject_contains = EXCLUDED.subject_contains,
-				amount_regex     = EXCLUDED.amount_regex,
-				merchant_regex   = EXCLUDED.merchant_regex,
-				currency_regex   = EXCLUDED.currency_regex,
-				enabled          = EXCLUDED.enabled,
-				updated_at       = NOW()`,
+				sender_email       = EXCLUDED.sender_email,
+				subject_contains   = EXCLUDED.subject_contains,
+				amount_regex       = EXCLUDED.amount_regex,
+				merchant_regex     = EXCLUDED.merchant_regex,
+				currency_regex     = EXCLUDED.currency_regex,
+				transaction_source = EXCLUDED.transaction_source,
+				enabled            = EXCLUDED.enabled,
+				updated_at         = NOW()`,
 			r.Name, r.SenderEmail, r.SubjectContains,
-			r.AmountRegex, r.MerchantRegex, r.CurrencyRegex, r.Enabled,
+			r.AmountRegex, r.MerchantRegex, r.CurrencyRegex,
+			r.TransactionSource, r.Enabled,
 		)
 		if err != nil {
 			return fmt.Errorf("importing rule %q: %w", r.Name, err)
