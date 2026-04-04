@@ -397,8 +397,7 @@ export function useThunderbirdProfiles() {
 export function useThunderbirdMailboxes(profilePath: string) {
   return useQuery({
     queryKey: ['thunderbird', 'mailboxes', profilePath] as const,
-    queryFn: () =>
-      api.thunderbird.discoverMailboxes(profilePath).then((r) => r.data.mailboxes),
+    queryFn: () => api.thunderbird.discoverMailboxes(profilePath).then((r) => r.data.mailboxes),
     staleTime: 60_000,
     enabled: profilePath.length > 0,
   })
