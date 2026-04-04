@@ -4,16 +4,14 @@ import { AppearanceSettings } from './settings/AppearanceSettings'
 import { BucketsSettings } from './settings/BucketsSettings'
 import { CategoriesSettings } from './settings/CategoriesSettings'
 import { LabelsSettings } from './settings/LabelsSettings'
-import { RulesSettings } from './settings/RulesSettings'
 
-type SettingsTab = 'appearance' | 'categories' | 'buckets' | 'labels' | 'rules' | 'webhooks'
+type SettingsTab = 'appearance' | 'categories' | 'buckets' | 'labels' | 'webhooks'
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'appearance', label: 'Appearance' },
   { id: 'categories', label: 'Categories' },
   { id: 'buckets', label: 'Buckets' },
   { id: 'labels', label: 'Labels' },
-  { id: 'rules', label: 'Rules' },
   { id: 'webhooks', label: 'Webhooks' },
 ]
 
@@ -43,7 +41,6 @@ export default function Settings() {
       {tab === 'categories' && <CategoriesSettings />}
       {tab === 'buckets' && <BucketsSettings />}
       {tab === 'labels' && <LabelsSettings />}
-      {tab === 'rules' && <RulesSettings />}
       {tab === 'webhooks' && <p className="text-sm text-muted-foreground">Coming soon.</p>}
     </div>
   )
