@@ -93,6 +93,7 @@ export interface Rule {
   amount_regex: string
   merchant_regex: string
   currency_regex: string
+  transaction_source: string
   enabled: boolean
   source: 'system' | 'user'
   created_at: string

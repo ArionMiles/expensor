@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useActiveReader, useCreateRule, useRescan, useRules, useUpdateRule } from '@/api/queries'
+import {
+  useActiveReader,
+  useCreateRule,
+  useFacets,
+  useRescan,
+  useRules,
+  useUpdateRule,
+} from '@/api/queries'
 
 // ─── Regex helpers ────────────────────────────────────────────────────────────
 
@@ -38,6 +45,7 @@ interface FormState {
   amountRegex: string
   merchantRegex: string
   currencyRegex: string
+  transactionSource: string
   enabled: boolean
 }
 
@@ -48,6 +56,7 @@ const emptyForm: FormState = {
   amountRegex: '',
   merchantRegex: '',
   currencyRegex: '',
+  transactionSource: '',
   enabled: true,
 }
 
@@ -62,6 +71,7 @@ export function RuleForm() {
   const rule = id ? rules.find((r) => r.id === id) : null
 
   const { data: activeReader = '' } = useActiveReader()
+  const { data: facets } = useFacets()
 
   const [form, setForm] = useState<FormState>(emptyForm)
   const [samples, setSamples] = useState<string[]>([''])
@@ -83,6 +93,7 @@ export function RuleForm() {
         amountRegex: rule.amount_regex,
         merchantRegex: rule.merchant_regex,
         currencyRegex: rule.currency_regex,
+        transactionSource: rule.transaction_source,
         enabled: rule.enabled,
       })
     }
@@ -139,6 +150,7 @@ export function RuleForm() {
           amount_regex: form.amountRegex,
           merchant_regex: form.merchantRegex,
           currency_regex: form.currencyRegex,
+          transaction_source: form.transactionSource,
           enabled: form.enabled,
         }
 
@@ -241,6 +253,28 @@ export function RuleForm() {
             />
           </div>
         ))}
+
+        <div>
+          <label className="mb-1 block text-xs uppercase tracking-wider text-muted-foreground">
+            Source
+          </label>
+          <input
+            value={form.transactionSource}
+            onChange={set('transactionSource')}
+            disabled={isSystem}
+            list="rule-source-options"
+            placeholder="e.g. Credit Card - HDFC"
+            className="w-full rounded border border-border bg-input px-2 py-1.5 text-sm disabled:opacity-50"
+          />
+          <datalist id="rule-source-options">
+            {(facets?.sources ?? []).map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Label shown in the Transactions source column for this rule's emails.
+          </p>
+        </div>
 
         {(
           [

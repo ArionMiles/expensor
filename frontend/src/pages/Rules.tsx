@@ -38,6 +38,7 @@ export default function Rules() {
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [importMsg, setImportMsg] = useState('')
+  const [sysTooltip, setSysTooltip] = useState<{ x: number; y: number } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [confirmState, setConfirmState] = useState<{
     title: string
@@ -266,20 +267,26 @@ export default function Rules() {
                   </button>
                 </td>
                 <td className="px-3 py-2">
-                  <div className="group relative inline-block">
+                  {rule.source === 'system' ? (
                     <button
-                      onClick={() => handleDelete(rule)}
-                      disabled={rule.source === 'system'}
-                      className="text-xs text-destructive hover:underline disabled:cursor-not-allowed disabled:opacity-30"
+                      disabled
+                      onMouseEnter={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        setSysTooltip({ x: rect.left + rect.width / 2, y: rect.top - 6 })
+                      }}
+                      onMouseLeave={() => setSysTooltip(null)}
+                      className="cursor-not-allowed text-xs text-destructive opacity-30"
                     >
                       Delete
                     </button>
-                    {rule.source === 'system' && (
-                      <div className="pointer-events-none absolute bottom-full left-1/2 mb-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded bg-foreground px-2 py-1 text-xs text-background shadow-md group-hover:block">
-                        System rules cannot be deleted
-                      </div>
-                    )}
-                  </div>
+                  ) : (
+                    <button
+                      onClick={() => handleDelete(rule)}
+                      className="text-xs text-destructive hover:underline"
+                    >
+                      Delete
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -296,6 +303,15 @@ export default function Rules() {
           </tbody>
         </table>
       </div>
+
+      {sysTooltip && (
+        <div
+          className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded bg-foreground px-2 py-1 text-xs text-background shadow-md"
+          style={{ left: sysTooltip.x, top: sysTooltip.y }}
+        >
+          System rules cannot be deleted
+        </div>
+      )}
 
       {confirmState && (
         <ConfirmModal
