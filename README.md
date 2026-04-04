@@ -18,17 +18,30 @@ I've documented why exactly expensor works for me [on my blog](https://kanishk.i
 
 ## Architecture
 
-```
-readers (gmail | thunderbird)
-        │
-        ▼
-  daemon runner
-        │
-        ▼
-  postgres writer
-        │
-        ▼
-  PostgreSQL DB  ──▶  REST API  ──▶  Web UI (React)
+```mermaid
+flowchart LR
+    subgraph Sources["Email Sources"]
+        Gmail([Gmail API])
+        TB([Thunderbird MBOX])
+    end
+
+    subgraph Daemon
+        direction TB
+        Reader[Readers] --> Runner[Runner] --> Writer[PostgreSQL Writer]
+        Runner -. dedup .-> State[(state.json)]
+    end
+
+    subgraph App["Expensor :8080"]
+        direction TB
+        API[REST API] --- Static[Static Server]
+    end
+
+    Gmail --> Reader
+    TB --> Reader
+    Writer --> DB[(PostgreSQL)]
+    DB <--> API
+    Static --> UI[Web UI]
+    UI -- /api/* --> API
 ```
 
 ## Repository Structure
@@ -57,40 +70,45 @@ readers (gmail | thunderbird)
 │       └── plugins/         # Plugin wrappers for readers & writers
 ├── frontend/                # React + Vite + Tailwind web UI
 ├── tests/                   # Integration test helpers & local docker-compose
-├── deployment/              # Docker Compose files per reader+writer combo
 ├── docker-compose.yml       # Default compose (gmail + postgres)
 └── Taskfile.yml             # Build & dev automation
 ```
 
 ## Quick Start
 
-### With Docker Compose
-
-Pre-built compose files live in [`deployment/`](deployment/):
-
 ```bash
-# Gmail + Postgres
-docker compose -f deployment/docker-compose.gmail-postgres.yml up -d
+# 1. Download the compose file
+curl -O https://raw.githubusercontent.com/ArionMiles/expensor/main/docker-compose.yml
 
-# Thunderbird + Postgres
-docker compose -f deployment/docker-compose.thunderbird-postgres.yml up -d
+# 2. Start Expensor and PostgreSQL
+docker compose up -d
+
+# 3. Open the web UI and complete the onboarding wizard
+open http://localhost:8080
 ```
 
-Once up, open **http://localhost:8080** and follow the onboarding wizard.
+Your data (credentials, OAuth token, state) is stored in `./data/` which is created automatically.
 
-### From Source
+### Releases
 
-Requires Go 1.25+ and Node 20+:
+| Channel | Image | Updated |
+|---------|-------|---------|
+| **Stable** | `ghcr.io/arionmiles/expensor:latest` | On git tag push |
+| **Nightly** | `ghcr.io/arionmiles/expensor:nightly` | Daily (if new commits) |
 
-```bash
-# Start postgres
-task db:start
-
-# Start everything (backend + frontend dev server)
-task dev
+To pin a specific version, change the image tag in `docker-compose.yml`:
+```yaml
+image: ghcr.io/arionmiles/expensor:v1.2.3
 ```
 
-Then open **http://localhost:5173**.
+### Thunderbird
+
+Uncomment the volume line in `docker-compose.yml` and set the path to your Thunderbird profile directory:
+```yaml
+volumes:
+  - ./data:/app/data
+  - /path/to/Thunderbird/Profiles/your.profile:/thunderbird-profile:ro
+```
 
 ## Configuration
 

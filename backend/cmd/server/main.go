@@ -258,7 +258,8 @@ func main() {
 		dc.start, dc.rescan,
 		logger.With("component", "api"),
 	)
-	server := httpapi.NewServer(port, handlers, logger.With("component", "http"))
+	staticDir := envStr("EXPENSOR_STATIC_DIR", "")
+	server := httpapi.NewServer(port, handlers, staticDir, logger.With("component", "http"))
 
 	if err := server.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("HTTP server error", "error", err)
