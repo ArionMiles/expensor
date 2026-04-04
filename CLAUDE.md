@@ -83,6 +83,21 @@ SQL files in `backend/migrations/` are embedded into the binary and run automati
 ### Configuration
 All env config flows through `pkg/config/config.go` using koanf. Only four env prefixes are loaded: `EXPENSOR_`, `GMAIL_`, `THUNDERBIRD_`, `POSTGRES_`. Do not add config fields under other prefixes.
 
+## Frontend Design Language Rules
+
+**Never use browser-native UI controls.** This project has a custom dark-themed design language. The following must never appear in frontend code:
+
+- `<select>` — use `InlineSelect` or a custom styled dropdown
+- `<datalist>` — use a custom combobox component (see `SourceCombobox` in `RuleForm.tsx` as a reference pattern)
+- `confirm()` / `alert()` / `prompt()` — use `ConfirmModal` from `@/components/ConfirmModal`
+- Native `title` attribute for tooltips — use CSS `group-hover` or `position:fixed` + mouse event state (see `Rules.tsx`)
+
+**Dropdown overflow:** All custom dropdowns in table rows or `overflow-x-auto` containers must use `position: fixed` + `getBoundingClientRect()` to escape the clipping context. See `LabelCombobox.tsx` and `InlineSelect.tsx` for the established pattern.
+
+**Disabled elements and mouse events:** Disabled form elements (`<button disabled>`, `<input disabled>`) do not fire `mouseenter`/`mouseleave` in browsers. Wrap them in a `<span>` to handle hover events when needed.
+
+See `frontend/README.md` for the full color system, component patterns, and spacing rules.
+
 ## Lint Rules to Know
 
 The prod linter is strict. Common traps:

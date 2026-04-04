@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   useActiveReader,
@@ -58,6 +58,63 @@ const emptyForm: FormState = {
   currencyRegex: '',
   transactionSource: '',
   enabled: true,
+}
+
+// ─── Source combobox ─────────────────────────────────────────────────────────
+
+interface SourceComboboxProps {
+  value: string
+  onChange: (v: string) => void
+  options: string[]
+  disabled?: boolean
+}
+
+function SourceCombobox({ value, onChange, options, disabled }: SourceComboboxProps) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Filter options: exclude internal rule-origin values, match current input
+  const filtered = options.filter(
+    (o) => o !== 'user' && o !== 'system' && o.toLowerCase().includes(value.toLowerCase()),
+  )
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setOpen(true)}
+        disabled={disabled}
+        placeholder="e.g. Credit Card - HDFC"
+        className="w-full rounded border border-border bg-input px-2 py-1.5 text-sm disabled:opacity-50"
+      />
+      {open && filtered.length > 0 && (
+        <ul className="absolute left-0 top-full z-50 mt-0.5 max-h-48 w-full overflow-y-auto rounded-md border border-border bg-card shadow-lg">
+          {filtered.map((opt) => (
+            <li
+              key={opt}
+              onMouseDown={() => {
+                onChange(opt)
+                setOpen(false)
+              }}
+              className="cursor-pointer px-3 py-1.5 text-sm text-foreground hover:bg-accent"
+            >
+              {opt}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
 }
 
 // ─── Rule form page ───────────────────────────────────────────────────────────
@@ -258,19 +315,12 @@ export function RuleForm() {
           <label className="mb-1 block text-xs uppercase tracking-wider text-muted-foreground">
             Source
           </label>
-          <input
+          <SourceCombobox
             value={form.transactionSource}
-            onChange={set('transactionSource')}
+            onChange={(v) => setForm((f) => ({ ...f, transactionSource: v }))}
+            options={facets?.sources ?? []}
             disabled={isSystem}
-            list="rule-source-options"
-            placeholder="e.g. Credit Card - HDFC"
-            className="w-full rounded border border-border bg-input px-2 py-1.5 text-sm disabled:opacity-50"
           />
-          <datalist id="rule-source-options">
-            {(facets?.sources ?? []).map((s) => (
-              <option key={s} value={s} />
-            ))}
-          </datalist>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Label shown in the Transactions source column for this rule's emails.
           </p>
