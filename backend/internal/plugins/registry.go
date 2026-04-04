@@ -42,6 +42,7 @@ type GuideProvider interface {
 type ConfigApplier interface {
 	ApplyConfig(cfg *config.Config, raw map[string]any)
 }
+
 // ReaderGuide is the structured setup guide for a reader plugin.
 type ReaderGuide struct {
 	Sections []GuideSection `json:"sections"`
