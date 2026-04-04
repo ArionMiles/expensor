@@ -15,6 +15,24 @@ const DefaultStateFile = "data/state.json"
 // Config holds the application configuration loaded from environment variables.
 // Reader and writer plugin selection is driven by the web UI, not env vars.
 type Config struct {
+	// Port is the HTTP server port.
+	// Environment variable: PORT
+	// Default: 8080
+	Port int `koanf:"PORT"`
+
+	// BaseURL is the public-facing base URL of the server, used as the OAuth
+	// redirect URI. Set this when hosting on a local network or remote server.
+	// Environment variable: BASE_URL
+	// Default: http://localhost:<PORT>
+	BaseURL string `koanf:"BASE_URL"`
+
+	// FrontendURL is the URL used for post-auth redirects (e.g. after OAuth).
+	// Defaults to BaseURL — only override this for local development when the
+	// frontend Vite dev server runs on a different port.
+	// Environment variable: FRONTEND_URL
+	// Default: same as BASE_URL
+	FrontendURL string `koanf:"FRONTEND_URL"`
+
 	// StateFile is the path to the state file for tracking processed messages.
 	// Environment variable: EXPENSOR_STATE_FILE
 	// Default: data/state.json
@@ -39,6 +57,12 @@ type Config struct {
 	// Environment variable: EXPENSOR_LOOKBACK_DAYS
 	// Default: 180
 	LookbackDays int `koanf:"EXPENSOR_LOOKBACK_DAYS"`
+
+	// StaticDir is an optional path to serve static frontend files from disk
+	// instead of the embedded assets. Useful for development.
+	// Environment variable: EXPENSOR_STATIC_DIR
+	// Default: "" (use embedded assets)
+	StaticDir string `koanf:"EXPENSOR_STATIC_DIR"`
 
 	// Reader-specific configurations (embedded to flatten the key namespace)
 	Gmail       GmailConfig       `koanf:",squash"`
@@ -116,6 +140,16 @@ func (c *Config) ValidatePostgres() error {
 
 // ApplyDefaults sets default values for unset configuration options.
 func (c *Config) ApplyDefaults() {
+	if c.Port <= 0 {
+		c.Port = 8080
+	}
+	if c.BaseURL == "" {
+		c.BaseURL = fmt.Sprintf("http://localhost:%d", c.Port)
+	}
+	if c.FrontendURL == "" {
+		c.FrontendURL = c.BaseURL
+	}
+
 	if c.StateFile == "" {
 		c.StateFile = DefaultStateFile
 	}

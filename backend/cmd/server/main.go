@@ -193,14 +193,25 @@ func main() {
 	)
 
 	// Load configuration from environment variables.
-	// Only load variables under known namespaces to avoid polluting koanf with
-	// unrelated process environment variables (PATH, HOME, etc.).
+	// Prefix-based loads cover the majority of config. A separate pass picks up
+	// the small set of prefix-less server vars (PORT, BASE_URL, FRONTEND_URL).
 	k := koanf.New(".")
 	for _, prefix := range []string{"EXPENSOR_", "GMAIL_", "THUNDERBIRD_", "POSTGRES_"} {
 		if err := k.Load(env.Provider(prefix, ".", func(s string) string { return s }), nil); err != nil {
 			logger.Error("failed to load env config", "prefix", prefix, "error", err)
 			os.Exit(1)
 		}
+	}
+	// Load prefix-less server vars by allowlist to avoid ingesting PATH, HOME, etc.
+	serverVars := map[string]bool{"PORT": true, "BASE_URL": true, "FRONTEND_URL": true}
+	if err := k.Load(env.Provider("", ".", func(s string) string {
+		if serverVars[s] {
+			return s
+		}
+		return ""
+	}), nil); err != nil {
+		logger.Error("failed to load server env config", "error", err)
+		os.Exit(1)
 	}
 	var cfg config.Config
 	if err := k.UnmarshalWithConf("", &cfg, koanf.UnmarshalConf{Tag: "koanf", FlatPaths: true}); err != nil {
@@ -264,14 +275,6 @@ func main() {
 	// dm is started on demand via POST /api/daemon/start.
 	dm := &daemonManager{}
 
-	// Start HTTP server.
-	port := envInt("PORT", 8080)
-	baseURL := envStr("BASE_URL", fmt.Sprintf("http://localhost:%d", port))
-	// Default FRONTEND_URL to BASE_URL: in production the frontend is served by
-	// the same binary, so they share the same host. Local dev overrides this via
-	// FRONTEND_URL=http://localhost:5173 in tests/.env.
-	frontendURL := envStr("FRONTEND_URL", baseURL)
-
 	// dc coordinates daemon start and rescan requests with a shared mutex.
 	dc := &daemonCoordinator{
 		ctx: ctx, registry: registry, cfg: cfg,
@@ -286,14 +289,13 @@ func main() {
 	}
 
 	handlers := httpapi.NewHandlers(
-		registry, st, dm, baseURL, frontendURL,
+		registry, st, dm, cfg.BaseURL, cfg.FrontendURL,
 		cfg.DataDir, cfg.BaseCurrency,
 		cfg.ScanInterval, cfg.LookbackDays,
 		dc.start, dc.rescan,
 		logger.With("component", "api"),
 	)
-	staticDir := envStr("EXPENSOR_STATIC_DIR", "")
-	server := httpapi.NewServer(port, handlers, staticDir, logger.With("component", "http"))
+	server := httpapi.NewServer(cfg.Port, handlers, cfg.StaticDir, logger.With("component", "http"))
 
 	if err := server.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("HTTP server error", "error", err)
@@ -594,22 +596,6 @@ func checkAndClearRescanPending(ctx context.Context, st httpapi.Storer, logger *
 	_ = st.SetAppConfig(ctx, "rescan_pending", "") // clear flag; best-effort
 	logger.Info("rescan_pending flag detected — starting with force rescan")
 	return true
-}
-
-func envInt(key string, def int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return def
-}
-
-func envStr(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
 }
 
 // applyScanOverrides returns a copy of cfg with ScanInterval and LookbackDays
