@@ -46,6 +46,9 @@ type RunConfig struct {
 	Rules        []api.Rule
 	Labels       api.Labels
 	StateManager *state.Manager
+	// ForceRescan bypasses state deduplication for the current run.
+	// When true, StateManager should be nil — readers handle nil gracefully.
+	ForceRescan bool
 }
 
 // Run starts the expense tracking daemon with the given configuration.

@@ -220,6 +220,7 @@ func main() {
 		cfg.DataDir, cfg.BaseCurrency,
 		cfg.ScanInterval, cfg.LookbackDays,
 		startDaemon,
+		nil, // rescanFn: wired in a later task
 		logger.With("component", "api"),
 	)
 	server := httpapi.NewServer(port, handlers, logger.With("component", "http"))

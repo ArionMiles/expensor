@@ -60,6 +60,8 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("GET /api/health", h.HandleHealth)
 	mux.HandleFunc("GET /api/status", h.HandleStatus)
 	mux.HandleFunc("POST /api/daemon/start", h.HandleStartDaemon)
+	mux.HandleFunc("POST /api/daemon/rescan", h.HandleRescan)
+	mux.HandleFunc("GET /api/config/active-reader", h.HandleGetActiveReader)
 
 	// Plugin listing
 	mux.HandleFunc("GET /api/plugins/readers", h.HandleListReaders)

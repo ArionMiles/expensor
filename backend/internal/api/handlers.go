@@ -61,6 +61,7 @@ type Handlers struct {
 	scanInterval int                 // default scan interval in seconds
 	lookbackDays int                 // default lookback in days
 	startFn      func(reader string) // called by POST /api/daemon/start; may be nil
+	rescanFn     func(reader string) // called by POST /api/daemon/rescan; may be nil
 	logger       *slog.Logger
 
 	// oauthStates maps state token → entry for in-flight OAuth flows.
@@ -82,6 +83,7 @@ func NewHandlers( //nolint:revive // dependency injection requires all these par
 	scanInterval int,
 	lookbackDays int,
 	startFn func(reader string),
+	rescanFn func(reader string),
 	logger *slog.Logger,
 ) *Handlers {
 	if frontendURL == "" {
@@ -110,6 +112,7 @@ func NewHandlers( //nolint:revive // dependency injection requires all these par
 		scanInterval: scanInterval,
 		lookbackDays: lookbackDays,
 		startFn:      startFn,
+		rescanFn:     rescanFn,
 		logger:       logger,
 		oauthStates:  make(map[string]oauthStateEntry),
 	}
@@ -596,6 +599,62 @@ func (h *Handlers) HandleStartDaemon(w http.ResponseWriter, r *http.Request) {
 	h.logger.Info("daemon start requested", "reader", body.Reader)
 	h.startFn(body.Reader)
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "starting"})
+}
+
+// HandleRescan handles POST /api/daemon/rescan.
+// Body: {"reader": "<name>"}
+// If the daemon is idle, starts a forced rescan immediately.
+// If the daemon is running, queues the rescan via app_config["rescan_pending"].
+func (h *Handlers) HandleRescan(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+
+	var body struct {
+		Reader string `json:"reader"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Reader == "" {
+		writeError(w, http.StatusBadRequest, `body must be {"reader": "<name>"}`)
+		return
+	}
+	if _, err := h.registry.GetReader(body.Reader); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("reader %q not found", body.Reader))
+		return
+	}
+
+	if h.daemon.Status().Running {
+		if err := h.store.SetAppConfig(r.Context(), "rescan_pending", "true"); err != nil {
+			h.logger.Error("failed to queue rescan", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to queue rescan")
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued"})
+		return
+	}
+
+	if h.rescanFn == nil {
+		writeError(w, http.StatusNotImplemented, "rescan not configured")
+		return
+	}
+	h.rescanFn(body.Reader)
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "rescanning"})
+}
+
+// HandleGetActiveReader handles GET /api/config/active-reader.
+// Returns the reader name persisted from the last daemon start, or "" if none.
+func (h *Handlers) HandleGetActiveReader(w http.ResponseWriter, r *http.Request) {
+	b, err := os.ReadFile(filepath.Join(h.dataDir, "active_reader"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeJSON(w, http.StatusOK, map[string]string{"reader": ""})
+			return
+		}
+		h.logger.Error("failed to read active reader", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to read active reader")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"reader": string(b)})
 }
 
 // --- transactions ---

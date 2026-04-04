@@ -282,7 +282,7 @@ func newTestHandlers(t *testing.T, st Storer, dm DaemonStatusProvider) *Handlers
 		{Key: "profilePath", Label: "Profile Directory", Type: "path", Required: true},
 	}})
 	_ = registry.RegisterWriter(&testWriterPlugin{name: "postgres"})
-	return NewHandlers(registry, st, dm, "http://localhost:8080", "http://localhost:5173", t.TempDir(), "INR", 60, 180, nil, slog.Default())
+	return NewHandlers(registry, st, dm, "http://localhost:8080", "http://localhost:5173", t.TempDir(), "INR", 60, 180, nil, nil, slog.Default())
 }
 
 // --- minimal plugin stubs ---
@@ -1462,5 +1462,52 @@ func TestHandleImportRules_InvalidRegex_Returns422(t *testing.T) {
 	h.HandleImportRules(rr, req)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+// --- rescan ---
+
+func TestHandleRescan_DaemonRunning_Returns202Queued(t *testing.T) {
+	ms := &mockStore{}
+	dm := &mockDaemon{status: DaemonStatus{Running: true}}
+	h := newTestHandlers(t, ms, dm)
+
+	body := `{"reader":"gmail"}`
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/daemon/rescan", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	h.HandleRescan(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp map[string]string
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp["status"] != "queued" {
+		t.Errorf("expected status=queued, got %q", resp["status"])
+	}
+}
+
+func TestHandleRescan_DaemonNotRunning_Returns202Rescanning(t *testing.T) {
+	called := false
+	ms := &mockStore{}
+	dm := &mockDaemon{status: DaemonStatus{Running: false}}
+	h := newTestHandlers(t, ms, dm)
+	h.rescanFn = func(_ string) { called = true }
+
+	body := `{"reader":"gmail"}`
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/daemon/rescan", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	h.HandleRescan(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp map[string]string
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp["status"] != "rescanning" {
+		t.Errorf("expected status=rescanning, got %q", resp["status"])
+	}
+	if !called {
+		t.Error("expected rescanFn to be called")
 	}
 }
