@@ -18,6 +18,7 @@ export function InlineSelect({
 }: InlineSelectProps) {
   const [open, setOpen] = useState(false)
   const [highlighted, setHighlighted] = useState(-1)
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -59,6 +60,10 @@ export function InlineSelect({
     <div ref={containerRef} className="relative">
       <button
         onClick={() => {
+          if (!open) {
+            const rect = containerRef.current?.getBoundingClientRect()
+            if (rect) setDropdownPos({ top: rect.bottom + 2, left: rect.left })
+          }
           setOpen(!open)
           setHighlighted(-1)
         }}
@@ -72,10 +77,11 @@ export function InlineSelect({
         {value || <span className="opacity-30">{placeholder}</span>}
       </button>
 
-      {open && (
+      {open && dropdownPos && (
         <ul
           role="listbox"
-          className="absolute left-0 top-full z-50 mt-0.5 max-h-48 min-w-[140px] overflow-y-auto rounded-md border border-border bg-card shadow-lg"
+          style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left }}
+          className="z-50 max-h-48 min-w-[140px] overflow-y-auto rounded-md border border-border bg-card shadow-lg"
         >
           {options.map((opt, i) => (
             <li

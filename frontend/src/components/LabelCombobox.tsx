@@ -11,6 +11,7 @@ interface LabelComboboxProps {
 export function LabelCombobox({ tx }: LabelComboboxProps) {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const { data: labels = [] } = useLabels()
@@ -94,7 +95,14 @@ export function LabelCombobox({ tx }: LabelComboboxProps) {
             className="w-24 rounded-sm border border-primary bg-accent px-1.5 py-0.5 text-xs text-foreground focus:outline-none"
           />
           {(filtered.length > 0 || showCreate) && (
-            <ul className="absolute left-0 top-full z-50 mt-0.5 max-h-40 min-w-[140px] overflow-y-auto rounded-md border border-border bg-card shadow-lg">
+            <ul
+              style={
+                dropdownPos
+                  ? { position: 'fixed', top: dropdownPos.top, left: dropdownPos.left }
+                  : {}
+              }
+              className="z-50 max-h-40 min-w-[140px] overflow-y-auto rounded-md border border-border bg-card shadow-lg"
+            >
               {filtered.map((l) => (
                 <li
                   key={l.name}
@@ -125,7 +133,13 @@ export function LabelCombobox({ tx }: LabelComboboxProps) {
         </div>
       ) : (
         <button
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            const rect = containerRef.current?.getBoundingClientRect()
+            if (rect) {
+              setDropdownPos({ top: rect.bottom + 4, left: rect.left })
+            }
+            setOpen(true)
+          }}
           className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
           aria-label="Add label"
         >

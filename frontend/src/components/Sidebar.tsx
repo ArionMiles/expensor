@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   type LucideIcon,
   Plug,
+  ScrollText,
   Settings2,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -28,6 +29,7 @@ const PRIMARY_NAV: NavItemDef[] = [
 
 const SECONDARY_NAV: NavItemDef[] = [
   { label: 'Onboarding', icon: Plug, href: '/setup' },
+  { label: 'Rules', icon: ScrollText, href: '/rules' },
   { label: 'Settings', icon: Settings2, href: '/settings' },
 ]
 

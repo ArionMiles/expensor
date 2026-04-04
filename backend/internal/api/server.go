@@ -60,6 +60,8 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("GET /api/health", h.HandleHealth)
 	mux.HandleFunc("GET /api/status", h.HandleStatus)
 	mux.HandleFunc("POST /api/daemon/start", h.HandleStartDaemon)
+	mux.HandleFunc("POST /api/daemon/rescan", h.HandleRescan)
+	mux.HandleFunc("GET /api/config/active-reader", h.HandleGetActiveReader)
 
 	// Plugin listing
 	mux.HandleFunc("GET /api/plugins/readers", h.HandleListReaders)
@@ -112,6 +114,14 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("GET /api/config/buckets", h.HandleListBuckets)
 	mux.HandleFunc("POST /api/config/buckets", h.HandleCreateBucket)
 	mux.HandleFunc("DELETE /api/config/buckets/{name}", h.HandleDeleteBucket)
+
+	// Rules — export and import before /{id} to avoid wildcard capture
+	mux.HandleFunc("GET /api/rules", h.HandleListRules)
+	mux.HandleFunc("GET /api/rules/export", h.HandleExportRules)
+	mux.HandleFunc("POST /api/rules/import", h.HandleImportRules)
+	mux.HandleFunc("POST /api/rules", h.HandleCreateRule)
+	mux.HandleFunc("PUT /api/rules/{id}", h.HandleUpdateRule)
+	mux.HandleFunc("DELETE /api/rules/{id}", h.HandleDeleteRule)
 
 	// Transactions
 	// /search and /facets must be registered before /{id} to avoid the wildcard swallowing them.

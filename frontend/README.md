@@ -91,6 +91,84 @@ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica N
 - Cards and panels: `shadow-sm`
 - No heavy shadows or glow effects
 
+### Never Use Native Browser Controls
+
+This project has a custom dark-themed design language. Native browser controls break it and must never be used:
+
+| ❌ Never use | ✅ Use instead |
+|---|---|
+| `<select>` | `InlineSelect` from `@/components/InlineSelect` |
+| `<datalist>` | Custom combobox with styled `<ul>` dropdown (see `SourceCombobox` in `pages/rules/RuleForm.tsx`) |
+| `confirm()` / `alert()` / `prompt()` | `ConfirmModal` from `@/components/ConfirmModal` |
+| `title="..."` attribute (browser tooltip) | CSS `group-hover:block` div or `position:fixed` with `onMouseEnter` state |
+
+#### Custom combobox pattern (for free-text + suggestions)
+
+```tsx
+function MyCombobox({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: string[] }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const filtered = options.filter((o) => o.toLowerCase().includes(value.toLowerCase()))
+
+  return (
+    <div ref={ref} className="relative">
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setOpen(true)}
+        className="w-full rounded border border-border bg-input px-2 py-1.5 text-sm"
+      />
+      {open && filtered.length > 0 && (
+        <ul className="absolute left-0 top-full z-50 mt-0.5 w-full overflow-y-auto rounded-md border border-border bg-card shadow-lg">
+          {filtered.map((opt) => (
+            <li key={opt} onMouseDown={() => { onChange(opt); setOpen(false) }}
+              className="cursor-pointer px-3 py-1.5 text-sm text-foreground hover:bg-accent">
+              {opt}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+```
+
+#### Dropdown overflow in tables
+
+Dropdowns inside `overflow-x-auto` containers must use `position: fixed` to escape clipping:
+
+```tsx
+// Capture position on open:
+const rect = containerRef.current?.getBoundingClientRect()
+setDropdownPos({ top: rect.bottom + 2, left: rect.left })
+
+// Render with fixed position:
+<ul style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left }}
+  className="z-50 min-w-[140px] rounded-md border border-border bg-card shadow-lg">
+```
+
+See `LabelCombobox.tsx` and `InlineSelect.tsx` for complete implementations.
+
+#### Disabled elements and hover events
+
+Disabled form elements do not fire `mouseenter`/`mouseleave` in browsers. Wrap them in a `<span>` to receive hover events:
+
+```tsx
+<span onMouseEnter={showTooltip} onMouseLeave={hideTooltip}>
+  <button disabled className="pointer-events-none opacity-30">Action</button>
+</span>
+```
+
 ### Component Patterns
 
 #### Cards / Panels

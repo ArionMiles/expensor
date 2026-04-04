@@ -8,6 +8,8 @@ const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const Transactions = lazy(() => import('@/pages/Transactions'))
 const Wizard = lazy(() => import('@/pages/setup/Wizard').then((m) => ({ default: m.Wizard })))
 const Settings = lazy(() => import('@/pages/Settings'))
+const Rules = lazy(() => import('@/pages/Rules'))
+const RuleForm = lazy(() => import('@/pages/rules/RuleForm').then((m) => ({ default: m.RuleForm })))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -68,6 +70,30 @@ export function App() {
                 element={
                   <PageSuspense>
                     <Settings />
+                  </PageSuspense>
+                }
+              />
+              <Route
+                path="/rules"
+                element={
+                  <PageSuspense>
+                    <Rules />
+                  </PageSuspense>
+                }
+              />
+              <Route
+                path="/rules/new"
+                element={
+                  <PageSuspense>
+                    <RuleForm />
+                  </PageSuspense>
+                }
+              />
+              <Route
+                path="/rules/:id"
+                element={
+                  <PageSuspense>
+                    <RuleForm />
                   </PageSuspense>
                 }
               />
