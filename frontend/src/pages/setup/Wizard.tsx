@@ -420,7 +420,7 @@ function ReaderCard({
                       </button>
                     )}
 
-                    {readerState === 'connected' && (
+                    {readerState === 'connected' && isOAuth && (
                       <button
                         onClick={handleDisconnect}
                         disabled={isBusy}
