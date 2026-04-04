@@ -71,12 +71,16 @@ func (p *Plugin) ConfigSchema() []plugins.ConfigField {
 func (p *Plugin) SetupGuide() []byte { return guideData }
 
 // ApplyConfig maps the web-UI-persisted JSON config onto config.Config.
-// Keys match the ConfigSchema: "profilePath" and "mailboxes".
+// The frontend wraps fields under a "config" key: {"config":{"profilePath":...}}.
 func (p *Plugin) ApplyConfig(cfg *config.Config, raw map[string]any) {
-	if v, ok := raw["profilePath"].(string); ok {
+	fields, ok := raw["config"].(map[string]any)
+	if !ok {
+		return
+	}
+	if v, ok := fields["profilePath"].(string); ok {
 		cfg.Thunderbird.ProfilePath = v
 	}
-	if v, ok := raw["mailboxes"].(string); ok {
+	if v, ok := fields["mailboxes"].(string); ok {
 		cfg.Thunderbird.Mailboxes = v
 	}
 }
