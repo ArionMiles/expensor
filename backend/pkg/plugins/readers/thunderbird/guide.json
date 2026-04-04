@@ -1,0 +1,30 @@
+{
+  "sections": [
+    {
+      "title": "Find your Thunderbird profile",
+      "steps": [
+        "In Thunderbird, open Help → Troubleshooting Information.",
+        "Click Open Folder next to Profile Directory — this is the path to enter below.",
+        "On macOS the path is usually ~/Library/Thunderbird/Profiles/<name>.",
+        "On Linux: ~/.thunderbird/<name>. On Windows: %APPDATA%/Thunderbird/Profiles/<name>."
+      ]
+    },
+    {
+      "title": "Select mailboxes to scan",
+      "steps": [
+        "Pick the mailboxes (folders) Expensor should scan for transaction emails.",
+        "INBOX is the most common choice; add others like Promotions or bank-specific folders if needed."
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "type": "docker",
+      "text": "Running Expensor in Docker? Mount your profile directory as a read-only volume in docker-compose.yml: - /path/to/your/profile:/thunderbird-profile:ro. The profile selector will then show it automatically."
+    },
+    {
+      "type": "info",
+      "text": "If no profiles appear in the dropdown, the profile path may not be accessible. Enter it manually or check the Docker volume mount."
+    }
+  ]
+}

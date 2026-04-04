@@ -249,3 +249,59 @@ func TestFindMailboxes_EmptyMailboxList(t *testing.T) {
 		t.Errorf("expected empty map, got %d mailboxes", len(mailboxPaths))
 	}
 }
+
+func TestListMailboxes_ReturnsMailboxNames(t *testing.T) {
+	dir := t.TempDir()
+	localFolders := filepath.Join(dir, "Mail", "Local Folders")
+	if err := os.MkdirAll(localFolders, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"INBOX", "Sent", "Trash"} {
+		if err := os.WriteFile(filepath.Join(localFolders, name), []byte("From "), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// .msf index files must NOT appear in results
+	if err := os.WriteFile(filepath.Join(localFolders, "INBOX.msf"), []byte(""), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	mailboxes, err := ListMailboxes(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(mailboxes) != 3 {
+		t.Errorf("expected 3 mailboxes, got %d: %v", len(mailboxes), mailboxes)
+	}
+	expected := []string{"INBOX", "Sent", "Trash"}
+	for i, want := range expected {
+		if mailboxes[i] != want {
+			t.Errorf("mailboxes[%d] = %q, want %q", i, mailboxes[i], want)
+		}
+	}
+}
+
+func TestListMailboxes_EmptyProfile_ReturnsEmptySlice(t *testing.T) {
+	dir := t.TempDir()
+	mailboxes, err := ListMailboxes(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(mailboxes) != 0 {
+		t.Errorf("expected 0 mailboxes, got %d", len(mailboxes))
+	}
+}
+
+func TestListMailboxes_NonexistentPath_ReturnsError(t *testing.T) {
+	_, err := ListMailboxes("/nonexistent/thunderbird/profile")
+	if err == nil {
+		t.Error("expected error for nonexistent path, got nil")
+	}
+}
+
+func TestListMailboxes_EmptyPath_ReturnsError(t *testing.T) {
+	_, err := ListMailboxes("")
+	if err == nil {
+		t.Error("expected error for empty path, got nil")
+	}
+}

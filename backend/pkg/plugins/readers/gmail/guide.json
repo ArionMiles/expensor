@@ -1,0 +1,40 @@
+{
+  "sections": [
+    {
+      "title": "Enable the Gmail API",
+      "steps": [
+        "Go to console.cloud.google.com and open or create a project.",
+        "Search for 'Gmail API' and click Enable."
+      ],
+      "link": { "label": "Google Cloud Console", "url": "https://console.cloud.google.com" }
+    },
+    {
+      "title": "Create OAuth 2.0 credentials",
+      "steps": [
+        "Navigate to APIs & Services → Credentials.",
+        "Click Create Credentials → OAuth client ID.",
+        "Set Application type to Desktop app.",
+        "Under Authorized redirect URIs add: http://localhost:8080/api/auth/callback",
+        "Click Create, then Download JSON — this is your client_secret.json."
+      ]
+    },
+    {
+      "title": "Configure the OAuth consent screen",
+      "steps": [
+        "Set User Type to External.",
+        "Add your email address as a test user.",
+        "Add scope: https://www.googleapis.com/auth/gmail.readonly"
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "type": "warning",
+      "text": "The redirect URI must be exactly: http://localhost:8080/api/auth/callback (or your deployed base URL + /api/auth/callback)."
+    },
+    {
+      "type": "info",
+      "text": "Only gmail.readonly is required. Expensor never modifies your inbox."
+    }
+  ]
+}

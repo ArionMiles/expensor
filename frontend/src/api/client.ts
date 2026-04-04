@@ -13,6 +13,7 @@ import type {
   Label,
   PluginInfo,
   ReaderConfig,
+  ReaderGuide,
   ReaderStatus,
   Rule,
   RuleImport,
@@ -109,6 +110,17 @@ export const api = {
     status: (readerName: string) => apiClient.get<ReaderStatus>(`/readers/${readerName}/status`),
 
     disconnect: (readerName: string) => apiClient.delete(`/readers/${readerName}`),
+
+    guide: (name: string) => apiClient.get<ReaderGuide>(`/readers/${name}/guide`),
+  },
+
+  thunderbird: {
+    discoverProfiles: () =>
+      apiClient.get<{ profiles: string[] }>('/readers/thunderbird/discover/profiles'),
+    discoverMailboxes: (profile: string) =>
+      apiClient.get<{ mailboxes: string[] }>(
+        `/readers/thunderbird/discover/mailboxes?profile=${encodeURIComponent(profile)}`,
+      ),
   },
 
   config: {

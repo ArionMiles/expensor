@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 )
 
 // FindProfiles finds all Thunderbird profile directories on the system.
@@ -130,4 +131,44 @@ func findMailboxInDirs(mailboxName string, dirs []string) (string, bool) {
 func pathExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// ListMailboxes returns the names of all available mailboxes in a Thunderbird profile.
+// It walks Mail/Local Folders, Mail/<account>/, and ImapMail/<account>/ directories,
+// returning file names that are MBOX files (no file extension — .msf index files are excluded).
+// Results are deduplicated and sorted alphabetically.
+func ListMailboxes(profilePath string) ([]string, error) {
+	if profilePath == "" {
+		return nil, fmt.Errorf("profile path is empty")
+	}
+	if _, err := os.Stat(profilePath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("profile path does not exist: %s", profilePath)
+	}
+
+	dirs := collectMailDirs(profilePath)
+	seen := make(map[string]struct{})
+	var mailboxes []string
+
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			if filepath.Ext(name) != "" {
+				continue
+			}
+			if _, exists := seen[name]; !exists {
+				seen[name] = struct{}{}
+				mailboxes = append(mailboxes, name)
+			}
+		}
+	}
+
+	sort.Strings(mailboxes)
+	return mailboxes, nil
 }

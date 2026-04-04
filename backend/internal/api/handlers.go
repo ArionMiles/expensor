@@ -24,6 +24,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/client"
+	tbreader "github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
 )
 
 const (
@@ -1352,6 +1353,86 @@ func (h *Handlers) HandleGetChartData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, cd)
+}
+
+// HandleDiscoverProfiles handles GET /api/readers/thunderbird/discover/profiles.
+// Returns discovered Thunderbird profile directories from platform paths,
+// the Docker mount /thunderbird-profile, and THUNDERBIRD_DATA_DIR env var.
+func (h *Handlers) HandleDiscoverProfiles(w http.ResponseWriter, _ *http.Request) {
+	var paths []string
+	seen := make(map[string]struct{})
+
+	addIfExists := func(p string) {
+		if p == "" {
+			return
+		}
+		if _, err := os.Stat(p); err == nil { //nolint:gosec // p is from OS path or trusted env var
+			if _, exists := seen[p]; !exists {
+				seen[p] = struct{}{}
+				paths = append(paths, p)
+			}
+		}
+	}
+
+	if discovered, err := tbreader.FindProfiles(); err == nil {
+		for _, p := range discovered {
+			addIfExists(p)
+		}
+	}
+	addIfExists("/thunderbird-profile")
+	addIfExists(os.Getenv("THUNDERBIRD_DATA_DIR"))
+
+	if paths == nil {
+		paths = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string][]string{"profiles": paths})
+}
+
+// HandleDiscoverMailboxes handles GET /api/readers/thunderbird/discover/mailboxes?profile=<path>.
+// Returns available MBOX mailbox names within the given Thunderbird profile directory.
+func (h *Handlers) HandleDiscoverMailboxes(w http.ResponseWriter, r *http.Request) {
+	profile := r.URL.Query().Get("profile")
+	if profile == "" {
+		writeError(w, http.StatusBadRequest, "profile query parameter is required")
+		return
+	}
+	if _, err := os.Stat(profile); os.IsNotExist(err) { //nolint:gosec // profile from query param, existence checked
+		writeError(w, http.StatusNotFound, "profile directory not found")
+		return
+	}
+	mailboxes, err := tbreader.ListMailboxes(profile)
+	if err != nil {
+		h.logger.Error("discovering mailboxes", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to discover mailboxes")
+		return
+	}
+	if mailboxes == nil {
+		mailboxes = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string][]string{"mailboxes": mailboxes})
+}
+
+// HandleGetReaderGuide handles GET /api/readers/{name}/guide.
+// Returns the structured setup guide for a reader if it implements plugins.GuideProvider.
+func (h *Handlers) HandleGetReaderGuide(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	plugin, err := h.registry.GetReader(name)
+	if err != nil {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
+		return
+	}
+	gp, ok := plugin.(plugins.GuideProvider)
+	if !ok || gp.SetupGuide() == nil {
+		writeError(w, http.StatusNotFound, "no setup guide available for this reader")
+		return
+	}
+	var guide plugins.ReaderGuide
+	if err := json.Unmarshal(gp.SetupGuide(), &guide); err != nil {
+		h.logger.Error("parsing reader guide", "reader", name, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to parse reader guide")
+		return
+	}
+	writeJSON(w, http.StatusOK, guide)
 }
 
 // HandleGetHeatmap handles GET /api/stats/heatmap.

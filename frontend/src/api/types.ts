@@ -120,6 +120,8 @@ export interface ConfigField {
   type: string
   label: string
   required: boolean
+  help?: string
+  depends_on?: string
   placeholder?: string
 }
 
@@ -129,6 +131,27 @@ export interface PluginInfo {
   auth_type: 'oauth' | 'config'
   requires_credentials_upload: boolean
   config_schema: ConfigField[]
+}
+
+export interface GuideLink {
+  label: string
+  url: string
+}
+
+export interface GuideSection {
+  title: string
+  steps: string[]
+  link?: GuideLink
+}
+
+export interface GuideNote {
+  type: 'info' | 'warning' | 'tip' | 'docker'
+  text: string
+}
+
+export interface ReaderGuide {
+  sections: GuideSection[]
+  notes?: GuideNote[]
 }
 
 export interface CredentialsStatus {

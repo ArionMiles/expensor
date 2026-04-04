@@ -101,36 +101,60 @@ func (m *daemonManager) Status() httpapi.DaemonStatus {
 // It exposes start and rescan as plain methods so they can be passed as func(string)
 // values without adding closure complexity to main.
 type daemonCoordinator struct {
-	mu          sync.Mutex
-	ctx         context.Context
-	registry    *plugins.Registry
-	cfg         config.Config
-	systemRules []api.Rule
-	labels      api.Labels
-	st          httpapi.Storer
-	dm          *daemonManager
-	logger      *slog.Logger
+	mu           sync.Mutex
+	ctx          context.Context
+	cancelFn     context.CancelFunc // cancels the current daemon run; nil when idle
+	activeReader string             // reader name currently running or last launched
+	registry     *plugins.Registry
+	cfg          config.Config
+	systemRules  []api.Rule
+	labels       api.Labels
+	st           httpapi.Storer
+	dm           *daemonManager
+	logger       *slog.Logger
 }
 
 // launch builds runtime config and merged rules then spawns runDaemon in a goroutine.
+// Must be called with c.mu held.
 func (c *daemonCoordinator) launch(readerName string, forceRescan bool) {
+	runCtx, cancel := context.WithCancel(c.ctx)
+	c.cancelFn = cancel
+	c.activeReader = readerName
 	runtimeCfg := applyScanOverrides(c.cfg, c.st)
 	merged := pkgrules.FilterEnabled(pkgrules.MergeRules(c.systemRules, loadUserRules(c.ctx, c.st, c.logger)))
-	go runDaemon(c.ctx, c.registry, readerName, runtimeCfg, merged, c.labels, c.dm, c.logger, forceRescan)
+	go func() {
+		defer cancel()
+		runDaemon(runCtx, c.registry, readerName, runtimeCfg, merged, c.labels, c.dm, c.logger, forceRescan)
+	}()
 }
 
-// start is safe to call concurrently; it is a no-op when the daemon is already running.
+// start is safe to call concurrently. If the daemon is already running with the same
+// reader it is a no-op. If a different reader is requested, the current daemon is
+// stopped and the new one is started.
 // It persists the reader name and checks the rescan_pending flag before launching.
 func (c *daemonCoordinator) start(readerName string) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.dm.Status().Running {
-		return
+		if c.activeReader == readerName {
+			c.mu.Unlock()
+			return
+		}
+		// Stop the current daemon so we can switch readers.
+		if c.cancelFn != nil {
+			c.cancelFn()
+		}
+		c.mu.Unlock()
+		// Wait for the goroutine to acknowledge the cancellation.
+		for c.dm.Status().Running {
+			time.Sleep(50 * time.Millisecond)
+		}
+		c.mu.Lock()
 	}
 	if err := saveActiveReader(c.cfg.DataDir, readerName); err != nil {
 		c.logger.Warn("failed to persist active reader", "error", err)
 	}
 	c.launch(readerName, checkAndClearRescanPending(c.ctx, c.st, c.logger))
+	c.mu.Unlock()
 }
 
 // rescan starts a daemon run with forceRescan=true, bypassing state deduplication.
