@@ -3,17 +3,22 @@
     {
       "title": "Find your Thunderbird profile",
       "steps": [
-        "In Thunderbird, open Help → Troubleshooting Information.",
-        "Click Open Folder next to Profile Directory — this is the path to enter below.",
-        "On macOS the path is usually ~/Library/Thunderbird/Profiles/<name>.",
-        "On Linux: ~/.thunderbird/<name>. On Windows: %APPDATA%/Thunderbird/Profiles/<name>."
+        {"text": "In Thunderbird, open Help → Troubleshooting Information."},
+        {
+          "text": "Under Application Basics → Profile Folder → Click \"Show in Finder\" — this is the path to enter below.",
+          "sub_steps": [
+            "macOS: ~/Library/Thunderbird/Profiles/<name>",
+            "Linux: ~/.thunderbird/<name>",
+            "Windows: %APPDATA%/Thunderbird/Profiles/<name>"
+          ]
+        }
       ]
     },
     {
       "title": "Select mailboxes to scan",
       "steps": [
-        "Pick the mailboxes (folders) Expensor should scan for transaction emails.",
-        "INBOX is the most common choice; add others like Promotions or bank-specific folders if needed."
+        {"text": "Pick the mailboxes (folders) Expensor should scan for transaction emails."},
+        {"text": "INBOX is the most common choice; add others like Promotions or bank-specific folders if needed."}
       ]
     }
   ],

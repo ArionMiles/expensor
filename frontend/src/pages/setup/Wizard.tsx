@@ -3,12 +3,13 @@ import {
   queryKeys,
   useDisconnectReader,
   useReaderAuthStatus,
+  useReaderGuide,
   useReaderStatus,
   useReaders,
   useRevokeToken,
   useStatus,
 } from '@/api/queries'
-import type { PluginInfo } from '@/api/types'
+import type { PluginInfo, ReaderGuide } from '@/api/types'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { ReaderLogo } from '@/components/ReaderLogo'
 import { cn, getReaderDisplayName } from '@/lib/utils'
@@ -32,6 +33,97 @@ function formatExpiry(expiry: string): string {
   if (diffDays < 30) return `expires in ${diffDays}d`
   if (diffDays < 365) return `expires in ${Math.floor(diffDays / 30)}mo`
   return `expires ${date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
+}
+
+// ─── Reader guide panel ───────────────────────────────────────────────────────
+
+function noteStyle(type: string): string {
+  switch (type) {
+    case 'warning':
+      return 'border-l-2 border-warning/60 bg-warning/5 px-3 py-2 text-xs text-warning'
+    case 'tip':
+      return 'border-l-2 border-green-500/60 bg-green-500/5 px-3 py-2 text-xs text-green-500'
+    case 'docker':
+      return 'border-l-2 border-purple-500/60 bg-purple-500/5 px-3 py-2 text-xs text-purple-400'
+    default:
+      return 'border-l-2 border-blue-500/60 bg-blue-500/5 px-3 py-2 text-xs text-blue-400'
+  }
+}
+
+function noteIcon(type: string): string {
+  switch (type) {
+    case 'warning':
+      return '⚠'
+    case 'tip':
+      return '✓'
+    case 'docker':
+      return '🐳'
+    default:
+      return 'ℹ'
+  }
+}
+
+function ReaderGuidePanel({ guide }: { guide: ReaderGuide }) {
+  const [open, setOpen] = useState(true)
+
+  return (
+    <div className="w-72 shrink-0 self-start overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
+      >
+        <span>Setup guide</span>
+        <span>{open ? '▴' : '▾'}</span>
+      </button>
+
+      {open && (
+        <div className="space-y-4 border-t border-border px-4 pb-4 pt-3">
+          {guide.sections.map((section, i) => (
+            <div key={i} className="space-y-1.5">
+              <p className="text-xs font-semibold text-foreground">{section.title}</p>
+              <ol className="space-y-1 pl-4">
+                {section.steps.map((step, j) => (
+                  <li key={j} className="list-decimal break-words text-xs text-muted-foreground">
+                    {step.text}
+                    {step.sub_steps && step.sub_steps.length > 0 && (
+                      <ol className="mt-0.5 space-y-0.5 pl-4">
+                        {step.sub_steps.map((sub, k) => (
+                          <li key={k} className="list-[lower-alpha] break-words text-xs text-muted-foreground">
+                            {sub}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </li>
+                ))}
+              </ol>
+              {section.link && (
+                <a
+                  href={section.link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block text-xs text-primary hover:underline"
+                >
+                  {section.link.label} ↗
+                </a>
+              )}
+            </div>
+          ))}
+
+          {guide.notes && guide.notes.length > 0 && (
+            <div className="space-y-2 pt-1">
+              {guide.notes.map((note, i) => (
+                <div key={i} className={noteStyle(note.type)}>
+                  <span className="mr-1.5">{noteIcon(note.type)}</span>
+                  {note.text}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ─── Wizard step flow ────────────────────────────────────────────────────────
@@ -68,6 +160,7 @@ function WizardFlow({ initialReader }: { initialReader?: PluginInfo }) {
 
   const steps = getSteps(selectedReader)
   const currentIndex = steps.indexOf(currentStep)
+  const { data: guide } = useReaderGuide(selectedReader?.name ?? '')
 
   const goNext = () => {
     const next = steps[currentIndex + 1]
@@ -79,7 +172,8 @@ function WizardFlow({ initialReader }: { initialReader?: PluginInfo }) {
   }
 
   return (
-    <div className="w-full max-w-lg">
+    <div className={cn('flex w-full items-start gap-6', guide && currentStep !== 'select' ? 'max-w-4xl' : 'max-w-lg')}>
+      <div className="w-full min-w-0 max-w-lg">
       {/* Step progress */}
       <div className="mb-8 flex items-center">
         {steps.map((step, idx) => (
@@ -140,6 +234,8 @@ function WizardFlow({ initialReader }: { initialReader?: PluginInfo }) {
           <ReviewAndStart reader={selectedReader} onBack={goBack} />
         )}
       </div>
+      </div>
+      {guide && currentStep !== 'select' && <ReaderGuidePanel guide={guide} />}
     </div>
   )
 }

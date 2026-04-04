@@ -3,27 +3,27 @@
     {
       "title": "Enable the Gmail API",
       "steps": [
-        "Go to console.cloud.google.com and open or create a project.",
-        "Search for 'Gmail API' and click Enable."
+        {"text": "Go to console.cloud.google.com and open or create a project."},
+        {"text": "Search for 'Gmail API' and click Enable."}
       ],
       "link": { "label": "Google Cloud Console", "url": "https://console.cloud.google.com" }
     },
     {
       "title": "Create OAuth 2.0 credentials",
       "steps": [
-        "Navigate to APIs & Services → Credentials.",
-        "Click Create Credentials → OAuth client ID.",
-        "Set Application type to Desktop app.",
-        "Under Authorized redirect URIs add: http://localhost:8080/api/auth/callback",
-        "Click Create, then Download JSON — this is your client_secret.json."
+        {"text": "Navigate to APIs & Services → Credentials."},
+        {"text": "Click Create Credentials → OAuth client ID."},
+        {"text": "Set Application type to Desktop app."},
+        {"text": "Under Authorized redirect URIs add: http://localhost:8080/api/auth/callback"},
+        {"text": "Click Create, then Download JSON — this is your client_secret.json."}
       ]
     },
     {
       "title": "Configure the OAuth consent screen",
       "steps": [
-        "Set User Type to External.",
-        "Add your email address as a test user.",
-        "Add scope: https://www.googleapis.com/auth/gmail.readonly"
+        {"text": "Set User Type to External."},
+        {"text": "Add your email address as a test user."},
+        {"text": "Add scope: https://www.googleapis.com/auth/gmail.readonly"}
       ]
     }
   ],

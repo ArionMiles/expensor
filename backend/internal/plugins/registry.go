@@ -51,9 +51,15 @@ type ReaderGuide struct {
 
 // GuideSection is a titled group of steps in the setup guide.
 type GuideSection struct {
-	Title string     `json:"title"`
-	Steps []string   `json:"steps"`
-	Link  *GuideLink `json:"link,omitempty"`
+	Title string      `json:"title"`
+	Steps []GuideStep `json:"steps"`
+	Link  *GuideLink  `json:"link,omitempty"`
+}
+
+// GuideStep is a single step in a guide section, with optional nested sub-steps.
+type GuideStep struct {
+	Text     string   `json:"text"`
+	SubSteps []string `json:"sub_steps,omitempty"`
 }
 
 // GuideLink is an optional external link attached to a guide section.

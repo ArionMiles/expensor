@@ -138,9 +138,14 @@ export interface GuideLink {
   url: string
 }
 
+export interface GuideStep {
+  text: string
+  sub_steps?: string[]
+}
+
 export interface GuideSection {
   title: string
-  steps: string[]
+  steps: GuideStep[]
   link?: GuideLink
 }
 
