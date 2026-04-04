@@ -72,6 +72,8 @@ export const api = {
 
   daemon: {
     start: (reader: string) => apiClient.post<{ status: string }>('/daemon/start', { reader }),
+    rescan: (reader: string) =>
+      apiClient.post<{ status: 'rescanning' | 'queued' }>('/daemon/rescan', { reader }),
   },
 
   plugins: {
@@ -110,6 +112,7 @@ export const api = {
   },
 
   config: {
+    getActiveReader: () => apiClient.get<{ reader: string }>('/config/active-reader'),
     getBaseCurrency: () => apiClient.get<{ base_currency: string }>('/config/base-currency'),
     setBaseCurrency: (currency: string) =>
       apiClient.put<{ base_currency: string }>('/config/base-currency', {

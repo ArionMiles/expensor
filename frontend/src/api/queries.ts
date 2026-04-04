@@ -362,3 +362,17 @@ export function useImportRules() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['rules'] }),
   })
 }
+
+export function useRescan() {
+  return useMutation({
+    mutationFn: (reader: string) => api.daemon.rescan(reader).then((r) => r.data),
+  })
+}
+
+export function useActiveReader() {
+  return useQuery({
+    queryKey: ['config', 'active-reader'] as const,
+    queryFn: () => api.config.getActiveReader().then((r) => r.data.reader),
+    staleTime: 60_000,
+  })
+}
