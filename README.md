@@ -76,39 +76,78 @@ flowchart LR
 
 ## Quick Start
 
-```bash
-# 1. Download the compose file
-curl -O https://raw.githubusercontent.com/ArionMiles/expensor/main/docker-compose.yml
+Create a `docker-compose.yml` with the following content:
 
-# 2. Start Expensor and PostgreSQL
-docker compose up -d
+```yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: expensor
+      POSTGRES_USER: expensor
+      POSTGRES_PASSWORD: expensor_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U expensor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-# 3. Open the web UI and complete the onboarding wizard
-open http://localhost:8080
+  expensor:
+    image: ghcr.io/arionmiles/expensor:v0.0.2
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: expensor
+      POSTGRES_USER: expensor
+      POSTGRES_PASSWORD: expensor_password
+      POSTGRES_SSLMODE: disable
+    volumes:
+      - ./data:/app/data
+      # Thunderbird only: uncomment and set path to your Thunderbird profile
+      # - /path/to/Thunderbird/Profiles/your.profile:/thunderbird-profile:ro
+
+volumes:
+  postgres_data:
 ```
 
-Your data (credentials, OAuth token, state) is stored in `./data/` which is created automatically.
+Then start the stack and open the onboarding wizard:
+
+```bash
+docker compose up -d
+open http://localhost:8080   # or your server's IP/hostname
+```
+
+Your data (credentials, OAuth token, state) is persisted in `./data/`, created automatically on first run.
 
 ### Releases
 
 | Channel | Image | Updated |
 |---------|-------|---------|
-| **Stable** | `ghcr.io/arionmiles/expensor:latest` | On git tag push |
+| **Stable** | `ghcr.io/arionmiles/expensor:<version>` | On git tag push |
 | **Nightly** | `ghcr.io/arionmiles/expensor:nightly` | Daily (if new commits) |
 
-To pin a specific version, change the image tag in `docker-compose.yml`:
-```yaml
-image: ghcr.io/arionmiles/expensor:v1.2.3
-```
+Latest release: see [Releases](https://github.com/ArionMiles/expensor/releases).
 
 ### Thunderbird
 
-Uncomment the volume line in `docker-compose.yml` and set the path to your Thunderbird profile directory:
+Uncomment the volume line in your `docker-compose.yml` and set the path to your Thunderbird profile directory:
+
 ```yaml
 volumes:
   - ./data:/app/data
   - /path/to/Thunderbird/Profiles/your.profile:/thunderbird-profile:ro
 ```
+
+The onboarding wizard will detect the mounted profile automatically.
 
 ## Configuration
 
