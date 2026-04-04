@@ -36,6 +36,13 @@ type GuideProvider interface {
 	SetupGuide() []byte
 }
 
+// ConfigApplier is an optional interface for reader plugins whose settings are
+// persisted via the web UI (POST /api/readers/{name}/config) rather than env vars.
+// Implement this to map the raw JSON config map onto config.Config before the daemon starts.
+type ConfigApplier interface {
+	ApplyConfig(cfg *config.Config, raw map[string]any)
+}
+
 // ReaderGuide is the structured setup guide for a reader plugin.
 type ReaderGuide struct {
 	Sections []GuideSection `json:"sections"`

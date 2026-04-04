@@ -70,6 +70,17 @@ func (p *Plugin) ConfigSchema() []plugins.ConfigField {
 // SetupGuide returns the embedded setup guide for Thunderbird.
 func (p *Plugin) SetupGuide() []byte { return guideData }
 
+// ApplyConfig maps the web-UI-persisted JSON config onto config.Config.
+// Keys match the ConfigSchema: "profilePath" and "mailboxes".
+func (p *Plugin) ApplyConfig(cfg *config.Config, raw map[string]any) {
+	if v, ok := raw["profilePath"].(string); ok {
+		cfg.Thunderbird.ProfilePath = v
+	}
+	if v, ok := raw["mailboxes"].(string); ok {
+		cfg.Thunderbird.Mailboxes = v
+	}
+}
+
 // NewReader creates a new Thunderbird reader instance.
 // The httpClient parameter is unused for Thunderbird (no OAuth needed).
 func (p *Plugin) NewReader( //nolint:revive // interface method; argument count dictated by ReaderPlugin

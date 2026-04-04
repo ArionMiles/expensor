@@ -3,11 +3,14 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
@@ -60,6 +63,9 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 		"reader", runCfg.ReaderName,
 		"writer", runCfg.WriterName,
 	)
+
+	// Overlay persisted web-UI config onto cfg for readers that use ConfigApplier.
+	applyPersistedReaderConfig(r.registry, runCfg.ReaderName, runCfg.Config, r.logger)
 
 	// Create reader from plugin
 	reader, err := r.registry.CreateReader(
@@ -129,4 +135,33 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 
 	r.logger.Info("daemon stopped")
 	return nil
+}
+
+// applyPersistedReaderConfig loads data/config_<name>.json and, if the plugin
+// implements ConfigApplier, overlays its values onto cfg.
+// Errors are non-fatal: if the file is absent the reader falls back to env vars.
+func applyPersistedReaderConfig(reg *plugins.Registry, readerName string, cfg *config.Config, logger *slog.Logger) {
+	plugin, err := reg.GetReader(readerName)
+	if err != nil {
+		return
+	}
+	applier, ok := plugin.(plugins.ConfigApplier)
+	if !ok {
+		return
+	}
+	path := filepath.Join(cfg.DataDir, fmt.Sprintf("config_%s.json", readerName))
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			logger.Warn("failed to read persisted reader config", "path", path, "error", err)
+		}
+		return
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		logger.Warn("failed to parse persisted reader config", "path", path, "error", err)
+		return
+	}
+	applier.ApplyConfig(cfg, raw)
+	logger.Debug("applied persisted reader config", "reader", readerName)
 }
