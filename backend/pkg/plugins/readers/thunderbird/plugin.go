@@ -2,6 +2,7 @@
 package thunderbird
 
 import (
+	_ "embed"
 	"log/slog"
 	"net/http"
 	"time"
@@ -12,6 +13,9 @@ import (
 	tbreader "github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
 	"github.com/ArionMiles/expensor/backend/pkg/state"
 )
+
+//go:embed guide.json
+var guideData []byte
 
 // Plugin implements the ReaderPlugin interface for Thunderbird.
 type Plugin struct{}
@@ -48,19 +52,23 @@ func (p *Plugin) ConfigSchema() []plugins.ConfigField {
 		{
 			Key:      "profilePath",
 			Label:    "Thunderbird Profile Directory",
-			Type:     "path",
+			Type:     "thunderbird-profile",
 			Required: true,
-			Help:     "Path to the Thunderbird profile directory containing MBOX files.",
+			Help:     "Path to your Thunderbird profile directory (contains Mail/ and ImapMail/).",
 		},
 		{
-			Key:      "mailboxes",
-			Label:    "Mailboxes",
-			Type:     "text",
-			Required: true,
-			Help:     "Comma-separated list of mailbox names to scan (e.g. INBOX,Archives).",
+			Key:       "mailboxes",
+			Label:     "Mailboxes to scan",
+			Type:      "thunderbird-mailboxes",
+			Required:  true,
+			DependsOn: "profilePath",
+			Help:      "Select mailboxes to scan. Comma-separated if entering manually (e.g. INBOX,Sent).",
 		},
 	}
 }
+
+// SetupGuide returns the embedded setup guide for Thunderbird.
+func (p *Plugin) SetupGuide() []byte { return guideData }
 
 // NewReader creates a new Thunderbird reader instance.
 // The httpClient parameter is unused for Thunderbird (no OAuth needed).

@@ -23,11 +23,43 @@ const (
 
 // ConfigField describes a single user-provided configuration field for a plugin.
 type ConfigField struct {
-	Key      string `json:"key"`
-	Label    string `json:"label"`
-	Type     string `json:"type"` // "text", "password", "path"
-	Required bool   `json:"required"`
-	Help     string `json:"help,omitempty"`
+	Key       string `json:"name"` // serialized as "name" for frontend compatibility
+	Label     string `json:"label"`
+	Type      string `json:"type"` // "text", "password", "path", "thunderbird-profile", "thunderbird-mailboxes"
+	Required  bool   `json:"required"`
+	Help      string `json:"help,omitempty"`
+	DependsOn string `json:"depends_on,omitempty"`
+}
+
+// GuideProvider is an optional interface for reader plugins that provide setup guides.
+type GuideProvider interface {
+	SetupGuide() []byte
+}
+
+// ReaderGuide is the structured setup guide for a reader plugin.
+type ReaderGuide struct {
+	Sections []GuideSection `json:"sections"`
+	Notes    []GuideNote    `json:"notes,omitempty"`
+}
+
+// GuideSection is a titled group of steps in the setup guide.
+type GuideSection struct {
+	Title string     `json:"title"`
+	Steps []string   `json:"steps"`
+	Link  *GuideLink `json:"link,omitempty"`
+}
+
+// GuideLink is an optional external link attached to a guide section.
+type GuideLink struct {
+	Label string `json:"label"`
+	URL   string `json:"url"`
+}
+
+// GuideNote is a color-coded callout displayed below the guide sections.
+// Type: "info" (blue), "warning" (amber), "tip" (green), "docker" (purple).
+type GuideNote struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
 }
 
 // ReaderPlugin defines the interface for transaction reader plugins.

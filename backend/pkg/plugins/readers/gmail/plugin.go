@@ -2,6 +2,7 @@
 package gmail
 
 import (
+	_ "embed"
 	"log/slog"
 	"net/http"
 	"time"
@@ -14,6 +15,9 @@ import (
 	gmailreader "github.com/ArionMiles/expensor/backend/pkg/reader/gmail"
 	"github.com/ArionMiles/expensor/backend/pkg/state"
 )
+
+//go:embed guide.json
+var guideData []byte
 
 // Plugin implements the ReaderPlugin interface for Gmail.
 type Plugin struct{}
@@ -50,6 +54,9 @@ func (p *Plugin) RequiresCredentialsUpload() bool {
 func (p *Plugin) ConfigSchema() []plugins.ConfigField {
 	return []plugins.ConfigField{}
 }
+
+// SetupGuide returns the embedded setup guide for Gmail.
+func (p *Plugin) SetupGuide() []byte { return guideData }
 
 // NewReader creates a new Gmail reader instance.
 func (p *Plugin) NewReader( //nolint:revive // interface method; argument count dictated by ReaderPlugin

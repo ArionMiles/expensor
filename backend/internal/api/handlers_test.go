@@ -1465,6 +1465,63 @@ func TestHandleImportRules_InvalidRegex_Returns422(t *testing.T) {
 	}
 }
 
+// --- thunderbird discovery + guide ---
+
+func TestHandleDiscoverProfiles_Returns200WithProfilesKey(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/thunderbird/discover/profiles", nil)
+	rr := httptest.NewRecorder()
+	h.HandleDiscoverProfiles(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp map[string][]string
+	decodeJSON(t, rr.Body.String(), &resp)
+	if _, ok := resp["profiles"]; !ok {
+		t.Error("expected 'profiles' key in response")
+	}
+}
+
+func TestHandleDiscoverMailboxes_MissingParam_Returns400(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/thunderbird/discover/mailboxes", nil)
+	rr := httptest.NewRecorder()
+	h.HandleDiscoverMailboxes(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestHandleDiscoverMailboxes_NonexistentProfile_Returns404(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+	req := httptest.NewRequestWithContext(
+		context.Background(), http.MethodGet,
+		"/api/readers/thunderbird/discover/mailboxes?profile=/nonexistent/thunderbird/profile",
+		nil,
+	)
+	rr := httptest.NewRecorder()
+	h.HandleDiscoverMailboxes(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rr.Code)
+	}
+}
+
+func TestHandleGetReaderGuide_NoGuide_Returns404(t *testing.T) {
+	// testReaderPlugin (used by newTestHandlers) does not implement GuideProvider.
+	h := newTestHandlers(t, nil, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/gmail/guide", nil)
+	req.SetPathValue("name", "gmail")
+	rr := httptest.NewRecorder()
+	h.HandleGetReaderGuide(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
 // --- rescan ---
 
 func TestHandleRescan_DaemonRunning_Returns202Queued(t *testing.T) {

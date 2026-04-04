@@ -94,6 +94,13 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("GET /api/plugins/readers", h.HandleListReaders)
 	mux.HandleFunc("GET /api/plugins/writers", h.HandleListWriters)
 
+	// Thunderbird profile/mailbox discovery (must precede wildcard /api/readers/{name}/... routes)
+	mux.HandleFunc("GET /api/readers/thunderbird/discover/profiles", h.HandleDiscoverProfiles)
+	mux.HandleFunc("GET /api/readers/thunderbird/discover/mailboxes", h.HandleDiscoverMailboxes)
+
+	// Reader setup guide (must precede wildcard /api/readers/{name}/... routes)
+	mux.HandleFunc("GET /api/readers/{name}/guide", h.HandleGetReaderGuide)
+
 	// Reader credentials (OAuth readers that need client_secret.json upload)
 	mux.HandleFunc("POST /api/readers/{name}/credentials", h.HandleUploadCredentials)
 	mux.HandleFunc("GET /api/readers/{name}/credentials/status", h.HandleCredentialsStatus)
