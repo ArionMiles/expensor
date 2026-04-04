@@ -96,7 +96,7 @@ services:
       retries: 5
 
   expensor:
-    image: ghcr.io/arionmiles/expensor:v0.0.2
+    image: ghcr.io/arionmiles/expensor:v0.0.3
     restart: unless-stopped
     depends_on:
       postgres:
