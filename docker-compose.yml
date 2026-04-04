@@ -26,7 +26,7 @@ services:
       retries: 5
 
   expensor:
-    image: expensor:v0.0.2-1-g3fe8f5d-dirty
+    image: ghcr.io/arionmiles/expensor:latest
     restart: unless-stopped
     depends_on:
       postgres:
