@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"path"
+	"path/filepath"
 	"time"
 )
 
@@ -16,9 +19,14 @@ type Server struct {
 }
 
 // NewServer builds an HTTP server with all routes registered.
-func NewServer(port int, handlers *Handlers, logger *slog.Logger) *Server {
+// Pass a non-empty staticDir to serve a bundled SPA for all non-/api paths.
+// Leave empty in local dev (Vite serves the frontend separately).
+func NewServer(port int, handlers *Handlers, staticDir string, logger *slog.Logger) *Server {
 	mux := http.NewServeMux()
 	registerRoutes(mux, handlers)
+	if staticDir != "" {
+		mux.HandleFunc("/", spaHandler(staticDir))
+	}
 
 	chain := corsMiddleware(loggingMiddleware(logger, recoveryMiddleware(logger, mux)))
 
@@ -51,6 +59,25 @@ func (s *Server) Start(ctx context.Context) error {
 		return s.httpServer.Shutdown(shutCtx)
 	case err := <-errCh:
 		return err
+	}
+}
+
+// spaHandler returns an http.HandlerFunc that serves static files from dir.
+// For paths that don't resolve to an existing file, it falls back to index.html
+// to support client-side SPA routing (React Router, etc.).
+func spaHandler(dir string) http.HandlerFunc {
+	fs := http.FileServer(http.Dir(dir))
+	return func(w http.ResponseWriter, r *http.Request) {
+		// path.Clean normalises the URL path and removes traversal sequences.
+		// filepath.Join with a cleaned path starting with "/" is safe in Go:
+		// Join never treats intermediate absolute components as new roots.
+		upath := path.Clean("/" + r.URL.Path)
+		fsPath := filepath.Join(dir, filepath.FromSlash(upath))
+		if _, err := os.Stat(fsPath); os.IsNotExist(err) {
+			http.ServeFile(w, r, filepath.Join(dir, "index.html"))
+			return
+		}
+		fs.ServeHTTP(w, r)
 	}
 }
 
