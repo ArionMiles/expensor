@@ -32,6 +32,7 @@ import (
 	gmailplugin "github.com/ArionMiles/expensor/backend/pkg/plugins/readers/gmail"
 	thunderbirdplugin "github.com/ArionMiles/expensor/backend/pkg/plugins/readers/thunderbird"
 	postgresplugin "github.com/ArionMiles/expensor/backend/pkg/plugins/writers/postgres"
+	pkgrules "github.com/ArionMiles/expensor/backend/pkg/rules"
 	"github.com/ArionMiles/expensor/backend/pkg/state"
 )
 
@@ -147,17 +148,12 @@ func main() {
 	}
 
 	// Parse embedded rules and labels.
-	rules, err := parseRules(rulesInput)
+	rawRules, systemRules, labels, err := parseEmbedded(rulesInput, labelsInput)
 	if err != nil {
-		logger.Error("failed to parse rules", "error", err)
+		logger.Error("failed to parse embedded content", "error", err)
 		os.Exit(1)
 	}
-	var labels api.Labels
-	if err := json.Unmarshal([]byte(labelsInput), &labels); err != nil {
-		logger.Error("failed to parse labels", "error", err)
-		os.Exit(1)
-	}
-	logger.Info("loaded embedded content", "rules", len(rules), "labels", len(labels))
+	logger.Info("loaded embedded content", "rules", len(systemRules), "labels", len(labels))
 
 	// Root context — canceled on SIGINT/SIGTERM.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -175,8 +171,17 @@ func main() {
 		logger.Error("failed to connect store", "error", storeErr)
 		os.Exit(1)
 	}
-	defer pgStore.Close()
 	var st httpapi.Storer = pgStore
+
+	// Seed embedded rules as system rules — idempotent, safe on every startup.
+	systemRuleRows := buildSystemRuleRows(rawRules)
+	if seedErr := pgStore.SeedSystemRules(ctx, systemRuleRows); seedErr != nil {
+		pgStore.Close()
+		logger.Error("failed to seed system rules", "error", seedErr)
+		os.Exit(1)
+	}
+	logger.Info("system rules seeded", "count", len(systemRuleRows))
+	defer pgStore.Close()
 
 	// dm is started on demand via POST /api/daemon/start.
 	dm := &daemonManager{}
@@ -200,7 +205,8 @@ func main() {
 			logger.Warn("failed to persist active reader", "error", err)
 		}
 		runtimeCfg := applyScanOverrides(cfg, st)
-		go runDaemon(ctx, registry, readerName, runtimeCfg, rules, labels, dm, logger)
+		merged := pkgrules.FilterEnabled(pkgrules.MergeRules(systemRules, loadUserRules(ctx, st, logger)))
+		go runDaemon(ctx, registry, readerName, runtimeCfg, merged, labels, dm, logger)
 	}
 
 	// Auto-start daemon if a previous reader selection was persisted.
@@ -298,6 +304,69 @@ func runDaemon( //nolint:revive // all parameters are required; splitting furthe
 	dm.setStopped(runErr)
 }
 
+// buildSystemRuleRows converts parsed RuleJSON entries to store.RuleRow values ready for seeding.
+func buildSystemRuleRows(raw []RuleJSON) []store.RuleRow {
+	rows := make([]store.RuleRow, 0, len(raw))
+	for _, r := range raw {
+		rows = append(rows, store.RuleRow{
+			Name: r.Name, SenderEmail: r.SenderEmail, SubjectContains: r.SubjectContains,
+			AmountRegex: r.AmountRegex, MerchantRegex: r.MerchantRegex,
+			CurrencyRegex: r.CurrencyRegex, Enabled: r.Enabled,
+		})
+	}
+	return rows
+}
+
+// loadUserRules fetches user rules from the store and compiles their regexes.
+// Returns nil on any error; daemon falls back to system rules only.
+func loadUserRules(ctx context.Context, st httpapi.Storer, logger *slog.Logger) []api.Rule {
+	if st == nil {
+		return nil
+	}
+	rows, err := st.ListRules(ctx)
+	if err != nil {
+		logger.Warn("failed to load user rules, using system rules only", "error", err)
+		return nil
+	}
+	var out []api.Rule
+	for _, row := range rows {
+		if row.Source != "user" {
+			continue
+		}
+		r, compileErr := compileRule(row)
+		if compileErr != nil {
+			logger.Warn("skipping user rule with invalid regex", "rule", row.Name, "error", compileErr)
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// compileRule converts a store.RuleRow to an api.Rule by compiling its regex strings.
+func compileRule(row store.RuleRow) (api.Rule, error) {
+	amount, err := regexp.Compile(row.AmountRegex)
+	if err != nil {
+		return api.Rule{}, fmt.Errorf("amount_regex: %w", err)
+	}
+	merchant, err := regexp.Compile(row.MerchantRegex)
+	if err != nil {
+		return api.Rule{}, fmt.Errorf("merchant_regex: %w", err)
+	}
+	var currency *regexp.Regexp
+	if row.CurrencyRegex != "" {
+		currency, err = regexp.Compile(row.CurrencyRegex)
+		if err != nil {
+			return api.Rule{}, fmt.Errorf("currency_regex: %w", err)
+		}
+	}
+	return api.Rule{
+		Name: row.Name, SenderEmail: row.SenderEmail, SubjectContains: row.SubjectContains,
+		Amount: amount, MerchantInfo: merchant, Currency: currency,
+		Enabled: row.Enabled, Source: row.Source,
+	}, nil
+}
+
 // waitForPostgres retries a postgres ping until the connection succeeds or the
 // timeout is reached. It gives the container time to accept connections after
 // being started by `task dev`.
@@ -348,6 +417,26 @@ func loadActiveReader(dataDir string, logger *slog.Logger) string {
 		return ""
 	}
 	return string(b)
+}
+
+// parseEmbedded parses the embedded rules and labels JSON, returning the raw rule
+// structs (for DB seeding), compiled rules, and labels.
+//
+//nolint:revive // four returns are necessary: raw rules, compiled rules, labels, and error
+func parseEmbedded(rulesJSON, labelsJSON string) ([]RuleJSON, []api.Rule, api.Labels, error) {
+	var raw []RuleJSON
+	if err := json.Unmarshal([]byte(rulesJSON), &raw); err != nil {
+		return nil, nil, nil, fmt.Errorf("parsing rules JSON: %w", err)
+	}
+	compiled, err := parseRules(rulesJSON)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	var labels api.Labels
+	if err := json.Unmarshal([]byte(labelsJSON), &labels); err != nil {
+		return nil, nil, nil, fmt.Errorf("parsing labels JSON: %w", err)
+	}
+	return raw, compiled, labels, nil
 }
 
 // parseRules parses the embedded rules JSON into []api.Rule.
