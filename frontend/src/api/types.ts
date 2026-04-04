@@ -85,6 +85,31 @@ export interface AnnualHeatmapData {
   buckets: DailyBucket[]
 }
 
+export interface Rule {
+  id: string
+  name: string
+  sender_email: string
+  subject_contains: string
+  amount_regex: string
+  merchant_regex: string
+  currency_regex: string
+  transaction_source: string
+  enabled: boolean
+  source: 'system' | 'user'
+  created_at: string
+  updated_at: string
+}
+
+export interface RuleImport {
+  name: string
+  senderEmail: string
+  subjectContains: string
+  amountRegex: string
+  merchantInfoRegex: string
+  currencyRegex?: string
+  enabled: boolean
+}
+
 export interface StatusResponse {
   daemon: DaemonStatus
   stats?: Stats

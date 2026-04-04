@@ -40,6 +40,15 @@ type Storer interface {
 	DeleteBucket(ctx context.Context, name string) error
 	// Extended transaction update
 	UpdateTransaction(ctx context.Context, id string, u store.TransactionUpdate) error
+	// Rules
+	ListRules(ctx context.Context) ([]store.RuleRow, error)
+	GetRule(ctx context.Context, id string) (*store.RuleRow, error)
+	CreateRule(ctx context.Context, r store.RuleRow) (*store.RuleRow, error)
+	UpdateRule(ctx context.Context, id string, r store.RuleRow) (*store.RuleRow, error)
+	ToggleRule(ctx context.Context, id string, enabled bool) (*store.RuleRow, error)
+	DeleteRule(ctx context.Context, id string) error
+	SeedSystemRules(ctx context.Context, rules []store.RuleRow) error
+	ImportUserRules(ctx context.Context, rules []store.RuleRow) error
 }
 
 // compile-time check: *store.Store must satisfy Storer.
