@@ -123,8 +123,15 @@ export function AnnualCalendarHeatmap({ year, metric }: Props) {
     return <div className="h-28 animate-pulse rounded bg-secondary" />
   }
 
+  const isEmpty = !data || data.buckets.length === 0
+
   return (
     <div className="relative">
+      {isEmpty && (
+        <div className="absolute inset-0 flex items-center justify-center bg-card/80">
+          <span className="text-xs text-muted-foreground">No transaction data yet</span>
+        </div>
+      )}
       <svg
         style={{ width: '100%', height: 'auto' }}
         viewBox={`0 0 ${svgWidth} ${svgHeight}`}

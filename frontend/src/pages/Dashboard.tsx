@@ -85,7 +85,7 @@ function BreakdownChart({
   data: Record<string, number>
   currency?: string
 }) {
-  const entries = Object.entries(data)
+  const entries = Object.entries(data ?? {})
     .sort(([, a], [, b]) => b - a)
     .slice(0, 8)
 
@@ -509,11 +509,11 @@ function formatDayLabel(period: string): string {
 }
 
 function ChartsSection({ charts }: { charts: ChartData }) {
-  const hasMonthly = charts.monthly_spend.length > 0
-  const hasDaily = charts.daily_spend.length > 0
-  const hasCategory = Object.keys(charts.by_category).length > 0
-  const hasBucket = Object.keys(charts.by_bucket).length > 0
-  const hasLabel = Object.keys(charts.by_label).length > 0
+  const hasMonthly = (charts.monthly_spend ?? []).length > 0
+  const hasDaily = (charts.daily_spend ?? []).length > 0
+  const hasCategory = Object.keys(charts.by_category ?? {}).length > 0
+  const hasBucket = Object.keys(charts.by_bucket ?? {}).length > 0
+  const hasLabel = Object.keys(charts.by_label ?? {}).length > 0
 
   if (!hasMonthly && !hasDaily && !hasCategory && !hasBucket && !hasLabel) {
     return null
