@@ -24,16 +24,25 @@ Allow users to export a portable snapshot of their Expensor data (transactions, 
 | `buckets` table | Bucket definitions |
 | `rules` table | All rules (system + user) |
 | `app_config` table | Application settings (base_currency, scan_interval, lookback_days, rescan_pending) |
+| `state.json` | Dedup state — tracks which emails have been processed |
 
 ### Excluded
 
 | Item | Why |
 |------|-----|
-| `client_secret_*.json` | OAuth credentials are account/project-specific — re-upload on new machine |
-| `token_*.json` | OAuth tokens are machine-specific and expire |
-| `state.json` | Dedup state — reconstructed naturally on first daemon run |
+| `client_secret_*.json` | OAuth credentials are project-specific — re-upload on new machine |
+| `token_*.json` | OAuth tokens expire and are re-generated via the auth flow |
 | `active_reader` | Reader choice is re-configured through onboarding |
 | PostgreSQL connection config | Infrastructure, not data |
+
+### Why `state.json` is included
+
+`state.json` stores SHA-256 hashes of `(source, messageID, date)`. The `messageID` is Gmail's (or Thunderbird's) globally unique identifier for an email — it is tied to the **email account**, not the machine. The same email has the same message ID regardless of which machine is running the daemon.
+
+Restoring `state.json` to machine B means the daemon correctly skips emails it has already processed, preventing re-extraction. Excluding it would cause the daemon to re-process every email in the lookback window on first run, which — even with upsert handling — has two problems:
+
+1. Transactions outside the lookback window (older than `lookback_days`) would be missed, creating a gap.
+2. User-edited fields (see §ON CONFLICT fix below) would risk being overwritten before the fix is fully propagated.
 
 ---
 
@@ -53,7 +62,8 @@ A single `.json.gz` file (gzipped JSON). Gzip keeps file size manageable for lar
     "rules": 18,
     "labels": 12,
     "categories": 9,
-    "buckets": 4
+    "buckets": 4,
+    "state_entries": 3891
   },
   "data": {
     "transactions": [ ... ],
@@ -63,9 +73,17 @@ A single `.json.gz` file (gzipped JSON). Gzip keeps file size manageable for lar
     "buckets": [ ... ],
     "rules": [ ... ],
     "app_config": [ {"key": "base_currency", "value": "INR"}, ... ]
+  },
+  "state": {
+    "processed_messages": {
+      "<sha256-hash>": "2026-01-15T10:32:00Z",
+      ...
+    }
   }
 }
 ```
+
+The `state` object mirrors the structure of `state.json` (map of SHA-256 key → timestamp). On restore, this is written back to `EXPENSOR_DATA_DIR/state.json`, replacing any existing state file.
 
 ### Version field
 
@@ -180,7 +198,7 @@ Enforcement checklist (add to PR template and code review):
 
 | Version | Added tables | Notes |
 |---------|-------------|-------|
-| 1 | transactions, transaction_labels, labels, categories, buckets, rules, app_config | Initial |
+| 1 | transactions, transaction_labels, labels, categories, buckets, rules, app_config + state.json | Initial |
 
 ---
 
@@ -201,7 +219,72 @@ Insert order to satisfy foreign keys:
 
 ### File size estimate
 
-A typical user with 5,000 transactions: ~2–5 MB raw JSON, ~200–500 KB gzipped.
+A typical user with 5,000 transactions: ~2–5 MB raw JSON, ~200–500 KB gzipped. The `state` object adds roughly 80 bytes per processed message; 5,000 entries ≈ 400 KB raw, negligible after gzip.
+
+---
+
+## ON CONFLICT fix — protect user-edited fields
+
+### The problem
+
+The postgres writer currently uses:
+
+```sql
+ON CONFLICT (message_id) DO UPDATE SET
+    amount = EXCLUDED.amount,
+    ...
+    category = EXCLUDED.category,
+    bucket   = EXCLUDED.bucket,
+    description = EXCLUDED.description,
+    updated_at = NOW()
+```
+
+This means any re-processing of an already-stored email (retroactive scan, daemon restart on a machine without `state.json`) silently overwrites user edits to `description`, `category`, and `bucket` with whatever the regex extracted.
+
+### The fix
+
+Split the fields into two groups:
+
+**Always overwrite on conflict** (raw extraction results — the regex owns these):
+- `amount`, `currency`, `original_amount`, `original_currency`, `exchange_rate`
+- `timestamp`, `merchant_info`, `source`
+
+**Never overwrite on conflict** (user-owned fields — preserve existing DB value):
+- `description` — only ever entered by the user; the regex never produces a description
+- `category` — may be set by rule extraction OR user edit; use `COALESCE` to keep existing non-null value
+- `bucket` — same as category
+
+Updated SQL:
+
+```sql
+ON CONFLICT (message_id) DO UPDATE SET
+    amount            = EXCLUDED.amount,
+    currency          = EXCLUDED.currency,
+    original_amount   = EXCLUDED.original_amount,
+    original_currency = EXCLUDED.original_currency,
+    exchange_rate     = EXCLUDED.exchange_rate,
+    timestamp         = EXCLUDED.timestamp,
+    merchant_info     = EXCLUDED.merchant_info,
+    source            = EXCLUDED.source,
+    -- Preserve user edits: only update if the existing stored value is NULL/empty
+    category    = COALESCE(NULLIF(transactions.category, ''), EXCLUDED.category),
+    bucket      = COALESCE(NULLIF(transactions.bucket, ''), EXCLUDED.bucket),
+    -- description is never set by extraction — never update it on conflict
+    updated_at  = NOW()
+```
+
+### Retroactive scan behaviour after this fix
+
+When a user saves a new rule and triggers a retroactive scan:
+- `amount`, `merchant_info`, `currency` etc. are updated from the new regex extraction ✓
+- `category`/`bucket` are updated only if the user has not already set them ✓
+- `description` is never touched ✓
+
+This is the correct behaviour: the user's intent when editing category/bucket is to override the auto-extraction permanently. If they want to reset to the auto-extracted value, they can clear the field in the UI.
+
+### Files affected by this fix
+
+`backend/pkg/writer/postgres/postgres.go` — update the `ON CONFLICT DO UPDATE SET` clause in `writeBatch`.
 
 ---
 
@@ -227,7 +310,9 @@ Not in scope for initial implementation. Could be added as a cron-style setting 
 
 | File | Change |
 |------|--------|
-| `backend/internal/backup/backup.go` | New — `Backup()`, `Restore()`, `BackupData` struct, version constants |
+| `backend/pkg/writer/postgres/postgres.go` | Fix `ON CONFLICT DO UPDATE SET` — protect description; COALESCE for category/bucket |
+| `backend/pkg/writer/postgres/postgres_test.go` | Tests for ON CONFLICT field-preservation behaviour |
+| `backend/internal/backup/backup.go` | New — `Backup()`, `Restore()`, `BackupData` struct, version constants; reads/writes state.json |
 | `backend/internal/backup/backup_test.go` | Unit tests with an in-memory PG test container |
 | `backend/internal/api/handlers.go` | Add `HandleBackup`, `HandleRestorePreview`, `HandleRestoreConfirm` |
 | `backend/internal/api/handlers_test.go` | Tests for backup/restore handlers |
