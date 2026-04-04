@@ -268,17 +268,21 @@ export default function Rules() {
                 </td>
                 <td className="px-3 py-2">
                   {rule.source === 'system' ? (
-                    <button
-                      disabled
+                    <span
+                      className="inline-block cursor-not-allowed"
                       onMouseEnter={(e) => {
                         const rect = e.currentTarget.getBoundingClientRect()
                         setSysTooltip({ x: rect.left + rect.width / 2, y: rect.top - 6 })
                       }}
                       onMouseLeave={() => setSysTooltip(null)}
-                      className="cursor-not-allowed text-xs text-destructive opacity-30"
                     >
-                      Delete
-                    </button>
+                      <button
+                        disabled
+                        className="pointer-events-none text-xs text-destructive opacity-30"
+                      >
+                        Delete
+                      </button>
+                    </span>
                   ) : (
                     <button
                       onClick={() => handleDelete(rule)}
