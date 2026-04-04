@@ -1,0 +1,6 @@
+Subject: Transaction alert for your ICICI Bank Credit Card
+
+Body:
+Dear Customer,
+
+Your ICICI Bank Credit Card XX1234 has been used for a transaction of EUR 20.10 on Mar 26, 2026 at 12:12:12. Info: NETCUP.
