@@ -376,3 +376,30 @@ export function useActiveReader() {
     staleTime: 60_000,
   })
 }
+
+export function useReaderGuide(name: string) {
+  return useQuery({
+    queryKey: ['readers', name, 'guide'] as const,
+    queryFn: () => api.readers.guide(name).then((r) => r.data),
+    staleTime: Infinity,
+    enabled: name.length > 0,
+  })
+}
+
+export function useThunderbirdProfiles() {
+  return useQuery({
+    queryKey: ['thunderbird', 'profiles'] as const,
+    queryFn: () => api.thunderbird.discoverProfiles().then((r) => r.data.profiles),
+    staleTime: 60_000,
+  })
+}
+
+export function useThunderbirdMailboxes(profilePath: string) {
+  return useQuery({
+    queryKey: ['thunderbird', 'mailboxes', profilePath] as const,
+    queryFn: () =>
+      api.thunderbird.discoverMailboxes(profilePath).then((r) => r.data.mailboxes),
+    staleTime: 60_000,
+    enabled: profilePath.length > 0,
+  })
+}
