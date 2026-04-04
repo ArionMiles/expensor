@@ -34,6 +34,7 @@ import (
 	postgresplugin "github.com/ArionMiles/expensor/backend/pkg/plugins/writers/postgres"
 	pkgrules "github.com/ArionMiles/expensor/backend/pkg/rules"
 	"github.com/ArionMiles/expensor/backend/pkg/state"
+	pgwriter "github.com/ArionMiles/expensor/backend/pkg/writer/postgres"
 )
 
 const (
@@ -236,6 +237,12 @@ func main() {
 		cancel()
 	}()
 
+	// Run schema migrations before opening the store connection.
+	if err := runMigrations(cfg.Postgres, logger); err != nil {
+		logger.Error("failed to run migrations", "error", err)
+		os.Exit(1)
+	}
+
 	// Connect store (API query layer).
 	pgStore, storeErr := store.New(cfg.Postgres, logger.With("component", "store"))
 	if storeErr != nil {
@@ -434,6 +441,29 @@ func compileRule(row store.RuleRow) (api.Rule, error) {
 		Amount: amount, MerchantInfo: merchant, Currency: currency,
 		Enabled: row.Enabled, Source: row.TransactionSource,
 	}, nil
+}
+
+// runMigrations opens a short-lived pool, runs schema migrations, and closes it.
+// Called once at startup before the store and writer pools are created.
+func runMigrations(pgCfg config.PostgresConfig, logger *slog.Logger) error {
+	connStr := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s pool_max_conns=1",
+		pgCfg.Host, pgCfg.Port, pgCfg.User, pgCfg.Password, pgCfg.Database, pgCfg.SSLMode,
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.New(ctx, connStr)
+	if err != nil {
+		return fmt.Errorf("opening migration pool: %w", err)
+	}
+	defer pool.Close()
+
+	if err := pgwriter.RunMigrations(ctx, pool); err != nil {
+		return err
+	}
+	logger.Info("migrations applied")
+	return nil
 }
 
 // waitForPostgres retries a postgres ping until the connection succeeds or the
