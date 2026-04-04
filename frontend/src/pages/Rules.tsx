@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useDeleteRule, useImportRules, useRules, useUpdateRule } from '@/api/queries'
 import type { Rule, RuleImport } from '@/api/types'
+import { ConfirmModal } from '@/components/ConfirmModal'
 
 // ─── Client-side export ───────────────────────────────────────────────────────
 
@@ -38,6 +39,11 @@ export default function Rules() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [importMsg, setImportMsg] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  const [confirmState, setConfirmState] = useState<{
+    title: string
+    message: string
+    onConfirm: () => void
+  } | null>(null)
 
   const allSelected = rules.length > 0 && selected.size === rules.length
   const noneSelected = selected.size === 0
@@ -64,18 +70,23 @@ export default function Rules() {
   const bulkDelete = () => {
     const userRules = rules.filter((r) => selected.has(r.id) && r.source === 'user')
     if (userRules.length === 0) return
-    if (!confirm(`Delete ${userRules.length} user rule${userRules.length !== 1 ? 's' : ''}?`))
-      return
-    userRules.forEach((r) =>
-      deleteRule(r.id, {
-        onSuccess: () =>
-          setSelected((s) => {
-            const n = new Set(s)
-            n.delete(r.id)
-            return n
+    setConfirmState({
+      title: `Delete ${userRules.length} rule${userRules.length !== 1 ? 's' : ''}`,
+      message: `Delete ${userRules.length} user rule${userRules.length !== 1 ? 's' : ''}? This cannot be undone.`,
+      onConfirm: () => {
+        userRules.forEach((r) =>
+          deleteRule(r.id, {
+            onSuccess: () =>
+              setSelected((s) => {
+                const n = new Set(s)
+                n.delete(r.id)
+                return n
+              }),
           }),
-      }),
-    )
+        )
+        setConfirmState(null)
+      },
+    })
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -99,8 +110,14 @@ export default function Rules() {
   }
 
   const handleDelete = (r: Rule) => {
-    if (!confirm(`Delete rule "${r.name}"?`)) return
-    deleteRule(r.id)
+    setConfirmState({
+      title: 'Delete rule',
+      message: `Delete rule "${r.name}"? This cannot be undone.`,
+      onConfirm: () => {
+        deleteRule(r.id)
+        setConfirmState(null)
+      },
+    })
   }
 
   if (isLoading) {
@@ -249,14 +266,20 @@ export default function Rules() {
                   </button>
                 </td>
                 <td className="px-3 py-2">
-                  <button
-                    onClick={() => handleDelete(rule)}
-                    disabled={rule.source === 'system'}
-                    title={rule.source === 'system' ? 'System rules cannot be deleted' : undefined}
-                    className="text-xs text-destructive hover:underline disabled:cursor-not-allowed disabled:opacity-30"
-                  >
-                    Delete
-                  </button>
+                  <div className="group relative inline-block">
+                    <button
+                      onClick={() => handleDelete(rule)}
+                      disabled={rule.source === 'system'}
+                      className="text-xs text-destructive hover:underline disabled:cursor-not-allowed disabled:opacity-30"
+                    >
+                      Delete
+                    </button>
+                    {rule.source === 'system' && (
+                      <div className="pointer-events-none absolute bottom-full left-1/2 mb-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded bg-foreground px-2 py-1 text-xs text-background shadow-md group-hover:block">
+                        System rules cannot be deleted
+                      </div>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -273,6 +296,17 @@ export default function Rules() {
           </tbody>
         </table>
       </div>
+
+      {confirmState && (
+        <ConfirmModal
+          title={confirmState.title}
+          message={confirmState.message}
+          confirmLabel="Delete"
+          variant="destructive"
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
     </div>
   )
 }

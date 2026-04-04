@@ -278,7 +278,7 @@ export function RuleForm() {
       {/* Multi-sample regex tester */}
       <div className="space-y-3 rounded-lg border border-border p-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs uppercase tracking-wider text-muted-foreground">Test Regexes</h3>
+          <h3 className="text-xs uppercase tracking-wider text-muted-foreground">Test Emails</h3>
           <button
             type="button"
             onClick={addSample}
@@ -317,7 +317,6 @@ export function RuleForm() {
               <thead>
                 <tr className="border-b border-border">
                   <th className="py-1 pr-3 text-left text-muted-foreground">#</th>
-                  <th className="py-1 pr-3 text-left text-muted-foreground">Preview</th>
                   <th className="py-1 pr-3 text-left text-muted-foreground">Amount</th>
                   <th className="py-1 pr-3 text-left text-muted-foreground">Merchant</th>
                   <th className="py-1 text-left text-muted-foreground">Currency</th>
@@ -327,9 +326,6 @@ export function RuleForm() {
                 {results.map((r, i) => (
                   <tr key={i} className="border-b border-border/50 last:border-0">
                     <td className="py-1.5 pr-3 text-muted-foreground">{i + 1}</td>
-                    <td className="max-w-[160px] truncate py-1.5 pr-3 font-mono text-muted-foreground">
-                      {r.body.slice(0, 60) || '—'}
-                    </td>
                     <td className="py-1.5 pr-3">
                       <ResultCell result={r.amount} />
                     </td>
