@@ -435,3 +435,74 @@ func TestGetAnnualSpend_EmptyDB(t *testing.T) {
 		t.Errorf("expected 0 buckets in empty DB, got %d", len(buckets))
 	}
 }
+
+func TestListRules_EmptyDB(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+
+	rules, err := ts.ListRules(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rules == nil {
+		t.Error("ListRules must return non-nil slice")
+	}
+	if len(rules) != 0 {
+		t.Errorf("expected 0 rules in empty DB, got %d", len(rules))
+	}
+}
+
+func TestCreateAndGetRule(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+
+	row := store.RuleRow{
+		Name:          "test rule",
+		AmountRegex:   `(\d+)`,
+		MerchantRegex: `(.+)`,
+		Enabled:       true,
+	}
+	created, err := ts.CreateRule(context.Background(), row)
+	if err != nil {
+		t.Fatalf("CreateRule: %v", err)
+	}
+	if created.ID == "" {
+		t.Error("expected non-empty ID after create")
+	}
+	if created.Source != "user" {
+		t.Errorf("expected source=user, got %q", created.Source)
+	}
+
+	got, err := ts.GetRule(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("GetRule: %v", err)
+	}
+	if got.Name != "test rule" {
+		t.Errorf("expected name=test rule, got %q", got.Name)
+	}
+}
+
+func TestDeleteRule_SystemRuleNotDeleted(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+
+	err := ts.SeedSystemRules(context.Background(), []store.RuleRow{
+		{Name: "sys", AmountRegex: `(\d+)`, MerchantRegex: `(.+)`, Enabled: true},
+	})
+	if err != nil {
+		t.Fatalf("SeedSystemRules: %v", err)
+	}
+	rules, err := ts.ListRules(context.Background())
+	if err != nil {
+		t.Fatalf("ListRules: %v", err)
+	}
+	if len(rules) == 0 {
+		t.Fatal("expected seeded system rule")
+	}
+	sysRule := rules[0]
+
+	delErr := ts.DeleteRule(context.Background(), sysRule.ID)
+	if !errors.Is(delErr, store.ErrNotFound) {
+		t.Errorf("expected ErrNotFound when deleting system rule, got %v", delErr)
+	}
+}

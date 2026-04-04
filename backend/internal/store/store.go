@@ -113,6 +113,22 @@ type Bucket struct {
 	IsDefault   bool   `json:"is_default"`
 }
 
+// RuleRow is a rule as stored in the database.
+// Source is either "system" (seeded from embedded rules.json) or "user" (created via UI).
+type RuleRow struct {
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	SenderEmail     string    `json:"sender_email"`
+	SubjectContains string    `json:"subject_contains"`
+	AmountRegex     string    `json:"amount_regex"`
+	MerchantRegex   string    `json:"merchant_regex"`
+	CurrencyRegex   string    `json:"currency_regex"`
+	Enabled         bool      `json:"enabled"`
+	Source          string    `json:"source"` // "system" | "user"
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
 // TransactionUpdate carries optional fields for updating a transaction.
 // Only non-nil fields are written.
 type TransactionUpdate struct {
@@ -188,6 +204,10 @@ func New(cfg config.PostgresConfig, logger *slog.Logger) (*Store, error) {
 	if err := s.initCategoriesBuckets(ctx); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("initializing categories/buckets tables: %w", err)
+	}
+	if err := s.initRules(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("initializing rules table: %w", err)
 	}
 	logger.Info("store connected to PostgreSQL", "host", cfg.Host, "database", cfg.Database)
 	return s, nil
@@ -893,6 +913,32 @@ func (s *Store) initCategoriesBuckets(ctx context.Context) error {
 	return err
 }
 
+// initRules creates the rule_source ENUM and rules table. Idempotent.
+func (s *Store) initRules(ctx context.Context) error {
+	_, err := s.pool.Exec(ctx, `
+		DO $$ BEGIN
+			CREATE TYPE rule_source AS ENUM ('system', 'user');
+		EXCEPTION WHEN duplicate_object THEN NULL;
+		END $$;
+
+		CREATE TABLE IF NOT EXISTS rules (
+			id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			name             TEXT NOT NULL,
+			sender_email     TEXT NOT NULL DEFAULT '',
+			subject_contains TEXT NOT NULL DEFAULT '',
+			amount_regex     TEXT NOT NULL,
+			merchant_regex   TEXT NOT NULL,
+			currency_regex   TEXT NOT NULL DEFAULT '',
+			enabled          BOOLEAN NOT NULL DEFAULT true,
+			source           rule_source NOT NULL DEFAULT 'user',
+			created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			UNIQUE (name, source)
+		);
+	`)
+	return err
+}
+
 // --- Labels ---
 
 // ListLabels returns all labels ordered by name.
@@ -1200,6 +1246,205 @@ func scanTransactions(rows pgx.Rows) ([]Transaction, error) {
 		return nil, fmt.Errorf("iterating transaction rows: %w", err)
 	}
 	return txns, nil
+}
+
+// --- Rules ---
+
+const ruleColumns = `id, name, sender_email, subject_contains, amount_regex, merchant_regex,
+	currency_regex, enabled, source::text, created_at, updated_at`
+
+func scanRuleRows(rows pgx.Rows) ([]RuleRow, error) {
+	var result []RuleRow
+	for rows.Next() {
+		var r RuleRow
+		if err := rows.Scan(
+			&r.ID, &r.Name, &r.SenderEmail, &r.SubjectContains,
+			&r.AmountRegex, &r.MerchantRegex, &r.CurrencyRegex,
+			&r.Enabled, &r.Source, &r.CreatedAt, &r.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scanning rule row: %w", err)
+		}
+		result = append(result, r)
+	}
+	if result == nil {
+		result = []RuleRow{}
+	}
+	return result, rows.Err()
+}
+
+// ListRules returns all rules ordered by user rules first, then system rules, both by name.
+func (s *Store) ListRules(ctx context.Context) ([]RuleRow, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+ruleColumns+`
+		 FROM rules
+		 ORDER BY (source = 'system'), name`)
+	if err != nil {
+		return nil, fmt.Errorf("listing rules: %w", err)
+	}
+	defer rows.Close()
+	result, err := scanRuleRows(rows)
+	if err != nil {
+		return nil, fmt.Errorf("listing rules: %w", err)
+	}
+	return result, nil
+}
+
+// GetRule fetches a single rule by UUID. Returns ErrNotFound if no row matched.
+func (s *Store) GetRule(ctx context.Context, id string) (*RuleRow, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+ruleColumns+` FROM rules WHERE id = $1`, id)
+	if err != nil {
+		return nil, fmt.Errorf("fetching rule: %w", err)
+	}
+	defer rows.Close()
+	result, err := scanRuleRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(result) == 0 {
+		return nil, ErrNotFound
+	}
+	return &result[0], nil
+}
+
+// CreateRule inserts a new user rule and returns the created row.
+func (s *Store) CreateRule(ctx context.Context, r RuleRow) (*RuleRow, error) {
+	rows, err := s.pool.Query(ctx,
+		`INSERT INTO rules (name, sender_email, subject_contains, amount_regex, merchant_regex, currency_regex, enabled)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 RETURNING `+ruleColumns,
+		r.Name, r.SenderEmail, r.SubjectContains,
+		r.AmountRegex, r.MerchantRegex, r.CurrencyRegex, r.Enabled,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("creating rule: %w", err)
+	}
+	defer rows.Close()
+	result, err := scanRuleRows(rows)
+	if err != nil {
+		return nil, fmt.Errorf("creating rule: %w", err)
+	}
+	if len(result) == 0 {
+		return nil, fmt.Errorf("creating rule: no row returned")
+	}
+	return &result[0], nil
+}
+
+// UpdateRule updates a user rule by ID. Returns ErrNotFound if no user rule matched.
+func (s *Store) UpdateRule(ctx context.Context, id string, r RuleRow) (*RuleRow, error) {
+	rows, err := s.pool.Query(ctx,
+		`UPDATE rules
+		 SET name=$2, sender_email=$3, subject_contains=$4,
+		     amount_regex=$5, merchant_regex=$6, currency_regex=$7,
+		     enabled=$8, updated_at=NOW()
+		 WHERE id=$1 AND source='user'
+		 RETURNING `+ruleColumns,
+		id, r.Name, r.SenderEmail, r.SubjectContains,
+		r.AmountRegex, r.MerchantRegex, r.CurrencyRegex, r.Enabled,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("updating rule: %w", err)
+	}
+	defer rows.Close()
+	result, err := scanRuleRows(rows)
+	if err != nil {
+		return nil, fmt.Errorf("updating rule: %w", err)
+	}
+	if len(result) == 0 {
+		return nil, ErrNotFound
+	}
+	return &result[0], nil
+}
+
+// ToggleRule sets the enabled flag on any rule (system or user). Returns ErrNotFound if no row matched.
+func (s *Store) ToggleRule(ctx context.Context, id string, enabled bool) (*RuleRow, error) {
+	rows, err := s.pool.Query(ctx,
+		`UPDATE rules SET enabled=$2, updated_at=NOW()
+		 WHERE id=$1
+		 RETURNING `+ruleColumns,
+		id, enabled,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("toggling rule: %w", err)
+	}
+	defer rows.Close()
+	result, err := scanRuleRows(rows)
+	if err != nil {
+		return nil, fmt.Errorf("toggling rule: %w", err)
+	}
+	if len(result) == 0 {
+		return nil, ErrNotFound
+	}
+	return &result[0], nil
+}
+
+// DeleteRule removes a user rule by ID. Returns ErrNotFound if no user rule matched.
+func (s *Store) DeleteRule(ctx context.Context, id string) error {
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM rules WHERE id=$1 AND source='user'`, id)
+	if err != nil {
+		return fmt.Errorf("deleting rule: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SeedSystemRules upserts system rules (source='system'). Idempotent.
+func (s *Store) SeedSystemRules(ctx context.Context, rules []RuleRow) error {
+	for _, r := range rules {
+		_, err := s.pool.Exec(ctx, `
+			INSERT INTO rules
+			  (name, sender_email, subject_contains, amount_regex, merchant_regex, currency_regex, enabled, source)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, 'system')
+			ON CONFLICT (name, source) DO UPDATE SET
+				sender_email     = EXCLUDED.sender_email,
+				subject_contains = EXCLUDED.subject_contains,
+				amount_regex     = EXCLUDED.amount_regex,
+				merchant_regex   = EXCLUDED.merchant_regex,
+				currency_regex   = EXCLUDED.currency_regex,
+				enabled          = EXCLUDED.enabled,
+				updated_at       = NOW()`,
+			r.Name, r.SenderEmail, r.SubjectContains,
+			r.AmountRegex, r.MerchantRegex, r.CurrencyRegex, r.Enabled,
+		)
+		if err != nil {
+			return fmt.Errorf("seeding system rule %q: %w", r.Name, err)
+		}
+	}
+	return nil
+}
+
+// ImportUserRules upserts user rules inside a transaction. Idempotent per (name, source) pair.
+func (s *Store) ImportUserRules(ctx context.Context, rules []RuleRow) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("beginning import transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	for _, r := range rules {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO rules
+			  (name, sender_email, subject_contains, amount_regex, merchant_regex, currency_regex, enabled)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			ON CONFLICT (name, source) DO UPDATE SET
+				sender_email     = EXCLUDED.sender_email,
+				subject_contains = EXCLUDED.subject_contains,
+				amount_regex     = EXCLUDED.amount_regex,
+				merchant_regex   = EXCLUDED.merchant_regex,
+				currency_regex   = EXCLUDED.currency_regex,
+				enabled          = EXCLUDED.enabled,
+				updated_at       = NOW()`,
+			r.Name, r.SenderEmail, r.SubjectContains,
+			r.AmountRegex, r.MerchantRegex, r.CurrencyRegex, r.Enabled,
+		)
+		if err != nil {
+			return fmt.Errorf("importing rule %q: %w", r.Name, err)
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 // loadLabels fetches labels for all transactions in a single query and attaches them.
