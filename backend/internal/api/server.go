@@ -113,6 +113,14 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("POST /api/config/buckets", h.HandleCreateBucket)
 	mux.HandleFunc("DELETE /api/config/buckets/{name}", h.HandleDeleteBucket)
 
+	// Rules — export and import before /{id} to avoid wildcard capture
+	mux.HandleFunc("GET /api/rules", h.HandleListRules)
+	mux.HandleFunc("GET /api/rules/export", h.HandleExportRules)
+	mux.HandleFunc("POST /api/rules/import", h.HandleImportRules)
+	mux.HandleFunc("POST /api/rules", h.HandleCreateRule)
+	mux.HandleFunc("PUT /api/rules/{id}", h.HandleUpdateRule)
+	mux.HandleFunc("DELETE /api/rules/{id}", h.HandleDeleteRule)
+
 	// Transactions
 	// /search and /facets must be registered before /{id} to avoid the wildcard swallowing them.
 	mux.HandleFunc("GET /api/transactions/search", h.HandleSearchTransactions)

@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -1016,6 +1017,267 @@ func (h *Handlers) HandleRemoveLabel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "removed"})
+}
+
+// --- rules ---
+
+// ruleExportJSON is the wire format for rule export/import.
+// Field names match content/rules.json for round-trip compatibility.
+type ruleExportJSON struct {
+	Name            string `json:"name"`
+	SenderEmail     string `json:"senderEmail"`
+	SubjectContains string `json:"subjectContains"`
+	AmountRegex     string `json:"amountRegex"`
+	MerchantRegex   string `json:"merchantInfoRegex"`
+	CurrencyRegex   string `json:"currencyRegex,omitempty"`
+	Enabled         bool   `json:"enabled"`
+}
+
+// validateRuleRegexes compiles the three regex fields on a RuleRow and returns the first error.
+// An empty pattern is skipped (optional fields are allowed to be unset for updates).
+func validateRuleRegexes(amountRegex, merchantRegex, currencyRegex string) error {
+	if amountRegex != "" {
+		if _, err := regexp.Compile(amountRegex); err != nil {
+			return fmt.Errorf("invalid amount_regex: %w", err)
+		}
+	}
+	if merchantRegex != "" {
+		if _, err := regexp.Compile(merchantRegex); err != nil {
+			return fmt.Errorf("invalid merchant_regex: %w", err)
+		}
+	}
+	if currencyRegex != "" {
+		if _, err := regexp.Compile(currencyRegex); err != nil {
+			return fmt.Errorf("invalid currency_regex: %w", err)
+		}
+	}
+	return nil
+}
+
+// HandleListRules handles GET /api/rules.
+func (h *Handlers) HandleListRules(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	rules, err := h.store.ListRules(r.Context())
+	if err != nil {
+		h.logger.Error("list rules", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to list rules")
+		return
+	}
+	writeJSON(w, http.StatusOK, rules)
+}
+
+// HandleCreateRule handles POST /api/rules.
+func (h *Handlers) HandleCreateRule(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	var body store.RuleRow
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
+		return
+	}
+	if body.Name == "" {
+		writeError(w, http.StatusUnprocessableEntity, "name is required")
+		return
+	}
+	if body.AmountRegex == "" {
+		writeError(w, http.StatusUnprocessableEntity, "amount_regex is required")
+		return
+	}
+	if body.MerchantRegex == "" {
+		writeError(w, http.StatusUnprocessableEntity, "merchant_regex is required")
+		return
+	}
+	if err := validateRuleRegexes(body.AmountRegex, body.MerchantRegex, body.CurrencyRegex); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	created, err := h.store.CreateRule(r.Context(), body)
+	if err != nil {
+		h.logger.Error("create rule", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to create rule")
+		return
+	}
+	writeJSON(w, http.StatusCreated, created)
+}
+
+// HandleUpdateRule handles PUT /api/rules/{id}.
+// System rules: only enabled is writable. User rules: full update.
+func (h *Handlers) HandleUpdateRule(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	id := r.PathValue("id")
+	existing, err := h.store.GetRule(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "rule not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to fetch rule")
+		return
+	}
+	if existing.Source == "system" {
+		h.handleToggleSystemRule(w, r, id)
+		return
+	}
+	h.handleUpdateUserRule(w, r, id)
+}
+
+// handleToggleSystemRule reads {enabled} from the body and calls ToggleRule.
+func (h *Handlers) handleToggleSystemRule(w http.ResponseWriter, r *http.Request, id string) {
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
+		return
+	}
+	updated, err := h.store.ToggleRule(r.Context(), id, body.Enabled)
+	if err != nil {
+		h.logger.Error("toggle system rule", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to update rule")
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+// handleUpdateUserRule performs a full update on a user-owned rule.
+func (h *Handlers) handleUpdateUserRule(w http.ResponseWriter, r *http.Request, id string) {
+	var body store.RuleRow
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
+		return
+	}
+	if err := validateRuleRegexes(body.AmountRegex, body.MerchantRegex, body.CurrencyRegex); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	updated, err := h.store.UpdateRule(r.Context(), id, body)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "rule not found")
+			return
+		}
+		h.logger.Error("update rule", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to update rule")
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+// HandleDeleteRule handles DELETE /api/rules/{id}.
+// Returns 403 for system rules.
+func (h *Handlers) HandleDeleteRule(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	id := r.PathValue("id")
+	existing, err := h.store.GetRule(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "rule not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to fetch rule")
+		return
+	}
+	if existing.Source == "system" {
+		writeError(w, http.StatusForbidden, "system rules cannot be deleted")
+		return
+	}
+	if err := h.store.DeleteRule(r.Context(), id); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "rule not found")
+			return
+		}
+		h.logger.Error("delete rule", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to delete rule")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleExportRules handles GET /api/rules/export.
+// Downloads all user rules as a JSON file in rules.json format.
+func (h *Handlers) HandleExportRules(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	all, err := h.store.ListRules(r.Context())
+	if err != nil {
+		h.logger.Error("export rules", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to fetch rules")
+		return
+	}
+	export := make([]ruleExportJSON, 0)
+	for _, row := range all {
+		if row.Source != "user" {
+			continue
+		}
+		export = append(export, ruleExportJSON{
+			Name: row.Name, SenderEmail: row.SenderEmail, SubjectContains: row.SubjectContains,
+			AmountRegex: row.AmountRegex, MerchantRegex: row.MerchantRegex,
+			CurrencyRegex: row.CurrencyRegex, Enabled: row.Enabled,
+		})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="expensor-rules.json"`)
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(export)
+}
+
+// HandleImportRules handles POST /api/rules/import.
+// Validates all rules first; rejects the entire import if any rule fails.
+func (h *Handlers) HandleImportRules(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not connected")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 5<<20)
+	var raw []ruleExportJSON
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
+		return
+	}
+	rows, err := validateAndConvertImport(raw)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	if err := h.store.ImportUserRules(r.Context(), rows); err != nil {
+		h.logger.Error("import rules", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to import rules")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"imported": len(rows)})
+}
+
+// validateAndConvertImport validates all rules in a batch import and converts them to store rows.
+// Returns an error on the first invalid rule.
+func validateAndConvertImport(raw []ruleExportJSON) ([]store.RuleRow, error) {
+	rows := make([]store.RuleRow, 0, len(raw))
+	for i, re := range raw {
+		if re.Name == "" {
+			return nil, fmt.Errorf("rule[%d]: name is required", i)
+		}
+		if err := validateRuleRegexes(re.AmountRegex, re.MerchantRegex, re.CurrencyRegex); err != nil {
+			return nil, fmt.Errorf("rule[%d] %q: %w", i, re.Name, err)
+		}
+		rows = append(rows, store.RuleRow{
+			Name: re.Name, SenderEmail: re.SenderEmail, SubjectContains: re.SubjectContains,
+			AmountRegex: re.AmountRegex, MerchantRegex: re.MerchantRegex,
+			CurrencyRegex: re.CurrencyRegex, Enabled: re.Enabled,
+		})
+	}
+	return rows, nil
 }
 
 // HandleGetChartData handles GET /api/stats/charts.

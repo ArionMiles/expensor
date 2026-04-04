@@ -54,6 +54,11 @@ type mockStore struct {
 	buckets      []store.Bucket
 	bucketsErr   error
 	updateTxErr  error
+	rules        []store.RuleRow
+	rulesErr     error
+	ruleResult   *store.RuleRow
+	ruleErr      error
+	importErr    error
 	heatmapData  *store.HeatmapData
 	heatmapErr   error
 	annualData   []store.DailyBucket
@@ -193,6 +198,55 @@ func (m *mockStore) DeleteBucket(_ context.Context, _ string) error { return m.b
 
 func (m *mockStore) UpdateTransaction(_ context.Context, _ string, _ store.TransactionUpdate) error {
 	return m.updateTxErr
+}
+
+func (m *mockStore) ListRules(_ context.Context) ([]store.RuleRow, error) {
+	if m.rulesErr != nil {
+		return nil, m.rulesErr
+	}
+	if m.rules != nil {
+		return m.rules, nil
+	}
+	return []store.RuleRow{}, nil
+}
+
+func (m *mockStore) GetRule(_ context.Context, _ string) (*store.RuleRow, error) {
+	return m.ruleResult, m.ruleErr
+}
+
+func (m *mockStore) CreateRule(_ context.Context, r store.RuleRow) (*store.RuleRow, error) {
+	if m.ruleErr != nil {
+		return nil, m.ruleErr
+	}
+	r.ID = "new-id"
+	r.Source = "user"
+	return &r, nil
+}
+
+func (m *mockStore) UpdateRule(_ context.Context, _ string, r store.RuleRow) (*store.RuleRow, error) {
+	if m.ruleErr != nil {
+		return nil, m.ruleErr
+	}
+	return &r, nil
+}
+
+func (m *mockStore) ToggleRule(_ context.Context, _ string, enabled bool) (*store.RuleRow, error) {
+	if m.ruleErr != nil {
+		return nil, m.ruleErr
+	}
+	return &store.RuleRow{Enabled: enabled}, nil
+}
+
+func (m *mockStore) DeleteRule(_ context.Context, _ string) error {
+	return m.ruleErr
+}
+
+func (m *mockStore) SeedSystemRules(_ context.Context, _ []store.RuleRow) error {
+	return nil
+}
+
+func (m *mockStore) ImportUserRules(_ context.Context, _ []store.RuleRow) error {
+	return m.importErr
 }
 
 func (m *mockStore) GetSpendingHeatmap(_ context.Context, _, _ *time.Time) (*store.HeatmapData, error) {
@@ -1277,5 +1331,136 @@ func TestHandleGetAnnualHeatmap_NoStore_Returns503(t *testing.T) {
 
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+// --- rules ---
+
+func TestHandleListRules_Success(t *testing.T) {
+	ms := &mockStore{rules: []store.RuleRow{{ID: "1", Name: "test", Source: "user", AmountRegex: `\d+`, MerchantRegex: `.+`}}}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/rules", nil)
+	rr := httptest.NewRecorder()
+	h.HandleListRules(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp []store.RuleRow
+	decodeJSON(t, rr.Body.String(), &resp)
+	if len(resp) != 1 {
+		t.Errorf("expected 1 rule, got %d", len(resp))
+	}
+}
+
+func TestHandleListRules_NilStore_Returns503(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/rules", nil)
+	rr := httptest.NewRecorder()
+	h.HandleListRules(rr, req)
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", rr.Code)
+	}
+}
+
+func TestHandleCreateRule_Success(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	body := `{"name":"test","amount_regex":"\\d+","merchant_regex":".+"}`
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	h.HandleCreateRule(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleCreateRule_MissingAmountRegex_Returns422(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	body := `{"name":"test","merchant_regex":".+"}`
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	h.HandleCreateRule(rr, req)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d", rr.Code)
+	}
+}
+
+func TestHandleCreateRule_InvalidAmountRegex_Returns422(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	body := `{"name":"test","amount_regex":"[invalid","merchant_regex":".+"}`
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	h.HandleCreateRule(rr, req)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d", rr.Code)
+	}
+}
+
+func TestHandleUpdateRule_SystemRuleOnlyTogglesEnabled(t *testing.T) {
+	ms := &mockStore{ruleResult: &store.RuleRow{ID: "1", Source: "system", Enabled: true}}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	body := `{"enabled":false}`
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/rules/1", strings.NewReader(body))
+	req.SetPathValue("id", "1")
+	rr := httptest.NewRecorder()
+	h.HandleUpdateRule(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleDeleteRule_SystemRule_Returns403(t *testing.T) {
+	ms := &mockStore{ruleResult: &store.RuleRow{ID: "1", Source: "system"}}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/rules/1", nil)
+	req.SetPathValue("id", "1")
+	rr := httptest.NewRecorder()
+	h.HandleDeleteRule(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", rr.Code)
+	}
+}
+
+func TestHandleDeleteRule_UserRule_Returns204(t *testing.T) {
+	ms := &mockStore{ruleResult: &store.RuleRow{ID: "1", Source: "user"}}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/rules/1", nil)
+	req.SetPathValue("id", "1")
+	rr := httptest.NewRecorder()
+	h.HandleDeleteRule(rr, req)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", rr.Code)
+	}
+}
+
+func TestHandleExportRules_OnlyUserRules(t *testing.T) {
+	ms := &mockStore{rules: []store.RuleRow{
+		{ID: "1", Name: "sys", Source: "system", AmountRegex: `\d+`, MerchantRegex: `.+`},
+		{ID: "2", Name: "usr", Source: "user", AmountRegex: `\d+`, MerchantRegex: `.+`},
+	}}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/rules/export", nil)
+	rr := httptest.NewRecorder()
+	h.HandleExportRules(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var exported []map[string]any
+	decodeJSON(t, rr.Body.String(), &exported)
+	if len(exported) != 1 {
+		t.Errorf("expected 1 exported rule (user only), got %d", len(exported))
+	}
+	if exported[0]["name"] != "usr" {
+		t.Errorf("expected exported name=usr, got %v", exported[0]["name"])
+	}
+}
+
+func TestHandleImportRules_InvalidRegex_Returns422(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	body := `[{"name":"bad","amountRegex":"[invalid","merchantInfoRegex":".+"}]`
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules/import", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	h.HandleImportRules(rr, req)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
