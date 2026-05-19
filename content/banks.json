@@ -1,0 +1,10 @@
+[
+  { "fragment": "hdfc",      "color": "#E31837", "name": "HDFC Bank" },
+  { "fragment": "icici",     "color": "#F47B20", "name": "ICICI Bank" },
+  { "fragment": "sbi",       "color": "#22409A", "name": "State Bank of India" },
+  { "fragment": "axis",      "color": "#97144D", "name": "Axis Bank" },
+  { "fragment": "kotak",     "color": "#EE3124", "name": "Kotak Mahindra Bank" },
+  { "fragment": "indusind",  "color": "#5C2D91", "name": "IndusInd Bank" },
+  { "fragment": "yes bank",  "color": "#003087", "name": "Yes Bank" },
+  { "fragment": "idfc",      "color": "#007A4D", "name": "IDFC First Bank" }
+]

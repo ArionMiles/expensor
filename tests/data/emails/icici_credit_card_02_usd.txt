@@ -1,0 +1,6 @@
+Subject: Transaction alert for your ICICI Bank Credit Card
+
+Body:
+Dear Customer,
+
+Your ICICI Bank Credit Card XX1234 has been used for a transaction of USD 5.90 on Apr 02, 2026 at 10:45:06. Info: ANTHROPIC.

@@ -1,0 +1,18 @@
+GET	/health	health endpoint
+GET	/version	version endpoint
+GET	/status	daemon status endpoint
+GET	/config/active-reader	active reader config
+GET	/config/banks	bank color mappings
+GET	/config/base-currency	base currency config
+GET	/config/buckets	bucket taxonomy
+GET	/config/categories	category taxonomy
+GET	/config/labels	label taxonomy
+GET	/config/labels/mappings	label merchant mappings
+GET	/config/lookback-days	lookback-days config
+GET	/config/scan-interval	scan-interval config
+GET	/config/sync/status	config sync status
+GET	/config/time-format	time-format config
+GET	/config/timezone	timezone config
+GET	/transactions	transaction listing
+GET	/transactions/facets	transaction facets
+GET	/transactions/search	transaction search

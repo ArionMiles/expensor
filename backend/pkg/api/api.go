@@ -1,0 +1,175 @@
+// Package api defines the core interfaces and data structures for expensor.
+package api
+
+import (
+	"context"
+	"fmt"
+	"regexp"
+	"strings"
+	"time"
+)
+
+const (
+	// FailureAmountZero indicates extraction produced a zero amount.
+	FailureAmountZero = "amount_zero"
+	// FailureMerchantEmpty indicates extraction produced no merchant text.
+	FailureMerchantEmpty = "merchant_empty"
+)
+
+// TransactionDetails holds extracted transaction information.
+type TransactionDetails struct {
+	Amount       float64 `json:"amount"`
+	Timestamp    string  `json:"timestamp"`
+	MerchantInfo string  `json:"merchant_info"`
+	Category     string  `json:"category"`
+	// Bucket classifies the expense as Need/Want/Investment.
+	Bucket string `json:"bucket"`
+	Source string `json:"source"`
+	// MessageID is the email message ID (used for marking as read after successful write).
+	MessageID string `json:"-"`
+
+	// Multi-currency support
+	Currency         string   `json:"currency,omitempty"`          // e.g., "INR", "USD", "EUR"
+	OriginalAmount   *float64 `json:"original_amount,omitempty"`   // If converted
+	OriginalCurrency *string  `json:"original_currency,omitempty"` // Original currency if converted
+	ExchangeRate     *float64 `json:"exchange_rate,omitempty"`     // Conversion rate if applicable
+
+	// User-added fields
+	Description string   `json:"description,omitempty"` // User-added description
+	Labels      []string `json:"labels,omitempty"`      // User-added labels
+}
+
+// Reader reads transactions from a source and sends them to the provided channel.
+// Implementations should close the channel when done or on error.
+// The ackChan is used to receive acknowledgments of successfully written transactions.
+type Reader interface {
+	Read(ctx context.Context, out chan<- *TransactionDetails, ackChan <-chan string) error
+}
+
+// Writer consumes transactions from a channel and writes them to a destination.
+// Successfully written transaction message IDs are sent to the ackChan.
+type Writer interface {
+	Write(ctx context.Context, in <-chan *TransactionDetails, ackChan chan<- string) error
+}
+
+// Rule defines an email matching rule for transaction extraction.
+// Rules are reader-agnostic: each reader uses the fields appropriate to its context.
+type Rule struct {
+	ID              string
+	Name            string
+	SenderEmail     string         // Email sender to match (e.g., "alerts@icicibank.com")
+	SubjectContains string         // Subject substring to match
+	Amount          *regexp.Regexp // Regex to extract amount (group 1 = numeric amount, commas stripped)
+	MerchantInfo    *regexp.Regexp // Regex to extract merchant; first non-empty capture group is used
+	Currency        *regexp.Regexp // Regex to extract ISO currency code (group 1 = code, e.g. "INR", "USD")
+	Source          string         // Transaction source identifier (e.g., "Credit Card - ICICI")
+}
+
+// RuleDiagnosticSnapshot captures the diagnostic fields from a rule at extraction time.
+type RuleDiagnosticSnapshot struct {
+	RuleID        string
+	RuleName      string
+	AmountRegex   string
+	MerchantRegex string
+	CurrencyRegex string
+}
+
+// ExtractionDiagnostic records context for an extraction attempt that did not produce a usable transaction.
+type ExtractionDiagnostic struct {
+	Reader         string
+	MessageID      string
+	Source         string
+	Sender         string
+	SenderEmail    string
+	Subject        string
+	EmailBody      string
+	ReceivedAt     *time.Time
+	Snippet        string
+	RuleID         string
+	RuleName       string
+	AmountRegex    string
+	MerchantRegex  string
+	CurrencyRegex  string
+	FailureReasons []string
+}
+
+// DiagnosticSink persists extraction diagnostics for later inspection.
+type DiagnosticSink interface {
+	RecordExtractionDiagnostic(ctx context.Context, diagnostic ExtractionDiagnostic) error
+}
+
+// DiagnosticSnapshot returns a diagnostic-safe copy of a rule's identity and regex strings.
+func (r Rule) DiagnosticSnapshot() RuleDiagnosticSnapshot {
+	snapshot := RuleDiagnosticSnapshot{
+		RuleID:   r.ID,
+		RuleName: r.Name,
+	}
+	if r.Amount != nil {
+		snapshot.AmountRegex = r.Amount.String()
+	}
+	if r.MerchantInfo != nil {
+		snapshot.MerchantRegex = r.MerchantInfo.String()
+	}
+	if r.Currency != nil {
+		snapshot.CurrencyRegex = r.Currency.String()
+	}
+	return snapshot
+}
+
+// ExtractionFailureReasons returns diagnostic reason codes for missing required transaction fields.
+func ExtractionFailureReasons(transaction *TransactionDetails) []string {
+	if transaction == nil {
+		return nil
+	}
+	reasons := make([]string, 0, 2)
+	if transaction.Amount == 0 {
+		reasons = append(reasons, FailureAmountZero)
+	}
+	if strings.TrimSpace(transaction.MerchantInfo) == "" {
+		reasons = append(reasons, FailureMerchantEmpty)
+	}
+	return reasons
+}
+
+// BuildGmailQuery constructs a Gmail API query string from the rule's fields.
+// Note: the caller is responsible for appending date filters (e.g. after:YYYY/MM/DD).
+func (r *Rule) BuildGmailQuery() string {
+	var parts []string
+	if r.SenderEmail != "" {
+		parts = append(parts, fmt.Sprintf("from:%s", r.SenderEmail))
+	}
+	if r.SubjectContains != "" {
+		parts = append(parts, fmt.Sprintf("subject:%q", r.SubjectContains))
+	}
+	return strings.Join(parts, " ")
+}
+
+// MatchesEmail checks if an email matches this rule based on sender and subject.
+// Used by readers that don't have query-based filtering (e.g., Thunderbird).
+// The fromHeader parameter can be the full From header (e.g., "Bank <bank@example.com>").
+func (r *Rule) MatchesEmail(fromHeader, subject string) bool {
+	if r.SenderEmail != "" {
+		// Case-insensitive check if the rule's sender email is contained in the From header
+		if !containsIgnoreCase(fromHeader, r.SenderEmail) {
+			return false
+		}
+	}
+	if r.SubjectContains != "" {
+		// Case-insensitive substring match
+		if !containsIgnoreCase(subject, r.SubjectContains) {
+			return false
+		}
+	}
+	return true
+}
+
+// containsIgnoreCase checks if s contains substr (case-insensitive).
+func containsIgnoreCase(s, substr string) bool {
+	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
+}
+
+// CategoryResolver returns the category and bucket for a merchant string.
+// Implementations perform substring matching against a community-maintained
+// fragment list. Returns ("", "") when no fragment matches; callers treat
+// this as "Uncategorized".
+type CategoryResolver func(merchantInfo string) (category, bucket string)

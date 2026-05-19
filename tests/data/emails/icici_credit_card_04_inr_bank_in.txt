@@ -1,0 +1,6 @@
+Subject: Transaction alert for your ICICI Bank Credit Card
+
+Body:
+Dear Customer,
+
+Your ICICI Bank Credit Card XX1234 has been used for a transaction of INR 1,999.00 on Apr 11, 2026 at 07:36:29. Info: OPENAI *CHATGPT SUBSCR.

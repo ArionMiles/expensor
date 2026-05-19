@@ -1,0 +1,106 @@
+name: contract
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: expensor_contract
+      POSTGRES_USER: expensor
+      POSTGRES_PASSWORD: expensor
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U expensor -d expensor_contract"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    image: golang:1.26.3-alpine
+    working_dir: /workspace/backend
+    volumes:
+      - ../..:/workspace
+    environment:
+      PORT: "8080"
+      BASE_URL: http://backend:8080
+      FRONTEND_URL: http://backend:8080
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: expensor_contract
+      POSTGRES_USER: expensor
+      POSTGRES_PASSWORD: expensor
+      POSTGRES_SSLMODE: disable
+      GOTOOLCHAIN: auto
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        go build -o /tmp/expensor ./cmd/server
+        /tmp/expensor
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/health >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  seed:
+    image: postgres:16-alpine
+    volumes:
+      - ../component/fixtures/seed.sql:/seed.sql:ro
+    environment:
+      PGPASSWORD: expensor
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        until pg_isready -h postgres -U expensor -d expensor_contract; do sleep 1; done
+        psql -h postgres -U expensor -d expensor_contract -f /seed.sql
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  runner:
+    image: schemathesis/schemathesis:latest
+    user: "0:0"
+    working_dir: /workspace/tests/contract
+    volumes:
+      - ../..:/workspace
+    environment:
+      CONTRACT_SCHEMA: /workspace/api/openapi/expensor.openapi.yaml
+      CONTRACT_BASE_URL: http://backend:8080/api
+      CONTRACT_ARTIFACTS: /workspace/tests/contract/artifacts
+    entrypoint:
+      - sh
+      - -c
+    command:
+      - |
+        set -e
+        mkdir -p "$${CONTRACT_ARTIFACTS}"
+        cp allowlist.tsv "$${CONTRACT_ARTIFACTS}/allowlist.tsv"
+        while IFS="$$(printf '\t')" read -r method route reason; do
+          safe_name="$$(echo "$${method}-$${route}" | tr '/{}' '---' | tr -cs 'A-Za-z0-9_.-' '-')"
+          log_file="$${CONTRACT_ARTIFACTS}/$${safe_name}.log"
+          echo "Contract check: $${method} $${route} ($${reason})"
+          if ! schemathesis run "$${CONTRACT_SCHEMA}" \
+            --url "$${CONTRACT_BASE_URL}" \
+            --checks "not_a_server_error,status_code_conformance,content_type_conformance,response_schema_conformance" \
+            --phases "examples,coverage,fuzzing" \
+            --mode positive \
+            --max-examples 5 \
+            --generation-deterministic \
+            --report junit \
+            --report-dir "$${CONTRACT_ARTIFACTS}/reports" \
+            --coverage-format html \
+            --coverage-report-html-path "$${CONTRACT_ARTIFACTS}/schema-coverage.html" \
+            --include-by "method == '$${method}' && path == '$${route}'" \
+            > "$${log_file}" 2>&1; then
+            cat "$${log_file}"
+            exit 1
+          fi
+        done < allowlist.tsv
+    depends_on:
+      backend:
+        condition: service_healthy

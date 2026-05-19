@@ -1,0 +1,1239 @@
+{
+  "status": {
+    "daemon": {
+      "running": true,
+      "started_at": "2026-05-18T03:30:00Z"
+    },
+    "stats": {
+      "base_currency": "INR"
+    }
+  },
+  "dashboard": {
+    "current_month": {
+      "label": "May 2026",
+      "stats": {
+        "total_count": 12,
+        "total_base": 30008,
+        "base_currency": "INR",
+        "total_by_category": {
+          "Housing": 9000,
+          "Food": 3295,
+          "Utilities": 2240,
+          "Dining": 2965,
+          "Travel": 2480,
+          "Transport": 2040,
+          "Shopping": 1299,
+          "Health": 1190,
+          "Entertainment": 499
+        },
+        "total_category_count": {
+          "Food": 3,
+          "Transport": 2,
+          "Dining": 2,
+          "Housing": 1,
+          "Utilities": 1,
+          "Entertainment": 1,
+          "Health": 1,
+          "Shopping": 1,
+          "Travel": 1
+        },
+        "top_merchants": [
+          {
+            "merchant": "Indiranagar Rent",
+            "amount": 9000,
+            "count": 1
+          },
+          {
+            "merchant": "Swiggy",
+            "amount": 830,
+            "count": 1
+          },
+          {
+            "merchant": "Zomato",
+            "amount": 2135,
+            "count": 1
+          },
+          {
+            "merchant": "BigBasket",
+            "amount": 1875,
+            "count": 1
+          },
+          {
+            "merchant": "BESCOM",
+            "amount": 2240,
+            "count": 1
+          }
+        ]
+      },
+      "charts": {
+        "monthly_spend": [
+          {
+            "period": "2025-06",
+            "amount": 25840,
+            "count": 10
+          },
+          {
+            "period": "2025-07",
+            "amount": 27420,
+            "count": 11
+          },
+          {
+            "period": "2025-08",
+            "amount": 29110,
+            "count": 12
+          },
+          {
+            "period": "2025-09",
+            "amount": 28160,
+            "count": 10
+          },
+          {
+            "period": "2025-10",
+            "amount": 30240,
+            "count": 12
+          },
+          {
+            "period": "2025-11",
+            "amount": 29480,
+            "count": 11
+          },
+          {
+            "period": "2025-12",
+            "amount": 31590,
+            "count": 13
+          },
+          {
+            "period": "2026-01",
+            "amount": 30720,
+            "count": 12
+          },
+          {
+            "period": "2026-02",
+            "amount": 32250,
+            "count": 13
+          },
+          {
+            "period": "2026-03",
+            "amount": 31180,
+            "count": 13
+          },
+          {
+            "period": "2026-04",
+            "amount": 32760,
+            "count": 14
+          },
+          {
+            "period": "2026-05",
+            "amount": 30008,
+            "count": 12
+          }
+        ],
+        "daily_spend": [
+          {
+            "period": "2026-05-01",
+            "amount": 9000,
+            "count": 1
+          },
+          {
+            "period": "2026-05-02",
+            "amount": 1875,
+            "count": 1
+          },
+          {
+            "period": "2026-05-04",
+            "amount": 1200,
+            "count": 1
+          },
+          {
+            "period": "2026-05-05",
+            "amount": 2240,
+            "count": 1
+          },
+          {
+            "period": "2026-05-07",
+            "amount": 1420,
+            "count": 1
+          },
+          {
+            "period": "2026-05-08",
+            "amount": 499,
+            "count": 1
+          },
+          {
+            "period": "2026-05-10",
+            "amount": 830,
+            "count": 1
+          },
+          {
+            "period": "2026-05-12",
+            "amount": 1190,
+            "count": 1
+          },
+          {
+            "period": "2026-05-14",
+            "amount": 840,
+            "count": 1
+          },
+          {
+            "period": "2026-05-15",
+            "amount": 1299,
+            "count": 1
+          },
+          {
+            "period": "2026-05-16",
+            "amount": 2480,
+            "count": 1
+          },
+          {
+            "period": "2026-05-17",
+            "amount": 2135,
+            "count": 1
+          }
+        ],
+        "by_category": {
+          "Housing": 9000,
+          "Food": 3295,
+          "Utilities": 2240,
+          "Dining": 2965,
+          "Travel": 2480,
+          "Transport": 2040,
+          "Shopping": 1299,
+          "Health": 1190,
+          "Entertainment": 499
+        },
+        "by_bucket": {
+          "Needs": 22195,
+          "Wants": 6534,
+          "Growth": 1279
+        },
+        "by_label": {
+          "Home": 11240,
+          "Groceries": 3295,
+          "Meals": 2965,
+          "Mobility": 4520,
+          "Personal": 3189,
+          "Subscriptions": 499,
+          "Books": 1299
+        },
+        "by_source": {
+          "gmail": 11858,
+          "thunderbird": 18150
+        },
+        "by_category_monthly": {
+          "Housing": {
+            "current": 9000,
+            "prior": 9000
+          },
+          "Food": {
+            "current": 3295,
+            "prior": 2880
+          },
+          "Utilities": {
+            "current": 2240,
+            "prior": 2175
+          },
+          "Dining": {
+            "current": 2965,
+            "prior": 3420
+          },
+          "Travel": {
+            "current": 2480,
+            "prior": 3320
+          },
+          "Transport": {
+            "current": 2040,
+            "prior": 1890
+          },
+          "Shopping": {
+            "current": 1299,
+            "prior": 1850
+          },
+          "Health": {
+            "current": 1190,
+            "prior": 960
+          },
+          "Entertainment": {
+            "current": 499,
+            "prior": 499
+          }
+        }
+      }
+    },
+    "all_time": {
+      "label": "All time",
+      "stats": {
+        "total_count": 143,
+        "total_base": 358758,
+        "base_currency": "INR",
+        "total_by_category": {
+          "Housing": 108000,
+          "Utilities": 26880,
+          "Food": 39450,
+          "Dining": 31820,
+          "Travel": 26545,
+          "Transport": 24920,
+          "Shopping": 18240,
+          "Health": 13590,
+          "Entertainment": 8988
+        },
+        "total_category_count": {
+          "Food": 34,
+          "Dining": 24,
+          "Transport": 22,
+          "Housing": 12,
+          "Utilities": 12,
+          "Travel": 10,
+          "Shopping": 10,
+          "Health": 10,
+          "Entertainment": 9
+        },
+        "top_merchants": [
+          {
+            "merchant": "Indiranagar Rent",
+            "amount": 108000,
+            "count": 12
+          },
+          {
+            "merchant": "Swiggy",
+            "amount": 17200,
+            "count": 9
+          },
+          {
+            "merchant": "BigBasket",
+            "amount": 24210,
+            "count": 18
+          },
+          {
+            "merchant": "BESCOM",
+            "amount": 26880,
+            "count": 12
+          },
+          {
+            "merchant": "IRCTC",
+            "amount": 26545,
+            "count": 10
+          }
+        ]
+      },
+      "charts": {
+        "monthly_spend": [
+          {
+            "period": "2025-06",
+            "amount": 25840,
+            "count": 10
+          },
+          {
+            "period": "2025-07",
+            "amount": 27420,
+            "count": 11
+          },
+          {
+            "period": "2025-08",
+            "amount": 29110,
+            "count": 12
+          },
+          {
+            "period": "2025-09",
+            "amount": 28160,
+            "count": 10
+          },
+          {
+            "period": "2025-10",
+            "amount": 30240,
+            "count": 12
+          },
+          {
+            "period": "2025-11",
+            "amount": 29480,
+            "count": 11
+          },
+          {
+            "period": "2025-12",
+            "amount": 31590,
+            "count": 13
+          },
+          {
+            "period": "2026-01",
+            "amount": 30720,
+            "count": 12
+          },
+          {
+            "period": "2026-02",
+            "amount": 32250,
+            "count": 13
+          },
+          {
+            "period": "2026-03",
+            "amount": 31180,
+            "count": 13
+          },
+          {
+            "period": "2026-04",
+            "amount": 32760,
+            "count": 14
+          },
+          {
+            "period": "2026-05",
+            "amount": 30008,
+            "count": 12
+          }
+        ],
+        "daily_spend": [
+          {
+            "period": "2026-04-18",
+            "amount": 2210,
+            "count": 2
+          },
+          {
+            "period": "2026-04-21",
+            "amount": 2600,
+            "count": 1
+          },
+          {
+            "period": "2026-04-24",
+            "amount": 980,
+            "count": 1
+          },
+          {
+            "period": "2026-04-27",
+            "amount": 1275,
+            "count": 1
+          },
+          {
+            "period": "2026-05-01",
+            "amount": 9000,
+            "count": 1
+          },
+          {
+            "period": "2026-05-02",
+            "amount": 1875,
+            "count": 1
+          },
+          {
+            "period": "2026-05-04",
+            "amount": 1200,
+            "count": 1
+          },
+          {
+            "period": "2026-05-05",
+            "amount": 2240,
+            "count": 1
+          },
+          {
+            "period": "2026-05-07",
+            "amount": 1420,
+            "count": 1
+          },
+          {
+            "period": "2026-05-08",
+            "amount": 499,
+            "count": 1
+          },
+          {
+            "period": "2026-05-10",
+            "amount": 830,
+            "count": 1
+          },
+          {
+            "period": "2026-05-12",
+            "amount": 1190,
+            "count": 1
+          },
+          {
+            "period": "2026-05-14",
+            "amount": 840,
+            "count": 1
+          },
+          {
+            "period": "2026-05-15",
+            "amount": 1299,
+            "count": 1
+          },
+          {
+            "period": "2026-05-16",
+            "amount": 2480,
+            "count": 1
+          },
+          {
+            "period": "2026-05-17",
+            "amount": 2135,
+            "count": 1
+          }
+        ],
+        "by_category": {
+          "Housing": 108000,
+          "Utilities": 26880,
+          "Food": 39450,
+          "Dining": 31820,
+          "Travel": 26545,
+          "Transport": 24920,
+          "Shopping": 18240,
+          "Health": 13590,
+          "Entertainment": 8988
+        },
+        "by_bucket": {
+          "Needs": 219750,
+          "Wants": 59383,
+          "Growth": 19100
+        },
+        "by_label": {
+          "Home": 134880,
+          "Groceries": 39450,
+          "Meals": 31820,
+          "Mobility": 51465,
+          "Personal": 27670,
+          "Subscriptions": 8988,
+          "Books": 1299
+        },
+        "by_source": {
+          "gmail": 118713,
+          "thunderbird": 179520
+        },
+        "by_category_monthly": {
+          "Housing": {
+            "current": 9000,
+            "prior": 9000
+          },
+          "Food": {
+            "current": 3295,
+            "prior": 2880
+          },
+          "Utilities": {
+            "current": 2240,
+            "prior": 2175
+          },
+          "Dining": {
+            "current": 2965,
+            "prior": 3420
+          },
+          "Travel": {
+            "current": 2480,
+            "prior": 3320
+          },
+          "Transport": {
+            "current": 2040,
+            "prior": 1890
+          },
+          "Shopping": {
+            "current": 1299,
+            "prior": 1850
+          },
+          "Health": {
+            "current": 1190,
+            "prior": 960
+          },
+          "Entertainment": {
+            "current": 499,
+            "prior": 499
+          }
+        }
+      }
+    }
+  },
+  "heatmap": {
+    "by_weekday_hour": [
+      {
+        "weekday": 1,
+        "hour": 8,
+        "amount": 1200,
+        "count": 1
+      },
+      {
+        "weekday": 2,
+        "hour": 10,
+        "amount": 1190,
+        "count": 1
+      },
+      {
+        "weekday": 3,
+        "hour": 19,
+        "amount": 1420,
+        "count": 1
+      },
+      {
+        "weekday": 4,
+        "hour": 9,
+        "amount": 840,
+        "count": 1
+      },
+      {
+        "weekday": 5,
+        "hour": 7,
+        "amount": 9000,
+        "count": 1
+      },
+      {
+        "weekday": 5,
+        "hour": 20,
+        "amount": 1299,
+        "count": 1
+      },
+      {
+        "weekday": 6,
+        "hour": 11,
+        "amount": 2480,
+        "count": 1
+      },
+      {
+        "weekday": 6,
+        "hour": 13,
+        "amount": 1875,
+        "count": 1
+      },
+      {
+        "weekday": 0,
+        "hour": 12,
+        "amount": 830,
+        "count": 1
+      },
+      {
+        "weekday": 0,
+        "hour": 18,
+        "amount": 2135,
+        "count": 1
+      }
+    ],
+    "by_day_of_month": [
+      {
+        "day": 1,
+        "amount": 9000,
+        "count": 1
+      },
+      {
+        "day": 2,
+        "amount": 1875,
+        "count": 1
+      },
+      {
+        "day": 4,
+        "amount": 1200,
+        "count": 1
+      },
+      {
+        "day": 5,
+        "amount": 2240,
+        "count": 1
+      },
+      {
+        "day": 7,
+        "amount": 1420,
+        "count": 1
+      },
+      {
+        "day": 8,
+        "amount": 499,
+        "count": 1
+      },
+      {
+        "day": 10,
+        "amount": 830,
+        "count": 1
+      },
+      {
+        "day": 12,
+        "amount": 1190,
+        "count": 1
+      },
+      {
+        "day": 14,
+        "amount": 840,
+        "count": 1
+      },
+      {
+        "day": 15,
+        "amount": 1299,
+        "count": 1
+      },
+      {
+        "day": 16,
+        "amount": 2480,
+        "count": 1
+      },
+      {
+        "day": 17,
+        "amount": 2135,
+        "count": 1
+      }
+    ]
+  },
+  "annualHeatmap": {
+    "year": 2026,
+    "buckets": [
+      {
+        "date": "2026-01-03",
+        "amount": 9000,
+        "count": 1
+      },
+      {
+        "date": "2026-01-12",
+        "amount": 1980,
+        "count": 2
+      },
+      {
+        "date": "2026-01-21",
+        "amount": 2200,
+        "count": 2
+      },
+      {
+        "date": "2026-02-01",
+        "amount": 9000,
+        "count": 1
+      },
+      {
+        "date": "2026-02-08",
+        "amount": 2420,
+        "count": 2
+      },
+      {
+        "date": "2026-02-18",
+        "amount": 1850,
+        "count": 1
+      },
+      {
+        "date": "2026-03-01",
+        "amount": 9000,
+        "count": 1
+      },
+      {
+        "date": "2026-03-09",
+        "amount": 1960,
+        "count": 2
+      },
+      {
+        "date": "2026-03-22",
+        "amount": 3200,
+        "count": 2
+      },
+      {
+        "date": "2026-04-01",
+        "amount": 9000,
+        "count": 1
+      },
+      {
+        "date": "2026-04-11",
+        "amount": 2680,
+        "count": 2
+      },
+      {
+        "date": "2026-04-25",
+        "amount": 2180,
+        "count": 1
+      },
+      {
+        "date": "2026-05-01",
+        "amount": 9000,
+        "count": 1
+      },
+      {
+        "date": "2026-05-02",
+        "amount": 1875,
+        "count": 1
+      },
+      {
+        "date": "2026-05-05",
+        "amount": 2240,
+        "count": 1
+      },
+      {
+        "date": "2026-05-10",
+        "amount": 830,
+        "count": 1
+      },
+      {
+        "date": "2026-05-16",
+        "amount": 2480,
+        "count": 1
+      }
+    ]
+  },
+  "monthlyBreakdown": {
+    "labels": [
+      "Home",
+      "Groceries",
+      "Meals",
+      "Mobility",
+      "Personal",
+      "Subscriptions"
+    ],
+    "months": [
+      "2025-12",
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05"
+    ],
+    "series": [
+      {
+        "label": "Home",
+        "data": [
+          11400,
+          11000,
+          11000,
+          11000,
+          11000,
+          11240
+        ]
+      },
+      {
+        "label": "Groceries",
+        "data": [
+          2120,
+          2240,
+          2510,
+          2450,
+          2880,
+          3295
+        ]
+      },
+      {
+        "label": "Meals",
+        "data": [
+          2520,
+          2380,
+          2840,
+          3060,
+          3420,
+          2965
+        ]
+      },
+      {
+        "label": "Mobility",
+        "data": [
+          3120,
+          2825,
+          3340,
+          2860,
+          3210,
+          4520
+        ]
+      },
+      {
+        "label": "Personal",
+        "data": [
+          2210,
+          1890,
+          2480,
+          2120,
+          1810,
+          3189
+        ]
+      },
+      {
+        "label": "Subscriptions",
+        "data": [
+          499,
+          499,
+          499,
+          499,
+          499,
+          499
+        ]
+      }
+    ]
+  },
+  "transactions": [
+    {
+      "id": "shot-tx-12",
+      "message_id": "shot-msg-12",
+      "amount": 2135,
+      "currency": "INR",
+      "timestamp": "2026-05-17T18:40:00Z",
+      "merchant_info": "Zomato",
+      "category": "Dining",
+      "bucket": "Wants",
+      "source": "gmail",
+      "description": "Weekend dinner",
+      "labels": [
+        "Meals"
+      ],
+      "muted": false,
+      "muted_by_merchant": false,
+      "created_at": "2026-05-17T18:40:00Z",
+      "updated_at": "2026-05-17T18:40:00Z"
+    },
+    {
+      "id": "shot-tx-11",
+      "message_id": "shot-msg-11",
+      "amount": 2480,
+      "currency": "INR",
+      "timestamp": "2026-05-16T11:15:00Z",
+      "merchant_info": "IRCTC",
+      "category": "Travel",
+      "bucket": "Needs",
+      "source": "gmail",
+      "description": "Intercity tickets",
+      "labels": [
+        "Mobility"
+      ],
+      "muted": false,
+      "muted_by_merchant": false,
+      "created_at": "2026-05-16T11:15:00Z",
+      "updated_at": "2026-05-16T11:15:00Z"
+    },
+    {
+      "id": "shot-tx-10",
+      "message_id": "shot-msg-10",
+      "amount": 1299,
+      "currency": "INR",
+      "timestamp": "2026-05-15T20:10:00Z",
+      "merchant_info": "Blossom Book House",
+      "category": "Shopping",
+      "bucket": "Growth",
+      "source": "gmail",
+      "description": "Books",
+      "labels": [
+        "Books"
+      ],
+      "muted": false,
+      "muted_by_merchant": false,
+      "created_at": "2026-05-15T20:10:00Z",
+      "updated_at": "2026-05-15T20:10:00Z"
+    },
+    {
+      "id": "shot-tx-9",
+      "message_id": "shot-msg-9",
+      "amount": 840,
+      "currency": "INR",
+      "timestamp": "2026-05-14T09:35:00Z",
+      "merchant_info": "Ola",
+      "category": "Transport",
+      "bucket": "Needs",
+      "source": "gmail",
+      "description": "Airport ride",
+      "labels": [
+        "Mobility"
+      ],
+      "muted": false,
+      "muted_by_merchant": false,
+      "created_at": "2026-05-14T09:35:00Z",
+      "updated_at": "2026-05-14T09:35:00Z"
+    },
+    {
+      "id": "shot-tx-8",
+      "message_id": "shot-msg-8",
+      "amount": 1190,
+      "currency": "INR",
+      "timestamp": "2026-05-12T10:05:00Z",
+      "merchant_info": "Apollo Pharmacy",
+      "category": "Health",
+      "bucket": "Needs",
+      "source": "thunderbird",
+      "description": "Pharmacy",
+      "labels": [
+        "Personal"
+      ],
+      "muted": false,
+      "muted_by_merchant": false,
+      "created_at": "2026-05-12T10:05:00Z",
+      "updated_at": "2026-05-12T10:05:00Z"
+    },
+    {
+      "id": "shot-tx-7",
+      "message_id": "shot-msg-7",
+      "amount": 830,
+      "currency": "INR",
+      "timestamp": "2026-05-10T12:50:00Z",
+      "merchant_info": "Swiggy",
+      "category": "Dining",
+      "bucket": "Wants",
+      "source": "gmail",
+      "description": "Lunch",
+      "labels": [
+        "Meals"
+      ],
+      "muted": false,
+      "muted_by_merchant": false,
+      "created_at": "2026-05-10T12:50:00Z",
+      "updated_at": "2026-05-10T12:50:00Z"
+    },
+    {
+      "id": "shot-tx-6",
+      "message_id": "shot-msg-6",
+      "amount": 499,
+      "currency": "INR",
+      "timestamp": "2026-05-08T21:00:00Z",
+      "merchant_info": "Hotstar",
+      "category": "Entertainment",
+      "bucket": "Wants",
+      "source": "gmail",
+      "description": "Subscription",
+      "labels": [
+        "Subscriptions"
+      ],
+      "muted": false,
+      "muted_by_merchant": false,
+      "created_at": "2026-05-08T21:00:00Z",
+      "updated_at": "2026-05-08T21:00:00Z"
+    },
+    {
+      "id": "shot-tx-5",
+      "message_id": "shot-msg-5",
+      "amount": 1420,
+      "currency": "INR",
+      "timestamp": "2026-05-07T19:20:00Z",
+      "merchant_info": "Reliance Fresh",
+      "category": "Food",
+      "bucket": "Needs",
+      "source": "thunderbird",
+      "description": "Groceries",
+      "labels": [
+        "Groceries"
+      ],
+      "muted": false,
+      "muted_by_merchant": false,
+      "created_at": "2026-05-07T19:20:00Z",
+      "updated_at": "2026-05-07T19:20:00Z"
+    },
+    {
+      "id": "shot-tx-4",
+      "message_id": "shot-msg-4",
+      "amount": 2240,
+      "currency": "INR",
+      "timestamp": "2026-05-05T07:50:00Z",
+      "merchant_info": "BESCOM",
+      "category": "Utilities",
+      "bucket": "Needs",
+      "source": "thunderbird",
+      "description": "Electricity bill",
+      "labels": [
+        "Home"
+      ],
+      "muted": false,
+      "muted_by_merchant": false,
+      "created_at": "2026-05-05T07:50:00Z",
+      "updated_at": "2026-05-05T07:50:00Z"
+    },
+    {
+      "id": "shot-tx-3",
+      "message_id": "shot-msg-3",
+      "amount": 1200,
+      "currency": "INR",
+      "timestamp": "2026-05-04T08:30:00Z",
+      "merchant_info": "Namma Metro",
+      "category": "Transport",
+      "bucket": "Needs",
+      "source": "gmail",
+      "description": "Transit top-up",
+      "labels": [
+        "Mobility"
+      ],
+      "muted": false,
+      "muted_by_merchant": false,
+      "created_at": "2026-05-04T08:30:00Z",
+      "updated_at": "2026-05-04T08:30:00Z"
+    },
+    {
+      "id": "shot-tx-2",
+      "message_id": "shot-msg-2",
+      "amount": 1875,
+      "currency": "INR",
+      "timestamp": "2026-05-02T13:15:00Z",
+      "merchant_info": "BigBasket",
+      "category": "Food",
+      "bucket": "Needs",
+      "source": "gmail",
+      "description": "Groceries",
+      "labels": [
+        "Groceries"
+      ],
+      "muted": false,
+      "muted_by_merchant": false,
+      "created_at": "2026-05-02T13:15:00Z",
+      "updated_at": "2026-05-02T13:15:00Z"
+    },
+    {
+      "id": "shot-tx-1",
+      "message_id": "shot-msg-1",
+      "amount": 9000,
+      "currency": "INR",
+      "timestamp": "2026-05-01T07:00:00Z",
+      "merchant_info": "Indiranagar Rent",
+      "category": "Housing",
+      "bucket": "Needs",
+      "source": "thunderbird",
+      "description": "Monthly rent",
+      "labels": [
+        "Home"
+      ],
+      "muted": false,
+      "muted_by_merchant": false,
+      "created_at": "2026-05-01T07:00:00Z",
+      "updated_at": "2026-05-01T07:00:00Z"
+    }
+  ],
+  "facets": {
+    "sources": [
+      "gmail",
+      "thunderbird"
+    ],
+    "categories": [
+      "Dining",
+      "Entertainment",
+      "Food",
+      "Health",
+      "Housing",
+      "Shopping",
+      "Transport",
+      "Travel",
+      "Utilities"
+    ],
+    "category_counts": {
+      "Dining": 2,
+      "Entertainment": 1,
+      "Food": 3,
+      "Health": 1,
+      "Housing": 1,
+      "Shopping": 1,
+      "Transport": 2,
+      "Travel": 1,
+      "Utilities": 1
+    },
+    "currencies": [
+      "INR"
+    ],
+    "merchants": [
+      "Zomato",
+      "Blossom Book House",
+      "BESCOM",
+      "BigBasket",
+      "Reliance Fresh",
+      "Indiranagar Rent",
+      "Namma Metro",
+      "Swiggy",
+      "IRCTC",
+      "Ola",
+      "Hotstar",
+      "Apollo Pharmacy"
+    ],
+    "labels": [
+      "Books",
+      "Groceries",
+      "Home",
+      "Meals",
+      "Mobility",
+      "Personal",
+      "Subscriptions"
+    ],
+    "label_counts": {
+      "Books": 1,
+      "Groceries": 2,
+      "Home": 2,
+      "Meals": 2,
+      "Mobility": 3,
+      "Personal": 1,
+      "Subscriptions": 1
+    },
+    "buckets": [
+      "Growth",
+      "Needs",
+      "Wants"
+    ],
+    "bucket_counts": {
+      "Growth": 1,
+      "Needs": 8,
+      "Wants": 3
+    }
+  },
+  "labels": [
+    {
+      "name": "Books",
+      "color": "#8b5cf6",
+      "created_at": "2026-05-15T20:10:00Z"
+    },
+    {
+      "name": "Groceries",
+      "color": "#22c55e",
+      "created_at": "2026-05-02T13:15:00Z"
+    },
+    {
+      "name": "Home",
+      "color": "#0ea5e9",
+      "created_at": "2026-05-01T07:00:00Z"
+    },
+    {
+      "name": "Meals",
+      "color": "#f97316",
+      "created_at": "2026-05-10T12:50:00Z"
+    },
+    {
+      "name": "Mobility",
+      "color": "#06b6d4",
+      "created_at": "2026-05-04T08:30:00Z"
+    },
+    {
+      "name": "Personal",
+      "color": "#ec4899",
+      "created_at": "2026-05-12T10:05:00Z"
+    },
+    {
+      "name": "Subscriptions",
+      "color": "#64748b",
+      "created_at": "2026-05-08T21:00:00Z"
+    }
+  ],
+  "categories": [
+    {
+      "name": "Dining",
+      "description": "Restaurants and cafes",
+      "is_default": false
+    },
+    {
+      "name": "Entertainment",
+      "description": "Media and leisure",
+      "is_default": false
+    },
+    {
+      "name": "Food",
+      "description": "Groceries and staples",
+      "is_default": false
+    },
+    {
+      "name": "Health",
+      "description": "Healthcare and pharmacy",
+      "is_default": false
+    },
+    {
+      "name": "Housing",
+      "description": "Rent and housing",
+      "is_default": false
+    },
+    {
+      "name": "Shopping",
+      "description": "Retail purchases",
+      "is_default": false
+    },
+    {
+      "name": "Transport",
+      "description": "Daily transport",
+      "is_default": false
+    },
+    {
+      "name": "Travel",
+      "description": "Trips and tickets",
+      "is_default": false
+    },
+    {
+      "name": "Utilities",
+      "description": "Bills and services",
+      "is_default": false
+    }
+  ],
+  "buckets": [
+    {
+      "name": "Growth",
+      "description": "Learning and long-term value",
+      "is_default": false
+    },
+    {
+      "name": "Needs",
+      "description": "Essential spending",
+      "is_default": false
+    },
+    {
+      "name": "Wants",
+      "description": "Optional spending",
+      "is_default": false
+    }
+  ]
+}

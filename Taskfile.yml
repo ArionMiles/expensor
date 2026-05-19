@@ -1,0 +1,401 @@
+version: '3'
+
+tasks:
+  # ── FORMATTING ───────────────────────────────────────────────────────────────
+
+  # Internal helper: runs gci import ordering (called by fmt:be).
+  imports:be:
+    internal: true
+    dir: backend
+    cmd: go tool gci write ./ --section standard --section default --section "Prefix(github.com/ArionMiles)" --skip-generated --skip-vendor
+
+  fmt:be:
+    summary: Format Go source files (gci import ordering + gofumpt).
+    desc: Runs import ordering and gofumpt over the backend source tree.
+    dir: backend
+    deps: [imports:be]
+    cmd: go tool gofumpt -l -w -extra .
+
+  fmt:fe:
+    summary: Format frontend TypeScript/TSX files with Prettier.
+    desc: Formats frontend source files with Prettier using the repo config.
+    dir: frontend
+    deps: [frontend:install]
+    cmd: npm run format
+
+  fmt:fe:check:
+    summary: Check frontend TypeScript/TSX files are formatted with Prettier (non-mutating, for CI).
+    desc: Verifies frontend formatting without modifying files. Intended for CI and pre-commit checks.
+    dir: frontend
+    deps: [frontend:install]
+    cmd: npm run format:check
+
+  fmt:
+    summary: Format all source files (Go + frontend).
+    desc: Runs backend and frontend formatting targets in sequence.
+    cmds:
+      - task: fmt:be
+      - task: fmt:fe
+
+  # ── LINTING ──────────────────────────────────────────────────────────────────
+
+  lint:be:
+    summary: Lint Go source files with golangci-lint (local config).
+    desc: >-
+      Lints Go source files using .golangci.toml (lighter local configuration
+      for development).
+    dir: backend
+    cmd: go tool golangci-lint --config="../.golangci.toml" run ./...
+
+  lint:be:new:
+    summary: Lint only new/changed Go source files (compared to main).
+    desc: >-
+      Lints only Go files that are new or changed compared to origin/main.
+      Uses --new-from-rev for incremental adoption.
+    dir: backend
+    cmd: go tool golangci-lint --config="../.golangci-prod.toml" --new-from-rev=origin/main --max-same-issues=0 --max-issues-per-linter=0 run ./...
+
+  lint:be:prod:
+    summary: Lint all Go source files with golangci-lint (strict production config).
+    desc: >-
+      Lints all Go source files using .golangci-prod.toml (strict CI rules).
+      Must report 0 issues before committing.
+    dir: backend
+    cmd: go tool golangci-lint --config="../.golangci-prod.toml" --max-same-issues=0 --max-issues-per-linter=0 run ./...
+
+  lint:fe:
+    summary: Type-check frontend TypeScript source files.
+    desc: Runs the frontend TypeScript compiler in no-emit mode to catch type errors.
+    dir: frontend
+    deps: [frontend:install]
+    cmd: npm run lint
+
+  lint:
+    summary: Lint all source files (Go local config + TypeScript).
+    desc: Runs local backend linting and frontend type checking together.
+    cmds:
+      - task: lint:be
+      - task: lint:fe
+
+  # ── TESTING ──────────────────────────────────────────────────────────────────
+
+  test:be:
+    summary: Run Go unit tests.
+    desc: Run all Go unit tests with verbose output. Integration tests require Docker; use -short to skip them.
+    dir: backend
+    cmd: go test -v ./...
+
+  test:be:cover:
+    summary: Run Go unit tests with coverage report.
+    desc: >-
+      Executes the backend Go test suite with coverage profiling enabled and
+      prints the function-level coverage summary for CI and local inspection.
+    dir: backend
+    cmd: |
+      go test -v -coverprofile=coverage.out ./...
+      go tool cover -func=coverage.out
+
+  test:be:cover:check:
+    summary: Verify backend unit coverage against the configured floor.
+    desc: >-
+      Parses backend/coverage.out and fails if the total unit-test statements
+      coverage is below BACKEND_COVERAGE_MIN.
+    dir: backend
+    cmd: ../scripts/coverage/check-backend.sh coverage.out "${BACKEND_COVERAGE_MIN:-45.0}"
+
+  test:be:component:
+    summary: Run Docker Compose-backed backend component tests.
+    desc: >-
+      Starts PostgreSQL and a coverage-instrumented backend under
+      tests/component, applies deterministic seed data, runs build-tagged Go
+      black-box API tests, and post-processes runtime backend coverage from
+      GOCOVERDIR into a text profile.
+    cmds:
+      - rm -rf tests/component/artifacts
+      - mkdir -p tests/component/artifacts/backend-coverage
+      - docker compose -f tests/component/docker-compose.yml down -v --remove-orphans
+      - docker compose -f tests/component/docker-compose.yml up --quiet-pull -d postgres backend
+      - docker compose -f tests/component/docker-compose.yml run --rm seed
+      - docker compose -f tests/component/docker-compose.yml run --rm runner
+      - docker compose -f tests/component/docker-compose.yml exec -T backend sh -lc "pkill -INT expensor || true"
+      - docker compose -f tests/component/docker-compose.yml down -v --remove-orphans
+      - cd backend && go tool covdata percent -i=../tests/component/artifacts/backend-coverage
+      - cd backend && go tool covdata textfmt -i=../tests/component/artifacts/backend-coverage -o=../tests/component/artifacts/backend-component.coverage.out
+
+  test:be:contract:
+    summary: Run Docker Compose-backed backend contract tests.
+    desc: >-
+      Starts PostgreSQL and the backend under tests/contract, applies the
+      deterministic component seed fixture, and runs Schemathesis against
+      the generated OpenAPI artifact for the Phase 4 read-only allowlist.
+    cmds:
+      - rm -rf tests/contract/artifacts
+      - mkdir -p tests/contract/artifacts
+      - docker compose -f tests/contract/docker-compose.yml down -v --remove-orphans
+      - docker compose -f tests/contract/docker-compose.yml up --quiet-pull -d postgres backend
+      - docker compose -f tests/contract/docker-compose.yml run --quiet-pull --rm seed
+      - docker compose -f tests/contract/docker-compose.yml run --quiet-pull --rm runner
+      - docker compose -f tests/contract/docker-compose.yml down -v --remove-orphans
+
+  test:fe:
+    summary: Run frontend unit and component tests.
+    desc: >-
+      Executes the Vitest suite in non-watch mode for the frontend app.
+      Intended for local verification and CI.
+    dir: frontend
+    deps: [frontend:install]
+    cmd: npm run test
+
+  test:fe:watch:
+    summary: Run frontend tests in watch mode.
+    desc: >-
+      Starts Vitest in watch mode for iterative frontend test development.
+      Intended for local development only.
+    dir: frontend
+    deps: [frontend:install]
+    cmd: npm run test:watch
+
+  test:fe:cover:
+    summary: Run frontend tests with coverage output.
+    desc: >-
+      Executes the frontend Vitest suite with V8 coverage enabled and writes
+      coverage artifacts under the frontend coverage directory.
+    dir: frontend
+    deps: [frontend:install]
+    cmd: npm run test:cover
+
+  test:fe:cover:check:
+    summary: Verify frontend app coverage against the configured floor.
+    desc: >-
+      Parses frontend/coverage/coverage-summary.json and fails if the total
+      app statements coverage is below FRONTEND_COVERAGE_MIN.
+    dir: frontend
+    deps: [frontend:install]
+    cmd: node ../scripts/coverage/check-frontend.mjs coverage/coverage-summary.json "${FRONTEND_COVERAGE_MIN:-22.5}"
+
+  test:fe:e2e:
+    summary: Run mocked Playwright browser tests against the built preview app.
+    desc: >-
+      Builds the frontend, serves it with Vite preview, enables browser-side
+      MSW mocks at runtime, and exercises the initial high-value browser flows.
+    dir: frontend
+    deps: [frontend:install]
+    cmd: npm run test:e2e
+
+  test:fe:e2e:smoke:
+    summary: Run real-stack Playwright smoke tests against the shared seeded backend.
+    desc: >-
+      Starts PostgreSQL and the backend with the existing shared seed fixture,
+      then runs the thin Playwright smoke slice against the built preview app.
+    cmds:
+      - docker compose -f tests/component/docker-compose.yml down -v --remove-orphans
+      - docker compose -f tests/component/docker-compose.yml up --quiet-pull -d postgres backend
+      - docker compose -f tests/component/docker-compose.yml run --quiet-pull --rm seed
+      - cd frontend && VITE_API_PROXY_TARGET=http://127.0.0.1:18080 npm run test:e2e:smoke
+      - docker compose -f tests/component/docker-compose.yml down -v --remove-orphans
+
+  screenshots:readme:
+    summary: Generate the README dashboard screenshot.
+    desc: >-
+      Builds the frontend preview app, serves it through Playwright, loads the
+      deterministic anonymized screenshot fixture, and writes
+      docs/screenshots/dashboard-light.png.
+    dir: frontend
+    deps: [frontend:install]
+    cmd: npm run screenshot:readme
+
+  test:
+    summary: Run all backend and frontend unit/component tests.
+    desc: >-
+      Executes the default backend Go test suite and the frontend Vitest suite.
+      Excludes later-phase component, contract, and browser test harnesses.
+    cmds:
+      - task: test:be
+      - task: test:fe
+
+  # ── SECURITY / AUDIT ─────────────────────────────────────────────────────────
+
+  audit:be:
+    summary: Run govulncheck vulnerability scanner on Go source.
+    desc: Scans the backend Go packages for known vulnerabilities using govulncheck.
+    dir: backend
+    cmd: go tool govulncheck -show verbose ./...
+
+  audit:fe:
+    summary: Audit frontend npm dependencies for known vulnerabilities.
+    desc: Audits production frontend dependencies with npm audit.
+    dir: frontend
+    deps: [frontend:install]
+    cmd: npm audit --audit-level=moderate --omit=dev
+
+  audit:
+    summary: Run all security audits (Go + frontend npm).
+    desc: Runs backend govulncheck and frontend npm audit in sequence.
+    cmds:
+      - task: audit:be
+      - task: audit:fe
+
+  # ── BUILD ────────────────────────────────────────────────────────────────────
+
+  build:
+    summary: Build the Go application.
+    desc: Compiles all backend Go packages to catch build-time regressions.
+    dir: backend
+    cmd: go build -v ./...
+
+  build:binary:
+    summary: Build optimized binary for current platform.
+    desc: Build a production-ready Go binary with version information embedded.
+    dir: backend
+    vars:
+      VERSION:
+        sh: |
+          RAW=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+          if echo "$RAW" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "$RAW"
+          else
+            SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+            if echo "$RAW" | grep -q dirty; then echo "dirty-${SHA}"; else echo "dev-${SHA}"; fi
+          fi
+    cmd: |
+      CGO_ENABLED=0 go build \
+        -trimpath \
+        -ldflags="-s -w -X main.Version={{.VERSION}}" \
+        -o ../bin/expensor \
+        ./cmd/server
+
+  openapi:generate:
+    summary: Generate the committed OpenAPI baseline for the backend.
+    desc: >-
+      Runs the pinned Swaggo v1.16.4 generator from backend/ against the server
+      entrypoint and API handlers, writes YAML into api/openapi, and renames
+      the generated swagger.yaml artifact to api/openapi/expensor.openapi.yaml.
+      Re-run whenever OpenAPI annotations or route shapes change.
+    dir: backend
+    cmd: |
+      mkdir -p ../api/openapi
+      go run github.com/swaggo/swag/cmd/swag@v1.16.4 init -g openapi.go -d ./cmd/server,./internal/api --output ../api/openapi --outputTypes yaml
+      mv -f ../api/openapi/swagger.yaml ../api/openapi/expensor.openapi.yaml
+
+  openapi:check:
+    summary: Regenerate the OpenAPI baseline and fail if the committed artifact drifts.
+    desc: >-
+      Rebuilds api/openapi/expensor.openapi.yaml with the pinned Swaggo v1.16.4
+      workflow, verifies the artifact is tracked by git, and then exits
+      non-zero if git diff reports any drift. Intended for contributor
+      verification and CI guardrails.
+    cmds:
+      - task: openapi:generate
+      - git ls-files --error-unmatch api/openapi/expensor.openapi.yaml
+      - git diff --exit-code -- api/openapi/expensor.openapi.yaml
+
+  build:docker:
+    summary: Build Docker image locally.
+    desc: Builds the local expensor Docker image with the current repo version metadata.
+    vars:
+      VERSION:
+        sh: |
+          RAW=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+          if echo "$RAW" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "$RAW"
+          else
+            SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+            if echo "$RAW" | grep -q dirty; then echo "dirty-${SHA}"; else echo "dev-${SHA}"; fi
+          fi
+      IMAGE_NAME: "expensor:{{.VERSION}}"
+    cmd: |
+      docker buildx build \
+        --build-arg VERSION={{.VERSION}} \
+        -t {{.IMAGE_NAME}} \
+        --load \
+        .
+
+  # ── DATABASE ─────────────────────────────────────────────────────────────────
+
+  db:start:
+    summary: Start the local development PostgreSQL container.
+    desc: >-
+      Starts the postgres:16-alpine container defined in tests/docker-compose.local.yml.
+      Idempotent — safe to run when the container is already running.
+      Pass RECREATE=1 to destroy the volume and recreate from scratch.
+    dir: tests
+    cmd: |
+      if [ "${RECREATE:-0}" = "1" ]; then
+        echo "Recreating dev postgres (RECREATE=1)..."
+        docker compose -f docker-compose.local.yml --env-file .env down -v
+      fi
+      docker compose -f docker-compose.local.yml --env-file .env up -d
+      echo "Waiting for postgres to be healthy..."
+      until docker inspect --format '{{.State.Health.Status}}' expensor-dev-postgres 2>/dev/null | grep -q "healthy"; do
+        sleep 1
+      done
+      echo "Postgres is healthy."
+
+  db:stop:
+    summary: Stop the local development PostgreSQL container.
+    desc: Stops the local dev postgres container without removing its volume.
+    dir: tests
+    cmd: docker compose -f docker-compose.local.yml --env-file .env stop
+
+  # ── RUN ──────────────────────────────────────────────────────────────────────
+
+  run:
+    summary: Start the backend server with local dev environment.
+    desc: Loads tests/.env if present and starts the backend server locally from backend/cmd/server.
+    cmd: |
+      set -a
+      [ -f tests/.env ] && . tests/.env
+      set +a
+      cd backend && go run ./cmd/server
+
+  frontend:install:
+    summary: Install frontend npm dependencies (skipped if node_modules already exists).
+    desc: Runs npm install in the frontend directory. Idempotent — skipped automatically when node_modules is present.
+    dir: frontend
+    status:
+      - test -d node_modules
+    cmd: npm install
+
+  run:frontend:
+    summary: Start the frontend Vite dev server.
+    desc: Installs frontend dependencies if needed and starts the local Vite dev server.
+    dir: frontend
+    deps: [frontend:install]
+    cmd: npm run dev
+
+  dev:
+    summary: Start postgres, backend, and frontend for local development.
+    desc: >-
+      Ensures the dev postgres container is running (idempotent), waits for it
+      to be healthy, starts the backend (loading tests/.env), waits for
+      /api/health, then starts the Vite dev server. Kills the backend when the
+      frontend exits. Pass RECREATE=1 to wipe and recreate the postgres volume.
+    cmd: |
+      set -a
+      [ -f tests/.env ] && . tests/.env
+      set +a
+
+      # Start postgres (idempotent)
+      RECREATE=${RECREATE:-0} task db:start
+
+      # Compute version string (same logic as build:binary)
+      RAW=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+      if echo "$RAW" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+        DEV_VERSION="$RAW"
+      else
+        SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+        if echo "$RAW" | grep -q dirty; then DEV_VERSION="dirty-${SHA}"; else DEV_VERSION="dev-${SHA}"; fi
+      fi
+
+      # Start backend in background
+      (set -a; [ -f tests/.env ] && . tests/.env; set +a; cd backend && go run -ldflags="-X main.Version=${DEV_VERSION}" ./cmd/server) &
+      BACKEND_PID=$!
+      echo "Backend started (pid $BACKEND_PID), waiting for /api/health..."
+      until curl -sf http://localhost:8080/api/health > /dev/null 2>&1; do
+        sleep 0.5
+      done
+      echo "Backend is up — starting frontend"
+
+      [ -d frontend/node_modules ] || (cd frontend && npm install)
+      (cd frontend && npm run dev) || true
+      kill "$BACKEND_PID" 2>/dev/null || true

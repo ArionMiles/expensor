@@ -1,0 +1,65 @@
+repos:
+  - repo: local
+    hooks:
+      - id: fmt:be
+        name: Format Go code
+        entry: task fmt:be
+        language: system
+        pass_filenames: false
+        types: [go]
+
+      - id: lint:be
+        name: Lint Go code
+        entry: task lint:be
+        language: system
+        pass_filenames: false
+        types: [go]
+
+      - id: test:be
+        name: Test Go code
+        entry: task test:be
+        language: system
+        pass_filenames: false
+        types: [go]
+
+      - id: audit:be
+        name: Audit Go code
+        entry: task audit:be
+        language: system
+        pass_filenames: false
+        types: [go]
+
+      - id: fmt:fe
+        name: Format frontend code
+        entry: task fmt:fe
+        language: system
+        pass_filenames: false
+        files: ^frontend/
+
+      - id: lint:fe
+        name: Lint frontend code
+        entry: task lint:fe
+        language: system
+        pass_filenames: false
+        files: ^frontend/
+
+      - id: test:fe
+        name: Test frontend code
+        entry: task test:fe
+        language: system
+        pass_filenames: false
+        files: ^frontend/
+
+      - id: audit:fe
+        name: Audit frontend code
+        entry: task audit:fe
+        language: system
+        pass_filenames: false
+        files: ^frontend/
+
+      - id: build:docker
+        name: Build Docker image
+        entry: docker build .
+        language: system
+        pass_filenames: false
+        files: ^(Dockerfile|backend/go\.mod|backend/go\.sum|frontend/package\.json|frontend/package-lock\.json)$

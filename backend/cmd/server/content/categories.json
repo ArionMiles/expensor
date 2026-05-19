@@ -1,0 +1,21 @@
+[
+  { "fragment": "swiggy",             "mcc": "5812" },
+  { "fragment": "zomato media",       "mcc": "5818" },
+  { "fragment": "zomato",             "mcc": "5812" },
+  { "fragment": "blinkit",            "mcc": "5411" },
+  { "fragment": "blink commerce",     "mcc": "5411" },
+  { "fragment": "grofers",            "mcc": "5411" },
+  { "fragment": "instamart",          "mcc": "5411" },
+  { "fragment": "amazon",             "mcc": "5999" },
+  { "fragment": "ikea",               "mcc": "5712" },
+  { "fragment": "bookmyshow",         "mcc": "7922" },
+  { "fragment": "nykaa",              "mcc": "5977" },
+  { "fragment": "myntra",             "mcc": "5691" },
+  { "fragment": "blue tokai",         "mcc": "5812" },
+  { "fragment": "spotify",            "mcc": "5818" },
+  { "fragment": "hotstar",            "mcc": "5818" },
+  { "fragment": "google workspace",   "mcc": "5817" },
+  { "fragment": "indigo airline",     "mcc": "4511" },
+  { "fragment": "interglobe aviation","mcc": "4511" },
+  { "fragment": "rentomojo",          "category": "Subscriptions", "bucket": "Needs" }
+]

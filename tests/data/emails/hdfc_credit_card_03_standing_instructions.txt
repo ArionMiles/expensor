@@ -1,0 +1,10 @@
+Subject: Alert : Update on your HDFC Bank Credit Card
+
+Body:
+Dear Customer,
+
+Thank you for using HDFC Bank Card XX1234 for Rs. 149.0 at SPOTIFYINDIA on 13-03-2026 17:57:42
+
+Authorization code:- 123456 Please note that this transaction was conducted without OTP /PIN.
+
+If you have not authorized the above transaction, please call on 18002586161

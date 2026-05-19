@@ -1,0 +1,269 @@
+# Release workflow
+# Triggered when a new tag is pushed (v*.*.*)
+# Builds multi-platform binaries and Docker images
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Build and release multi-platform binaries
+  build-binaries:
+    name: Build Binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Linux builds
+          - goos: linux
+            goarch: amd64
+            output_name: expensor-linux-amd64
+          - goos: linux
+            goarch: arm64
+            output_name: expensor-linux-arm64
+
+          # macOS builds
+          - goos: darwin
+            goarch: amd64
+            output_name: expensor-darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            output_name: expensor-darwin-arm64
+
+          # Windows build
+          - goos: windows
+            goarch: amd64
+            output_name: expensor-windows-amd64.exe
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'backend/go.mod'
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build binary
+        working-directory: backend
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build \
+            -trimpath \
+            -ldflags="-s -w -X main.Version=${{ steps.version.outputs.VERSION }}" \
+            -o ../dist/${{ matrix.output_name }} \
+            ./cmd/server
+
+      - name: Create archive
+        run: |
+          cd dist
+          if [[ "${{ matrix.goos }}" == "windows" ]]; then
+            zip ${{ matrix.output_name }}.zip ${{ matrix.output_name }}
+            sha256sum ${{ matrix.output_name }}.zip > ${{ matrix.output_name }}.zip.sha256
+          else
+            tar czf ${{ matrix.output_name }}.tar.gz ${{ matrix.output_name }}
+            sha256sum ${{ matrix.output_name }}.tar.gz > ${{ matrix.output_name }}.tar.gz.sha256
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sha256
+          retention-days: 1
+
+  # Build and push multi-platform Docker image using cross-compilation.
+  # Builder stages use --platform=$BUILDPLATFORM so the Go toolchain and Node
+  # run natively on the amd64 host; GOOS/GOARCH handle arm64 targeting without QEMU.
+  build-docker:
+    name: Build Docker Image
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Lowercase image name
+        run: echo "IMAGE_NAME=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}.{{minor}}
+            type=semver,pattern=v{{major}}
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.description=Expense tracker that reads Gmail and Thunderbird emails and writes to PostgreSQL
+            org.opencontainers.image.licenses=AGPL-3.0
+            org.opencontainers.image.vendor=ArionMiles
+            org.opencontainers.image.documentation=https://github.com/ArionMiles/expensor#readme
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          build-args: VERSION=${{ steps.version.outputs.VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
+
+  # Create GitHub Release
+  create-release:
+    name: Create GitHub Release
+    needs: [build-binaries, build-docker]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: binaries-*
+          merge-multiple: true
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 ${VERSION}^ 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${VERSION})
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${PREV_TAG}..${VERSION})
+          fi
+
+          cat > release_notes.md <<EOF
+          ## What's Changed
+
+          ${CHANGELOG}
+
+          ## Installation
+
+          ### Binary
+          Download the appropriate binary for your platform from the assets below.
+
+          ### Docker
+          \`\`\`bash
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}
+          \`\`\`
+
+          ### From Source
+          \`\`\`bash
+          go install github.com/ArionMiles/expensor/backend/cmd/server@${VERSION}
+          \`\`\`
+
+          ## Checksums
+          SHA256 checksums are provided for all binaries in the \`.sha256\` files.
+
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${VERSION}
+          EOF
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: Release ${{ steps.version.outputs.VERSION }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.VERSION, '-') }}
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sha256
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post release summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY <<EOF
+          # Release ${{ steps.version.outputs.VERSION }} Published
+
+          ## Artifacts
+          - Multi-platform binaries: Linux (amd64, arm64), macOS (amd64, arm64), Windows (amd64)
+          - Docker image: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}\`
+
+          ## Links
+          - [Release Page](https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.VERSION }})
+          - [Docker Image](https://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }})
+          EOF

@@ -1,0 +1,109 @@
+[
+    {
+        "name": "ICICI Credit Card",
+        "senderEmail": "credit_cards@icicibank.com",
+        "subjectContains": "Transaction alert for your ICICI Bank Credit Card",
+        "amountRegex": "(?:INR|USD|EUR) ([\\d,]+(?:\\.\\d+)?)",
+        "merchantInfoRegex": "(?:at ([A-Z][A-Z ]*?) on|Info: (.*?)\\.)",
+        "currencyRegex": "(INR|USD|EUR)",
+        "source": "Credit Card - ICICI"
+    },
+    {
+        "name": "ICICI Credit Card (bank.in)",
+        "senderEmail": "credit_cards@icici.bank.in",
+        "subjectContains": "Transaction alert for your ICICI Bank Credit Card",
+        "amountRegex": "(?:INR|USD|EUR) ([\\d,]+(?:\\.\\d+)?)",
+        "merchantInfoRegex": "(?:at ([A-Z][A-Z ]*?) on|Info: (.*?)\\.)",
+        "currencyRegex": "(INR|USD|EUR)",
+        "source": "Credit Card - ICICI"
+    },
+    {
+        "name": "HDFC Credit Card",
+        "senderEmail": "@hdfcbank.bank.in",
+        "subjectContains": "Alert : Update on your HDFC Bank Credit Card",
+        "amountRegex": "Rs\\.\\s*([\\d,]+(?:\\.\\d+)?)",
+        "merchantInfoRegex": "\\bat\\b (.*?) on",
+        "source": "Credit Card - HDFC"
+    },
+    {
+        "name": "HDFC Credit Card (.net)",
+        "senderEmail": "@hdfcbank.net",
+        "subjectContains": "Alert : Update on your HDFC Bank Credit Card",
+        "amountRegex": "Rs\\.\\s*([\\d,]+(?:\\.\\d+)?)",
+        "merchantInfoRegex": "\\bat\\b (.*?) on",
+        "source": "Credit Card - HDFC"
+    },
+    {
+        "name": "HDFC Credit Card (debit alert)",
+        "senderEmail": "@hdfcbank.bank.in",
+        "subjectContains": "debited via Credit Card",
+        "amountRegex": "Rs\\.\\s*([\\d,]+(?:\\.\\d+)?)",
+        "merchantInfoRegex": "\\btowards\\b (.*?) on",
+        "source": "Credit Card - HDFC"
+    },
+    {
+        "name": "HDFC Credit Card (debit alert .net)",
+        "senderEmail": "@hdfcbank.net",
+        "subjectContains": "debited via Credit Card",
+        "amountRegex": "Rs\\.\\s*([\\d,]+(?:\\.\\d+)?)",
+        "merchantInfoRegex": "\\btowards\\b (.*?) on",
+        "source": "Credit Card - HDFC"
+    },
+    {
+        "name": "HDFC Credit Card (payment made alert)",
+        "senderEmail": "alerts@hdfcbank.bank.in",
+        "subjectContains": "A payment was made using your Credit Card",
+        "amountRegex": "Rs\\.\\s*([\\d,]+(?:\\.\\d+)?)",
+        "merchantInfoRegex": "\\btowards\\b (.*?) on",
+        "source": "Credit Card - HDFC"
+    },
+    {
+        "name": "HDFC Credit Card (payment made alert .net)",
+        "senderEmail": "alerts@hdfcbank.net",
+        "subjectContains": "A payment was made using your Credit Card",
+        "amountRegex": "Rs\\.\\s*([\\d,]+(?:\\.\\d+)?)",
+        "merchantInfoRegex": "\\btowards\\b (.*?) on",
+        "source": "Credit Card - HDFC"
+    },
+    {
+        "name": "HDFC UPI",
+        "senderEmail": "@hdfcbank",
+        "subjectContains": "UPI txn",
+        "amountRegex": "Rs\\.\\s*([\\d,]+(?:\\.\\d+)?)",
+        "merchantInfoRegex": "VPA \\S+\\s+(?:\\(([^)]*)\\)|(.*?))\\s+on\\s",
+        "source": "UPI - HDFC"
+    },
+    {
+        "name": "Axis Bank Credit Card",
+        "senderEmail": "alerts@axis.bank.in",
+        "subjectContains": "spent on credit card",
+        "amountRegex": "Transaction Amount:\\s*</div>\\s*<div[^>]*>\\s*[A-Z]{3}\\s*(?:&nbsp;|\\s)*([\\d,.]+)",
+        "merchantInfoRegex": "Merchant Name:\\s*</div>\\s*<div[^>]*>\\s*(.*?)\\s*(?:<br\\s*/?>|\\s*</div>)",
+        "currencyRegex": "Transaction Amount:\\s*</div>\\s*<div[^>]*>\\s*([A-Z]{3})",
+        "source": "Credit Card - Axis"
+    },
+    {
+        "name": "ICICI iMobile Fund Transfer",
+        "senderEmail": "customercare@icicibank.com",
+        "subjectContains": "Alert for transaction through ICICI Bank iMobile",
+        "amountRegex": "Rs ([\\d,]+(?:\\.\\d+)?)",
+        "merchantInfoRegex": "towards (.*?) on",
+        "source": "iMobile - ICICI"
+    },
+    {
+        "name": "ICICI NEFT iMobile",
+        "senderEmail": "customernotification@icici.bank.in",
+        "subjectContains": "NEFT transaction through ICICI Bank iMobile.",
+        "amountRegex": "Rs\\.\\s*([\\d,]+(?:\\.\\d+)?)",
+        "merchantInfoRegex": "towards (.*?) on",
+        "source": "iMobile - ICICI"
+    },
+    {
+        "name": "ICICI Debit Card",
+        "senderEmail": "alert@icicibank.com",
+        "subjectContains": "Transaction alert for your ICICI Bank debit card",
+        "amountRegex": "Rs\\.\\s*([\\d,]+(?:\\.\\d+)?)",
+        "merchantInfoRegex": "Info:\\s*(.*?)\\.",
+        "source": "Debit Card - ICICI"
+    }
+]

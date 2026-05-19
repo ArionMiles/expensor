@@ -1,0 +1,214 @@
+<h1 align="center">Expensor</h1>
+
+<p align="center">
+  Email-driven personal finance tracking with PostgreSQL-backed transaction analytics.
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="https://kanishk.io/posts/expensor/">Read the Blog Post</a> ·
+  <a href="https://github.com/ArionMiles/expensor/releases">Releases</a>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/dashboard-light.png" alt="Expensor dashboard in light mode" width="100%">
+</p>
+
+Expensor reads expense-related emails from Gmail or Thunderbird, extracts transaction details with configurable rules, and stores them in PostgreSQL. It ships with a web UI for onboarding, dashboard analytics, transaction review, labels, settings, and daemon control.
+
+> [!IMPORTANT]
+> This project is built with AI-assisted tooling.
+
+## Quick Start
+
+The fastest way to run Expensor is Docker Compose. It starts Expensor and PostgreSQL, then you finish setup in the browser.
+
+```bash
+# Download the Docker Compose file
+curl -LO https://raw.githubusercontent.com/ArionMiles/expensor/refs/heads/main/deploy/docker-compose.yml
+
+# Start the services
+docker compose up -d
+```
+
+Open `http://localhost:8080` and follow the onboarding wizard.
+
+This starts:
+
+- Expensor UI and API on port `8080`
+- PostgreSQL on the internal Compose network
+- A persistent `postgres_data` volume containing transactions, settings, reader config, OAuth tokens, and processed-message state
+
+### Custom PostgreSQL Password
+
+The Compose file uses a default local password for convenience. To set your own password for a new stack:
+
+```bash
+EXPENSOR_POSTGRES_PASSWORD='change-me' docker compose up -d
+```
+
+You can also create a `.env` file next to `docker-compose.yml`:
+
+```dotenv
+EXPENSOR_POSTGRES_PASSWORD=change-me
+```
+
+Then run:
+
+```bash
+docker compose up -d
+```
+
+For an existing database volume, change the password inside PostgreSQL before changing the Compose environment. The official Postgres image only uses `POSTGRES_PASSWORD` when initializing a new database directory.
+
+### Thunderbird
+
+For Thunderbird, mount your profile directory read-only and set `THUNDERBIRD_DATA_DIR` to the mount point if discovery needs a hint:
+
+```yaml
+services:
+  expensor:
+    environment:
+      THUNDERBIRD_DATA_DIR: /thunderbird-profile
+    volumes:
+      - /path/to/Thunderbird/Profiles/your.profile:/thunderbird-profile:ro
+```
+
+The onboarding wizard can then discover the mounted profile and save the selected profile/mailboxes in PostgreSQL.
+
+### Upgrading Older File-Backed Installs
+
+Current versions store runtime details in PostgreSQL. Older installs may still have files such as `client_secret_*.json`, `token_*.json`, `config_*.json`, `active_reader`, or `state.json` under `/app/data`.
+
+On upgrade, Expensor imports those legacy files into PostgreSQL if `/app/data` is mounted. After a successful upgrade, the old application data volume is stale and can be removed at your discretion. Keep `postgres_data`; that is where current runtime state lives.
+
+## Features
+
+- Gmail API and Thunderbird MBOX readers
+- Web onboarding for reader selection, credentials upload, OAuth, and reader config
+- PostgreSQL-backed transactions, settings, rules, labels, runtime state, and dedup state
+- Dashboard summaries, charts, heatmaps, and transaction drill-downs
+- Transaction search, filters, labeling, muting, and edit flows
+- Predefined extraction rules plus user-managed rules in the UI
+- Backup/restore, diagnostics, OpenAPI contract checks, component tests, and Playwright smoke coverage
+
+## How It Works
+
+1. Open the web UI and complete onboarding.
+2. Start the daemon from the UI.
+3. Expensor polls Gmail or Thunderbird on the configured interval.
+4. Messages are matched against predefined and user-managed rules.
+5. Regex extractors derive amount, currency, merchant, date, and source.
+6. Transactions and processing state are written to PostgreSQL.
+7. The UI reads from the API for dashboard, transaction, settings, labels, and rules workflows.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Sources["Email Sources"]
+        Gmail([Gmail API])
+        TB([Thunderbird MBOX])
+    end
+
+    subgraph Daemon
+        direction TB
+        Reader[Reader Plugin] --> Runner[Daemon Runner] --> Writer[PostgreSQL Writer]
+    end
+
+    subgraph App["Expensor :8080"]
+        direction TB
+        API[REST API] --- Static[Static Assets]
+    end
+
+    Gmail --> Reader
+    TB --> Reader
+    Writer --> DB[(PostgreSQL)]
+    DB <--> API
+    DB -. runtime state .-> Runner
+    Static --> UI[Web UI]
+    UI -- /api/* --> API
+```
+
+## Configuration
+
+Most setup happens in the web UI. Environment variables are only needed for deployment wiring and a few runtime defaults.
+
+| Variable | Use |
+|----------|-----|
+| `BASE_URL` | Public URL used for OAuth redirects. Set this if Expensor is not reached at `http://localhost:8080`. |
+| `FRONTEND_URL` | Post-auth redirect target. Usually leave unset unless running the Vite dev server separately. |
+| `EXPENSOR_BASE_CURRENCY` | Default aggregate currency. Can also be managed from settings. |
+| `EXPENSOR_SCAN_INTERVAL` | Reader polling interval in seconds. |
+| `EXPENSOR_LOOKBACK_DAYS` | How far back readers search on first run. |
+| `THUNDERBIRD_DATA_DIR` | Optional profile-discovery hint for Docker-mounted Thunderbird profiles. |
+| `POSTGRES_HOST` | PostgreSQL host. Required outside the bundled Compose setup. |
+| `POSTGRES_DB` | PostgreSQL database name. |
+| `POSTGRES_USER` | PostgreSQL user. |
+| `POSTGRES_PASSWORD` | PostgreSQL password. |
+| `POSTGRES_PORT` | PostgreSQL port. Defaults to `5432`. |
+| `POSTGRES_SSLMODE` | PostgreSQL SSL mode. Defaults to `disable`. |
+| `LOG_LEVEL` | `DEBUG`, `INFO`, `WARN`, or `ERROR`. |
+| `LOG_JSON` | Set to `true` for structured JSON logs. |
+
+`EXPENSOR_DATA_DIR` is retained only for importing legacy file-backed runtime data during upgrades. New installs do not need an application data volume.
+
+## Releases
+
+| Channel | Image | Updated |
+|---------|-------|---------|
+| Stable | `ghcr.io/arionmiles/expensor:<version>` | On git tag push |
+| Tip | `ghcr.io/arionmiles/expensor:tip` | On every merge to `main` |
+
+Tip builds are also published with a pinnable tag: `ghcr.io/arionmiles/expensor:tip-<sha7>`.
+
+Latest release: see [Releases](https://github.com/ArionMiles/expensor/releases).
+
+## Repository Structure
+
+```text
+.
+├── backend/                 # Go API, daemon, plugins, migrations, PostgreSQL store
+├── deploy/                  # Public deployment assets, including Docker Compose
+├── frontend/                # React + Vite + Tailwind web UI
+├── tests/                   # Component, contract, local DB, and integration helpers
+├── docs/                    # Project notes, i18n docs, screenshots, and test docs
+└── Taskfile.yml             # Build, lint, test, and dev automation
+```
+
+## Development
+
+This project uses [Task](https://taskfile.dev) for automation. Prefer `task` targets over direct `go`, `npm`, or `docker compose` commands because they set the expected working directory and environment.
+
+```bash
+task dev               # Start postgres + backend + frontend
+task run               # Backend only
+task run:frontend      # Frontend Vite dev server only
+
+task fmt               # Format Go and frontend code
+task lint              # Lint Go and type-check frontend
+task lint:be:prod      # Strict Go lint used by CI
+task test              # Run backend and frontend tests
+task test:be           # Go unit tests
+task test:fe           # Frontend unit/component tests
+task test:fe:e2e       # Mocked Playwright E2E tests
+
+task build:binary      # Build optimized binary -> bin/expensor
+task build:docker      # Build Docker image locally
+```
+
+PostgreSQL-backed integration tests use Docker. Run them through the relevant `task` targets when changing store, writer, or API behavior.
+
+## Internationalization
+
+Frontend strings that have been extracted for translation live in `frontend/src/i18n/messages.ts`. To add a language, copy the English catalog, translate values without changing keys, then run `task lint:fe` and `task test:fe`.
+
+See [docs/i18n/adding-translations.md](docs/i18n/adding-translations.md) and [docs/i18n/string-extraction.md](docs/i18n/string-extraction.md).
+
+## Screenshots
+
+Dashboard screenshots should use anonymized data only. Keep reusable screenshot seed data under `docs/screenshots/` so screenshots can be regenerated as the UI changes.
+
+## Third-Party Notices
+
+The Gmail and Thunderbird icons used in this project are trademarks of their respective owners, Google LLC and MZLA Technologies Corporation. They are used solely to identify the services Expensor integrates with. See [NOTICE](NOTICE) for full attribution.

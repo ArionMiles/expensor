@@ -1,0 +1,58 @@
+# Git files
+.git
+.gitignore
+.github
+
+# Development tools
+.tools
+.task
+.vscode
+.idea
+.claude
+
+# Documentation
+*.md
+!README.md
+PLAN.md
+REQUIREMENTS.md
+
+# Test files and coverage
+*_test.go
+tests/
+coverage.out
+coverage.html
+
+# Build artifacts
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+
+# Dependencies (will be downloaded during build)
+vendor/
+
+# Config files (should be mounted or provided at runtime)
+config.json
+client_secret*.json
+token.json
+credentials.json
+
+# Task runner
+Taskfile.yml
+
+# Linter configs
+.golangci.toml
+.golangci-prod.toml
+
+# Docker files
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# Misc
+.DS_Store
+go.work
+go.work.sum
