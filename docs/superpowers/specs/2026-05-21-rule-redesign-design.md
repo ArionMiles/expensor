@@ -237,6 +237,13 @@ Adding or changing a bundled rule should include at least one matching fixture u
 
 The Rule creator should move to a workbench layout.
 
+All paths that currently open the rule editor should use this workbench:
+
+- `Rules` list create/edit actions.
+- `Diagnostics` row "Fix rule" actions.
+- Direct rule edit URLs.
+- Diagnostic-prefilled create URLs when a diagnostic cannot be associated with an existing rule.
+
 Left panel:
 
 - Identity: name and predefined/custom badge.
@@ -285,6 +292,8 @@ Filters should persist in URL search params:
 
 Type and bank filter values should be derived from rules and should show predefined/custom origin where helpful.
 
+The `/rules` route should open on this revamped list view by default. Creating or editing a rule should be a secondary route/state from that list, not the first surface users see when they visit Rules.
+
 ## Transactions UI
 
 The Transactions page should replace the Source column and filter with:
@@ -329,9 +338,11 @@ Backend tests:
 Frontend tests:
 
 - Rule workbench layout basics.
+- Diagnostics "Fix rule" navigation opens the workbench with the diagnostic sample loaded.
 - Sender chip editing.
 - Source type and bank combobox behavior.
 - Shared Go regexp help affordance.
+- Rules route opens the revamped list view by default.
 - Rules list URL-persisted filters.
 - Transactions type/bank columns and filters.
 - Dashboard type and bank donuts.
