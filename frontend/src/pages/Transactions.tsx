@@ -31,10 +31,6 @@ import { useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTooltip } from '@/hooks/useTooltip'
 
-function sourceDisplay(source: Transaction['source']) {
-  return source.label || [source.bank, source.type].filter(Boolean).join(' ')
-}
-
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
   useEffect(() => {
@@ -471,17 +467,22 @@ function TransactionRow({
         </span>
       </td>
       <td className="overflow-hidden whitespace-nowrap px-3 py-2.5">
-        {tx.source && (
+        {tx.source.bank && (
           <span
             className="inline-block max-w-full truncate rounded-sm border border-border py-0.5 pl-1.5 pr-2 font-mono text-[10px] text-muted-foreground"
             style={{
-              borderLeftColor: getSourceColor(sourceDisplay(tx.source), banks),
+              borderLeftColor: getSourceColor(tx.source.bank, banks),
               borderLeftWidth: '2px',
             }}
           >
-            {sourceDisplay(tx.source)}
+            {tx.source.bank}
           </span>
         )}
+      </td>
+      <td className="overflow-hidden whitespace-nowrap px-3 py-2.5">
+        <span className="block truncate text-xs text-muted-foreground">
+          {tx.source.type || '—'}
+        </span>
       </td>
       <td className="px-3 py-2.5">
         <AmountCell tx={tx} />
@@ -509,6 +510,8 @@ type FilterPanelProps = {
   facets:
     | {
         sources: string[]
+        source_types: string[]
+        banks: string[]
         categories: string[]
         currencies: string[]
         labels: string[]
@@ -616,13 +619,22 @@ function FilterPanel({
         }
       />
 
-      {/* Always-visible: Source */}
+      {/* Always-visible: Source type */}
       <FilterCombobox
-        value={filters.source ?? ''}
-        onChange={(v) => updateFilter('source', v)}
-        options={facets?.sources ?? []}
-        placeholder="Source"
-        label="Filter by source"
+        value={filters.source_type ?? ''}
+        onChange={(v) => updateFilter('source_type', v)}
+        options={facets?.source_types ?? []}
+        placeholder="Type"
+        label="Filter by source type"
+      />
+
+      {/* Always-visible: Bank */}
+      <FilterCombobox
+        value={filters.bank ?? ''}
+        onChange={(v) => updateFilter('bank', v)}
+        options={facets?.banks ?? []}
+        placeholder="Bank"
+        label="Filter by bank"
       />
 
       {/* Always-visible: Label */}
@@ -813,6 +825,10 @@ export function Transactions() {
     currency: searchParams.get('currency') || undefined,
     source: searchParams.get('source') || undefined,
     exclude_sources: parseCSVParam('exclude_sources'),
+    source_type: searchParams.get('source_type') || undefined,
+    exclude_source_types: parseCSVParam('exclude_source_types'),
+    bank: searchParams.get('bank') || undefined,
+    exclude_banks: parseCSVParam('exclude_banks'),
     bucket: searchParams.get('bucket') || undefined,
     bucket_missing: searchParams.get('bucket_missing') === '1' || undefined,
     exclude_buckets: parseCSVParam('exclude_buckets'),
@@ -838,6 +854,8 @@ export function Transactions() {
       Boolean(searchParams.get('category_missing')) ||
       Boolean(searchParams.get('currency')) ||
       Boolean(searchParams.get('source')) ||
+      Boolean(searchParams.get('source_type')) ||
+      Boolean(searchParams.get('bank')) ||
       Boolean(searchParams.get('bucket')) ||
       Boolean(searchParams.get('bucket_missing')) ||
       Boolean(searchParams.get('label')) ||
@@ -999,6 +1017,8 @@ export function Transactions() {
     filters.category_missing ||
     filters.currency ||
     filters.source ||
+    filters.source_type ||
+    filters.bank ||
     filters.bucket ||
     filters.bucket_missing ||
     filters.label ||
@@ -1179,14 +1199,15 @@ export function Transactions() {
       <div className="flex-1 overflow-x-auto rounded-lg border border-border bg-card shadow-sm">
         <table
           aria-label="Transactions"
-          className="min-w-[96rem] table-fixed"
+          className="min-w-[104rem] table-fixed"
           style={{ borderCollapse: 'collapse' }}
         >
           <colgroup>
             <col className="w-10" />
             <col className="w-52" />
             <col className="w-72" />
-            <col className="w-48" />
+            <col className="w-32" />
+            <col className="w-36" />
             <col className="w-32" />
             <col className="w-56" />
             <col className="w-44" />
@@ -1226,7 +1247,13 @@ export function Transactions() {
                 scope="col"
                 className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
               >
-                Source
+                Bank
+              </th>
+              <th
+                scope="col"
+                className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+              >
+                Type
               </th>
               <th
                 scope="col"
@@ -1259,7 +1286,7 @@ export function Transactions() {
             {isLoading
               ? Array.from({ length: 10 }).map((_, i) => (
                   <tr key={i} className="animate-pulse border-b border-border">
-                    {Array.from({ length: 8 }).map((_, j) => (
+                    {Array.from({ length: 10 }).map((_, j) => (
                       <td key={j} className="px-3 py-3">
                         <div className="h-3 rounded-sm bg-secondary" />
                       </td>
@@ -1278,7 +1305,7 @@ export function Transactions() {
                 ))}
             {!isLoading && transactions.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-12 text-center text-xs text-muted-foreground">
+                <td colSpan={10} className="px-3 py-12 text-center text-xs text-muted-foreground">
                   {hasActiveFilters
                     ? 'No transactions match the current filters'
                     : 'No transactions found'}

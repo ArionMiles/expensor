@@ -120,6 +120,8 @@ export interface ChartData {
   by_bucket: Record<string, number>
   by_label: Record<string, number>
   by_source: Record<string, number>
+  by_source_type: Record<string, number>
+  by_bank: Record<string, number>
   by_category_monthly: Record<string, CategoryMonthlyEntry>
 }
 

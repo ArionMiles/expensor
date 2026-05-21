@@ -17,7 +17,7 @@ var fixtureNamePattern = regexp.MustCompile(`^[a-z0-9-]+_[a-z0-9-]+_[a-z0-9-]+$`
 // EmailFixture is one positive email example for one rule. The rule regexes are
 // intentionally not part of the fixture; tests load those from rules.json.
 type EmailFixture struct {
-	TestName string
+	TestName string                  `yaml:"-"`
 	Rule     string                  `yaml:"rule"`
 	Sender   string                  `yaml:"sender"`
 	Subject  string                  `yaml:"subject"`

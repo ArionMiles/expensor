@@ -107,6 +107,14 @@ describe('dashboard uncategorized display helpers', () => {
       label_missing: '1',
       show_filters: '1',
     })
+    expect(dashboardBreakdownParams('source_type', 'Credit Card')).toEqual({
+      source_type: 'Credit Card',
+      show_filters: '1',
+    })
+    expect(dashboardBreakdownParams('bank', 'HDFC')).toEqual({
+      bank: 'HDFC',
+      show_filters: '1',
+    })
   })
 
   it('keeps investments as the configured bucket label', () => {

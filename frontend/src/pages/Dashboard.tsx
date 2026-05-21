@@ -45,7 +45,7 @@ function chartColor(index: number): string {
 
 const UNCATEGORIZED_LABEL = 'Uncategorized'
 
-type BreakdownDimension = 'category' | 'bucket' | 'label' | 'source'
+type BreakdownDimension = 'category' | 'bucket' | 'label' | 'source' | 'source_type' | 'bank'
 
 type SpendBreakdownMode = 'labels' | 'categories' | 'buckets'
 
@@ -1065,10 +1065,16 @@ function SummarySection({
           onSliceClick={(slice) => goToBreakdownSlice(slice, 'label')}
         />
         <BreakdownChart
-          title="By source"
-          data={summary.charts.by_source}
+          title="By source type"
+          data={summary.charts.by_source_type}
           currency={currency}
-          onSliceClick={(slice) => goToBreakdownSlice(slice, 'source')}
+          onSliceClick={(slice) => goToBreakdownSlice(slice, 'source_type')}
+        />
+        <BreakdownChart
+          title="By bank"
+          data={summary.charts.by_bank}
+          currency={currency}
+          onSliceClick={(slice) => goToBreakdownSlice(slice, 'bank')}
         />
       </div>
     </div>

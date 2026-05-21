@@ -90,6 +90,14 @@ const sharedCharts: ChartData = {
     'HDFC Credit Card': 1250,
     'ICICI UPI': 240000,
   },
+  by_source_type: {
+    'Credit Card': 1250,
+    UPI: 240000,
+  },
+  by_bank: {
+    HDFC: 1250,
+    ICICI: 240000,
+  },
   by_category_monthly: {
     Food: { current: 1250, prior: 950 },
     Housing: { current: 240000, prior: 238000 },

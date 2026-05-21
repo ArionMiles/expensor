@@ -15,7 +15,7 @@ const transactionFixtures = vi.hoisted(() => {
     merchant_info: 'Corner Coffee',
     category: 'Food',
     bucket: 'Needs',
-    source: 'gmail',
+    source: { type: 'Credit Card', label: 'HDFC Credit Card', bank: 'HDFC' },
     description: 'Coffee beans',
     labels: ['Groceries'],
     muted: false,
@@ -33,7 +33,7 @@ const transactionFixtures = vi.hoisted(() => {
     merchant_info: 'City Apartments',
     category: 'Housing',
     bucket: 'Needs',
-    source: 'thunderbird',
+    source: { type: 'UPI', label: 'ICICI UPI', bank: 'ICICI' },
     description: 'April rent',
     labels: ['Rent'],
     muted: false,
@@ -46,7 +46,7 @@ const transactionFixtures = vi.hoisted(() => {
     allTransactions: [coffee, rent],
     foodTransactions: [coffee],
     housingTransactions: [rent],
-    gmailTransactions: [coffee],
+    creditCardTransactions: [coffee],
     searchCoffeeTransactions: [coffee],
     searchRentTransactions: [rent],
   }
@@ -70,7 +70,9 @@ vi.mock('@/api/queries', () => ({
   }),
   useFacets: () => ({
     data: {
-      sources: ['gmail', 'thunderbird'],
+      sources: ['HDFC Credit Card', 'ICICI UPI'],
+      source_types: ['Credit Card', 'UPI'],
+      banks: ['HDFC', 'ICICI'],
       categories: ['Food', 'Housing'],
       currencies: ['USD'],
       labels: ['Groceries', 'Rent'],
@@ -83,7 +85,8 @@ vi.mock('@/api/queries', () => ({
   useTransactions: (
     filters: {
       category?: string
-      source?: string
+      source_type?: string
+      bank?: string
     },
     searchQuery: string,
   ) => {
@@ -97,8 +100,8 @@ vi.mock('@/api/queries', () => ({
             ? transactionFixtures.housingTransactions
             : filters.category === 'Food'
               ? transactionFixtures.foodTransactions
-              : filters.source === 'gmail'
-                ? transactionFixtures.gmailTransactions
+              : filters.source_type === 'Credit Card' || filters.bank === 'HDFC'
+                ? transactionFixtures.creditCardTransactions
                 : transactionFixtures.allTransactions
 
     const totalAmount = transactions.reduce((sum, transaction) => sum + transaction.amount, 0)
@@ -216,12 +219,12 @@ describe('Transactions', () => {
     const table = await screen.findByRole('table', { name: 'Transactions' })
 
     expect(table).toHaveClass('table-fixed')
-    expect(table).toHaveClass('min-w-[96rem]')
+    expect(table).toHaveClass('min-w-[104rem]')
     expect(table.querySelector('colgroup col:nth-child(2)')).toHaveClass('w-52')
     expect(table.querySelector('colgroup col:nth-child(3)')).toHaveClass('w-72')
   })
 
-  it('round-trips search and source filter state through URL query params', async () => {
+  it('round-trips search and source type/bank filter state through URL query params', async () => {
     const user = userEvent.setup()
 
     renderTransactions('/transactions')
@@ -233,13 +236,17 @@ describe('Transactions', () => {
     })
 
     await user.click(screen.getByRole('button', { name: 'Filters' }))
-    fireEvent.change(screen.getByRole('textbox', { name: 'Filter by source' }), {
-      target: { value: 'gmail' },
+    fireEvent.change(screen.getByRole('textbox', { name: 'Filter by source type' }), {
+      target: { value: 'Credit Card' },
+    })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Filter by bank' }), {
+      target: { value: 'HDFC' },
     })
 
     await waitFor(() => {
       expect(screen.getByTestId('location').textContent).toContain('q=coffee')
-      expect(screen.getByTestId('location').textContent).toContain('source=gmail')
+      expect(screen.getByTestId('location').textContent).toContain('source_type=Credit+Card')
+      expect(screen.getByTestId('location').textContent).toContain('bank=HDFC')
     })
   })
 

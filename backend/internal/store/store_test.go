@@ -1694,9 +1694,9 @@ func TestGetChartData_BySource(t *testing.T) {
 	ctx := context.Background()
 
 	for _, p := range []store.InsertParams{
-		{MessageID: "src-1", Amount: 100, Currency: "INR", MerchantInfo: "Amazon", Category: "Shopping", Source: "HDFC Credit Card"},
-		{MessageID: "src-2", Amount: 200, Currency: "INR", MerchantInfo: "Swiggy", Category: "Food", Source: "SBI Debit Card"},
-		{MessageID: "src-3", Amount: 50, Currency: "INR", MerchantInfo: "Netflix", Category: "Entertainment", Source: "HDFC Credit Card"},
+		{MessageID: "src-1", Amount: 100, Currency: "INR", MerchantInfo: "Amazon", Category: "Shopping", Source: "HDFC Credit Card", SourceType: "Credit Card", Bank: "HDFC"},
+		{MessageID: "src-2", Amount: 200, Currency: "INR", MerchantInfo: "Swiggy", Category: "Food", Source: "SBI Debit Card", SourceType: "Debit Card", Bank: "SBI"},
+		{MessageID: "src-3", Amount: 50, Currency: "INR", MerchantInfo: "Netflix", Category: "Entertainment", Source: "HDFC Credit Card", SourceType: "Credit Card", Bank: "HDFC"},
 	} {
 		if _, err := ts.InsertForTest(ctx, p); err != nil {
 			t.Fatalf("seed: %v", err)
@@ -1712,6 +1712,18 @@ func TestGetChartData_BySource(t *testing.T) {
 	}
 	if cd.BySource["SBI Debit Card"] != 200 {
 		t.Errorf("want SBI=200, got %v", cd.BySource["SBI Debit Card"])
+	}
+	if cd.BySourceType["Credit Card"] != 150 {
+		t.Errorf("want Credit Card=150, got %v", cd.BySourceType["Credit Card"])
+	}
+	if cd.BySourceType["Debit Card"] != 200 {
+		t.Errorf("want Debit Card=200, got %v", cd.BySourceType["Debit Card"])
+	}
+	if cd.ByBank["HDFC"] != 150 {
+		t.Errorf("want HDFC bank=150, got %v", cd.ByBank["HDFC"])
+	}
+	if cd.ByBank["SBI"] != 200 {
+		t.Errorf("want SBI bank=200, got %v", cd.ByBank["SBI"])
 	}
 }
 
