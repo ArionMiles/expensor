@@ -605,19 +605,19 @@ Run: `task fmt`
 
 Expected: no unformatted changes after rerun.
 
-- [ ] **Step 3: Backend verification**
+- [x] **Step 3: Backend verification**
 
 Run: `task test:be`, `task lint:be:prod`, and `task openapi:check`.
 
 Expected: PASS / 0 issues.
 
-- [ ] **Step 4: Frontend verification**
+- [x] **Step 4: Frontend verification**
 
 Run: `task test:fe`, `task lint:fe`, and `task test:fe:e2e`.
 
 Expected: PASS.
 
-- [ ] **Step 5: Inspect final diff and commit docs/cleanup**
+- [x] **Step 5: Inspect final diff and commit docs/cleanup**
 
 Run:
 
