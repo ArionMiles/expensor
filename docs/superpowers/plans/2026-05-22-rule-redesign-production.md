@@ -262,7 +262,7 @@ Run: `task test:be -- ./pkg/rules`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -282,17 +282,17 @@ git commit --no-gpg-sign -m "test: add self-contained rule fixtures"
 - Modify: `backend/internal/store/testing.go`
 - Modify: `backend/internal/store/store_test.go`
 
-- [ ] **Step 1: Write failing store tests**
+- [x] **Step 1: Write failing store tests**
 
 Add tests that create a rule with two sender emails and source fields, then assert `ListRules` returns them. Add transaction fixture rows with `source_type` and `bank`, then assert facets include `source_types` and `banks`, and filters `source_type=Credit Card&bank=HDFC` return only matching rows.
 
-- [ ] **Step 2: Run tests to confirm failure**
+- [x] **Step 2: Run tests to confirm failure**
 
 Run: `task test:be -- ./internal/store -run 'Test.*Rule.*Sender|Test.*Source.*Facet|Test.*Source.*Filter'`
 
 Expected: fails on missing columns/fields.
 
-- [ ] **Step 3: Implement migration and repository changes**
+- [x] **Step 3: Implement migration and repository changes**
 
 The upgrade migration must:
 
@@ -314,7 +314,7 @@ UPDATE rules SET source_label = transaction_source WHERE source_label = '' AND t
 
 Keep legacy `source`, `sender_email`, and `transaction_source` columns populated during this task so older code paths do not break while the rest of the branch is migrated.
 
-- [ ] **Step 4: Run store tests**
+- [x] **Step 4: Run store tests**
 
 Run: `task test:be -- ./internal/store`
 

@@ -90,7 +90,8 @@ func (r *pgTransactionsRepository) listTransactionsQuery(ctx context.Context, f 
 		SELECT DISTINCT t.id, t.message_id, t.amount, t.currency,
 		       t.original_amount, t.original_currency, t.exchange_rate,
 		       t.timestamp, t.merchant_info,
-		       COALESCE(t.category, ''), COALESCE(t.bucket, ''), t.source,
+		       COALESCE(t.category, ''), COALESCE(t.bucket, ''),
+		       t.source, COALESCE(t.source_type, ''), COALESCE(t.source_label, ''), COALESCE(t.bank, ''),
 		       COALESCE(t.description, ''), t.muted, t.muted_by_merchant, COALESCE(t.mute_reason,''), t.created_at, t.updated_at
 		FROM transactions t%s%s
 		ORDER BY %s
@@ -130,7 +131,8 @@ func (r *pgTransactionsRepository) getTransactionQuery(ctx context.Context, id s
 		SELECT t.id, t.message_id, t.amount, t.currency,
 		       t.original_amount, t.original_currency, t.exchange_rate,
 		       t.timestamp, t.merchant_info,
-		       COALESCE(t.category, ''), COALESCE(t.bucket, ''), t.source,
+		       COALESCE(t.category, ''), COALESCE(t.bucket, ''),
+		       t.source, COALESCE(t.source_type, ''), COALESCE(t.source_label, ''), COALESCE(t.bank, ''),
 		       COALESCE(t.description, ''), t.muted, t.muted_by_merchant, COALESCE(t.mute_reason,''), t.created_at, t.updated_at
 		FROM transactions t
 		WHERE t.id = $1
@@ -324,7 +326,8 @@ func (r *pgTransactionsRepository) searchTransactionsQuery(
 		SELECT DISTINCT t.id, t.message_id, t.amount, t.currency,
 		       t.original_amount, t.original_currency, t.exchange_rate,
 		       t.timestamp, t.merchant_info,
-		       COALESCE(t.category, ''), COALESCE(t.bucket, ''), t.source,
+		       COALESCE(t.category, ''), COALESCE(t.bucket, ''),
+		       t.source, COALESCE(t.source_type, ''), COALESCE(t.source_label, ''), COALESCE(t.bank, ''),
 		       COALESCE(t.description, ''), t.muted, t.muted_by_merchant, COALESCE(t.mute_reason,''), t.created_at, t.updated_at
 		FROM transactions t%s%s
 		ORDER BY t.timestamp DESC
@@ -383,6 +386,18 @@ func (r *pgTransactionsRepository) loadFacetValues(ctx context.Context, f *Facet
              WHERE source IS NOT NULL AND source != ''
              ORDER BY source`,
 			&f.Sources,
+		},
+		{
+			`SELECT DISTINCT source_type FROM transactions
+             WHERE source_type IS NOT NULL AND source_type != ''
+             ORDER BY source_type`,
+			&f.SourceTypes,
+		},
+		{
+			`SELECT DISTINCT bank FROM transactions
+             WHERE bank IS NOT NULL AND bank != ''
+             ORDER BY bank`,
+			&f.Banks,
 		},
 		{
 			`SELECT DISTINCT category FROM transactions
@@ -496,6 +511,12 @@ func (r *pgTransactionsRepository) scanFacetCountMap(ctx context.Context, sql, n
 func normalizeFacetSlices(f *Facets) {
 	if f.Sources == nil {
 		f.Sources = []string{}
+	}
+	if f.SourceTypes == nil {
+		f.SourceTypes = []string{}
+	}
+	if f.Banks == nil {
+		f.Banks = []string{}
 	}
 	if f.Categories == nil {
 		f.Categories = []string{}

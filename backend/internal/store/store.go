@@ -26,25 +26,25 @@ import (
 
 // Transaction represents a single expense transaction as returned by the API.
 type Transaction struct {
-	ID               string    `json:"id"`
-	MessageID        string    `json:"message_id"`
-	Amount           float64   `json:"amount"`
-	Currency         string    `json:"currency"`
-	OriginalAmount   *float64  `json:"original_amount,omitempty"`
-	OriginalCurrency *string   `json:"original_currency,omitempty"`
-	ExchangeRate     *float64  `json:"exchange_rate,omitempty"`
-	Timestamp        time.Time `json:"timestamp"`
-	MerchantInfo     string    `json:"merchant_info"`
-	Category         string    `json:"category"`
-	Bucket           string    `json:"bucket"`
-	Source           string    `json:"source"`
-	Description      string    `json:"description"`
-	Labels           []string  `json:"labels"`
-	Muted            bool      `json:"muted"`
-	MutedByMerchant  bool      `json:"muted_by_merchant"`
-	MuteReason       string    `json:"mute_reason,omitempty"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID               string     `json:"id"`
+	MessageID        string     `json:"message_id"`
+	Amount           float64    `json:"amount"`
+	Currency         string     `json:"currency"`
+	OriginalAmount   *float64   `json:"original_amount,omitempty"`
+	OriginalCurrency *string    `json:"original_currency,omitempty"`
+	ExchangeRate     *float64   `json:"exchange_rate,omitempty"`
+	Timestamp        time.Time  `json:"timestamp"`
+	MerchantInfo     string     `json:"merchant_info"`
+	Category         string     `json:"category"`
+	Bucket           string     `json:"bucket"`
+	Source           api.Source `json:"source"`
+	Description      string     `json:"description"`
+	Labels           []string   `json:"labels"`
+	Muted            bool       `json:"muted"`
+	MutedByMerchant  bool       `json:"muted_by_merchant"`
+	MuteReason       string     `json:"mute_reason,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 // MutedMerchant holds a merchant pattern that auto-mutes matching transactions at write time.
@@ -200,11 +200,15 @@ type RuleRow struct {
 	ID                string    `json:"id"`
 	Name              string    `json:"name"`
 	SenderEmail       string    `json:"sender_email"`
+	SenderEmails      []string  `json:"sender_emails"`
 	SubjectContains   string    `json:"subject_contains"`
 	AmountRegex       string    `json:"amount_regex"`
 	MerchantRegex     string    `json:"merchant_regex"`
 	CurrencyRegex     string    `json:"currency_regex"`
 	TransactionSource string    `json:"transaction_source"`
+	SourceType        string    `json:"source_type"`
+	SourceLabel       string    `json:"source_label"`
+	Bank              string    `json:"bank"`
 	Predefined        bool      `json:"predefined"` // true = seeded from embedded rules.json; editable but not deletable
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
@@ -263,32 +267,36 @@ type TransactionListResult struct {
 
 // ListFilter controls pagination and filtering for ListTransactions.
 type ListFilter struct {
-	Page              int    // 1-based
-	PageSize          int    // max rows per page
-	Category          string // partial match (ILIKE), empty = all
-	CategoryMissing   bool   // true = category is NULL or empty
-	ExcludeCategories []string
-	Currency          string // partial match (ILIKE), empty = all
-	Source            string // partial match (ILIKE), empty = all
-	ExcludeSources    []string
-	Bucket            string // partial match, empty = all
-	BucketMissing     bool   // true = bucket is NULL or empty
-	ExcludeBuckets    []string
-	Label             string // filter by label, empty = all
-	LabelMissing      bool   // true = no labels assigned
-	ExcludeLabels     []string
-	Merchant          string // partial match (ILIKE) on merchant_info, empty = all
-	ShowMuted         bool   // when true, muted transactions are included; default hides them
-	MutedOnly         bool   // when true, only muted=true (for click-through from Muted page)
-	IndividualOnly    bool   // when true, only muted=true AND muted_by_merchant=false (per-tx mutes)
-	Weekday           *int   // nil = all weekdays; uses configured timezone and PostgreSQL DOW convention
-	HourFrom          *int   // nil = all hours; non-nil filters EXTRACT(HOUR FROM timestamp) >= *HourFrom
-	HourTo            *int   // nil = all hours; non-nil filters EXTRACT(HOUR FROM timestamp) <= *HourTo
-	Timezone          string // IANA timezone for hour extraction; defaults to UTC when empty
-	From              *time.Time
-	To                *time.Time
-	SortBy            string // "timestamp" (only supported value for now); default = "timestamp"
-	SortDir           string // "asc" | "desc"; default = "desc"
+	Page               int    // 1-based
+	PageSize           int    // max rows per page
+	Category           string // partial match (ILIKE), empty = all
+	CategoryMissing    bool   // true = category is NULL or empty
+	ExcludeCategories  []string
+	Currency           string // partial match (ILIKE), empty = all
+	Source             string // partial match (ILIKE), empty = all
+	ExcludeSources     []string
+	SourceType         string
+	ExcludeSourceTypes []string
+	Bank               string
+	ExcludeBanks       []string
+	Bucket             string // partial match, empty = all
+	BucketMissing      bool   // true = bucket is NULL or empty
+	ExcludeBuckets     []string
+	Label              string // filter by label, empty = all
+	LabelMissing       bool   // true = no labels assigned
+	ExcludeLabels      []string
+	Merchant           string // partial match (ILIKE) on merchant_info, empty = all
+	ShowMuted          bool   // when true, muted transactions are included; default hides them
+	MutedOnly          bool   // when true, only muted=true (for click-through from Muted page)
+	IndividualOnly     bool   // when true, only muted=true AND muted_by_merchant=false (per-tx mutes)
+	Weekday            *int   // nil = all weekdays; uses configured timezone and PostgreSQL DOW convention
+	HourFrom           *int   // nil = all hours; non-nil filters EXTRACT(HOUR FROM timestamp) >= *HourFrom
+	HourTo             *int   // nil = all hours; non-nil filters EXTRACT(HOUR FROM timestamp) <= *HourTo
+	Timezone           string // IANA timezone for hour extraction; defaults to UTC when empty
+	From               *time.Time
+	To                 *time.Time
+	SortBy             string // "timestamp" (only supported value for now); default = "timestamp"
+	SortDir            string // "asc" | "desc"; default = "desc"
 }
 
 // Store wraps a pgxpool.Pool and provides query operations for the API layer.
@@ -1018,6 +1026,8 @@ func buildHeatmapWhere(from, to *time.Time) (string, []any) {
 // Facets holds distinct filter values for the transactions UI dropdowns.
 type Facets struct {
 	Sources        []string       `json:"sources"`
+	SourceTypes    []string       `json:"source_types"`
+	Banks          []string       `json:"banks"`
 	Categories     []string       `json:"categories"`
 	CategoryCounts map[string]int `json:"category_counts"`
 	Currencies     []string       `json:"currencies"`
@@ -1552,6 +1562,20 @@ func buildListWhere(f ListFilter) (string, []any) {
 		conds = append(conds, "COALESCE(t.source, '') != ''")
 		conds = append(conds, fmt.Sprintf("NOT (t.source = ANY(%s))", next(f.ExcludeSources)))
 	}
+	if f.SourceType != "" {
+		conds = append(conds, fmt.Sprintf("t.source_type ILIKE %s", next("%"+f.SourceType+"%")))
+	}
+	if len(f.ExcludeSourceTypes) > 0 {
+		conds = append(conds, "COALESCE(t.source_type, '') != ''")
+		conds = append(conds, fmt.Sprintf("NOT (t.source_type = ANY(%s))", next(f.ExcludeSourceTypes)))
+	}
+	if f.Bank != "" {
+		conds = append(conds, fmt.Sprintf("t.bank ILIKE %s", next("%"+f.Bank+"%")))
+	}
+	if len(f.ExcludeBanks) > 0 {
+		conds = append(conds, "COALESCE(t.bank, '') != ''")
+		conds = append(conds, fmt.Sprintf("NOT (t.bank = ANY(%s))", next(f.ExcludeBanks)))
+	}
 	if f.From != nil {
 		conds = append(conds, fmt.Sprintf("t.timestamp >= %s", next(*f.From)))
 	}
@@ -1713,14 +1737,20 @@ func scanTransactions(rows pgx.Rows) ([]Transaction, error) {
 	var txns []Transaction
 	for rows.Next() {
 		var t Transaction
+		var legacySource, sourceType, sourceLabel, bank string
 		if err := rows.Scan(
 			&t.ID, &t.MessageID, &t.Amount, &t.Currency,
 			&t.OriginalAmount, &t.OriginalCurrency, &t.ExchangeRate,
 			&t.Timestamp, &t.MerchantInfo, &t.Category, &t.Bucket,
-			&t.Source, &t.Description, &t.Muted, &t.MutedByMerchant, &t.MuteReason, &t.CreatedAt, &t.UpdatedAt,
+			&legacySource, &sourceType, &sourceLabel, &bank,
+			&t.Description, &t.Muted, &t.MutedByMerchant, &t.MuteReason, &t.CreatedAt, &t.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scanning transaction row: %w", err)
 		}
+		if sourceLabel == "" {
+			sourceLabel = legacySource
+		}
+		t.Source = api.Source{Type: sourceType, Label: sourceLabel, Bank: bank}
 		t.Labels = []string{}
 		txns = append(txns, t)
 	}
@@ -1732,17 +1762,17 @@ func scanTransactions(rows pgx.Rows) ([]Transaction, error) {
 
 // --- Rules ---
 
-const ruleColumns = `id, name, sender_email, subject_contains, amount_regex, merchant_regex,
-	currency_regex, transaction_source, predefined, created_at, updated_at`
+const ruleColumns = `id, name, sender_email, sender_emails, subject_contains, amount_regex, merchant_regex,
+	currency_regex, transaction_source, source_type, source_label, bank, predefined, created_at, updated_at`
 
 func scanRuleRows(rows pgx.Rows) ([]RuleRow, error) {
 	var result []RuleRow
 	for rows.Next() {
 		var r RuleRow
 		if err := rows.Scan(
-			&r.ID, &r.Name, &r.SenderEmail, &r.SubjectContains,
+			&r.ID, &r.Name, &r.SenderEmail, &r.SenderEmails, &r.SubjectContains,
 			&r.AmountRegex, &r.MerchantRegex, &r.CurrencyRegex,
-			&r.TransactionSource, &r.Predefined,
+			&r.TransactionSource, &r.SourceType, &r.SourceLabel, &r.Bank, &r.Predefined,
 			&r.CreatedAt, &r.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scanning rule row: %w", err)

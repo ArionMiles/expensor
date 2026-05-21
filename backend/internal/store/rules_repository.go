@@ -34,6 +34,33 @@ func NewRulesRepository(deps repositoryDependencies) RulesRepository {
 	}
 }
 
+func primarySender(rule RuleRow) string {
+	if rule.SenderEmail != "" {
+		return rule.SenderEmail
+	}
+	if len(rule.SenderEmails) > 0 {
+		return rule.SenderEmails[0]
+	}
+	return ""
+}
+
+func normalizedRuleSenders(rule RuleRow) []string {
+	if len(rule.SenderEmails) > 0 {
+		return rule.SenderEmails
+	}
+	if rule.SenderEmail != "" {
+		return []string{rule.SenderEmail}
+	}
+	return []string{}
+}
+
+func ruleSourceLabel(rule RuleRow) string {
+	if rule.SourceLabel != "" {
+		return rule.SourceLabel
+	}
+	return rule.TransactionSource
+}
+
 func (r *pgRulesRepository) InitRules(ctx context.Context) error {
 	err := r.metrics.Observe(ctx, "rules.init", func(ctx context.Context) error {
 		_, err := r.pool.Exec(ctx, `
@@ -54,7 +81,19 @@ func (r *pgRulesRepository) InitRules(ctx context.Context) error {
 
 			-- Upgrade path: add columns that may be missing on older installs.
 			ALTER TABLE rules ADD COLUMN IF NOT EXISTS transaction_source TEXT NOT NULL DEFAULT '';
+			ALTER TABLE rules ADD COLUMN IF NOT EXISTS sender_emails TEXT[] NOT NULL DEFAULT '{}';
+			ALTER TABLE rules ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT '';
+			ALTER TABLE rules ADD COLUMN IF NOT EXISTS source_label TEXT NOT NULL DEFAULT '';
+			ALTER TABLE rules ADD COLUMN IF NOT EXISTS bank TEXT NOT NULL DEFAULT '';
 			ALTER TABLE rules ADD COLUMN IF NOT EXISTS predefined BOOLEAN NOT NULL DEFAULT false;
+
+			UPDATE rules
+			SET sender_emails = ARRAY[sender_email]
+			WHERE cardinality(sender_emails) = 0 AND sender_email <> '';
+
+			UPDATE rules
+			SET source_label = transaction_source
+			WHERE source_label = '' AND transaction_source <> '';
 
 			-- Ensure UNIQUE (name) constraint exists (idempotent).
 			DO $$ BEGIN
@@ -129,12 +168,15 @@ func (r *pgRulesRepository) CreateRule(ctx context.Context, rule RuleRow) (*Rule
 	var created *RuleRow
 	err := r.metrics.Observe(ctx, "rules.create", func(ctx context.Context) error {
 		rows, err := r.pool.Query(ctx,
-			`INSERT INTO rules (name, sender_email, subject_contains, amount_regex, merchant_regex, currency_regex, transaction_source)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7)
+			`INSERT INTO rules (
+				name, sender_email, sender_emails, subject_contains, amount_regex, merchant_regex,
+				currency_regex, transaction_source, source_type, source_label, bank
+			)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 			 RETURNING `+ruleColumns,
-			rule.Name, rule.SenderEmail, rule.SubjectContains,
+			rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
 			rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
-			rule.TransactionSource,
+			ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
 		)
 		if err != nil {
 			return fmt.Errorf("creating rule: %w", err)
@@ -161,14 +203,14 @@ func (r *pgRulesRepository) UpdateRule(ctx context.Context, id string, rule Rule
 	err := r.metrics.Observe(ctx, "rules.update", func(ctx context.Context) error {
 		rows, err := r.pool.Query(ctx,
 			`UPDATE rules
-			 SET name=$2, sender_email=$3, subject_contains=$4,
-			     amount_regex=$5, merchant_regex=$6, currency_regex=$7,
-			     transaction_source=$8, updated_at=NOW()
+			 SET name=$2, sender_email=$3, sender_emails=$4, subject_contains=$5,
+			     amount_regex=$6, merchant_regex=$7, currency_regex=$8,
+			     transaction_source=$9, source_type=$10, source_label=$11, bank=$12, updated_at=NOW()
 			 WHERE id=$1
 			 RETURNING `+ruleColumns,
-			id, rule.Name, rule.SenderEmail, rule.SubjectContains,
+			id, rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
 			rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
-			rule.TransactionSource,
+			ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
 		)
 		if err != nil {
 			return fmt.Errorf("updating rule: %w", err)
@@ -210,12 +252,13 @@ func (r *pgRulesRepository) SeedPredefinedRules(ctx context.Context, rules []Rul
 		for _, rule := range rules {
 			_, err := r.pool.Exec(ctx, `
 				INSERT INTO rules
-				  (name, sender_email, subject_contains, amount_regex, merchant_regex, currency_regex, transaction_source, predefined)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+				  (name, sender_email, sender_emails, subject_contains, amount_regex, merchant_regex,
+				   currency_regex, transaction_source, source_type, source_label, bank, predefined)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
 				ON CONFLICT (name) DO NOTHING`,
-				rule.Name, rule.SenderEmail, rule.SubjectContains,
+				rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
 				rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
-				rule.TransactionSource,
+				ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
 			)
 			if err != nil {
 				return fmt.Errorf("seeding predefined rule %q: %w", rule.Name, err)
@@ -237,19 +280,24 @@ func (r *pgRulesRepository) ImportUserRules(ctx context.Context, rules []RuleRow
 		for _, rule := range rules {
 			_, err := tx.Exec(ctx, `
 				INSERT INTO rules
-				  (name, sender_email, subject_contains, amount_regex, merchant_regex, currency_regex, transaction_source)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)
+				  (name, sender_email, sender_emails, subject_contains, amount_regex, merchant_regex,
+				   currency_regex, transaction_source, source_type, source_label, bank)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 				ON CONFLICT (name) DO UPDATE SET
 					sender_email       = EXCLUDED.sender_email,
+					sender_emails      = EXCLUDED.sender_emails,
 					subject_contains   = EXCLUDED.subject_contains,
 					amount_regex       = EXCLUDED.amount_regex,
 					merchant_regex     = EXCLUDED.merchant_regex,
 					currency_regex     = EXCLUDED.currency_regex,
 					transaction_source = EXCLUDED.transaction_source,
+					source_type        = EXCLUDED.source_type,
+					source_label       = EXCLUDED.source_label,
+					bank               = EXCLUDED.bank,
 					updated_at         = NOW()`,
-				rule.Name, rule.SenderEmail, rule.SubjectContains,
+				rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
 				rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
-				rule.TransactionSource,
+				ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
 			)
 			if err != nil {
 				return fmt.Errorf("importing rule %q: %w", rule.Name, err)

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -1605,6 +1606,82 @@ func TestGetFacets_IncludesLabelCounts(t *testing.T) {
 	}
 	if got := facets.LabelCounts["counted-label"]; got != 2 {
 		t.Fatalf("want counted-label count 2, got %d from %#v", got, facets.LabelCounts)
+	}
+}
+
+func TestRulesRepository_PersistsSenderEmailsAndSourceFields(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+
+	created, err := ts.CreateRule(ctx, store.RuleRow{
+		Name:            "Structured HDFC",
+		SenderEmails:    []string{"alerts@hdfcbank.net", "alerts@hdfcbank.bank.in"},
+		SubjectContains: "HDFC Credit Card",
+		AmountRegex:     `Rs\.([\d.]+)`,
+		MerchantRegex:   `at (.*?) on`,
+		SourceType:      "Credit Card",
+		SourceLabel:     "HDFC Credit Card",
+		Bank:            "HDFC",
+	})
+	if err != nil {
+		t.Fatalf("CreateRule: %v", err)
+	}
+
+	got, err := ts.GetRule(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("GetRule: %v", err)
+	}
+	if !reflect.DeepEqual(got.SenderEmails, []string{"alerts@hdfcbank.net", "alerts@hdfcbank.bank.in"}) {
+		t.Fatalf("sender emails = %#v", got.SenderEmails)
+	}
+	if got.SourceType != "Credit Card" || got.SourceLabel != "HDFC Credit Card" || got.Bank != "HDFC" {
+		t.Fatalf("source fields = (%q, %q, %q)", got.SourceType, got.SourceLabel, got.Bank)
+	}
+}
+
+func TestTransactionsStructuredSourceFacetsAndFilters(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+
+	seed := []store.InsertParams{
+		{MessageID: "structured-source-1", Amount: 100, MerchantInfo: "Amazon", SourceType: "Credit Card", SourceLabel: "HDFC Credit Card", Bank: "HDFC"},
+		{MessageID: "structured-source-2", Amount: 200, MerchantInfo: "Swiggy", SourceType: "UPI", SourceLabel: "ICICI UPI", Bank: "ICICI"},
+		{MessageID: "structured-source-3", Amount: 300, MerchantInfo: "Uber", SourceType: "Credit Card", SourceLabel: "ICICI Credit Card", Bank: "ICICI"},
+	}
+	for _, p := range seed {
+		if _, err := ts.InsertForTest(ctx, p); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+
+	facets, err := ts.GetFacets(ctx)
+	if err != nil {
+		t.Fatalf("GetFacets: %v", err)
+	}
+	if !reflect.DeepEqual(facets.SourceTypes, []string{"Credit Card", "UPI"}) {
+		t.Fatalf("source types = %#v", facets.SourceTypes)
+	}
+	if !reflect.DeepEqual(facets.Banks, []string{"HDFC", "ICICI"}) {
+		t.Fatalf("banks = %#v", facets.Banks)
+	}
+
+	txns, _, err := ts.ListTransactions(ctx, store.ListFilter{SourceType: "Credit Card", Bank: "HDFC", PageSize: 10})
+	if err != nil {
+		t.Fatalf("ListTransactions: %v", err)
+	}
+	if len(txns) != 1 || txns[0].MessageID != "structured-source-1" {
+		t.Fatalf("filtered transactions = %#v", txns)
+	}
+	if txns[0].Source.Type != "Credit Card" || txns[0].Source.Bank != "HDFC" || txns[0].Source.Label != "HDFC Credit Card" {
+		t.Fatalf("transaction source = %#v", txns[0].Source)
 	}
 }
 
