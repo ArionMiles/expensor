@@ -76,6 +76,7 @@ type ImportConflict = {
   conflicts: string[]
   decisions: Record<string, Decision>
   fileName: string
+  hasRowChanges: boolean
 }
 
 type ColorPickerState =
@@ -445,6 +446,7 @@ export default function ExpenseGroupsPage() {
           conflicts,
           fileName: file.name,
           decisions: Object.fromEntries(conflicts.map((name) => [name, 'keep'])),
+          hasRowChanges: false,
         })
       } else {
         runImport(imported, {})
@@ -988,6 +990,7 @@ export default function ExpenseGroupsPage() {
                             (current) =>
                               current && {
                                 ...current,
+                                hasRowChanges: true,
                                 decisions: { ...current.decisions, [name]: decision },
                               },
                           )
@@ -1018,13 +1021,44 @@ export default function ExpenseGroupsPage() {
               >
                 {t('common.cancel')}
               </button>
-              <button
-                type="button"
-                onClick={() => runImport(importConflict.imported, importConflict.decisions)}
-                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-              >
-                {t('expenseGroups.importApply')}
-              </button>
+              {importConflict.hasRowChanges ? (
+                <button
+                  type="button"
+                  onClick={() => runImport(importConflict.imported, importConflict.decisions)}
+                  className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                >
+                  {t('expenseGroups.importApply')}
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      runImport(
+                        importConflict.imported,
+                        Object.fromEntries(importConflict.conflicts.map((name) => [name, 'keep'])),
+                      )
+                    }
+                    className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+                  >
+                    {t('expenseGroups.importKeepAll')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      runImport(
+                        importConflict.imported,
+                        Object.fromEntries(
+                          importConflict.conflicts.map((name) => [name, 'overwrite']),
+                        ),
+                      )
+                    }
+                    className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                  >
+                    {t('expenseGroups.importOverwriteAll')}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
