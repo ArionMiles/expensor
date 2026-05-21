@@ -17,6 +17,7 @@ import { ThemeToggle } from './ThemeToggle'
 import { useI18n } from '@/i18n/I18nProvider'
 import type { MessageKey } from '@/i18n/messages'
 import { shortcutLabel } from '@/lib/shortcuts'
+import { useExtractionDiagnostics, useReaderStatus } from '@/api/queries'
 
 interface NavItemDef {
   labelKey: MessageKey
@@ -60,7 +61,7 @@ function GithubIcon({ size = 14 }: { size?: number }) {
 // Reusable nav item class — single source of truth for alignment
 function navItemCls(collapsed: boolean, active = false) {
   return cn(
-    'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors',
+    'relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors',
     collapsed && 'justify-center gap-0 px-2',
     active
       ? 'bg-accent font-medium text-accent-foreground'
@@ -72,6 +73,16 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
   const { handlers: tipHandlers, tip } = useTooltip('right')
   const { t } = useI18n()
   const sidebarToggleLabel = `${collapsed ? t('sidebar.open') : t('sidebar.close')} (${shortcutLabel('.')})`
+  const { data: gmailStatus, isSuccess: gmailStatusLoaded } = useReaderStatus('gmail')
+  const { data: openDiagnostics } = useExtractionDiagnostics('open')
+  const setupNeedsAttention =
+    gmailStatusLoaded && gmailStatus?.auth_type === 'oauth' && !gmailStatus.ready
+  const openDiagnosticsCount = openDiagnostics?.length ?? 0
+
+  const diagnosticsCountLabel =
+    openDiagnosticsCount === 1
+      ? t('sidebar.diagnosticsCount.one')
+      : t('sidebar.diagnosticsCount', { count: openDiagnosticsCount })
 
   return (
     <div
@@ -154,25 +165,68 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
         </div>
 
         <div className="space-y-0.5 px-2">
-          {SECONDARY_NAV.map((item) => (
-            <NavLink
-              key={item.href}
-              to={item.href}
-              end={item.href === '/'}
-              {...(collapsed ? tipHandlers(t(item.labelKey)) : {})}
-              className={({ isActive }) => navItemCls(collapsed, isActive)}
-            >
-              <item.icon size={16} className="flex-shrink-0" />
-              <span
-                className={cn(
-                  'whitespace-nowrap transition-opacity duration-200',
-                  collapsed ? 'w-0 overflow-hidden opacity-0' : 'opacity-100',
-                )}
+          {SECONDARY_NAV.map((item) => {
+            const isSetup = item.href === '/setup'
+            const isDiagnostics = item.href === '/diagnostics'
+            const showSetupDot = isSetup && setupNeedsAttention
+            const diagnosticsCount = isDiagnostics ? openDiagnosticsCount : 0
+            const showDiagnosticsCount = diagnosticsCount > 0
+            const hasIndicator = showSetupDot || showDiagnosticsCount
+            const label = t(item.labelKey)
+            const tooltipLabel =
+              showSetupDot && collapsed
+                ? t('sidebar.setupAttention')
+                : showDiagnosticsCount && collapsed
+                  ? `${label} · ${diagnosticsCountLabel}`
+                  : label
+
+            return (
+              <NavLink
+                key={item.href}
+                to={item.href}
+                end={item.href === '/'}
+                data-testid={isDiagnostics ? 'nav-link-diagnostics' : undefined}
+                {...(collapsed ? tipHandlers(tooltipLabel) : {})}
+                className={({ isActive }) =>
+                  cn(navItemCls(collapsed, isActive), hasIndicator && 'overflow-visible')
+                }
               >
-                {t(item.labelKey)}
-              </span>
-            </NavLink>
-          ))}
+                <item.icon size={16} className="flex-shrink-0" />
+                <span
+                  className={cn(
+                    'whitespace-nowrap transition-opacity duration-200',
+                    collapsed ? 'w-0 overflow-hidden opacity-0' : 'opacity-100',
+                  )}
+                >
+                  {label}
+                </span>
+
+                {showSetupDot && (
+                  <span
+                    data-testid="setup-attention-dot"
+                    aria-hidden="true"
+                    className={cn(
+                      'h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_0_2px_hsl(var(--card))]',
+                      collapsed ? 'absolute right-1.5 top-1.5' : 'ml-auto flex-shrink-0',
+                    )}
+                  />
+                )}
+
+                {showDiagnosticsCount && (
+                  <span
+                    data-testid="diagnostics-count-badge"
+                    aria-label={diagnosticsCountLabel}
+                    className={cn(
+                      'inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1.5 text-[11px] font-semibold leading-none text-slate-950 shadow-[0_0_0_2px_hsl(var(--card))]',
+                      collapsed ? 'absolute right-0 top-0' : 'ml-auto flex-shrink-0',
+                    )}
+                  >
+                    {diagnosticsCount > 99 ? '99+' : diagnosticsCount}
+                  </span>
+                )}
+              </NavLink>
+            )
+          })}
         </div>
       </nav>
 
