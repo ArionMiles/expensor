@@ -4,6 +4,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"net/mail"
 	"regexp"
 	"strings"
 	"time"
@@ -24,7 +25,7 @@ type TransactionDetails struct {
 	Category     string  `json:"category"`
 	// Bucket classifies the expense as Need/Want/Investment.
 	Bucket string `json:"bucket"`
-	Source string `json:"source"`
+	Source Source `json:"source"`
 	// MessageID is the email message ID (used for marking as read after successful write).
 	MessageID string `json:"-"`
 
@@ -37,6 +38,30 @@ type TransactionDetails struct {
 	// User-added fields
 	Description string   `json:"description,omitempty"` // User-added description
 	Labels      []string `json:"labels,omitempty"`      // User-added labels
+}
+
+// Source describes where a transaction originated.
+type Source struct {
+	Type  string `json:"type"`
+	Label string `json:"label"`
+	Bank  string `json:"bank"`
+}
+
+// Display returns a compact fallback label for places that still need a string.
+func (s Source) Display() string {
+	parts := make([]string, 0, 3)
+	if strings.TrimSpace(s.Bank) != "" {
+		parts = append(parts, strings.TrimSpace(s.Bank))
+	}
+	if strings.TrimSpace(s.Type) != "" {
+		parts = append(parts, strings.TrimSpace(s.Type))
+	}
+	display := strings.Join(parts, " ")
+	label := strings.TrimSpace(s.Label)
+	if label != "" && !strings.EqualFold(label, display) {
+		parts = append(parts, label)
+	}
+	return strings.Join(parts, " ")
 }
 
 // Reader reads transactions from a source and sends them to the provided channel.
@@ -58,11 +83,12 @@ type Rule struct {
 	ID              string
 	Name            string
 	SenderEmail     string         // Email sender to match (e.g., "alerts@icicibank.com")
+	SenderEmails    []string       // Exact sender email addresses to match.
 	SubjectContains string         // Subject substring to match
 	Amount          *regexp.Regexp // Regex to extract amount (group 1 = numeric amount, commas stripped)
 	MerchantInfo    *regexp.Regexp // Regex to extract merchant; first non-empty capture group is used
 	Currency        *regexp.Regexp // Regex to extract ISO currency code (group 1 = code, e.g. "INR", "USD")
-	Source          string         // Transaction source identifier (e.g., "Credit Card - ICICI")
+	Source          Source         // Transaction source metadata.
 }
 
 // RuleDiagnosticSnapshot captures the diagnostic fields from a rule at extraction time.
@@ -134,9 +160,32 @@ func ExtractionFailureReasons(transaction *TransactionDetails) []string {
 // BuildGmailQuery constructs a Gmail API query string from the rule's fields.
 // Note: the caller is responsible for appending date filters (e.g. after:YYYY/MM/DD).
 func (r *Rule) BuildGmailQuery() string {
+	queries := r.BuildGmailQueries()
+	if len(queries) == 0 {
+		return ""
+	}
+	return queries[0]
+}
+
+// BuildGmailQueries constructs one Gmail query per sender. Gmail's query
+// language supports OR, but separate queries keep rule evaluation and
+// diagnostics tied to the exact sender variant that matched.
+func (r *Rule) BuildGmailQueries() []string {
+	senders := r.normalizedSenders()
+	if len(senders) == 0 {
+		return []string{r.buildGmailQueryForSender("")}
+	}
+	queries := make([]string, 0, len(senders))
+	for _, sender := range senders {
+		queries = append(queries, r.buildGmailQueryForSender(sender))
+	}
+	return queries
+}
+
+func (r *Rule) buildGmailQueryForSender(sender string) string {
 	var parts []string
-	if r.SenderEmail != "" {
-		parts = append(parts, fmt.Sprintf("from:%s", r.SenderEmail))
+	if sender != "" {
+		parts = append(parts, fmt.Sprintf("from:%s", sender))
 	}
 	if r.SubjectContains != "" {
 		parts = append(parts, fmt.Sprintf("subject:%q", r.SubjectContains))
@@ -148,9 +197,10 @@ func (r *Rule) BuildGmailQuery() string {
 // Used by readers that don't have query-based filtering (e.g., Thunderbird).
 // The fromHeader parameter can be the full From header (e.g., "Bank <bank@example.com>").
 func (r *Rule) MatchesEmail(fromHeader, subject string) bool {
-	if r.SenderEmail != "" {
-		// Case-insensitive check if the rule's sender email is contained in the From header
-		if !containsIgnoreCase(fromHeader, r.SenderEmail) {
+	senders := r.normalizedSenders()
+	if len(senders) > 0 {
+		fromEmail := normalizeEmailAddress(fromHeader)
+		if fromEmail == "" || !emailInList(fromEmail, senders) {
 			return false
 		}
 	}
@@ -161,6 +211,47 @@ func (r *Rule) MatchesEmail(fromHeader, subject string) bool {
 		}
 	}
 	return true
+}
+
+func (r *Rule) normalizedSenders() []string {
+	raw := r.SenderEmails
+	if len(raw) == 0 && r.SenderEmail != "" {
+		raw = []string{r.SenderEmail}
+	}
+	seen := make(map[string]struct{}, len(raw))
+	out := make([]string, 0, len(raw))
+	for _, sender := range raw {
+		normalized := normalizeEmailAddress(sender)
+		if normalized == "" {
+			continue
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+	return out
+}
+
+func normalizeEmailAddress(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if parsed, err := mail.ParseAddress(value); err == nil {
+		value = parsed.Address
+	}
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func emailInList(email string, senders []string) bool {
+	for _, sender := range senders {
+		if strings.EqualFold(email, sender) {
+			return true
+		}
+	}
+	return false
 }
 
 // containsIgnoreCase checks if s contains substr (case-insensitive).
