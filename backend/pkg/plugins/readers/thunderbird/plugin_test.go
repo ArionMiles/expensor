@@ -75,7 +75,7 @@ func TestPlugin_NewReader(t *testing.T) {
 			SenderEmail:  "test@example.com",
 			Amount:       amountRegex,
 			MerchantInfo: merchantRegex,
-			Source:       "test-bank",
+			Source:       api.Source{Label: "test-bank"},
 		},
 	}
 

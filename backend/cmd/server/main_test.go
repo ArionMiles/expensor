@@ -81,8 +81,10 @@ func TestParseRules_ICICICreditCardCoversBothExactSenders(t *testing.T) {
 		if !strings.Contains(rule.Name, "ICICI Credit Card") {
 			continue
 		}
-		if _, ok := wantSenders[rule.SenderEmail]; ok {
-			wantSenders[rule.SenderEmail] = true
+		for _, sender := range rule.SenderEmails {
+			if _, ok := wantSenders[sender]; ok {
+				wantSenders[sender] = true
+			}
 		}
 	}
 

@@ -257,7 +257,7 @@ func (w *Writer) writeBatch(ctx context.Context, transactions []*api.Transaction
 			txn.MerchantInfo,
 			txn.Category,
 			txn.Bucket,
-			txn.Source,
+			txn.Source.Display(),
 			txn.Description,
 		)
 	}

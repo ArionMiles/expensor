@@ -232,7 +232,7 @@ func TestProcessMessage_RetriesGetAuthErrorOnce(t *testing.T) {
 	reader := &Reader{client: svc, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	out := make(chan *api.TransactionDetails, 1)
 	err = reader.processMessage(context.Background(), "msg-1", api.Rule{
-		Source:       "test",
+		Source:       api.Source{Label: "test"},
 		Amount:       regexp.MustCompile(`Rs\.([\d.]+)`),
 		MerchantInfo: regexp.MustCompile(`at (.*?) on`),
 	}, out)
@@ -290,7 +290,7 @@ func TestProcessMessage_RecordsExtractionDiagnostic(t *testing.T) {
 	rule := api.Rule{
 		ID:              "rule-1",
 		Name:            "Card Rule",
-		Source:          "credit-card",
+		Source:          api.Source{Label: "credit-card"},
 		SenderEmail:     "alerts@example.com",
 		SubjectContains: "Card",
 		Amount:          regexp.MustCompile(`Rs\.([\d.]+)`),
@@ -365,7 +365,7 @@ func TestProcessMessage_BlockingDiagnosticSinkDoesNotDelayEmission(t *testing.T)
 	done := make(chan error, 1)
 	go func() {
 		done <- reader.processMessage(ctx, "msg-blocking-sink", api.Rule{
-			Source:       "credit-card",
+			Source:       api.Source{Label: "credit-card"},
 			Amount:       regexp.MustCompile(`Rs\.([\d.]+)`),
 			MerchantInfo: regexp.MustCompile(`at (.*?) on`),
 		}, out)
@@ -434,7 +434,7 @@ func TestProcessMessage_FullDiagnosticLimiterSkipsWithoutBlocking(t *testing.T) 
 		logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 	rule := api.Rule{
-		Source:       "credit-card",
+		Source:       api.Source{Label: "credit-card"},
 		Amount:       regexp.MustCompile(`Rs\.([\d.]+)`),
 		MerchantInfo: regexp.MustCompile(`at (.*?) on`),
 	}
@@ -502,7 +502,7 @@ func TestProcessMessage_DiagnosticSinkErrorIsBestEffort(t *testing.T) {
 	}
 	out := make(chan *api.TransactionDetails, 1)
 	err = reader.processMessage(context.Background(), "msg-sink-error", api.Rule{
-		Source:       "credit-card",
+		Source:       api.Source{Label: "credit-card"},
 		Amount:       regexp.MustCompile(`Rs\.([\d.]+)`),
 		MerchantInfo: regexp.MustCompile(`at (.*?) on`),
 	}, out)
@@ -550,7 +550,7 @@ func TestProcessRule_GetAuthFailureLogsReauthorizationGuidance(t *testing.T) {
 		lookbackDays: 14,
 		logger:       slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}
-	err = reader.processRule(context.Background(), api.Rule{Name: "Test Rule", Source: "test"}, make(chan *api.TransactionDetails, 1))
+	err = reader.processRule(context.Background(), api.Rule{Name: "Test Rule", Source: api.Source{Label: "test"}}, make(chan *api.TransactionDetails, 1))
 	if err == nil {
 		t.Fatal("expected processRule to return get-message auth error")
 	}
@@ -626,7 +626,7 @@ func TestRead_CheckpointAfterListMessagesResult(t *testing.T) {
 			checkpointSaved := make(chan struct{}, 1)
 			reader := &Reader{
 				client:       svc,
-				rules:        []api.Rule{{Name: "Test Rule", Source: "test"}},
+				rules:        []api.Rule{{Name: "Test Rule", Source: api.Source{Label: "test"}}},
 				interval:     time.Hour,
 				lookbackDays: 14,
 				onCheckpoint: func(time.Time) {

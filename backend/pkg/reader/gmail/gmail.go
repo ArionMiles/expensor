@@ -454,7 +454,7 @@ func gmailExtractionDiagnostic(ctx gmailDiagnosticContext) api.ExtractionDiagnos
 	return api.ExtractionDiagnostic{
 		Reader:         "gmail",
 		MessageID:      ctx.messageID,
-		Source:         ctx.rule.Source,
+		Source:         ctx.rule.Source.Display(),
 		Sender:         sender,
 		SenderEmail:    senderEmail(sender),
 		Subject:        ctx.headers["subject"],

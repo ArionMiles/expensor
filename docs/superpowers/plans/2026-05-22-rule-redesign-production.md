@@ -178,7 +178,7 @@ Run: `task test:be -- ./pkg/rules ./pkg/api`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -195,7 +195,7 @@ git commit --no-gpg-sign -m "feat: parse versioned rule documents"
 - Create: `backend/pkg/rules/fixtures_test.go`
 - Modify: `backend/go.mod`, `backend/go.sum`
 
-- [ ] **Step 1: Write the fixture and failing fixture runner test**
+- [x] **Step 1: Write the fixture and failing fixture runner test**
 
 Fixture shape:
 
@@ -240,13 +240,13 @@ func TestRuleEmailFixtures(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to confirm failure**
+- [x] **Step 2: Run tests to confirm failure**
 
 Run: `task test:be -- ./pkg/rules`
 
 Expected: fails because fixture loader and v2 content are absent.
 
-- [ ] **Step 3: Implement fixture loader**
+- [x] **Step 3: Implement fixture loader**
 
 Use `filepath.WalkDir`, load only `.yaml`/`.yml`, set `TestName` to `strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))`, and validate the basename with:
 
@@ -256,7 +256,7 @@ var fixtureNamePattern = regexp.MustCompile(`^[a-z0-9-]+_[a-z0-9-]+_[a-z0-9-]+$`
 
 Reject fixtures that define regexes or timestamps by not supporting those fields in the struct.
 
-- [ ] **Step 4: Run tests to confirm pass**
+- [x] **Step 4: Run tests to confirm pass**
 
 Run: `task test:be -- ./pkg/rules`
 

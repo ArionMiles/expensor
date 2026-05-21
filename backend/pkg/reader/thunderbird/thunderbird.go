@@ -411,7 +411,7 @@ func thunderbirdExtractionDiagnostic(ctx thunderbirdDiagnosticContext) api.Extra
 	return api.ExtractionDiagnostic{
 		Reader:         "thunderbird",
 		MessageID:      ctx.messageID,
-		Source:         ctx.rule.Source,
+		Source:         ctx.rule.Source.Display(),
 		Sender:         sender,
 		SenderEmail:    senderEmail(sender),
 		Subject:        decodeRFC2047(ctx.message.Header.Get("Subject")),

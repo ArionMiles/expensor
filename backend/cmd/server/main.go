@@ -69,7 +69,7 @@ var (
 
 // embeddedContent bundles the parsed results of all embedded JSON assets.
 type embeddedContent struct {
-	rawRules   []RuleJSON
+	rawRules   []api.Rule
 	rules      []api.Rule
 	mccEntries []store.MCCEntry
 	catEntries []store.MerchantCategoryEntry
@@ -506,17 +506,28 @@ func runDaemon( //nolint:revive // all parameters are required; splitting furthe
 	dm.setStopped(runErr)
 }
 
-// buildSystemRuleRows converts parsed RuleJSON entries to store.RuleRow values ready for seeding.
-func buildSystemRuleRows(raw []RuleJSON) []store.RuleRow {
+// buildSystemRuleRows converts parsed rules to store.RuleRow values ready for seeding.
+func buildSystemRuleRows(raw []api.Rule) []store.RuleRow {
 	rows := make([]store.RuleRow, 0, len(raw))
 	for _, r := range raw {
+		sender := r.SenderEmail
+		if sender == "" && len(r.SenderEmails) > 0 {
+			sender = r.SenderEmails[0]
+		}
 		rows = append(rows, store.RuleRow{
-			Name: r.Name, SenderEmail: r.SenderEmail, SubjectContains: r.SubjectContains,
-			AmountRegex: r.AmountRegex, MerchantRegex: r.MerchantRegex,
-			CurrencyRegex: r.CurrencyRegex, TransactionSource: r.Source,
+			Name: r.Name, SenderEmail: sender, SubjectContains: r.SubjectContains,
+			AmountRegex: regexString(r.Amount), MerchantRegex: regexString(r.MerchantInfo),
+			CurrencyRegex: regexString(r.Currency), TransactionSource: r.Source.Display(),
 		})
 	}
 	return rows
+}
+
+func regexString(re *regexp.Regexp) string {
+	if re == nil {
+		return ""
+	}
+	return re.String()
 }
 
 // loadUserRules fetches all user-created (non-predefined) rules from the store and compiles them.
@@ -565,7 +576,7 @@ func compileRule(row store.RuleRow) (api.Rule, error) {
 	return api.Rule{
 		ID: row.ID, Name: row.Name, SenderEmail: row.SenderEmail, SubjectContains: row.SubjectContains,
 		Amount: amount, MerchantInfo: merchant, Currency: currency,
-		Source: row.TransactionSource,
+		Source: api.Source{Label: row.TransactionSource},
 	}, nil
 }
 
@@ -643,10 +654,6 @@ func loadActiveReader(ctx context.Context, st httpapi.Storer, logger *slog.Logge
 
 // parseEmbedded parses the embedded rules, MCC codes, and merchant categories JSON.
 func parseEmbedded(rulesJSON string, mccJSON, categoriesJSON []byte) (embeddedContent, error) {
-	var raw []RuleJSON
-	if err := json.Unmarshal([]byte(rulesJSON), &raw); err != nil {
-		return embeddedContent{}, fmt.Errorf("parsing rules JSON: %w", err)
-	}
 	compiled, err := parseRules(rulesJSON)
 	if err != nil {
 		return embeddedContent{}, err
@@ -659,7 +666,7 @@ func parseEmbedded(rulesJSON string, mccJSON, categoriesJSON []byte) (embeddedCo
 	if err := json.Unmarshal(categoriesJSON, &catEntries); err != nil {
 		return embeddedContent{}, fmt.Errorf("parsing categories JSON: %w", err)
 	}
-	return embeddedContent{rawRules: raw, rules: compiled, mccEntries: mccEntries, catEntries: catEntries}, nil
+	return embeddedContent{rawRules: compiled, rules: compiled, mccEntries: mccEntries, catEntries: catEntries}, nil
 }
 
 // uniqueCategoryNames extracts unique category names from MCC entries, sorted.
@@ -678,40 +685,11 @@ func uniqueCategoryNames(entries []store.MCCEntry) []string {
 
 // parseRules parses the embedded rules JSON into []api.Rule.
 func parseRules(rulesJSON string) ([]api.Rule, error) {
-	var rawRules []RuleJSON
-	if err := json.Unmarshal([]byte(rulesJSON), &rawRules); err != nil {
+	doc, err := pkgrules.ParseDocument([]byte(rulesJSON))
+	if err != nil {
 		return nil, fmt.Errorf("parsing rules JSON: %w", err)
 	}
-
-	rules := make([]api.Rule, 0, len(rawRules))
-	for i, raw := range rawRules {
-		amountRegex, err := regexp.Compile(raw.AmountRegex)
-		if err != nil {
-			return nil, fmt.Errorf("compiling amountRegex for rule %d (%s): %w", i, raw.Name, err)
-		}
-		merchantRegex, err := regexp.Compile(raw.MerchantRegex)
-		if err != nil {
-			return nil, fmt.Errorf("compiling merchantInfoRegex for rule %d (%s): %w", i, raw.Name, err)
-		}
-		var currencyRegex *regexp.Regexp
-		if raw.CurrencyRegex != "" {
-			currencyRegex, err = regexp.Compile(raw.CurrencyRegex)
-			if err != nil {
-				return nil, fmt.Errorf("compiling currencyRegex for rule %d (%s): %w", i, raw.Name, err)
-			}
-		}
-
-		rules = append(rules, api.Rule{
-			Name:            raw.Name,
-			SenderEmail:     raw.SenderEmail,
-			SubjectContains: raw.SubjectContains,
-			Amount:          amountRegex,
-			MerchantInfo:    merchantRegex,
-			Currency:        currencyRegex,
-			Source:          raw.Source,
-		})
-	}
-	return rules, nil
+	return doc.Rules, nil
 }
 
 // registerPlugins loads guide data from the embedded FS into each reader plugin,

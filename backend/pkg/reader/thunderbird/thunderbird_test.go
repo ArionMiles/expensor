@@ -370,7 +370,7 @@ func TestScanMailbox(t *testing.T) {
 				SubjectContains: "Transaction",
 				Amount:          amountRegex,
 				MerchantInfo:    merchantRegex,
-				Source:          "test-bank",
+				Source:          api.Source{Label: "test-bank"},
 			},
 		},
 		resolver: nil,
@@ -412,7 +412,7 @@ func TestScanMailbox(t *testing.T) {
 		if txn.MerchantInfo != "Amazon" {
 			t.Errorf("expected merchant Amazon, got %q", txn.MerchantInfo)
 		}
-		if txn.Source != "test-bank" {
+		if txn.Source.Label != "test-bank" {
 			t.Errorf("expected source test-bank, got %q", txn.Source)
 		}
 	}
@@ -470,7 +470,7 @@ func TestProcessMessage_RecordsExtractionDiagnostic(t *testing.T) {
 				SubjectContains: "Transaction",
 				Amount:          regexp.MustCompile(`Rs\.([\d.]+)`),
 				MerchantInfo:    regexp.MustCompile(`at (.*?) using`),
-				Source:          "bank-card",
+				Source:          api.Source{Label: "bank-card"},
 			},
 		},
 		diagnosticSink: sink,
@@ -530,7 +530,7 @@ func TestProcessMessage_BlockingDiagnosticSinkDoesNotDelayEmission(t *testing.T)
 				SenderEmail:  "alerts@example.com",
 				Amount:       regexp.MustCompile(`Rs\.([\d.]+)`),
 				MerchantInfo: regexp.MustCompile(`at (.*?) using`),
-				Source:       "bank-card",
+				Source:       api.Source{Label: "bank-card"},
 			},
 		},
 		diagnosticSink: sink,
@@ -560,7 +560,7 @@ func TestProcessMessage_BlockingDiagnosticSinkDoesNotDelayEmission(t *testing.T)
 
 	select {
 	case tx := <-out:
-		if tx.Source != "bank-card" {
+		if tx.Source.Label != "bank-card" {
 			t.Fatalf("transaction source = %q, want bank-card", tx.Source)
 		}
 	case <-time.After(250 * time.Millisecond):
@@ -612,7 +612,7 @@ func TestProcessMessage_FullDiagnosticLimiterSkipsWithoutBlocking(t *testing.T) 
 				SenderEmail:  "alerts@example.com",
 				Amount:       regexp.MustCompile(`Rs\.([\d.]+)`),
 				MerchantInfo: regexp.MustCompile(`at (.*?) using`),
-				Source:       "bank-card",
+				Source:       api.Source{Label: "bank-card"},
 			},
 		},
 		diagnosticSink:  sink,
@@ -682,7 +682,7 @@ func TestProcessMessage_DiagnosticSinkErrorIsBestEffort(t *testing.T) {
 				SenderEmail:  "alerts@example.com",
 				Amount:       regexp.MustCompile(`Rs\.([\d.]+)`),
 				MerchantInfo: regexp.MustCompile(`at (.*?) using`),
-				Source:       "bank-card",
+				Source:       api.Source{Label: "bank-card"},
 			},
 		},
 		diagnosticSink: &recordingDiagnosticSink{err: errors.New("store down")},
@@ -744,7 +744,7 @@ func TestReadWithContext(t *testing.T) {
 				SenderEmail:  "bank@example.com",
 				Amount:       amountRegex,
 				MerchantInfo: merchantRegex,
-				Source:       "test",
+				Source:       api.Source{Label: "test"},
 			},
 		},
 		resolver: nil,
