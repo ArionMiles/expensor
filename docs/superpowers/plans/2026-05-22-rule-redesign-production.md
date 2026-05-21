@@ -337,17 +337,17 @@ git commit --no-gpg-sign -m "feat: store structured rule sources"
 - Modify: `backend/internal/api/handlers_test.go`
 - Modify: `api/openapi/expensor.openapi.yaml`
 
-- [ ] **Step 1: Write failing handler tests**
+- [x] **Step 1: Write failing handler tests**
 
 Cover `POST /api/rules` with `sender_emails` and `source`, `GET /api/rules` returning `source`, import/export using the v2 versioned object, and `GET /api/transactions` query parsing for `source_type`, `bank`, `exclude_source_types`, and `exclude_banks`.
 
-- [ ] **Step 2: Run tests to confirm failure**
+- [x] **Step 2: Run tests to confirm failure**
 
 Run: `task test:be -- ./internal/api -run 'TestHandle.*Rule|TestHandleListTransactions_QueryCSVFilters'`
 
 Expected: fails on old JSON fields and missing query filters.
 
-- [ ] **Step 3: Implement handlers**
+- [x] **Step 3: Implement handlers**
 
 Use request/response structs with JSON names:
 
@@ -365,7 +365,7 @@ type ruleRequest struct {
 
 Validate nonblank rule name, at least one exact sender email, amount regex, merchant regex, source type, and bank. Import/export must use the same versioned document format as `content/rules.json`.
 
-- [ ] **Step 4: Regenerate/check OpenAPI**
+- [x] **Step 4: Regenerate/check OpenAPI**
 
 Run: `task openapi:generate` then `task openapi:check`.
 

@@ -24,8 +24,10 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	pkgapi "github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/client"
 	tbreader "github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
+	pkgrules "github.com/ArionMiles/expensor/backend/pkg/rules"
 )
 
 const (
@@ -1203,10 +1205,14 @@ func (h *Handlers) HandleListTransactions(w http.ResponseWriter, r *http.Request
 		"category",
 		"currency",
 		"source",
+		"source_type",
+		"bank",
 		"label",
 		"bucket",
 		"exclude_categories",
 		"exclude_sources",
+		"exclude_source_types",
+		"exclude_banks",
 		"exclude_labels",
 		"exclude_buckets",
 	); ok {
@@ -1215,28 +1221,32 @@ func (h *Handlers) HandleListTransactions(w http.ResponseWriter, r *http.Request
 	}
 
 	f := store.ListFilter{
-		Page:              queryInt(r, "page", 1),
-		PageSize:          queryInt(r, "page_size", 20),
-		Merchant:          r.URL.Query().Get("merchant"),
-		Category:          r.URL.Query().Get("category"),
-		CategoryMissing:   r.URL.Query().Get("category_missing") == "1",
-		ExcludeCategories: queryCSV(r, "exclude_categories"),
-		Currency:          r.URL.Query().Get("currency"),
-		Source:            r.URL.Query().Get("source"),
-		ExcludeSources:    queryCSV(r, "exclude_sources"),
-		Label:             r.URL.Query().Get("label"),
-		ExcludeLabels:     queryCSV(r, "exclude_labels"),
-		Bucket:            r.URL.Query().Get("bucket"),
-		BucketMissing:     r.URL.Query().Get("bucket_missing") == "1",
-		ExcludeBuckets:    queryCSV(r, "exclude_buckets"),
-		LabelMissing:      r.URL.Query().Get("label_missing") == "1",
-		ShowMuted:         r.URL.Query().Get("show_muted") == "1",
-		MutedOnly:         r.URL.Query().Get("muted_only") == "1",
-		IndividualOnly:    r.URL.Query().Get("individual_only") == "1",
-		Weekday:           queryWeekday(r, "weekday"),
-		HourFrom:          queryHour(r, "hour_from"),
-		HourTo:            queryHour(r, "hour_to"),
-		Timezone:          h.resolveTimezone(r.Context(), r.URL.Query().Get("tz")),
+		Page:               queryInt(r, "page", 1),
+		PageSize:           queryInt(r, "page_size", 20),
+		Merchant:           r.URL.Query().Get("merchant"),
+		Category:           r.URL.Query().Get("category"),
+		CategoryMissing:    r.URL.Query().Get("category_missing") == "1",
+		ExcludeCategories:  queryCSV(r, "exclude_categories"),
+		Currency:           r.URL.Query().Get("currency"),
+		Source:             r.URL.Query().Get("source"),
+		ExcludeSources:     queryCSV(r, "exclude_sources"),
+		SourceType:         r.URL.Query().Get("source_type"),
+		ExcludeSourceTypes: queryCSV(r, "exclude_source_types"),
+		Bank:               r.URL.Query().Get("bank"),
+		ExcludeBanks:       queryCSV(r, "exclude_banks"),
+		Label:              r.URL.Query().Get("label"),
+		ExcludeLabels:      queryCSV(r, "exclude_labels"),
+		Bucket:             r.URL.Query().Get("bucket"),
+		BucketMissing:      r.URL.Query().Get("bucket_missing") == "1",
+		ExcludeBuckets:     queryCSV(r, "exclude_buckets"),
+		LabelMissing:       r.URL.Query().Get("label_missing") == "1",
+		ShowMuted:          r.URL.Query().Get("show_muted") == "1",
+		MutedOnly:          r.URL.Query().Get("muted_only") == "1",
+		IndividualOnly:     r.URL.Query().Get("individual_only") == "1",
+		Weekday:            queryWeekday(r, "weekday"),
+		HourFrom:           queryHour(r, "hour_from"),
+		HourTo:             queryHour(r, "hour_to"),
+		Timezone:           h.resolveTimezone(r.Context(), r.URL.Query().Get("tz")),
 	}
 	if v := r.URL.Query().Get("date_from"); v != "" {
 		// JavaScript toISOString() includes milliseconds (RFC3339Nano); try that first.
@@ -2521,15 +2531,182 @@ func (h *Handlers) HandleCategorizeMerchant(w http.ResponseWriter, r *http.Reque
 
 // --- rules ---
 
-// ruleExportJSON is the wire format for rule export/import.
-// Field names match content/rules.json for round-trip compatibility.
-type ruleExportJSON struct {
-	Name            string `json:"name"`
-	SenderEmail     string `json:"senderEmail"`
-	SubjectContains string `json:"subjectContains"`
-	AmountRegex     string `json:"amountRegex"`
-	MerchantRegex   string `json:"merchantInfoRegex"`
-	CurrencyRegex   string `json:"currencyRegex,omitempty"`
+type ruleHTTPJSON struct {
+	ID                string        `json:"id,omitempty"`
+	Name              string        `json:"name"`
+	SenderEmail       string        `json:"sender_email,omitempty"`
+	SenderEmails      []string      `json:"sender_emails"`
+	SubjectContains   string        `json:"subject_contains"`
+	AmountRegex       string        `json:"amount_regex"`
+	MerchantRegex     string        `json:"merchant_regex"`
+	CurrencyRegex     string        `json:"currency_regex"`
+	TransactionSource string        `json:"transaction_source,omitempty"`
+	SourceType        string        `json:"source_type,omitempty"`
+	SourceLabel       string        `json:"source_label,omitempty"`
+	Bank              string        `json:"bank,omitempty"`
+	Source            pkgapi.Source `json:"source"`
+	Predefined        bool          `json:"predefined"`
+	CreatedAt         time.Time     `json:"created_at,omitempty"`
+	UpdatedAt         time.Time     `json:"updated_at,omitempty"`
+}
+
+type ruleDocumentJSON struct {
+	Version int                 `json:"version"`
+	Presets pkgrules.Presets    `json:"presets"`
+	Rules   []ruleDocumentEntry `json:"rules"`
+}
+
+type ruleDocumentEntry struct {
+	Name            string        `json:"name"`
+	SenderEmails    []string      `json:"sender_emails"`
+	SubjectContains string        `json:"subject_contains"`
+	AmountRegex     string        `json:"amount_regex"`
+	MerchantRegex   string        `json:"merchant_regex"`
+	CurrencyRegex   string        `json:"currency_regex"`
+	Source          pkgapi.Source `json:"source"`
+}
+
+func ruleRowToHTTP(row store.RuleRow) ruleHTTPJSON {
+	source := pkgapi.Source{Type: row.SourceType, Label: row.SourceLabel, Bank: row.Bank}
+	return ruleHTTPJSON{
+		ID:                row.ID,
+		Name:              row.Name,
+		SenderEmail:       row.SenderEmail,
+		SenderEmails:      normalizedHTTPSenders(row.SenderEmails, row.SenderEmail),
+		SubjectContains:   row.SubjectContains,
+		AmountRegex:       row.AmountRegex,
+		MerchantRegex:     row.MerchantRegex,
+		CurrencyRegex:     row.CurrencyRegex,
+		TransactionSource: row.TransactionSource,
+		SourceType:        row.SourceType,
+		SourceLabel:       row.SourceLabel,
+		Bank:              row.Bank,
+		Source:            source,
+		Predefined:        row.Predefined,
+		CreatedAt:         row.CreatedAt,
+		UpdatedAt:         row.UpdatedAt,
+	}
+}
+
+func ruleRowsToHTTP(rows []store.RuleRow) []ruleHTTPJSON {
+	out := make([]ruleHTTPJSON, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, ruleRowToHTTP(row))
+	}
+	return out
+}
+
+func ruleHTTPToRow(body ruleHTTPJSON) store.RuleRow {
+	source := body.Source
+	if source.Type == "" {
+		source.Type = body.SourceType
+	}
+	if source.Label == "" {
+		source.Label = body.SourceLabel
+	}
+	if source.Bank == "" {
+		source.Bank = body.Bank
+	}
+	senders := normalizedHTTPSenders(body.SenderEmails, body.SenderEmail)
+	row := store.RuleRow{
+		Name:              strings.TrimSpace(body.Name),
+		SenderEmail:       "",
+		SenderEmails:      senders,
+		SubjectContains:   strings.TrimSpace(body.SubjectContains),
+		AmountRegex:       strings.TrimSpace(body.AmountRegex),
+		MerchantRegex:     strings.TrimSpace(body.MerchantRegex),
+		CurrencyRegex:     strings.TrimSpace(body.CurrencyRegex),
+		TransactionSource: strings.TrimSpace(body.TransactionSource),
+		SourceType:        strings.TrimSpace(source.Type),
+		SourceLabel:       strings.TrimSpace(source.Label),
+		Bank:              strings.TrimSpace(source.Bank),
+	}
+	if len(senders) > 0 {
+		row.SenderEmail = senders[0]
+	}
+	if row.TransactionSource == "" {
+		row.TransactionSource = pkgapi.Source{Type: row.SourceType, Label: row.SourceLabel, Bank: row.Bank}.Display()
+	}
+	return row
+}
+
+func normalizedHTTPSenders(senders []string, fallback string) []string {
+	seen := make(map[string]struct{}, len(senders)+1)
+	out := make([]string, 0, len(senders)+1)
+	for _, value := range append(senders, fallback) {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+func ruleToRow(rule pkgapi.Rule) store.RuleRow {
+	row := store.RuleRow{
+		Name:            rule.Name,
+		SenderEmail:     rule.SenderEmail,
+		SenderEmails:    normalizedHTTPSenders(rule.SenderEmails, rule.SenderEmail),
+		SubjectContains: rule.SubjectContains,
+		SourceType:      rule.Source.Type,
+		SourceLabel:     rule.Source.Label,
+		Bank:            rule.Source.Bank,
+	}
+	if row.SenderEmail == "" && len(row.SenderEmails) > 0 {
+		row.SenderEmail = row.SenderEmails[0]
+	}
+	if rule.Amount != nil {
+		row.AmountRegex = rule.Amount.String()
+	}
+	if rule.MerchantInfo != nil {
+		row.MerchantRegex = rule.MerchantInfo.String()
+	}
+	if rule.Currency != nil {
+		row.CurrencyRegex = rule.Currency.String()
+	}
+	row.TransactionSource = rule.Source.Display()
+	return row
+}
+
+func ruleDocumentEntryFromRow(row store.RuleRow) ruleDocumentEntry {
+	return ruleDocumentEntry{
+		Name:            row.Name,
+		SenderEmails:    normalizedHTTPSenders(row.SenderEmails, row.SenderEmail),
+		SubjectContains: row.SubjectContains,
+		AmountRegex:     row.AmountRegex,
+		MerchantRegex:   row.MerchantRegex,
+		CurrencyRegex:   row.CurrencyRegex,
+		Source:          pkgapi.Source{Type: row.SourceType, Label: row.SourceLabel, Bank: row.Bank},
+	}
+}
+
+func ruleDocumentPresets(entries []ruleDocumentEntry) pkgrules.Presets {
+	return pkgrules.Presets{
+		SourceTypes: presetValuesFromRules(entries, func(source pkgapi.Source) string { return source.Type }),
+		Banks:       presetValuesFromRules(entries, func(source pkgapi.Source) string { return source.Bank }),
+	}
+}
+
+func presetValuesFromRules(entries []ruleDocumentEntry, value func(pkgapi.Source) string) []pkgrules.PresetValue {
+	seen := map[string]struct{}{}
+	out := []pkgrules.PresetValue{}
+	for _, entry := range entries {
+		v := strings.TrimSpace(value(entry.Source))
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, pkgrules.PresetValue{Value: v, Origin: "custom"})
+	}
+	return out
 }
 
 // validateRuleRegexes compiles the three regex fields on a RuleRow and returns the first error.
@@ -2553,6 +2730,28 @@ func validateRuleRegexes(amountRegex, merchantRegex, currencyRegex string) error
 	return nil
 }
 
+func validateRuleRow(row store.RuleRow) error {
+	if row.Name == "" {
+		return errors.New("name is required")
+	}
+	if len(row.SenderEmails) == 0 {
+		return errors.New("sender_emails is required")
+	}
+	if row.AmountRegex == "" {
+		return errors.New("amount_regex is required")
+	}
+	if row.MerchantRegex == "" {
+		return errors.New("merchant_regex is required")
+	}
+	if row.SourceType == "" {
+		return errors.New("source.type is required")
+	}
+	if row.Bank == "" {
+		return errors.New("source.bank is required")
+	}
+	return validateRuleRegexes(row.AmountRegex, row.MerchantRegex, row.CurrencyRegex)
+}
+
 // HandleListRules handles GET /api/rules.
 func (h *Handlers) HandleListRules(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
@@ -2565,7 +2764,7 @@ func (h *Handlers) HandleListRules(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list rules")
 		return
 	}
-	writeJSON(w, http.StatusOK, rules)
+	writeJSON(w, http.StatusOK, ruleRowsToHTTP(rules))
 }
 
 // HandleCreateRule handles POST /api/rules.
@@ -2574,35 +2773,24 @@ func (h *Handlers) HandleCreateRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
 	}
-	var body store.RuleRow
+	var body ruleHTTPJSON
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
 		return
 	}
-	if body.Name == "" {
-		writeError(w, http.StatusUnprocessableEntity, "name is required")
-		return
-	}
-	if body.AmountRegex == "" {
-		writeError(w, http.StatusUnprocessableEntity, "amount_regex is required")
-		return
-	}
-	if body.MerchantRegex == "" {
-		writeError(w, http.StatusUnprocessableEntity, "merchant_regex is required")
-		return
-	}
-	if err := validateRuleRegexes(body.AmountRegex, body.MerchantRegex, body.CurrencyRegex); err != nil {
+	row := ruleHTTPToRow(body)
+	if err := validateRuleRow(row); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	created, err := h.store.CreateRule(r.Context(), body)
+	created, err := h.store.CreateRule(r.Context(), row)
 	if err != nil {
 		h.logger.Error("create rule", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create rule")
 		return
 	}
 	h.clearActiveReaderCheckpointForNewRule(r.Context())
-	writeJSON(w, http.StatusCreated, created)
+	writeJSON(w, http.StatusCreated, ruleRowToHTTP(*created))
 }
 
 func (h *Handlers) clearActiveReaderCheckpointForNewRule(ctx context.Context) {
@@ -2635,16 +2823,17 @@ func (h *Handlers) HandleUpdateRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	var body store.RuleRow
+	var body ruleHTTPJSON
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
 		return
 	}
-	if err := validateRuleRegexes(body.AmountRegex, body.MerchantRegex, body.CurrencyRegex); err != nil {
+	row := ruleHTTPToRow(body)
+	if err := validateRuleRow(row); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	updated, err := h.store.UpdateRule(r.Context(), id, body)
+	updated, err := h.store.UpdateRule(r.Context(), id, row)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "rule not found")
@@ -2654,7 +2843,7 @@ func (h *Handlers) HandleUpdateRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to update rule")
 		return
 	}
-	writeJSON(w, http.StatusOK, updated)
+	writeJSON(w, http.StatusOK, ruleRowToHTTP(*updated))
 }
 
 // HandleDeleteRule handles DELETE /api/rules/{id}.
@@ -2703,21 +2892,17 @@ func (h *Handlers) HandleExportRules(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to fetch rules")
 		return
 	}
-	export := make([]ruleExportJSON, 0)
+	export := make([]ruleDocumentEntry, 0)
 	for _, row := range all {
 		if row.Predefined {
 			continue // export only user-created rules
 		}
-		export = append(export, ruleExportJSON{
-			Name: row.Name, SenderEmail: row.SenderEmail, SubjectContains: row.SubjectContains,
-			AmountRegex: row.AmountRegex, MerchantRegex: row.MerchantRegex,
-			CurrencyRegex: row.CurrencyRegex,
-		})
+		export = append(export, ruleDocumentEntryFromRow(row))
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", `attachment; filename="expensor-rules.json"`)
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(export)
+	_ = json.NewEncoder(w).Encode(ruleDocumentJSON{Version: 2, Presets: ruleDocumentPresets(export), Rules: export})
 }
 
 // HandleImportRules handles POST /api/rules/import.
@@ -2728,15 +2913,19 @@ func (h *Handlers) HandleImportRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 5<<20)
-	var raw []ruleExportJSON
-	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
 		return
 	}
-	rows, err := validateAndConvertImport(raw)
+	doc, err := pkgrules.ParseDocument(body)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
+	}
+	rows := make([]store.RuleRow, 0, len(doc.Rules))
+	for _, rule := range doc.Rules {
+		rows = append(rows, ruleToRow(rule))
 	}
 	if err := h.store.ImportUserRules(r.Context(), rows); err != nil {
 		h.logger.Error("import rules", "error", err)
@@ -2744,26 +2933,6 @@ func (h *Handlers) HandleImportRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"imported": len(rows)})
-}
-
-// validateAndConvertImport validates all rules in a batch import and converts them to store rows.
-// Returns an error on the first invalid rule.
-func validateAndConvertImport(raw []ruleExportJSON) ([]store.RuleRow, error) {
-	rows := make([]store.RuleRow, 0, len(raw))
-	for i, re := range raw {
-		if re.Name == "" {
-			return nil, fmt.Errorf("rule[%d]: name is required", i)
-		}
-		if err := validateRuleRegexes(re.AmountRegex, re.MerchantRegex, re.CurrencyRegex); err != nil {
-			return nil, fmt.Errorf("rule[%d] %q: %w", i, re.Name, err)
-		}
-		rows = append(rows, store.RuleRow{
-			Name: re.Name, SenderEmail: re.SenderEmail, SubjectContains: re.SubjectContains,
-			AmountRegex: re.AmountRegex, MerchantRegex: re.MerchantRegex,
-			CurrencyRegex: re.CurrencyRegex,
-		})
-	}
-	return rows, nil
 }
 
 // HandleGetChartData handles GET /api/stats/charts.
