@@ -16,7 +16,7 @@ const baseTransaction: Transaction = {
   merchant_info: '',
   category: 'Food',
   bucket: 'Needs',
-  source: 'gmail',
+  source: { type: 'Credit Card', label: 'HDFC Credit Card', bank: 'HDFC' },
   description: 'Lunch',
   labels: [],
   muted: false,

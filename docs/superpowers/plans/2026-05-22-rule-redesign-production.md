@@ -411,7 +411,7 @@ Run: `task test:be -- ./pkg/reader/gmail ./pkg/reader/thunderbird ./pkg/writer/p
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -431,7 +431,7 @@ git commit --no-gpg-sign -m "feat: match exact rule senders"
 - Modify: `frontend/src/mocks/fixtures/transactions.ts`
 - Modify: `frontend/src/test/fixtures/transactions.ts`
 
-- [ ] **Step 1: Write failing frontend type/mock tests**
+- [x] **Step 1: Write failing frontend type/mock tests**
 
 Update existing tests that consume mocked rules and transactions so TypeScript expects:
 
@@ -448,17 +448,17 @@ interface Rule {
 }
 ```
 
-- [ ] **Step 2: Run tests to confirm failure**
+- [x] **Step 2: Run tests to confirm failure**
 
 Run: `task lint:fe`
 
 Expected: TypeScript fails on old `sender_email`, `transaction_source`, and `source: string` usage.
 
-- [ ] **Step 3: Update types and mocks**
+- [x] **Step 3: Update types and mocks**
 
 Keep mock data realistic: include HDFC Credit Card, ICICI UPI, and custom Mobile App examples with `predefined` and `custom` origins.
 
-- [ ] **Step 4: Run frontend typecheck**
+- [x] **Step 4: Run frontend typecheck**
 
 Run: `task lint:fe`
 

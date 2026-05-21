@@ -6,8 +6,8 @@ import type {
   ExtractionDiagnosticListStatus,
   ExtractionDiagnosticStatus,
   MonthlyBreakdownData,
-  Rule,
-  RuleImport,
+  RuleDocument,
+  RulePayload,
   SyncStatus,
   TransactionFilters,
   TransactionPatch,
@@ -508,8 +508,7 @@ export function useRules() {
 export function useCreateRule() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: Omit<Rule, 'id' | 'source' | 'created_at' | 'updated_at'>) =>
-      api.rules.create(body).then((r) => r.data),
+    mutationFn: (body: RulePayload) => api.rules.create(body).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['rules'] }),
   })
 }
@@ -522,7 +521,7 @@ export function useUpdateRule() {
       body,
     }: {
       id: string
-      body: Partial<Omit<Rule, 'id' | 'source' | 'created_at' | 'updated_at'>>
+      body: Partial<RulePayload>
     }) => api.rules.update(id, body).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['rules'] }),
   })
@@ -563,7 +562,7 @@ export function useUpdateExtractionDiagnosticStatus() {
 export function useImportRules() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (rules: RuleImport[]) => api.rules.import(rules).then((r) => r.data),
+    mutationFn: (rules: RuleDocument) => api.rules.import(rules).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['rules'] }),
   })
 }

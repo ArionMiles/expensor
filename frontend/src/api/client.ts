@@ -23,7 +23,8 @@ import type {
   ReaderGuide,
   ReaderStatus,
   Rule,
-  RuleImport,
+  RuleDocument,
+  RulePayload,
   SetupStatus,
   StatusResponse,
   SyncStatus,
@@ -261,15 +262,11 @@ export const api = {
 
   rules: {
     list: () => apiClient.get<Rule[]>('/rules'),
-    create: (body: Omit<Rule, 'id' | 'predefined' | 'created_at' | 'updated_at'>) =>
-      apiClient.post<Rule>('/rules', body),
-    update: (
-      id: string,
-      body: Partial<Omit<Rule, 'id' | 'predefined' | 'created_at' | 'updated_at'>>,
-    ) => apiClient.put<Rule>(`/rules/${id}`, body),
+    create: (body: RulePayload) => apiClient.post<Rule>('/rules', body),
+    update: (id: string, body: Partial<RulePayload>) => apiClient.put<Rule>(`/rules/${id}`, body),
     delete: (id: string) => apiClient.delete(`/rules/${id}`),
-    export: () => apiClient.get<RuleImport[]>('/rules/export'),
-    import: (rules: RuleImport[]) => apiClient.post<{ imported: number }>('/rules/import', rules),
+    export: () => apiClient.get<RuleDocument>('/rules/export'),
+    import: (rules: RuleDocument) => apiClient.post<{ imported: number }>('/rules/import', rules),
   },
 
   extractionDiagnostics: {
@@ -295,6 +292,11 @@ export const api = {
       if (filters.source) params.set('source', filters.source)
       if (filters.exclude_sources?.length)
         params.set('exclude_sources', filters.exclude_sources.join(','))
+      if (filters.source_type) params.set('source_type', filters.source_type)
+      if (filters.exclude_source_types?.length)
+        params.set('exclude_source_types', filters.exclude_source_types.join(','))
+      if (filters.bank) params.set('bank', filters.bank)
+      if (filters.exclude_banks?.length) params.set('exclude_banks', filters.exclude_banks.join(','))
       if (filters.bucket) params.set('bucket', filters.bucket)
       if (filters.bucket_missing) params.set('bucket_missing', '1')
       if (filters.exclude_buckets?.length)

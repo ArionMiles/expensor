@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useDeleteRule, useImportRules, useRules } from '@/api/queries'
-import type { Rule, RuleImport } from '@/api/types'
+import type { Rule, RuleDocument, RuleImport } from '@/api/types'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { Trash2 } from 'lucide-react'
 
@@ -12,13 +12,26 @@ function downloadRules(rules: Rule[], selectedIds: Set<string>) {
     .filter((r) => selectedIds.has(r.id))
     .map((r) => ({
       name: r.name,
-      senderEmail: r.sender_email,
-      subjectContains: r.subject_contains,
-      amountRegex: r.amount_regex,
-      merchantInfoRegex: r.merchant_regex,
-      currencyRegex: r.currency_regex || undefined,
+      sender_emails: r.sender_emails,
+      subject_contains: r.subject_contains,
+      amount_regex: r.amount_regex,
+      merchant_regex: r.merchant_regex,
+      currency_regex: r.currency_regex || '',
+      source: r.source,
     }))
-  const blob = new Blob([JSON.stringify(toExport, null, 2)], { type: 'application/json' })
+  const doc: RuleDocument = {
+    version: 2,
+    presets: {
+      source_types: [...new Set(toExport.map((rule) => rule.source.type).filter(Boolean))].map(
+        (value) => ({ value, origin: 'custom' }),
+      ),
+      banks: [...new Set(toExport.map((rule) => rule.source.bank).filter(Boolean))].map(
+        (value) => ({ value, origin: 'custom' }),
+      ),
+    },
+    rules: toExport,
+  }
+  const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -82,9 +95,9 @@ export default function Rules() {
     const file = e.target.files?.[0]
     if (!file) return
     void file.text().then((text) => {
-      let parsed: RuleImport[]
+      let parsed: RuleDocument
       try {
-        parsed = JSON.parse(text) as RuleImport[]
+        parsed = JSON.parse(text) as RuleDocument
       } catch {
         setImportMsg('Invalid JSON file')
         return
@@ -236,7 +249,7 @@ export default function Rules() {
                   </Link>
                 </td>
                 <td className="truncate px-3 py-2 font-mono text-xs text-muted-foreground">
-                  {rule.sender_email || '—'}
+                  {rule.sender_emails.join(', ') || '—'}
                 </td>
                 <td className="truncate px-3 py-2 text-xs text-muted-foreground">
                   {rule.subject_contains || '—'}

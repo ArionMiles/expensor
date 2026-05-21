@@ -31,6 +31,10 @@ import { useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTooltip } from '@/hooks/useTooltip'
 
+function sourceDisplay(source: Transaction['source']) {
+  return source.label || [source.bank, source.type].filter(Boolean).join(' ')
+}
+
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
   useEffect(() => {
@@ -470,9 +474,12 @@ function TransactionRow({
         {tx.source && (
           <span
             className="inline-block max-w-full truncate rounded-sm border border-border py-0.5 pl-1.5 pr-2 font-mono text-[10px] text-muted-foreground"
-            style={{ borderLeftColor: getSourceColor(tx.source, banks), borderLeftWidth: '2px' }}
+            style={{
+              borderLeftColor: getSourceColor(sourceDisplay(tx.source), banks),
+              borderLeftWidth: '2px',
+            }}
           >
-            {tx.source}
+            {sourceDisplay(tx.source)}
           </span>
         )}
       </td>

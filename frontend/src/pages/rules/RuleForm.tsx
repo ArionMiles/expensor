@@ -164,12 +164,12 @@ export function RuleForm() {
     if (rule) {
       setForm({
         name: rule.name,
-        senderEmail: rule.sender_email,
+        senderEmail: rule.sender_emails[0] ?? rule.sender_email ?? '',
         subjectContains: rule.subject_contains,
         amountRegex: rule.amount_regex || diagnostic?.amount_regex || '',
         merchantRegex: rule.merchant_regex || diagnostic?.merchant_regex || '',
         currencyRegex: rule.currency_regex || diagnostic?.currency_regex || '',
-        transactionSource: rule.transaction_source || diagnostic?.source || '',
+        transactionSource: rule.source.label || rule.transaction_source || diagnostic?.source || '',
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -226,16 +226,16 @@ export function RuleForm() {
 
     const body = {
       name: form.name,
-      sender_email: form.senderEmail,
+      sender_emails: [form.senderEmail].filter(Boolean),
       subject_contains: form.subjectContains,
       amount_regex: form.amountRegex,
       merchant_regex: form.merchantRegex,
       currency_regex: form.currencyRegex,
-      transaction_source: form.transactionSource,
+      source: { type: '', label: form.transactionSource, bank: '' },
     }
 
     if (isCreate) {
-      createRule(body as Parameters<typeof createRule>[0], {
+      createRule(body, {
         onSuccess: () => navigate('/rules'),
         onError: (e) => setFormError(e.message),
       })
