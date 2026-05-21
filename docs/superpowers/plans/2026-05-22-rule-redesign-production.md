@@ -516,21 +516,21 @@ git commit --no-gpg-sign -m "feat: revamp rules list"
 - Modify: `frontend/src/pages/Diagnostics.tsx`
 - Modify: `frontend/src/pages/Diagnostics.test.tsx`
 
-- [ ] **Step 1: Write failing component tests**
+- [x] **Step 1: Write failing component tests**
 
 Cover editable rule title, blank title blur reverting to last saved value, Enter-to-add sender, no Add Sender button, type/bank combobox add behavior only when no matches exist, `+ Add sample`, red live-result failures, and diagnostic "Fix rule" opening `/rules/new?diagnostic=<id>`.
 
-- [ ] **Step 2: Run tests to confirm failure**
+- [x] **Step 2: Run tests to confirm failure**
 
 Run: `task test:fe -- RuleForm.test.tsx Diagnostics.test.tsx`
 
 Expected: fails on old single-column editor and old diagnostic routing.
 
-- [ ] **Step 3: Implement workbench**
+- [x] **Step 3: Implement workbench**
 
 Port the approved prototype behavior, but use production APIs and no native `title` attributes. The type/bank floating menu must use `position: fixed` plus `createPortal` if it can be clipped by a scrollable pane. Use `data-1p-ignore`, `data-lpignore`, `data-form-type="other"`, and readonly-until-focus on combobox text inputs to avoid password-manager overlays.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `task test:fe -- RuleForm.test.tsx Diagnostics.test.tsx`
 

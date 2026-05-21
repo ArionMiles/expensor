@@ -1,5 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { DisplayProvider } from '@/contexts/DisplayContext'
@@ -36,7 +37,17 @@ vi.mock('@/api/queries', () => ({
     data: id === 'diag-1' ? diagnostic : undefined,
     isLoading: false,
   }),
-  useFacets: () => ({ data: { sources: ['Card', 'Existing Source'] } }),
+  useFacets: () => ({
+    data: {
+      sources: ['Card', 'Existing Source'],
+      source_types: ['Credit Card', 'Debit Card', 'UPI'],
+      banks: ['HDFC', 'ICICI'],
+      categories: [],
+      currencies: [],
+      labels: [],
+      buckets: [],
+    },
+  }),
   useRescan: () => ({ mutate: vi.fn() }),
   useRules: () => ({
     data: [
@@ -44,11 +55,13 @@ vi.mock('@/api/queries', () => ({
         id: 'rule-1',
         name: 'Existing rule name',
         sender_email: 'existing@example.com',
+        sender_emails: ['existing@example.com'],
         subject_contains: 'Existing subject',
         amount_regex: 'Existing amount',
         merchant_regex: 'Existing merchant',
         currency_regex: '',
         transaction_source: 'Existing Source',
+        source: { type: 'Credit Card', label: 'Existing Source', bank: 'HDFC' },
         predefined: false,
         created_at: '2026-04-19T10:00:00Z',
         updated_at: '2026-04-19T10:00:00Z',
@@ -89,5 +102,60 @@ describe('RuleForm diagnostics', () => {
 
     expect(await screen.findByDisplayValue('Existing rule name')).toBeInTheDocument()
     expect(screen.getByDisplayValue(/Amount: 0/)).toBeInTheDocument()
+  })
+
+  it('reverts a blank rule title on blur', async () => {
+    const user = userEvent.setup()
+
+    renderRuleForm('/rules/rule-1', '/rules/:id')
+
+    const title = await screen.findByRole('textbox', { name: 'Rule name' })
+    await user.clear(title)
+    await user.tab()
+
+    expect(title).toHaveValue('Existing rule name')
+  })
+
+  it('adds exact sender emails with Enter and has no add sender button', async () => {
+    const user = userEvent.setup()
+
+    renderRuleForm('/rules/new', '/rules/new')
+
+    expect(screen.queryByRole('button', { name: /add sender/i })).not.toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Add sender'), 'alerts@hdfcbank.net{Enter}')
+
+    expect(screen.getByText('alerts@hdfcbank.net')).toBeInTheDocument()
+  })
+
+  it('shows add options only for source type and bank values with no matches', async () => {
+    const user = userEvent.setup()
+
+    renderRuleForm('/rules/new', '/rules/new')
+
+    const type = screen.getByLabelText('Type')
+    await user.type(type, 'Cre')
+    expect(screen.getByRole('button', { name: 'Credit Card' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Add "Cre"/ })).not.toBeInTheDocument()
+
+    await user.clear(type)
+    await user.type(type, 'Wallet')
+    await user.click(screen.getByRole('button', { name: 'Add "Wallet"' }))
+
+    expect(type).toHaveValue('Wallet')
+  })
+
+  it('adds samples and marks missing live extraction values in red', async () => {
+    const user = userEvent.setup()
+
+    renderRuleForm('/rules/new?diagnostic=diag-1', '/rules/new')
+
+    await user.click(await screen.findByRole('button', { name: '+ Add sample' }))
+
+    expect(screen.getByRole('tab', { name: 'Sample 2' })).toBeInTheDocument()
+    expect(screen.getByText('Needs attention')).toBeInTheDocument()
+    expect(
+      screen.getAllByText('missing').some((node) => node.classList.contains('text-destructive')),
+    ).toBe(true)
   })
 })

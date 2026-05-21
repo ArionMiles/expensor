@@ -82,7 +82,7 @@ describe('Diagnostics', () => {
     renderWithProviders(<Diagnostics />, { route: '/diagnostics' })
 
     const link = await screen.findByRole('link', { name: /fix rule/i })
-    expect(link).toHaveAttribute('href', '/rules/rule-1?diagnostic=diag-1')
+    expect(link).toHaveAttribute('href', '/rules/new?diagnostic=diag-1')
   })
 
   it('uses readable resolved action styling in light and dark mode', async () => {
