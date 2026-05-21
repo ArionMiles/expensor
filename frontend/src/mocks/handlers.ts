@@ -123,6 +123,15 @@ export const handlers = [
   http.get('/api/config/readers/:reader/checkpoint', () =>
     HttpResponse.json({ last_scan_at: null }),
   ),
+  http.get('/api/readers/:reader/status', () =>
+    HttpResponse.json({
+      credentials_uploaded: true,
+      authenticated: true,
+      config_present: true,
+      auth_type: 'oauth',
+      ready: true,
+    }),
+  ),
   http.delete('/api/config/readers/:reader/checkpoint', () => HttpResponse.json({})),
   http.post('/api/daemon/rescan', () => HttpResponse.json({ status: 'rescanning' })),
   http.get('/api/extraction-diagnostics', ({ request }) => {
