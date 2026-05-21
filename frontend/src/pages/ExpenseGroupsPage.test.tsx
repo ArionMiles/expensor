@@ -95,7 +95,7 @@ describe('ExpenseGroupsPage', () => {
     expect(disabledDelete).toHaveClass('disabled:text-destructive/60')
   })
 
-  it('lets users choose keep or overwrite per import conflict', async () => {
+  it('offers bulk actions before row-level import conflict choices are changed', async () => {
     const user = userEvent.setup()
     const { container } = renderWithProviders(<ExpenseGroupsPage />, {
       route: '/expense-groups?tab=categories',
@@ -119,13 +119,77 @@ describe('ExpenseGroupsPage', () => {
     expect(within(dialog).getByText('Food')).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Keep' })).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Overwrite' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Keep All' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Overwrite All' })).toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Apply changes' })).not.toBeInTheDocument()
 
-    await user.click(within(dialog).getByRole('button', { name: 'Overwrite' }))
-    await user.click(within(dialog).getByRole('button', { name: 'Apply choices' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Keep All' }))
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'Import conflicts' })).not.toBeInTheDocument()
     })
+    expect(screen.getByText('No changes applied; existing entries were kept.')).toBeInTheDocument()
+  })
+
+  it('switches to apply changes after a row-level import conflict choice changes', async () => {
+    const user = userEvent.setup()
+    const { container } = renderWithProviders(<ExpenseGroupsPage />, {
+      route: '/expense-groups?tab=categories',
+    })
+    await findExpenseGroupsHeading()
+
+    const file = new File(
+      [JSON.stringify([{ name: 'Food', merchants: ['zomato'] }])],
+      'groups.json',
+      {
+        type: 'application/json',
+      },
+    )
+    const input = container.querySelector(
+      '[data-testid="expense-groups-import-file"]',
+    ) as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+
+    const dialog = await screen.findByRole('dialog', { name: 'Import conflicts' })
+
+    await user.click(within(dialog).getByRole('button', { name: 'Overwrite' }))
+
+    expect(within(dialog).queryByRole('button', { name: 'Keep All' })).not.toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Overwrite All' })).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Apply changes' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Import conflicts' })).not.toBeInTheDocument()
+    })
+  })
+
+  it('reports that existing entries were overwritten after overwrite all', async () => {
+    const user = userEvent.setup()
+    const { container } = renderWithProviders(<ExpenseGroupsPage />, {
+      route: '/expense-groups?tab=categories',
+    })
+    await findExpenseGroupsHeading()
+
+    const file = new File(
+      [JSON.stringify([{ name: 'Food', merchants: ['zomato'] }])],
+      'groups.json',
+      {
+        type: 'application/json',
+      },
+    )
+    const input = container.querySelector(
+      '[data-testid="expense-groups-import-file"]',
+    ) as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+
+    const dialog = await screen.findByRole('dialog', { name: 'Import conflicts' })
+
+    await user.click(within(dialog).getByRole('button', { name: 'Overwrite All' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Import conflicts' })).not.toBeInTheDocument()
+    })
+    expect(screen.getByText('Existing entries were overwritten.')).toBeInTheDocument()
   })
 
   it('opens transactions with the active group filter when a transaction count is clicked', async () => {

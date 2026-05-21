@@ -76,6 +76,7 @@ type ImportConflict = {
   conflicts: string[]
   decisions: Record<string, Decision>
   fileName: string
+  hasRowChanges: boolean
 }
 
 type ColorPickerState =
@@ -402,7 +403,11 @@ export default function ExpenseGroupsPage() {
     if (tab === 'labels') removeLabel.mutate(payload)
   }
 
-  const runImport = (imported: GroupItem[], decisions: Record<string, Decision>) => {
+  const runImport = (
+    imported: GroupItem[],
+    decisions: Record<string, Decision>,
+    completionMessage = t('expenseGroups.importComplete'),
+  ) => {
     const existing = new Map(items.map((item) => [item.name.toLowerCase(), item]))
     for (const row of imported) {
       const match = existing.get(row.name.toLowerCase())
@@ -422,7 +427,7 @@ export default function ExpenseGroupsPage() {
       for (const merchant of row.merchants) applyMerchantTo(row.name, merchant)
     }
     setImportConflict(null)
-    setNote(t('expenseGroups.importComplete'))
+    setNote(completionMessage)
   }
 
   const applyMerchantTo = (name: string, pattern: string) => {
@@ -445,6 +450,7 @@ export default function ExpenseGroupsPage() {
           conflicts,
           fileName: file.name,
           decisions: Object.fromEntries(conflicts.map((name) => [name, 'keep'])),
+          hasRowChanges: false,
         })
       } else {
         runImport(imported, {})
@@ -988,6 +994,7 @@ export default function ExpenseGroupsPage() {
                             (current) =>
                               current && {
                                 ...current,
+                                hasRowChanges: true,
                                 decisions: { ...current.decisions, [name]: decision },
                               },
                           )
@@ -1018,13 +1025,46 @@ export default function ExpenseGroupsPage() {
               >
                 {t('common.cancel')}
               </button>
-              <button
-                type="button"
-                onClick={() => runImport(importConflict.imported, importConflict.decisions)}
-                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-              >
-                {t('expenseGroups.importApply')}
-              </button>
+              {importConflict.hasRowChanges ? (
+                <button
+                  type="button"
+                  onClick={() => runImport(importConflict.imported, importConflict.decisions)}
+                  className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                >
+                  {t('expenseGroups.importApply')}
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      runImport(
+                        importConflict.imported,
+                        Object.fromEntries(importConflict.conflicts.map((name) => [name, 'keep'])),
+                        t('expenseGroups.importKeptAll'),
+                      )
+                    }
+                    className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+                  >
+                    {t('expenseGroups.importKeepAll')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      runImport(
+                        importConflict.imported,
+                        Object.fromEntries(
+                          importConflict.conflicts.map((name) => [name, 'overwrite']),
+                        ),
+                        t('expenseGroups.importOverwroteAll'),
+                      )
+                    }
+                    className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                  >
+                    {t('expenseGroups.importOverwriteAll')}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

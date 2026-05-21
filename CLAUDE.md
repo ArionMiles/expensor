@@ -135,6 +135,7 @@ Run `task lint:prod` before every commit. It must report `0 issues`.
 - Commits: imperative mood, Tim Pope style, `--no-gpg-sign`
 - Never commit to `main` directly — branch protection requires PRs (bypass only for docs/chore)
 - Check `.pre-commit-config.yaml` before committing if it exists
+- When creating or updating PRs, follow `.github/PULL_REQUEST_TEMPLATE.md` for the PR description.
 
 ## Testing Strategy
 
