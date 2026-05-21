@@ -566,6 +566,61 @@ func TestProcessRule_GetAuthFailureLogsReauthorizationGuidance(t *testing.T) {
 	}
 }
 
+func TestProcessRule_QueriesEveryExactSender(t *testing.T) {
+	queries := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/gmail/v1/users/me/messages" {
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+		queries = append(queries, r.URL.Query().Get("q"))
+		if _, err := w.Write([]byte(`{"messages":[]}`)); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	svc, err := gmail.NewService(
+		context.Background(),
+		option.WithHTTPClient(server.Client()),
+		option.WithEndpoint(server.URL+"/"),
+	)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	reader := &Reader{
+		client:       svc,
+		lookbackDays: 14,
+		logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	rule := api.Rule{
+		Name:            "HDFC Credit Card",
+		SenderEmails:    []string{"alerts@hdfcbank.net", "alerts@hdfcbank.bank.in"},
+		SubjectContains: "HDFC Credit Card",
+		Source:          api.Source{Type: "Credit Card", Label: "HDFC Credit Card", Bank: "HDFC"},
+	}
+
+	if err := reader.processRule(context.Background(), rule, make(chan *api.TransactionDetails, 1)); err != nil {
+		t.Fatalf("processRule: %v", err)
+	}
+
+	if len(queries) != 2 {
+		t.Fatalf("queries = %#v, want 2 sender-specific queries", queries)
+	}
+	wantFragments := [][]string{
+		{"from:alerts@hdfcbank.net", `subject:"HDFC Credit Card"`},
+		{"from:alerts@hdfcbank.bank.in", `subject:"HDFC Credit Card"`},
+	}
+	for i, fragments := range wantFragments {
+		for _, fragment := range fragments {
+			if !strings.Contains(queries[i], fragment) {
+				t.Fatalf("query[%d] = %q, missing %q", i, queries[i], fragment)
+			}
+		}
+	}
+}
+
 func containsReason(reasons []string, want string) bool {
 	for _, reason := range reasons {
 		if reason == want {

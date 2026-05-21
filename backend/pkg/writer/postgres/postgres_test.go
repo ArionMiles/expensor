@@ -131,6 +131,40 @@ func TestWrite_SingleTransaction(t *testing.T) {
 	assertWrite(t, w, []*api.TransactionDetails{txn}, 5*time.Second)
 }
 
+func TestWrite_PersistsStructuredSourceFields(t *testing.T) {
+	w := newTestWriter(t, Config{BatchSize: 1, FlushInterval: time.Second})
+	ctx := context.Background()
+
+	txn := &api.TransactionDetails{
+		MessageID:    fmt.Sprintf("structured-source-%d", time.Now().UnixNano()),
+		Amount:       999.00,
+		Currency:     "INR",
+		Timestamp:    time.Now().Format(time.RFC3339),
+		MerchantInfo: "Swiggy",
+		Category:     "Food",
+		Bucket:       "Wants",
+		Source:       api.Source{Type: "Credit Card", Label: "HDFC Credit Card", Bank: "HDFC"},
+	}
+
+	assertWrite(t, w, []*api.TransactionDetails{txn}, 5*time.Second)
+
+	var source, sourceType, sourceLabel, bank string
+	err := w.pool.QueryRow(ctx, `
+		SELECT source, source_type, source_label, bank
+		FROM transactions
+		WHERE message_id = $1
+	`, txn.MessageID).Scan(&source, &sourceType, &sourceLabel, &bank)
+	if err != nil {
+		t.Fatalf("query transaction source: %v", err)
+	}
+	if source != "HDFC Credit Card" {
+		t.Fatalf("source = %q, want HDFC Credit Card", source)
+	}
+	if sourceType != "Credit Card" || sourceLabel != "HDFC Credit Card" || bank != "HDFC" {
+		t.Fatalf("structured source = (%q, %q, %q)", sourceType, sourceLabel, bank)
+	}
+}
+
 // TestWrite_MultiCurrency verifies a transaction with currency conversion fields is stored correctly.
 func TestWrite_MultiCurrency(t *testing.T) {
 	w := newTestWriter(t, Config{BatchSize: 1, FlushInterval: time.Second})

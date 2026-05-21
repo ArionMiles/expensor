@@ -285,6 +285,18 @@ func TestMatchesRule(t *testing.T) {
 			wantMatch:  false,
 		},
 		{
+			name: "no match - sender suffix is not exact address",
+			rules: []api.Rule{
+				{
+					Name:         "test rule",
+					SenderEmails: []string{"alerts@hdfcbank.net"},
+				},
+			},
+			fromHeader: "alerts@hdfcbank.net.evil.example",
+			subjHeader: "Transaction Alert",
+			wantMatch:  false,
+		},
+		{
 			name: "no match - wrong subject",
 			rules: []api.Rule{
 				{

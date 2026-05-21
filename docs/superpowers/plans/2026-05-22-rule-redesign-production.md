@@ -320,7 +320,7 @@ Run: `task test:be -- ./internal/store`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -371,7 +371,7 @@ Run: `task openapi:generate` then `task openapi:check`.
 
 Expected: generated spec is current and check passes.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -391,21 +391,21 @@ git commit --no-gpg-sign -m "feat: expose structured rules api"
 - Modify: `backend/pkg/writer/postgres/001_create_transactions.sql`
 - Modify: `backend/pkg/writer/postgres/postgres_test.go`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Gmail tests must assert one rule with two senders produces sender-specific queries and exact match semantics. Thunderbird tests must assert `alerts@hdfcbank.net.evil.example` does not match `alerts@hdfcbank.net`. Writer tests must assert inserted rows populate `source_type`, `source_label`, and `bank`.
 
-- [ ] **Step 2: Run tests to confirm failure**
+- [x] **Step 2: Run tests to confirm failure**
 
 Run: `task test:be -- ./pkg/reader/gmail ./pkg/reader/thunderbird ./pkg/writer/postgres`
 
 Expected: fails on source fields and sender semantics.
 
-- [ ] **Step 3: Implement runtime propagation**
+- [x] **Step 3: Implement runtime propagation**
 
 Set `transaction.Source = rule.Source`. Use `mail.ParseAddress` for sender extraction where a From header may include display names. Gmail query construction should produce one query per exact sender for a multi-sender rule, each retaining the subject filter.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `task test:be -- ./pkg/reader/gmail ./pkg/reader/thunderbird ./pkg/writer/postgres`
 
