@@ -479,21 +479,21 @@ git commit --no-gpg-sign -m "feat: update frontend source types"
 - Modify: `frontend/src/pages/Rules.tsx`
 - Modify: `frontend/src/pages/Rules.test.tsx`
 
-- [ ] **Step 1: Write failing component tests**
+- [x] **Step 1: Write failing component tests**
 
 Assert URL-backed filters for type, bank, and origin; assert column order text appears as Bank, Name, Subject, Senders, Type, Origin; assert selecting a filter updates `?type=Credit%20Card`; assert no native `<select>` appears.
 
-- [ ] **Step 2: Run tests to confirm failure**
+- [x] **Step 2: Run tests to confirm failure**
 
 Run: `task test:fe -- Rules.test.tsx`
 
 Expected: fails on old table and filters.
 
-- [ ] **Step 3: Implement list view**
+- [x] **Step 3: Implement list view**
 
 Port the approved `prototypes/rule-workbench/list.html` structure to React/Tailwind. Use custom buttons/popovers, CSS chevrons, and `useSearchParams` for filters. Origin values are `all`, `predefined`, `custom`.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `task test:fe -- Rules.test.tsx`
 
