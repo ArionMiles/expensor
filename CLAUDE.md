@@ -88,6 +88,11 @@ Unit tests in `internal/api/handlers_test.go` use `mockStore` (not a real DB). W
 ### Migrations
 SQL files in `backend/migrations/` are embedded into the binary and run automatically on startup. Name new files `NNN_description.sql` (next sequential number). Migrations use `IF NOT EXISTS` and `ON CONFLICT DO NOTHING` — they must be idempotent.
 
+### Rules and fixtures
+Bundled extraction rules live in `content/rules.json` and `backend/cmd/server/content/rules.json` as a versioned v2 document. Rules use exact sender matching with `sender_emails`; add every supported sender address explicitly. Rule source is structured as `source.type`, `source.label`, and `source.bank`. When bundled rules introduce a new type or bank, update the matching `presets.source_types` or `presets.banks` entry too.
+
+Rule email tests live under `tests/data/rule-emails` as self-contained YAML fixtures. Use one email per file and name each file `<bank>_<source-type>_<case>.yaml`, with lowercase slug segments such as `hdfc_credit-card_classic-spend.yaml`. Fixtures must not include regexes or timestamps; the table-driven runner loads the named rule from `rules.json`, uses the fixture filename as the subtest name, and asserts sender/subject matching plus amount, merchant, and currency extraction.
+
 ### Configuration
 All env config flows through `pkg/config/config.go` using koanf. Only four env prefixes are loaded: `EXPENSOR_`, `GMAIL_`, `THUNDERBIRD_`, `POSTGRES_`. Do not add config fields under other prefixes.
 

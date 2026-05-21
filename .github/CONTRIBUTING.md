@@ -358,14 +358,11 @@ task test:be
 # With coverage
 task test:be:cover
 
-# Specific package
-go test ./pkg/reader/gmail/...
+# Backend tests
+task test:be
 
-# Verbose
-go test -v ./...
-
-# Race detector
-go test -race ./...
+# Frontend tests
+task test:fe
 ```
 
 ## Pull Request Process
@@ -438,22 +435,53 @@ To add support for a new bank:
 1. Create an issue using the "Bank Support" template
 2. Provide a **redacted** sample email
 3. Fork and create a branch: `feature/bank-BANKNAME`
-4. Add regex patterns to `cmd/expensor/config/rules.json`
-5. Add tests with sample data
+4. Add or update the rule in `content/rules.json` and `backend/cmd/server/content/rules.json`
+5. Add one positive rule email fixture under `tests/data/rule-emails`
 6. Submit a pull request
 
-Example rule structure:
+Rules use the versioned v2 document format. Keep sender matching exact by adding every supported sender address to `sender_emails`, and set `source.type`,
+`source.label`, and `source.bank` so transactions can be filtered and charted by type and bank. If a rule introduces a new source type or bank, also add it
+to the matching `presets.source_types` or `presets.banks` list.
 
 ```json
 {
-  "name": "Bank Name Debit Card",
-  "query": "from:alerts@bank.com subject:transaction",
-  "patterns": {
-    "amount": "Rs\\. ([0-9,]+\\.[0-9]{2})",
-    "merchant": "at (.+?) on",
-    "date": "on (\\d{2}/\\d{2}/\\d{4})"
-  }
+  "version": 2,
+  "presets": {
+    "source_types": [{ "value": "Debit Card", "origin": "predefined" }],
+    "banks": [{ "value": "Bank Name", "origin": "predefined" }]
+  },
+  "rules": [
+    {
+      "name": "Bank Name Debit Card",
+      "sender_emails": ["alerts@bank.example"],
+      "subject_contains": "transaction alert",
+      "amount_regex": "Rs\\.\\s*([\\d,]+(?:\\.\\d+)?)",
+      "merchant_regex": "at (.*?) on",
+      "currency_regex": "",
+      "source": { "type": "Debit Card", "label": "Bank Name Debit Card", "bank": "Bank Name" }
+    }
+  ]
 }
+```
+
+Rule email fixtures are self-contained YAML files, but they must not duplicate regexes from `rules.json`. The test runner automatically discovers
+`*.yaml` and `*.yml` files under `tests/data/rule-emails`, uses the file basename as the table-driven subtest name, loads the named rule from the real
+rules document, and asserts sender/subject matching plus amount, merchant, and currency extraction.
+
+Use one email per fixture file. Fixture filenames must follow `<bank>_<source-type>_<case>.yaml`, with lowercase slug segments such as
+`hdfc_credit-card_classic-spend.yaml`.
+
+```yaml
+rule: HDFC Credit Card
+sender: alerts@hdfcbank.net
+subject: "Alert : Update on your HDFC Bank Credit Card"
+body: |
+  Dear Customer,
+  Rs.999.00 spent at SWIGGY on your HDFC Credit Card on 12-Apr-2026.
+expected:
+  amount: 999.00
+  merchant: SWIGGY
+  currency: INR
 ```
 
 ## Getting Help

@@ -464,7 +464,7 @@ Run: `task lint:fe`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -499,7 +499,7 @@ Run: `task test:fe -- Rules.test.tsx`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -536,7 +536,7 @@ Run: `task test:fe -- RuleForm.test.tsx Diagnostics.test.tsx`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -554,27 +554,27 @@ git commit --no-gpg-sign -m "feat: add rule workbench"
 - Modify: `frontend/src/pages/Dashboard.test.tsx`
 - Modify: `frontend/src/lib/utils.ts`
 
-- [ ] **Step 1: Write failing UI tests**
+- [x] **Step 1: Write failing UI tests**
 
 Transactions tests must assert Type and Bank columns/filters replace Source. Dashboard tests must assert two donuts render: By type and By bank, and clicking a slice navigates with `source_type` or `bank`.
 
-- [ ] **Step 2: Run tests to confirm failure**
+- [x] **Step 2: Run tests to confirm failure**
 
 Run: `task test:fe -- Transactions.test.tsx Dashboard.test.tsx`
 
 Expected: fails on old source column and single source donut.
 
-- [ ] **Step 3: Implement transactions/dashboard updates**
+- [x] **Step 3: Implement transactions/dashboard updates**
 
 Use API fields `tx.source.type`, `tx.source.bank`, chart fields `by_source_type`, and `by_bank`. Update filter query keys to `source_type`, `bank`, `exclude_source_types`, and `exclude_banks`.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `task test:fe -- Transactions.test.tsx Dashboard.test.tsx`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -590,7 +590,7 @@ git commit --no-gpg-sign -m "feat: split source analytics"
 - Modify: `AGENTS.md`
 - Modify: `frontend/README.md` if new combobox guidance is worth documenting.
 
-- [ ] **Step 1: Update docs**
+- [x] **Step 1: Update docs**
 
 Document:
 - Rule fixture directory: `tests/data/rule-emails`.
@@ -599,7 +599,7 @@ Document:
 - Fixtures do not include regexes, rule runner loads regexes from `content/rules.json`.
 - Rule JSON v2 object shape and source fields.
 
-- [ ] **Step 2: Format**
+- [x] **Step 2: Format**
 
 Run: `task fmt`
 
