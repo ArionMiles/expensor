@@ -1218,18 +1218,18 @@ export function Transactions() {
       <div className="flex-1 overflow-x-auto rounded-lg border border-border bg-card shadow-sm">
         <table
           aria-label="Transactions"
-          className="min-w-[84rem] table-fixed"
+          className="min-w-[78rem] table-fixed"
           style={{ borderCollapse: 'collapse' }}
         >
           <colgroup>
             <col className="w-10" />
-            <col className="w-44" />
-            <col className="w-64" />
-            <col className="w-36" />
-            <col className="w-32" />
-            <col className="w-48" />
             <col className="w-40" />
-            <col className="w-52" />
+            <col className="w-60" />
+            <col className="w-28" />
+            <col className="w-32" />
+            <col className="w-44" />
+            <col className="w-36" />
+            <col className="w-64" />
             <col className="w-10" />
           </colgroup>
           <thead>

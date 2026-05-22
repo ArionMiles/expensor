@@ -219,10 +219,12 @@ describe('Transactions', () => {
     const table = await screen.findByRole('table', { name: 'Transactions' })
 
     expect(table).toHaveClass('table-fixed')
-    expect(table).toHaveClass('min-w-[84rem]')
+    expect(table).toHaveClass('min-w-[78rem]')
     expect(screen.getByRole('columnheader', { name: 'Bank / Type' })).toBeInTheDocument()
-    expect(table.querySelector('colgroup col:nth-child(2)')).toHaveClass('w-44')
-    expect(table.querySelector('colgroup col:nth-child(3)')).toHaveClass('w-64')
+    expect(table.querySelector('colgroup col:nth-child(2)')).toHaveClass('w-40')
+    expect(table.querySelector('colgroup col:nth-child(3)')).toHaveClass('w-60')
+    expect(table.querySelector('colgroup col:nth-child(4)')).toHaveClass('w-28')
+    expect(table.querySelector('colgroup col:nth-child(8)')).toHaveClass('w-64')
     expect(table.querySelector('thead th:last-child')).toHaveClass('sticky', 'right-0')
   })
 
