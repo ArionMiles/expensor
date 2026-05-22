@@ -94,6 +94,7 @@ interface DonutTooltipState {
   label: string
   amount: number
   pct: number
+  group?: string
 }
 
 function DonutChart({
@@ -191,7 +192,7 @@ export function topBreakdownSlices(data: Record<string, number>): BreakdownSlice
     }))
 }
 
-// ─── Breakdown chart (donut + legend) ────────────────────────────────────────
+// ─── Breakdown charts ────────────────────────────────────────────────────────
 
 function BreakdownChart({
   title,
@@ -250,11 +251,11 @@ function BreakdownChart({
       >
         {title}
       </h3>
-      <div className="flex flex-1 items-start gap-4">
-        <div className="flex flex-shrink-0 items-center justify-center pt-1">
+      <div className="flex flex-1 items-center justify-center py-2">
+        <div className="flex flex-shrink-0 items-center justify-center">
           <DonutChart
             data={slices}
-            size={104}
+            size={156}
             currency={currency}
             onSliceClick={(label) => {
               const slice = slices.find((entry) => entry.label === label)
@@ -262,32 +263,175 @@ function BreakdownChart({
             }}
           />
         </div>
-        <div className="min-w-0 flex-1 space-y-1.5 pt-1">
-          {slices.map((s) => (
-            <button
-              key={s.label}
-              type="button"
-              className="grid w-full min-w-0 grid-cols-[auto,minmax(0,1fr),auto] items-center gap-2"
-              style={{ cursor: onSliceClick ? 'pointer' : 'default' }}
-              onClick={() => onSliceClick?.(s)}
-            >
-              <span
-                className="h-2 w-2 flex-shrink-0 rounded-full"
-                style={{ backgroundColor: s.color }}
-              />
-              <span className="flex-1 truncate text-left text-xs text-muted-foreground">
-                {s.label}
-              </span>
-              <span className="flex-shrink-0 font-mono text-xs text-foreground">
-                {total > 0 ? `${Math.round((s.value / total) * 100)}%` : '—'}
-              </span>
-            </button>
-          ))}
-        </div>
       </div>
       <p className="mt-auto border-t border-border pt-3 text-xs text-muted-foreground">
         Total: <span className="font-mono text-foreground">{formatCurrency(total, currency)}</span>
       </p>
+    </div>
+  )
+}
+
+function ConcentricBreakdownChart({
+  title,
+  outerData,
+  innerData,
+  outerLabel,
+  innerLabel,
+  currency,
+  onOuterSliceClick,
+  onInnerSliceClick,
+}: {
+  title: string
+  outerData: Record<string, number>
+  innerData: Record<string, number>
+  outerLabel: string
+  innerLabel: string
+  currency: string
+  onOuterSliceClick?: (slice: BreakdownSlice) => void
+  onInnerSliceClick?: (slice: BreakdownSlice) => void
+}) {
+  const [tooltip, setTooltip] = useState<DonutTooltipState | null>(null)
+  const outerSlices = topBreakdownSlices(outerData)
+  const innerSlices = topBreakdownSlices(innerData).map((slice, index) => ({
+    ...slice,
+    color: chartColor(index + 3),
+  }))
+  const total = outerSlices.reduce((sum, slice) => sum + slice.value, 0)
+  const hasData = outerSlices.length > 0 || innerSlices.length > 0
+
+  if (!hasData) {
+    return (
+      <div className="flex min-h-[220px] flex-col rounded-lg border border-border bg-card p-4 shadow-sm">
+        <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">{title}</h3>
+        <p className="flex flex-1 items-center justify-center py-4 text-center text-xs text-muted-foreground">
+          No data
+        </p>
+      </div>
+    )
+  }
+
+  const size = 176
+  const cx = size / 2
+  const cy = size / 2
+  const buildRing = (
+    slices: BreakdownSlice[],
+    radius: number,
+    strokeWidth: number,
+    group: string,
+    onSliceClick?: (slice: BreakdownSlice) => void,
+  ) => {
+    const ringTotal = slices.reduce((sum, slice) => sum + slice.value, 0)
+    const circumference = 2 * Math.PI * radius
+    let cumulativeOffset = 0
+
+    return slices.map((slice, index) => {
+      const length = ringTotal > 0 ? (slice.value / ringTotal) * circumference : 0
+      const dashOffset = circumference - cumulativeOffset
+      cumulativeOffset += length
+
+      return (
+        <circle
+          key={`${group}-${slice.label}-${index}`}
+          cx={cx}
+          cy={cy}
+          r={radius}
+          fill="none"
+          stroke={slice.color}
+          strokeWidth={strokeWidth}
+          strokeDasharray={`${length} ${circumference - length}`}
+          strokeDashoffset={dashOffset}
+          tabIndex={onSliceClick ? 0 : -1}
+          role={onSliceClick ? 'button' : undefined}
+          aria-label={
+            onSliceClick
+              ? `${group}: ${slice.label}, ${formatCurrency(slice.value, currency)}, ${Math.round((slice.value / ringTotal) * 100)} percent`
+              : undefined
+          }
+          style={{ cursor: onSliceClick ? 'pointer' : 'default' }}
+          onMouseEnter={(event) =>
+            setTooltip({
+              x: event.clientX + 12,
+              y: event.clientY + 12,
+              label: slice.label,
+              amount: slice.value,
+              pct: ringTotal > 0 ? (slice.value / ringTotal) * 100 : 0,
+              group,
+            })
+          }
+          onMouseMove={(event) =>
+            setTooltip((prev) =>
+              prev ? { ...prev, x: event.clientX + 12, y: event.clientY + 12 } : prev,
+            )
+          }
+          onMouseLeave={() => setTooltip(null)}
+          onClick={() => onSliceClick?.(slice)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              onSliceClick?.(slice)
+            }
+          }}
+        />
+      )
+    })
+  }
+
+  return (
+    <div className="flex min-h-[220px] flex-col rounded-lg border border-border bg-card p-4 shadow-sm">
+      <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">{title}</h3>
+      <div className="flex flex-1 items-center justify-center py-1">
+        <svg
+          width={size}
+          height={size}
+          viewBox={`0 0 ${size} ${size}`}
+          aria-label={title}
+          className="overflow-visible"
+        >
+          <g transform={`rotate(-90, ${cx}, ${cy})`}>
+            {buildRing(outerSlices, 68, 20, outerLabel, onOuterSliceClick)}
+            {buildRing(innerSlices, 41, 18, innerLabel, onInnerSliceClick)}
+          </g>
+          <text
+            x={cx}
+            y={cy - 6}
+            textAnchor="middle"
+            fontSize={9}
+            fill="currentColor"
+            opacity={0.5}
+          >
+            Total
+          </text>
+          <text x={cx} y={cy + 8} textAnchor="middle" fontSize={11} fill="currentColor">
+            {formatCurrency(total, currency)}
+          </text>
+        </svg>
+      </div>
+      <p className="mt-auto border-t border-border pt-3 text-xs text-muted-foreground">
+        {innerLabel}: <span className="text-foreground">{innerSlices.length}</span> · {outerLabel}:{' '}
+        <span className="text-foreground">{outerSlices.length}</span>
+      </p>
+      {tooltip &&
+        createPortal(
+          <div
+            className="pointer-events-none fixed z-50 rounded border border-border bg-secondary px-2 py-1 text-xs shadow-lg"
+            style={{ left: tooltip.x, top: tooltip.y }}
+          >
+            {tooltip.group && (
+              <>
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {tooltip.group}
+                </span>
+                <br />
+              </>
+            )}
+            <span className="font-medium text-foreground">{tooltip.label}</span>
+            <br />
+            <span className="text-muted-foreground">
+              {formatCurrency(tooltip.amount, currency)} · {tooltip.pct.toFixed(1)}%
+            </span>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
@@ -328,7 +472,7 @@ function BucketRing({
   }
 
   const total = entries.reduce((sum, [, value]) => sum + value, 0)
-  const size = 128
+  const size = 156
   const r = size * 0.36
   const strokeWidth = size * 0.15
   const cx = size / 2
@@ -354,7 +498,7 @@ function BucketRing({
       <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">
         Needs · Wants · Investments
       </h3>
-      <div className="flex flex-1 flex-col items-center gap-4">
+      <div className="flex flex-1 flex-col items-center justify-center">
         <div className="relative flex items-center justify-center">
           <svg
             width={size}
@@ -422,26 +566,6 @@ function BucketRing({
             </text>
           </svg>
         </div>
-        <div className="flex w-full flex-wrap justify-center gap-x-4 gap-y-1">
-          {slices.map((s) => (
-            <button
-              key={s.label}
-              type="button"
-              className="flex items-center gap-1.5"
-              style={{ cursor: onSliceClick ? 'pointer' : 'default' }}
-              onClick={() => onSliceClick?.(s.label)}
-            >
-              <span
-                className="h-2 w-2 flex-shrink-0 rounded-full"
-                style={{ backgroundColor: s.color }}
-              />
-              <span className="text-xs text-muted-foreground">{displayBucketLabel(s.label)}</span>
-              <span className="font-mono text-xs text-foreground">
-                {Math.round((s.value / total) * 100)}%
-              </span>
-            </button>
-          ))}
-        </div>
       </div>
       {tooltip &&
         createPortal(
@@ -466,12 +590,16 @@ function CategoryMonthlyCard({
   currency,
   monthLabel,
   locale,
+  title,
+  showPrior = true,
   onRowClick,
 }: {
   data: Record<string, CategoryMonthlyEntry>
   currency: string
   monthLabel: string
   locale: string
+  title?: string
+  showPrior?: boolean
   onRowClick?: (category: string) => void
 }) {
   const currentMonth = parseMonthLabel(monthLabel)
@@ -483,17 +611,17 @@ function CategoryMonthlyCard({
     ? formatMonthForLocale(new Date(priorMonth.year, priorMonth.month - 1, 1), locale)
     : 'Prior'
 
+  const cardTitle = title ?? `${currentLabel} vs ${priorLabel}`
+
   const rows = Object.entries(data)
-    .filter(([, entry]) => entry.current > 0 || entry.prior > 0)
+    .filter(([, entry]) => entry.current > 0 || (showPrior && entry.prior > 0))
     .sort(([, a], [, b]) => b.current - a.current)
     .slice(0, 5)
 
   if (rows.length === 0) {
     return (
       <div className="flex h-full min-h-[220px] flex-col rounded-lg border border-border bg-card p-4 shadow-sm">
-        <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">
-          {currentLabel} vs {priorLabel}
-        </h3>
+        <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">{cardTitle}</h3>
         <p className="flex flex-1 items-center justify-center py-4 text-center text-xs text-muted-foreground">
           No data
         </p>
@@ -501,28 +629,34 @@ function CategoryMonthlyCard({
     )
   }
 
-  const maxVal = Math.max(...rows.flatMap(([, entry]) => [entry.current, entry.prior]), 1)
+  const maxVal = Math.max(
+    ...rows.flatMap(([, entry]) => (showPrior ? [entry.current, entry.prior] : [entry.current])),
+    1,
+  )
 
   return (
     <div className="flex h-full min-h-[220px] flex-col rounded-lg border border-border bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-xs uppercase tracking-wider text-muted-foreground">
-          {currentLabel} vs {priorLabel}
-        </h3>
+        <h3 className="text-xs uppercase tracking-wider text-muted-foreground">{cardTitle}</h3>
         <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
           <span className="flex items-center gap-1">
             <span className="inline-block h-2 w-3 rounded-sm bg-primary/80" />
             {currentLabel}
           </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-3 rounded-sm bg-secondary-foreground/20" />
-            {priorLabel}
-          </span>
+          {showPrior && (
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2 w-3 rounded-sm bg-secondary-foreground/20" />
+              {priorLabel}
+            </span>
+          )}
         </div>
       </div>
       <div className="space-y-2">
         {rows.map(([cat, entry]) => {
-          const delta = entry.prior > 0 ? ((entry.current - entry.prior) / entry.prior) * 100 : null
+          const delta =
+            showPrior && entry.prior > 0
+              ? ((entry.current - entry.prior) / entry.prior) * 100
+              : null
           const isClickable = Boolean(onRowClick) && entry.current > 0
           return (
             <button
@@ -568,12 +702,14 @@ function CategoryMonthlyCard({
                     style={{ width: `${(entry.current / maxVal) * 100}%` }}
                   />
                 </div>
-                <div className="h-1 overflow-hidden rounded-full bg-secondary">
-                  <div
-                    className="h-full rounded-full bg-secondary-foreground/20 transition-all"
-                    style={{ width: `${(entry.prior / maxVal) * 100}%` }}
-                  />
-                </div>
+                {showPrior && (
+                  <div className="h-1 overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className="h-full rounded-full bg-secondary-foreground/20 transition-all"
+                      style={{ width: `${(entry.prior / maxVal) * 100}%` }}
+                    />
+                  </div>
+                )}
               </div>
             </button>
           )
@@ -860,44 +996,6 @@ function DailySpendChart({
   )
 }
 
-// ─── Stats section ───────────────────────────────────────────────────────────
-
-function CategoryBar({
-  category,
-  amount,
-  count,
-  maxAmount,
-  currency,
-  onBarClick,
-}: {
-  category: string
-  amount: number
-  count?: number
-  maxAmount: number
-  currency: string
-  onBarClick?: (category: string) => void
-}) {
-  const pct = maxAmount > 0 ? (amount / maxAmount) * 100 : 0
-  return (
-    <div
-      className="flex items-center gap-3 py-1.5"
-      style={{ cursor: onBarClick ? 'pointer' : 'default' }}
-      onClick={() => onBarClick?.(category)}
-    >
-      <span className="w-28 flex-shrink-0 truncate text-xs text-muted-foreground">{category}</span>
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
-        <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
-      </div>
-      <span className="flex-shrink-0 text-right font-mono text-xs text-primary">
-        {formatCurrency(amount, currency)}
-        {count !== undefined && (
-          <span className="ml-1 font-sans text-[10px] text-muted-foreground">· {count}</span>
-        )}
-      </span>
-    </div>
-  )
-}
-
 type SummaryMode = 'current_month' | 'all_time'
 
 const SUMMARY_MODE_OPTIONS: SummaryMode[] = ['current_month', 'all_time']
@@ -993,7 +1091,7 @@ function buildTransactionSearch(
   return search.toString()
 }
 
-function SummarySection({
+export function SummarySection({
   summary,
   currency,
   locale,
@@ -1021,32 +1119,34 @@ function SummarySection({
 
   return (
     <div className="space-y-4">
-      {summaryMode === 'current_month' && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="md:col-span-1">
-            <BucketRing
-              data={summary.charts.by_bucket}
-              currency={currency}
-              onSliceClick={(label) =>
-                goToTransactions(dashboardBreakdownParams('bucket', displayBucketLabel(label)))
-              }
-            />
-          </div>
-          <div className="md:col-span-2">
-            <CategoryMonthlyCard
-              data={summary.charts.by_category_monthly}
-              currency={currency}
-              locale={locale}
-              monthLabel={summary.label}
-              onRowClick={(category) =>
-                goToTransactions(dashboardBreakdownParams('category', category))
-              }
-            />
-          </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="md:col-span-1">
+          <BucketRing
+            data={summary.charts.by_bucket}
+            currency={currency}
+            onSliceClick={(label) =>
+              goToTransactions(dashboardBreakdownParams('bucket', displayBucketLabel(label)))
+            }
+          />
         </div>
-      )}
+        <div className="md:col-span-2">
+          <CategoryMonthlyCard
+            data={summary.charts.by_category_monthly}
+            currency={currency}
+            locale={locale}
+            monthLabel={summary.label}
+            title={
+              summaryMode === 'all_time' ? t('dashboard.breakdown.spendByCategory') : undefined
+            }
+            showPrior={summaryMode === 'current_month'}
+            onRowClick={(category) =>
+              goToTransactions(dashboardBreakdownParams('category', category))
+            }
+          />
+        </div>
+      </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <BreakdownChart
           title={t('dashboard.breakdown.byCategory')}
           data={dashboardBreakdownData(summary.charts.by_category)}
@@ -1054,28 +1154,20 @@ function SummarySection({
           onSliceClick={(slice) => goToBreakdownSlice(slice, 'category')}
         />
         <BreakdownChart
-          title={t('dashboard.breakdown.byBucket')}
-          data={dashboardBreakdownData(summary.charts.by_bucket, 'bucket')}
-          currency={currency}
-          onSliceClick={(slice) => goToBreakdownSlice(slice, 'bucket')}
-        />
-        <BreakdownChart
           title={t('dashboard.breakdown.byLabel')}
           data={dashboardBreakdownData(summary.charts.by_label)}
           currency={currency}
           onSliceClick={(slice) => goToBreakdownSlice(slice, 'label')}
         />
-        <BreakdownChart
-          title={t('dashboard.breakdown.bySourceType')}
-          data={summary.charts.by_source_type}
+        <ConcentricBreakdownChart
+          title={t('dashboard.breakdown.bankAndType')}
+          outerData={summary.charts.by_source_type}
+          innerData={summary.charts.by_bank}
+          outerLabel={t('common.type')}
+          innerLabel={t('common.bank')}
           currency={currency}
-          onSliceClick={(slice) => goToBreakdownSlice(slice, 'source_type')}
-        />
-        <BreakdownChart
-          title={t('dashboard.breakdown.byBank')}
-          data={summary.charts.by_bank}
-          currency={currency}
-          onSliceClick={(slice) => goToBreakdownSlice(slice, 'bank')}
+          onOuterSliceClick={(slice) => goToBreakdownSlice(slice, 'source_type')}
+          onInnerSliceClick={(slice) => goToBreakdownSlice(slice, 'bank')}
         />
       </div>
     </div>
@@ -1096,22 +1188,10 @@ function SummaryOverviewCard({
   currentMonthRange?: { from: string; to: string } | null
 }) {
   const navigate = useNavigate()
-  const sortedCategories = Object.entries(
-    dashboardBreakdownData(summary.stats.total_by_category ?? {}),
-  )
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 5)
-  const maxCategoryAmount = sortedCategories[0]?.[1] ?? 1
   const monthRange = summaryMode === 'current_month' ? currentMonthRange : null
 
   const goToTransactions = () => {
     navigate(`/transactions?${buildTransactionSearch({ show_filters: '1' }, monthRange)}`)
-  }
-
-  const goToCategory = (category: string) => {
-    navigate(
-      `/transactions?${buildTransactionSearch(dashboardBreakdownParams('category', category), monthRange)}`,
-    )
   }
 
   return (
@@ -1134,29 +1214,6 @@ function SummaryOverviewCard({
             {formatNumberForLocale(summary.stats.total_count, locale)} transactions
           </button>
         </div>
-      </div>
-
-      <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-        <h3 className="mb-4 text-xs uppercase tracking-wider text-muted-foreground">
-          Spend by category
-        </h3>
-        {sortedCategories.length > 0 ? (
-          <div className="divide-y divide-border">
-            {sortedCategories.map(([category, amount]) => (
-              <CategoryBar
-                key={category}
-                category={category}
-                amount={amount}
-                count={summary.stats.total_category_count?.[category]}
-                maxAmount={maxCategoryAmount}
-                currency={currency}
-                onBarClick={goToCategory}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="py-4 text-center text-xs text-muted-foreground">No data</p>
-        )}
       </div>
     </div>
   )

@@ -337,6 +337,31 @@ function CategoryBucketCell({ tx }: { tx: Transaction }) {
   )
 }
 
+function SourceCell({ tx, banks }: { tx: Transaction; banks?: BankColor[] }) {
+  if (!tx.source.bank && !tx.source.type) {
+    return <span className="text-xs text-muted-foreground">—</span>
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      {tx.source.bank && (
+        <span
+          className="inline-block max-w-full truncate rounded-sm border border-border py-0.5 pl-1.5 pr-2 font-mono text-[10px] text-muted-foreground"
+          style={{
+            borderLeftColor: getSourceColor(tx.source.bank, banks),
+            borderLeftWidth: '2px',
+          }}
+        >
+          {tx.source.bank}
+        </span>
+      )}
+      {tx.source.type && (
+        <span className="block truncate text-xs text-muted-foreground">{tx.source.type}</span>
+      )}
+    </div>
+  )
+}
+
 function IgnoreButton({ tx }: { tx: Transaction }) {
   const { t } = useI18n()
   const { mutate: ignoreTransaction, isPending } = useIgnoreTransaction()
@@ -467,22 +492,7 @@ function TransactionRow({
         </span>
       </td>
       <td className="overflow-hidden whitespace-nowrap px-3 py-2.5">
-        {tx.source.bank && (
-          <span
-            className="inline-block max-w-full truncate rounded-sm border border-border py-0.5 pl-1.5 pr-2 font-mono text-[10px] text-muted-foreground"
-            style={{
-              borderLeftColor: getSourceColor(tx.source.bank, banks),
-              borderLeftWidth: '2px',
-            }}
-          >
-            {tx.source.bank}
-          </span>
-        )}
-      </td>
-      <td className="overflow-hidden whitespace-nowrap px-3 py-2.5">
-        <span className="block truncate text-xs text-muted-foreground">
-          {tx.source.type || '—'}
-        </span>
+        <SourceCell tx={tx} banks={banks} />
       </td>
       <td className="px-3 py-2.5">
         <AmountCell tx={tx} />
@@ -496,7 +506,7 @@ function TransactionRow({
       <td className="overflow-hidden px-3 py-2.5">
         <DescriptionCell tx={tx} searchQuery={searchQuery} />
       </td>
-      <td className="px-3 py-2.5">
+      <td className="sticky right-0 bg-card px-3 py-2.5 shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.6)]">
         <IgnoreButton tx={tx} />
       </td>
     </tr>
@@ -1200,19 +1210,18 @@ export function Transactions() {
       <div className="flex-1 overflow-x-auto rounded-lg border border-border bg-card shadow-sm">
         <table
           aria-label="Transactions"
-          className="min-w-[104rem] table-fixed"
+          className="min-w-[92rem] table-fixed"
           style={{ borderCollapse: 'collapse' }}
         >
           <colgroup>
             <col className="w-10" />
             <col className="w-52" />
             <col className="w-72" />
-            <col className="w-32" />
-            <col className="w-36" />
+            <col className="w-40" />
             <col className="w-32" />
             <col className="w-56" />
             <col className="w-44" />
-            <col className="w-64" />
+            <col className="w-56" />
             <col className="w-10" />
           </colgroup>
           <thead>
@@ -1248,13 +1257,7 @@ export function Transactions() {
                 scope="col"
                 className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
               >
-                {t('common.bank')}
-              </th>
-              <th
-                scope="col"
-                className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
-              >
-                {t('common.type')}
+                {t('transactions.columns.bankType')}
               </th>
               <th
                 scope="col"
@@ -1280,14 +1283,14 @@ export function Transactions() {
               >
                 Description
               </th>
-              <th scope="col" className="px-3 py-2.5" />
+              <th scope="col" className="sticky right-0 bg-secondary/50 px-3 py-2.5" />
             </tr>
           </thead>
           <tbody className="[&_td]:py-1 [&_td]:text-xs">
             {isLoading
               ? Array.from({ length: 10 }).map((_, i) => (
                   <tr key={i} className="animate-pulse border-b border-border">
-                    {Array.from({ length: 10 }).map((_, j) => (
+                    {Array.from({ length: 9 }).map((_, j) => (
                       <td key={j} className="px-3 py-3">
                         <div className="h-3 rounded-sm bg-secondary" />
                       </td>
@@ -1306,7 +1309,7 @@ export function Transactions() {
                 ))}
             {!isLoading && transactions.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-3 py-12 text-center text-xs text-muted-foreground">
+                <td colSpan={9} className="px-3 py-12 text-center text-xs text-muted-foreground">
                   {hasActiveFilters
                     ? t('transactions.empty.filtered')
                     : t('transactions.empty.none')}

@@ -1,15 +1,62 @@
 import { render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
+import type { ChartData, Stats } from '@/api/types'
+import { I18nProvider } from '@/i18n/I18nProvider'
 import {
   BreakdownTimeline,
   DEFAULT_SPEND_BREAKDOWN_MODE,
   DEFAULT_HEATMAP_METRIC,
   MetricToggle,
+  SummarySection,
   dashboardBreakdownData,
   dashboardBreakdownParams,
   displayBucketLabel,
   topBreakdownSlices,
 } from './Dashboard'
+
+const chartData: ChartData = {
+  monthly_spend: [],
+  daily_spend: [],
+  by_category: { Food: 1200, Travel: 500 },
+  by_bucket: { Needs: 1000, Wants: 700 },
+  by_label: { Online: 900, Store: 300 },
+  by_source: {},
+  by_source_type: { 'Credit Card': 1400, UPI: 300 },
+  by_bank: { HDFC: 1100, ICICI: 600 },
+  by_category_monthly: {
+    Food: { current: 1200, prior: 900 },
+    Travel: { current: 500, prior: 700 },
+  },
+}
+
+const stats: Stats = {
+  total_count: 3,
+  total_base: 1700,
+  base_currency: 'INR',
+  total_by_category: { Food: 1200, Travel: 500 },
+  total_category_count: { Food: 2, Travel: 1 },
+  top_merchants: [],
+}
+
+function renderSummarySection(summaryMode: 'current_month' | 'all_time') {
+  return render(
+    <I18nProvider>
+      <MemoryRouter>
+        <SummarySection
+          summary={{ label: 'April 2026', stats, charts: chartData }}
+          currency="INR"
+          locale="en-IN"
+          summaryMode={summaryMode}
+          currentMonthRange={{
+            from: '2026-04-01T00:00:00Z',
+            to: '2026-04-30T23:59:59Z',
+          }}
+        />
+      </MemoryRouter>
+    </I18nProvider>,
+  )
+}
 
 describe('BreakdownTimeline', () => {
   it('rerenders from populated data to empty data without changing hook order', () => {
@@ -87,6 +134,25 @@ describe('MetricToggle', () => {
       'text-muted-foreground',
       'hover:text-foreground',
     )
+  })
+})
+
+describe('SummarySection', () => {
+  it('removes the duplicate bucket donut and combines bank/type into one donut', () => {
+    renderSummarySection('current_month')
+
+    expect(screen.queryByText('By bucket')).not.toBeInTheDocument()
+    expect(screen.queryByText('By source type')).not.toBeInTheDocument()
+    expect(screen.queryByText('By bank')).not.toBeInTheDocument()
+    expect(screen.getByText('By bank & type')).toBeInTheDocument()
+  })
+
+  it('shows the category monthly chart for all time without prior comparison copy', () => {
+    renderSummarySection('all_time')
+
+    expect(screen.getByText('Spend By Category')).toBeInTheDocument()
+    expect(screen.queryByText(/March 2026/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/\+33%/)).not.toBeInTheDocument()
   })
 })
 
