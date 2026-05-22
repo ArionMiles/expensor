@@ -9,7 +9,7 @@ import type { Transaction } from '@/api/types'
 import { LabelChip } from '@/components/LabelChip'
 import { SlideNotification } from '@/components/SlideNotification'
 import { useI18n } from '@/i18n/I18nProvider'
-import { cn } from '@/lib/utils'
+import { LABEL_SWATCH_COLORS, cn } from '@/lib/utils'
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -194,8 +194,9 @@ export function LabelCombobox({ tx, maxVisibleLabels = 2 }: LabelComboboxProps) 
   const handleCreate = () => {
     const name = input.trim()
     if (!name) return
+    const color = LABEL_SWATCH_COLORS[labels.length % LABEL_SWATCH_COLORS.length]
     createLabel(
-      { name, color: '#6366f1' },
+      { name, color },
       {
         onSuccess: () => {
           addLabels({ id: tx.id, labels: [name] })
@@ -210,7 +211,8 @@ export function LabelCombobox({ tx, maxVisibleLabels = 2 }: LabelComboboxProps) 
   const activeOptionId =
     highlighted >= 0 && dropdownPos ? `${listboxId}-option-${highlighted}` : undefined
   const visibleLabels = tx.labels.slice(0, maxVisibleLabels)
-  const hiddenLabelCount = Math.max(0, tx.labels.length - visibleLabels.length)
+  const hiddenLabels = tx.labels.slice(visibleLabels.length)
+  const hiddenLabelCount = hiddenLabels.length
 
   useEffect(() => {
     if (highlighted < 0 || !open) return
@@ -258,14 +260,16 @@ export function LabelCombobox({ tx, maxVisibleLabels = 2 }: LabelComboboxProps) 
             createPortal(
               <div
                 ref={overflowPortalRef}
+                role="dialog"
+                aria-label={t('labels.hiddenLabels')}
                 className="fixed z-50 w-56 rounded-md border border-border bg-card p-2 shadow-lg"
                 style={{ top: overflowPos.top, left: overflowPos.left }}
               >
                 <div className="mb-1 px-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                  {t('labels.allLabels')}
+                  {t('labels.hiddenLabels')}
                 </div>
                 <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">
-                  {tx.labels.map((label) => {
+                  {hiddenLabels.map((label) => {
                     const meta = labels.find((l) => l.name === label)
                     return (
                       <LabelChip

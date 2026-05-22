@@ -1,11 +1,12 @@
 import { http, HttpResponse } from 'msw'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { LabelCombobox } from './LabelCombobox'
 import { renderWithProviders } from '@/test/render'
 import { server } from '@/test/server'
 import type { Transaction } from '@/api/types'
+import { LABEL_SWATCH_COLORS } from '@/lib/utils'
 
 const baseTransaction: Transaction = {
   id: 'tx-1',
@@ -27,6 +28,7 @@ const baseTransaction: Transaction = {
 
 function stubLabels() {
   let addLabelCalls = 0
+  let createLabelColor = ''
 
   server.use(
     http.get('/api/config/labels', () =>
@@ -39,10 +41,16 @@ function stubLabels() {
       addLabelCalls += 1
       return HttpResponse.json({})
     }),
+    http.post('/api/config/labels', async ({ request }) => {
+      const body = (await request.json()) as { name?: string; color?: string }
+      createLabelColor = body.color ?? ''
+      return HttpResponse.json({ name: body.name ?? '', color: body.color ?? '' })
+    }),
   )
 
   return {
     getAddLabelCalls: () => addLabelCalls,
+    getCreateLabelColor: () => createLabelColor,
   }
 }
 
@@ -194,8 +202,26 @@ describe('LabelCombobox', () => {
 
     await user.click(screen.getByRole('button', { name: 'Show 2 more labels' }))
 
-    expect(await screen.findByText('All labels')).toBeInTheDocument()
-    expect(screen.getByText('fgf')).toBeInTheDocument()
-    expect(screen.getByText('gfgf')).toBeInTheDocument()
+    const popover = await screen.findByRole('dialog', { name: 'More labels' })
+    expect(within(popover).getByText('More labels')).toBeInTheDocument()
+    expect(within(popover).queryByText('10min Delivery')).not.toBeInTheDocument()
+    expect(within(popover).queryByText('ffd')).not.toBeInTheDocument()
+    expect(within(popover).getByText('fgf')).toBeInTheDocument()
+    expect(within(popover).getByText('gfgf')).toBeInTheDocument()
+  })
+
+  it('assigns new labels the next shared swatch color', async () => {
+    const user = userEvent.setup()
+    const state = stubLabels()
+
+    renderWithProviders(<LabelCombobox tx={baseTransaction} />)
+
+    await user.click(screen.getByRole('button', { name: 'Add label' }))
+    await user.type(screen.getByPlaceholderText('label...'), 'Travel')
+    await user.keyboard('{Enter}')
+
+    await waitFor(() => {
+      expect(state.getCreateLabelColor()).toBe(LABEL_SWATCH_COLORS[2])
+    })
   })
 })

@@ -115,15 +115,15 @@ export function getSourceColor(source: string, banks?: BankColor[]): string {
   return SOURCE_FALLBACK_COLORS[Math.abs(hash) % SOURCE_FALLBACK_COLORS.length]
 }
 
-const LABEL_COLORS = [
-  '#3b82f6', // blue
-  '#8b5cf6', // violet
-  '#ec4899', // pink
-  '#f59e0b', // amber
-  '#06b6d4', // cyan
-  '#d97706', // orange
-  '#6366f1', // indigo
-  '#14b8a6', // teal
+export const LABEL_SWATCH_COLORS = [
+  '#f59e0b',
+  '#3b82f6',
+  '#8b5cf6',
+  '#06b6d4',
+  '#10b981',
+  '#ec4899',
+  '#f97316',
+  '#6366f1',
 ]
 
 export function getLabelColor(label: string): string {
@@ -132,8 +132,8 @@ export function getLabelColor(label: string): string {
     hash = (hash << 5) - hash + label.charCodeAt(i)
     hash |= 0
   }
-  const index = Math.abs(hash) % LABEL_COLORS.length
-  return LABEL_COLORS[index]
+  const index = Math.abs(hash) % LABEL_SWATCH_COLORS.length
+  return LABEL_SWATCH_COLORS[index]
 }
 
 export function formatDuration(isoString: string): string {

@@ -151,7 +151,7 @@ export const messages = {
       'Transactions matching these patterns are excluded from totals and charts.',
     'ignored.page.title': 'Ignored',
     'ignored.transaction.restoreTitle': 'Restore transaction',
-    'labels.allLabels': 'All labels',
+    'labels.hiddenLabels': 'More labels',
     'labels.moreAria': 'Show {count} more labels',
     'transactions.ignore.action': 'Ignore',
     'transactions.ignore.bulkMerchants': 'Ignore selected merchants',
