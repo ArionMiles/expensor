@@ -177,9 +177,19 @@ describe('RuleForm diagnostics', () => {
     renderRuleForm('/rules/new', '/rules/new')
 
     const actions = screen.getByLabelText('Rule editor actions')
-    expect(within(actions).getByRole('link', { name: 'Cancel' })).toBeInTheDocument()
-    expect(within(actions).getByRole('button', { name: 'Export fixture' })).toBeInTheDocument()
-    expect(within(actions).getByRole('button', { name: 'Save Rule' })).toBeInTheDocument()
+    const exportButton = within(actions).getByRole('button', { name: 'Export fixture' })
+    const saveButton = within(actions).getByRole('button', { name: 'Save Rule' })
+    const cancelLink = within(actions).getByRole('link', { name: 'Cancel' })
+
+    expect(exportButton).toBeInTheDocument()
+    expect(saveButton.compareDocumentPosition(cancelLink)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+  })
+
+  it('renders the rule settings as a separate bordered pane', () => {
+    renderRuleForm('/rules/new', '/rules/new')
+
+    expect(screen.getByLabelText('Rule settings')).toHaveClass('rounded-xl', 'border', 'bg-card')
+    expect(screen.getByLabelText('Sample workbench')).toHaveClass('rounded-xl', 'border', 'bg-card')
   })
 
   it('uses an opaque card surface for source dropdowns', async () => {

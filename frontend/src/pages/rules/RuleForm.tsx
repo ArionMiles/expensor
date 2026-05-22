@@ -532,12 +532,6 @@ expected:
               Predefined
             </span>
           )}
-          <Link
-            to="/rules"
-            className="inline-flex rounded-lg border border-border px-4 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
-          >
-            Cancel
-          </Link>
           <button
             type="button"
             onClick={exportFixture}
@@ -553,6 +547,12 @@ expected:
           >
             {isPending ? 'Saving...' : 'Save Rule'}
           </button>
+          <Link
+            to="/rules"
+            className="inline-flex rounded-lg border border-border px-4 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
+          >
+            Cancel
+          </Link>
         </div>
       </div>
 
@@ -562,8 +562,11 @@ expected:
         </div>
       )}
 
-      <div className="grid min-h-[32rem] grid-cols-1 overflow-hidden rounded-xl border border-border bg-card lg:grid-cols-[24rem_minmax(0,1fr)_20rem]">
-        <aside className="space-y-4 border-b border-border p-4 lg:border-b-0 lg:border-r">
+      <div className="grid min-h-[32rem] grid-cols-1 gap-4 lg:grid-cols-[24rem_minmax(0,1fr)]">
+        <aside
+          aria-label="Rule settings"
+          className="space-y-4 rounded-xl border border-border bg-card p-4"
+        >
           <section className="space-y-2 border-b border-border pb-4">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Subject Contains
@@ -682,191 +685,196 @@ expected:
           </section>
         </aside>
 
-        <main className="min-w-0 border-b border-border lg:border-b-0 lg:border-r">
-          <div className="flex items-center justify-between gap-3 border-b border-border p-4">
-            <div role="tablist" aria-label="Samples" className="flex flex-wrap gap-2">
-              {samples.map((sample, index) => (
-                <button
-                  key={`${sample.name}-${index}`}
-                  type="button"
-                  role="tab"
-                  aria-selected={index === activeSample}
-                  onClick={() => setActiveSample(index)}
-                  className={`rounded-full border px-3 py-1.5 text-sm font-medium ${
-                    index === activeSample
-                      ? 'border-primary/50 bg-primary/10 text-foreground'
-                      : 'border-border text-muted-foreground hover:text-foreground'
+        <div
+          aria-label="Sample workbench"
+          className="grid min-w-0 overflow-hidden rounded-xl border border-border bg-card lg:grid-cols-[minmax(0,1fr)_20rem]"
+        >
+          <main className="min-w-0 border-b border-border lg:border-b-0 lg:border-r">
+            <div className="flex items-center justify-between gap-3 border-b border-border p-4">
+              <div role="tablist" aria-label="Samples" className="flex flex-wrap gap-2">
+                {samples.map((sample, index) => (
+                  <button
+                    key={`${sample.name}-${index}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={index === activeSample}
+                    onClick={() => setActiveSample(index)}
+                    className={`rounded-full border px-3 py-1.5 text-sm font-medium ${
+                      index === activeSample
+                        ? 'border-primary/50 bg-primary/10 text-foreground'
+                        : 'border-border text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {sample.name}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={addSample}
+                className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary"
+              >
+                + Add sample
+              </button>
+            </div>
+
+            <div className="grid gap-3 overflow-y-auto p-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <label className="text-sm text-muted-foreground">
+                  Name
+                  <input
+                    value={selectedSample.name}
+                    onChange={(event) => updateSample({ name: event.target.value })}
+                    className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-sm text-foreground"
+                  />
+                </label>
+                <label className="text-sm text-muted-foreground">
+                  Sender
+                  <input
+                    value={selectedSample.sender}
+                    onChange={(event) => updateSample({ sender: event.target.value })}
+                    className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-sm text-foreground"
+                  />
+                </label>
+                <label className="text-sm text-muted-foreground md:col-span-2">
+                  Subject
+                  <input
+                    value={selectedSample.subject}
+                    onChange={(event) => updateSample({ subject: event.target.value })}
+                    className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-sm text-foreground"
+                  />
+                </label>
+              </div>
+              <label className="flex min-h-0 flex-col text-sm text-muted-foreground">
+                Email body
+                <textarea
+                  value={selectedSample.body}
+                  onChange={(event) => updateSample({ body: event.target.value })}
+                  className="mt-1 h-[20rem] min-h-[14rem] resize-y rounded-lg border border-border bg-input px-3 py-3 font-mono text-xs text-foreground"
+                />
+              </label>
+            </div>
+          </main>
+
+          <aside className="space-y-4 p-4">
+            <div className="rounded-xl border border-border p-4">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Expected
+              </h2>
+              <div className="mt-3 space-y-3">
+                <label className="block text-sm text-muted-foreground">
+                  Amount
+                  <input
+                    aria-label="Expected amount"
+                    value={selectedSample.expected.amount}
+                    onChange={(event) => updateExpected({ amount: event.target.value })}
+                    className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-sm text-foreground"
+                  />
+                </label>
+                <label className="block text-sm text-muted-foreground">
+                  Merchant
+                  <input
+                    aria-label="Expected merchant"
+                    value={selectedSample.expected.merchant}
+                    onChange={(event) => updateExpected({ merchant: event.target.value })}
+                    className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-sm text-foreground"
+                  />
+                </label>
+                <label className="block text-sm text-muted-foreground">
+                  Currency
+                  <input
+                    aria-label="Expected currency"
+                    value={selectedSample.expected.currency}
+                    onChange={(event) => updateExpected({ currency: event.target.value })}
+                    className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-sm text-foreground"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Live Result
+                </h2>
+                <span
+                  className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                    needsAttention
+                      ? 'border-destructive/40 text-destructive'
+                      : 'border-green-500/40 text-green-500'
                   }`}
                 >
-                  {sample.name}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={addSample}
-              className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary"
-            >
-              + Add sample
-            </button>
-          </div>
-
-          <div className="grid gap-3 overflow-y-auto p-4">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <label className="text-sm text-muted-foreground">
-                Name
-                <input
-                  value={selectedSample.name}
-                  onChange={(event) => updateSample({ name: event.target.value })}
-                  className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-sm text-foreground"
-                />
-              </label>
-              <label className="text-sm text-muted-foreground">
-                Sender
-                <input
-                  value={selectedSample.sender}
-                  onChange={(event) => updateSample({ sender: event.target.value })}
-                  className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-sm text-foreground"
-                />
-              </label>
-              <label className="text-sm text-muted-foreground md:col-span-2">
-                Subject
-                <input
-                  value={selectedSample.subject}
-                  onChange={(event) => updateSample({ subject: event.target.value })}
-                  className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-sm text-foreground"
-                />
-              </label>
-            </div>
-            <label className="flex min-h-0 flex-col text-sm text-muted-foreground">
-              Email body
-              <textarea
-                value={selectedSample.body}
-                onChange={(event) => updateSample({ body: event.target.value })}
-                className="mt-1 h-[20rem] min-h-[14rem] resize-y rounded-lg border border-border bg-input px-3 py-3 font-mono text-xs text-foreground"
-              />
-            </label>
-          </div>
-        </main>
-
-        <aside className="space-y-4 p-4">
-          <div className="rounded-xl border border-border p-4">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Expected
-            </h2>
-            <div className="mt-3 space-y-3">
-              <label className="block text-sm text-muted-foreground">
-                Amount
-                <input
-                  aria-label="Expected amount"
-                  value={selectedSample.expected.amount}
-                  onChange={(event) => updateExpected({ amount: event.target.value })}
-                  className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-sm text-foreground"
-                />
-              </label>
-              <label className="block text-sm text-muted-foreground">
-                Merchant
-                <input
-                  aria-label="Expected merchant"
-                  value={selectedSample.expected.merchant}
-                  onChange={(event) => updateExpected({ merchant: event.target.value })}
-                  className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-sm text-foreground"
-                />
-              </label>
-              <label className="block text-sm text-muted-foreground">
-                Currency
-                <input
-                  aria-label="Expected currency"
-                  value={selectedSample.expected.currency}
-                  onChange={(event) => updateExpected({ currency: event.target.value })}
-                  className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-sm text-foreground"
-                />
-              </label>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border p-4">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Live Result
-              </h2>
-              <span
-                className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                  needsAttention
-                    ? 'border-destructive/40 text-destructive'
-                    : 'border-green-500/40 text-green-500'
-                }`}
-              >
-                {needsAttention ? 'Needs attention' : 'All checks pass'}
-              </span>
-            </div>
-            <dl className="mt-3 divide-y divide-border text-sm">
-              <div className="flex items-center justify-between gap-3 py-2">
-                <dt className="text-muted-foreground">Sender</dt>
-                <dd
-                  className={
-                    form.senders.includes(selectedSample.sender)
-                      ? 'text-green-500'
-                      : 'text-destructive'
-                  }
-                >
-                  {form.senders.includes(selectedSample.sender) ? 'matches' : 'missing'}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-3 py-2">
-                <dt className="text-muted-foreground">Subject</dt>
-                <dd
-                  className={
-                    !form.subjectContains || selectedSample.subject.includes(form.subjectContains)
-                      ? 'text-green-500'
-                      : 'text-destructive'
-                  }
-                >
-                  {!form.subjectContains || selectedSample.subject.includes(form.subjectContains)
-                    ? 'matches'
-                    : 'missing'}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-3 py-2">
-                <dt className="text-muted-foreground">Amount</dt>
-                <dd>
-                  <ResultValue result={live.amount} />
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-3 py-2">
-                <dt className="text-muted-foreground">Merchant</dt>
-                <dd>
-                  <ResultValue result={live.merchant} />
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-3 py-2">
-                <dt className="text-muted-foreground">Currency</dt>
-                <dd>
-                  <ResultValue result={live.currency} optional />
-                </dd>
-              </div>
-            </dl>
-          </div>
-
-          {!isCreate && (
-            <label className="flex items-start gap-2 rounded-xl border border-border bg-secondary/30 p-4 text-sm text-foreground">
-              <input
-                type="checkbox"
-                checked={rescan}
-                onChange={(event) => setRescan(event.target.checked)}
-                className="mt-1"
-              />
-              <span>
-                Retroactive scan
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  Re-process emails from the lookback window with this updated rule.
+                  {needsAttention ? 'Needs attention' : 'All checks pass'}
                 </span>
-              </span>
-            </label>
-          )}
+              </div>
+              <dl className="mt-3 divide-y divide-border text-sm">
+                <div className="flex items-center justify-between gap-3 py-2">
+                  <dt className="text-muted-foreground">Sender</dt>
+                  <dd
+                    className={
+                      form.senders.includes(selectedSample.sender)
+                        ? 'text-green-500'
+                        : 'text-destructive'
+                    }
+                  >
+                    {form.senders.includes(selectedSample.sender) ? 'matches' : 'missing'}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3 py-2">
+                  <dt className="text-muted-foreground">Subject</dt>
+                  <dd
+                    className={
+                      !form.subjectContains || selectedSample.subject.includes(form.subjectContains)
+                        ? 'text-green-500'
+                        : 'text-destructive'
+                    }
+                  >
+                    {!form.subjectContains || selectedSample.subject.includes(form.subjectContains)
+                      ? 'matches'
+                      : 'missing'}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3 py-2">
+                  <dt className="text-muted-foreground">Amount</dt>
+                  <dd>
+                    <ResultValue result={live.amount} />
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3 py-2">
+                  <dt className="text-muted-foreground">Merchant</dt>
+                  <dd>
+                    <ResultValue result={live.merchant} />
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3 py-2">
+                  <dt className="text-muted-foreground">Currency</dt>
+                  <dd>
+                    <ResultValue result={live.currency} optional />
+                  </dd>
+                </div>
+              </dl>
+            </div>
 
-          {formError && <p className="text-xs text-destructive">{formError}</p>}
-        </aside>
+            {!isCreate && (
+              <label className="flex items-start gap-2 rounded-xl border border-border bg-secondary/30 p-4 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={rescan}
+                  onChange={(event) => setRescan(event.target.checked)}
+                  className="mt-1"
+                />
+                <span>
+                  Retroactive scan
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    Re-process emails from the lookback window with this updated rule.
+                  </span>
+                </span>
+              </label>
+            )}
+
+            {formError && <p className="text-xs text-destructive">{formError}</p>}
+          </aside>
+        </div>
       </div>
     </div>
   )
