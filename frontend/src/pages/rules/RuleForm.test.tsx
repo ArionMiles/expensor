@@ -1,11 +1,18 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DisplayProvider } from '@/contexts/DisplayContext'
 import { createTestQueryClient } from '@/test/render'
 import { RuleForm } from './RuleForm'
+
+const queryMocks = vi.hoisted(() => ({
+  activeReader: 'gmail',
+  createRule: vi.fn(),
+  updateRule: vi.fn(),
+  rescan: vi.fn(),
+}))
 
 const diagnostic = {
   id: 'diag-1',
@@ -31,8 +38,8 @@ const diagnostic = {
 }
 
 vi.mock('@/api/queries', () => ({
-  useActiveReader: () => ({ data: 'gmail' }),
-  useCreateRule: () => ({ mutate: vi.fn(), isPending: false }),
+  useActiveReader: () => ({ data: queryMocks.activeReader }),
+  useCreateRule: () => ({ mutate: queryMocks.createRule, isPending: false }),
   useExtractionDiagnostic: (id: string | null) => ({
     data: id === 'diag-1' ? diagnostic : undefined,
     isLoading: false,
@@ -48,7 +55,7 @@ vi.mock('@/api/queries', () => ({
       buckets: [],
     },
   }),
-  useRescan: () => ({ mutate: vi.fn() }),
+  useRescan: () => ({ mutate: queryMocks.rescan }),
   useRules: () => ({
     data: [
       {
@@ -71,7 +78,7 @@ vi.mock('@/api/queries', () => ({
   }),
   useTimeFormat: () => ({ data: 'HH:mm', isLoading: false }),
   useTimezone: () => ({ data: 'UTC', isLoading: false }),
-  useUpdateRule: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateRule: () => ({ mutate: queryMocks.updateRule, isPending: false }),
 }))
 
 function renderRuleForm(route: string, path: string) {
@@ -90,6 +97,13 @@ function renderRuleForm(route: string, path: string) {
 }
 
 describe('RuleForm diagnostics', () => {
+  beforeEach(() => {
+    queryMocks.activeReader = 'gmail'
+    queryMocks.createRule.mockReset()
+    queryMocks.updateRule.mockReset()
+    queryMocks.rescan.mockReset()
+  })
+
   it('loads diagnostic email body into the first test sample', async () => {
     renderRuleForm('/rules/new?diagnostic=diag-1', '/rules/new')
 
@@ -132,7 +146,8 @@ describe('RuleForm diagnostics', () => {
   it('shows extract labels and expected sample assertions', async () => {
     renderRuleForm('/rules/new', '/rules/new')
 
-    expect(screen.getByText(/Use Go-compatible regular expressions/)).toBeInTheDocument()
+    expect(screen.queryByText('Go regexp syntax')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Go-compatible regex help' })).toBeInTheDocument()
     expect(screen.getByLabelText('Amount regex')).toBeInTheDocument()
     expect(screen.getByLabelText('Merchant regex')).toBeInTheDocument()
     expect(screen.getByLabelText('Currency regex')).toBeInTheDocument()
@@ -159,18 +174,118 @@ describe('RuleForm diagnostics', () => {
     expect(type).toHaveValue('Wallet')
   })
 
-  it('adds samples and marks missing live extraction values in red', async () => {
+  it('marks missing live extraction values in red when sample data exists', async () => {
     const user = userEvent.setup()
 
     renderRuleForm('/rules/new?diagnostic=diag-1', '/rules/new')
 
-    await user.click(await screen.findByRole('button', { name: '+ Add sample' }))
-
-    expect(screen.getByRole('tab', { name: 'Sample 2' })).toBeInTheDocument()
+    await screen.findByDisplayValue(/Amount: 0/)
     expect(screen.getByText('Needs attention')).toBeInTheDocument()
     expect(
       screen.getAllByText('missing').some((node) => node.classList.contains('text-destructive')),
     ).toBe(true)
+
+    await user.click(screen.getByRole('button', { name: '+ Add sample' }))
+
+    expect(screen.getByRole('tab', { name: 'Sample 2' })).toBeInTheDocument()
+    expect(screen.getByText('No sample data yet')).toBeInTheDocument()
+  })
+
+  it('does not show missing live results or block saving when the sample is empty', async () => {
+    const user = userEvent.setup()
+
+    renderRuleForm('/rules/new', '/rules/new')
+
+    expect(screen.getByText('No sample data yet')).toBeInTheDocument()
+    expect(screen.queryByText('missing')).not.toBeInTheDocument()
+
+    await user.type(screen.getByRole('textbox', { name: 'Rule name' }), 'HDFC Credit Card')
+    await user.type(screen.getByLabelText('Subject contains'), 'Credit Card')
+    await user.type(screen.getByLabelText('Add sender'), 'alerts@hdfcbank.net{Enter}')
+    fireEvent.change(screen.getByLabelText('Amount regex'), {
+      target: { value: 'Amount: ([0-9.]+)' },
+    })
+    fireEvent.change(screen.getByLabelText('Merchant regex'), { target: { value: 'at (.*)' } })
+    await user.click(screen.getByRole('button', { name: 'Save Rule' }))
+
+    expect(queryMocks.createRule).toHaveBeenCalledTimes(1)
+  })
+
+  it('deletes samples from the workbench while keeping one blank sample', async () => {
+    const user = userEvent.setup()
+
+    renderRuleForm('/rules/new', '/rules/new')
+
+    await user.click(screen.getByRole('button', { name: '+ Add sample' }))
+    expect(screen.getByRole('tab', { name: 'Sample 2' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Delete sample Sample 2' }))
+
+    expect(screen.queryByRole('tab', { name: 'Sample 2' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Sample 1' })).toBeInTheDocument()
+  })
+
+  it('validates sample sender email inline', async () => {
+    const user = userEvent.setup()
+
+    renderRuleForm('/rules/new', '/rules/new')
+
+    await user.type(screen.getByLabelText('Sender'), 'not-an-email')
+
+    expect(screen.getByText('Enter a valid sender email address.')).toBeInTheDocument()
+  })
+
+  it('shows inline rule field errors on save', () => {
+    renderRuleForm('/rules/new', '/rules/new')
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Rule name' }), {
+      target: { value: '' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Rule' }))
+
+    expect(screen.getByText('Rule name is required.')).toBeInTheDocument()
+    expect(screen.getByText('Add at least one sender email.')).toBeInTheDocument()
+    expect(screen.getByText('Amount regex is required.')).toBeInTheDocument()
+    expect(screen.getByText('Merchant regex is required.')).toBeInTheDocument()
+    expect(screen.queryByText('Name is required')).not.toBeInTheDocument()
+    expect(queryMocks.createRule).not.toHaveBeenCalled()
+  })
+
+  it('asks how to save existing rules and can start a retroactive scan', async () => {
+    const user = userEvent.setup()
+    queryMocks.updateRule.mockImplementation((_variables, options) => options?.onSuccess?.())
+    queryMocks.rescan.mockImplementation((_reader, options) =>
+      options?.onSuccess?.({ status: 'rescanning' }),
+    )
+
+    renderRuleForm('/rules/rule-1', '/rules/:id')
+
+    await screen.findByDisplayValue('Existing rule name')
+    await user.click(screen.getByRole('button', { name: 'Save Rule' }))
+
+    expect(screen.getByRole('dialog', { name: 'Save rule changes?' })).toBeInTheDocument()
+    expect(
+      screen.getByText(/Save & Exit updates the rule and returns to the rules list/),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Save & Re-scan also re-processes emails/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Save & Re-scan' }))
+
+    expect(queryMocks.updateRule).toHaveBeenCalledTimes(1)
+    expect(queryMocks.rescan).toHaveBeenCalledWith('gmail', expect.any(Object))
+  })
+
+  it('can save existing rules without re-scanning', async () => {
+    const user = userEvent.setup()
+
+    renderRuleForm('/rules/rule-1', '/rules/:id')
+
+    await screen.findByDisplayValue('Existing rule name')
+    await user.click(screen.getByRole('button', { name: 'Save Rule' }))
+    await user.click(screen.getByRole('button', { name: 'Save & Exit' }))
+
+    expect(queryMocks.updateRule).toHaveBeenCalledTimes(1)
+    expect(queryMocks.rescan).not.toHaveBeenCalled()
   })
 
   it('keeps cancel next to save rule and exposes fixture export', () => {

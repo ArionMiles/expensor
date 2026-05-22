@@ -10,6 +10,7 @@ import {
   useRules,
   useUpdateRule,
 } from '@/api/queries'
+import { ConfirmModal } from '@/components/ConfirmModal'
 
 interface RegexResult {
   match: string | null
@@ -38,6 +39,14 @@ interface SampleState {
     merchant: string
     currency: string
   }
+}
+
+interface FieldErrors {
+  name?: string
+  senders?: string
+  amountRegex?: string
+  merchantRegex?: string
+  sampleSender?: string
 }
 
 const emptyForm: FormState = {
@@ -120,6 +129,32 @@ function indentBlock(value: string) {
     .split('\n')
     .map((line) => `  ${line}`)
     .join('\n')
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+}
+
+function sampleHasValidationData(sample?: SampleState) {
+  if (!sample) return false
+  return Boolean(
+    sample.sender.trim() ||
+    sample.subject.trim() ||
+    sample.body.trim() ||
+    sample.expected.amount.trim() ||
+    sample.expected.merchant.trim() ||
+    sample.expected.currency.trim(),
+  )
+}
+
+function inputClasses(hasError = false, extra = '') {
+  return [
+    'mt-1 w-full rounded-lg border bg-input px-3 py-2 text-sm text-foreground',
+    hasError ? 'border-destructive focus:border-destructive' : 'border-border',
+    extra,
+  ]
+    .filter(Boolean)
+    .join(' ')
 }
 
 function downloadText(filename: string, text: string, type: string) {
@@ -288,9 +323,10 @@ export function RuleForm() {
   const [activeSample, setActiveSample] = useState(0)
   const [customTypes, setCustomTypes] = useState<string[]>([])
   const [customBanks, setCustomBanks] = useState<string[]>([])
-  const [rescan, setRescan] = useState(true)
   const [toast, setToast] = useState('')
   const [formError, setFormError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
 
   const { mutate: createRule, isPending: creating } = useCreateRule()
   const { mutate: updateRule, isPending: updating } = useUpdateRule()
@@ -373,6 +409,18 @@ export function RuleForm() {
     })
   }
 
+  const deleteSample = () => {
+    setSamples((current) => {
+      if (current.length === 1) {
+        setActiveSample(0)
+        return [blankSample(1)]
+      }
+      const next = current.filter((_, index) => index !== activeSample)
+      setActiveSample(Math.max(0, Math.min(activeSample, next.length - 1)))
+      return next
+    })
+  }
+
   const exportFixture = () => {
     const sample = selectedSample
     const bankSlug = slug(form.bank || 'bank')
@@ -392,6 +440,19 @@ expected:
   }
 
   const selectedSample = samples[activeSample] ?? samples[0]
+  const selectedSampleHasData = sampleHasValidationData(selectedSample)
+  const selectedSampleSenderInvalid =
+    selectedSample?.sender.trim() !== '' && !isValidEmail(selectedSample.sender)
+  const selectedSampleHasSenderAndBody = Boolean(
+    selectedSample?.sender.trim() && selectedSample?.body.trim(),
+  )
+  const selectedSampleExpectedMissing =
+    selectedSampleHasSenderAndBody &&
+    (!selectedSample.expected.amount.trim() || !selectedSample.expected.merchant.trim())
+  const selectedSampleExtractMissing =
+    selectedSampleHasSenderAndBody &&
+    !selectedSampleExpectedMissing &&
+    (!form.amountRegex.trim() || !form.merchantRegex.trim())
   const live = useMemo(
     () => ({
       amount: testRegex(form.amountRegex, selectedSample?.body ?? ''),
@@ -401,38 +462,47 @@ expected:
     [form.amountRegex, form.currencyRegex, form.merchantRegex, selectedSample?.body],
   )
   const needsAttention =
-    live.amount.invalid ||
-    live.merchant.invalid ||
-    live.amount.match === null ||
-    live.amount.match.trim() === '' ||
-    live.merchant.match === null ||
-    live.merchant.match.trim() === '' ||
-    (selectedSample.expected.amount.trim() !== '' &&
-      live.amount.match !== selectedSample.expected.amount.trim()) ||
-    (selectedSample.expected.merchant.trim() !== '' &&
-      live.merchant.match !== selectedSample.expected.merchant.trim()) ||
-    (selectedSample.expected.currency.trim() !== '' &&
-      live.currency.match !== selectedSample.expected.currency.trim())
+    selectedSampleHasData &&
+    (selectedSampleSenderInvalid ||
+      live.amount.invalid ||
+      live.merchant.invalid ||
+      (selectedSample.body.trim() !== '' &&
+        (!live.amount.match ||
+          live.amount.match.trim() === '' ||
+          !live.merchant.match ||
+          live.merchant.match.trim() === '')) ||
+      (selectedSample.expected.amount.trim() !== '' &&
+        live.amount.match !== selectedSample.expected.amount.trim()) ||
+      (selectedSample.expected.merchant.trim() !== '' &&
+        live.merchant.match !== selectedSample.expected.merchant.trim()) ||
+      (selectedSample.expected.currency.trim() !== '' &&
+        live.currency.match !== selectedSample.expected.currency.trim()))
 
-  const handleSubmit = () => {
+  const validateForm = () => {
     setFormError('')
+    const errors: FieldErrors = {}
     const name = form.name.trim()
     if (!name) {
-      setFormError('Name is required')
-      return
+      errors.name = 'Rule name is required.'
     }
     if (form.senders.length === 0) {
-      setFormError('At least one sender is required')
-      return
+      errors.senders = 'Add at least one sender email.'
     }
-    if (!form.amountRegex) {
-      setFormError('Amount regex is required')
-      return
+    if (!form.amountRegex.trim()) {
+      errors.amountRegex = 'Amount regex is required.'
     }
-    if (!form.merchantRegex) {
-      setFormError('Merchant regex is required')
-      return
+    if (!form.merchantRegex.trim()) {
+      errors.merchantRegex = 'Merchant regex is required.'
     }
+    if (selectedSampleSenderInvalid) {
+      errors.sampleSender = 'Enter a valid sender email address.'
+    }
+    setFieldErrors(errors)
+    return { valid: Object.keys(errors).length === 0, name }
+  }
+
+  const saveRule = (shouldRescan: boolean) => {
+    const name = form.name.trim()
 
     const body = {
       name,
@@ -460,7 +530,7 @@ expected:
       { id: id!, body },
       {
         onSuccess: () => {
-          if (!rescan || !activeReader) {
+          if (!shouldRescan || !activeReader) {
             navigate('/rules')
             return
           }
@@ -479,6 +549,18 @@ expected:
         onError: (error) => setFormError(error.message),
       },
     )
+  }
+
+  const handleSubmit = () => {
+    const result = validateForm()
+    if (!result.valid) return
+
+    if (!isCreate) {
+      setSaveDialogOpen(true)
+      return
+    }
+
+    saveRule(false)
   }
 
   if (!isCreate && rulesLoading) {
@@ -520,8 +602,13 @@ expected:
             onBlur={() => {
               if (form.name.trim() === '') updateForm({ name: lastSavedName })
             }}
-            className="mt-2 max-w-[46rem] border-0 border-b border-transparent bg-transparent px-0 py-1 text-3xl font-semibold tracking-tight text-foreground outline-none transition-colors hover:border-border focus:border-primary"
+            className={`mt-2 max-w-[46rem] border-0 border-b bg-transparent px-0 py-1 text-3xl font-semibold tracking-tight text-foreground outline-none transition-colors hover:border-border ${
+              fieldErrors.name
+                ? 'border-destructive focus:border-destructive'
+                : 'border-transparent focus:border-primary'
+            }`}
           />
+          {fieldErrors.name && <p className="mt-1 text-xs text-destructive">{fieldErrors.name}</p>}
           <p className="mt-1 text-sm text-muted-foreground">
             Edit the rule once, switch samples freely, and watch match status update inline.
           </p>
@@ -601,6 +688,9 @@ expected:
                 </span>
               ))}
             </div>
+            {fieldErrors.senders && (
+              <p className="text-xs text-destructive">{fieldErrors.senders}</p>
+            )}
             <input
               aria-label="Add sender"
               value={form.senderDraft}
@@ -612,7 +702,9 @@ expected:
                 }
               }}
               placeholder="alerts@example.com"
-              className="w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-sm text-foreground"
+              className={`w-full rounded-lg border bg-input px-3 py-2 font-mono text-sm text-foreground ${
+                fieldErrors.senders ? 'border-destructive' : 'border-border'
+              }`}
             />
           </section>
 
@@ -621,22 +713,39 @@ expected:
               <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Extract
               </h2>
-              <span className="rounded-full border border-border px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Go regexp syntax
-              </span>
+              <div className="group relative">
+                <button
+                  type="button"
+                  aria-label="Go-compatible regex help"
+                  className="flex h-6 w-6 items-center justify-center rounded-full border border-border text-xs font-semibold text-muted-foreground hover:text-foreground"
+                >
+                  ?
+                </button>
+                <div className="bg-popover text-popover-foreground pointer-events-none absolute right-0 top-8 z-10 hidden w-64 rounded-lg border border-border p-3 text-xs normal-case leading-relaxed shadow-xl group-hover:block">
+                  Use Go-compatible regular expressions. Put the extracted value in the first
+                  capture group.
+                </div>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Use Go-compatible regular expressions. Each regex should expose the target value in a
-              capture group.
-            </p>
+            {selectedSampleExtractMissing && (
+              <p className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary">
+                Expected values are present. Fill amount and merchant regex next so the sample can
+                validate extraction.
+              </p>
+            )}
             <label className="block text-sm text-muted-foreground">
               Amount regex
               <input
                 aria-label="Amount regex"
                 value={form.amountRegex}
                 onChange={(event) => updateForm({ amountRegex: event.target.value })}
-                className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-xs text-foreground"
+                className={inputClasses(Boolean(fieldErrors.amountRegex), 'font-mono text-xs')}
               />
+              {fieldErrors.amountRegex && (
+                <span className="mt-1 block text-xs text-destructive">
+                  {fieldErrors.amountRegex}
+                </span>
+              )}
             </label>
             <label className="block text-sm text-muted-foreground">
               Merchant regex
@@ -644,8 +753,13 @@ expected:
                 aria-label="Merchant regex"
                 value={form.merchantRegex}
                 onChange={(event) => updateForm({ merchantRegex: event.target.value })}
-                className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-xs text-foreground"
+                className={inputClasses(Boolean(fieldErrors.merchantRegex), 'font-mono text-xs')}
               />
+              {fieldErrors.merchantRegex && (
+                <span className="mt-1 block text-xs text-destructive">
+                  {fieldErrors.merchantRegex}
+                </span>
+              )}
             </label>
             <label className="block text-sm text-muted-foreground">
               Currency regex
@@ -654,7 +768,7 @@ expected:
                 value={form.currencyRegex}
                 onChange={(event) => updateForm({ currencyRegex: event.target.value })}
                 placeholder="Optional"
-                className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-xs text-foreground"
+                className={inputClasses(false, 'font-mono text-xs')}
               />
             </label>
           </section>
@@ -709,13 +823,23 @@ expected:
                   </button>
                 ))}
               </div>
-              <button
-                type="button"
-                onClick={addSample}
-                className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary"
-              >
-                + Add sample
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={deleteSample}
+                  aria-label={`Delete sample ${selectedSample.name}`}
+                  className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-destructive"
+                >
+                  Delete sample
+                </button>
+                <button
+                  type="button"
+                  onClick={addSample}
+                  className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary"
+                >
+                  + Add sample
+                </button>
+              </div>
             </div>
 
             <div className="grid gap-3 overflow-y-auto p-4">
@@ -733,8 +857,16 @@ expected:
                   <input
                     value={selectedSample.sender}
                     onChange={(event) => updateSample({ sender: event.target.value })}
-                    className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-sm text-foreground"
+                    className={inputClasses(
+                      Boolean(fieldErrors.sampleSender || selectedSampleSenderInvalid),
+                      'font-mono',
+                    )}
                   />
+                  {(fieldErrors.sampleSender || selectedSampleSenderInvalid) && (
+                    <span className="mt-1 block text-xs text-destructive">
+                      Enter a valid sender email address.
+                    </span>
+                  )}
                 </label>
                 <label className="text-sm text-muted-foreground md:col-span-2">
                   Subject
@@ -753,6 +885,12 @@ expected:
                   className="mt-1 h-[20rem] min-h-[14rem] resize-y rounded-lg border border-border bg-input px-3 py-3 font-mono text-xs text-foreground"
                 />
               </label>
+              {selectedSampleHasSenderAndBody && selectedSampleExpectedMissing && (
+                <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-500">
+                  Fill expected amount and merchant first. Once those are set, tune the extract
+                  regex fields against this sample.
+                </p>
+              )}
             </div>
           </main>
 
@@ -797,85 +935,114 @@ expected:
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Live Result
                 </h2>
-                <span
-                  className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                    needsAttention
-                      ? 'border-destructive/40 text-destructive'
-                      : 'border-green-500/40 text-green-500'
-                  }`}
-                >
-                  {needsAttention ? 'Needs attention' : 'All checks pass'}
-                </span>
-              </div>
-              <dl className="mt-3 divide-y divide-border text-sm">
-                <div className="flex items-center justify-between gap-3 py-2">
-                  <dt className="text-muted-foreground">Sender</dt>
-                  <dd
-                    className={
-                      form.senders.includes(selectedSample.sender)
-                        ? 'text-green-500'
-                        : 'text-destructive'
-                    }
+                {selectedSampleHasData && (
+                  <span
+                    className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                      needsAttention
+                        ? 'border-destructive/40 text-destructive'
+                        : 'border-green-500/40 text-green-500'
+                    }`}
                   >
-                    {form.senders.includes(selectedSample.sender) ? 'matches' : 'missing'}
-                  </dd>
-                </div>
-                <div className="flex items-center justify-between gap-3 py-2">
-                  <dt className="text-muted-foreground">Subject</dt>
-                  <dd
-                    className={
-                      !form.subjectContains || selectedSample.subject.includes(form.subjectContains)
-                        ? 'text-green-500'
-                        : 'text-destructive'
-                    }
-                  >
-                    {!form.subjectContains || selectedSample.subject.includes(form.subjectContains)
-                      ? 'matches'
-                      : 'missing'}
-                  </dd>
-                </div>
-                <div className="flex items-center justify-between gap-3 py-2">
-                  <dt className="text-muted-foreground">Amount</dt>
-                  <dd>
-                    <ResultValue result={live.amount} />
-                  </dd>
-                </div>
-                <div className="flex items-center justify-between gap-3 py-2">
-                  <dt className="text-muted-foreground">Merchant</dt>
-                  <dd>
-                    <ResultValue result={live.merchant} />
-                  </dd>
-                </div>
-                <div className="flex items-center justify-between gap-3 py-2">
-                  <dt className="text-muted-foreground">Currency</dt>
-                  <dd>
-                    <ResultValue result={live.currency} optional />
-                  </dd>
-                </div>
-              </dl>
-            </div>
-
-            {!isCreate && (
-              <label className="flex items-start gap-2 rounded-xl border border-border bg-secondary/30 p-4 text-sm text-foreground">
-                <input
-                  type="checkbox"
-                  checked={rescan}
-                  onChange={(event) => setRescan(event.target.checked)}
-                  className="mt-1"
-                />
-                <span>
-                  Retroactive scan
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    Re-process emails from the lookback window with this updated rule.
+                    {needsAttention ? 'Needs attention' : 'All checks pass'}
                   </span>
-                </span>
-              </label>
-            )}
+                )}
+              </div>
+              {selectedSampleHasData ? (
+                <dl className="mt-3 divide-y divide-border text-sm">
+                  {selectedSample.sender.trim() !== '' && (
+                    <div className="flex items-center justify-between gap-3 py-2">
+                      <dt className="text-muted-foreground">Sender</dt>
+                      <dd
+                        className={
+                          !selectedSampleSenderInvalid &&
+                          form.senders.includes(selectedSample.sender)
+                            ? 'text-green-500'
+                            : 'text-destructive'
+                        }
+                      >
+                        {!selectedSampleSenderInvalid &&
+                        form.senders.includes(selectedSample.sender)
+                          ? 'matches'
+                          : 'missing'}
+                      </dd>
+                    </div>
+                  )}
+                  {selectedSample.subject.trim() !== '' && (
+                    <div className="flex items-center justify-between gap-3 py-2">
+                      <dt className="text-muted-foreground">Subject</dt>
+                      <dd
+                        className={
+                          !form.subjectContains ||
+                          selectedSample.subject.includes(form.subjectContains)
+                            ? 'text-green-500'
+                            : 'text-destructive'
+                        }
+                      >
+                        {!form.subjectContains ||
+                        selectedSample.subject.includes(form.subjectContains)
+                          ? 'matches'
+                          : 'missing'}
+                      </dd>
+                    </div>
+                  )}
+                  {selectedSample.body.trim() !== '' && (
+                    <>
+                      <div className="flex items-center justify-between gap-3 py-2">
+                        <dt className="text-muted-foreground">Amount</dt>
+                        <dd>
+                          <ResultValue result={live.amount} />
+                        </dd>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 py-2">
+                        <dt className="text-muted-foreground">Merchant</dt>
+                        <dd>
+                          <ResultValue result={live.merchant} />
+                        </dd>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 py-2">
+                        <dt className="text-muted-foreground">Currency</dt>
+                        <dd>
+                          <ResultValue result={live.currency} optional />
+                        </dd>
+                      </div>
+                    </>
+                  )}
+                </dl>
+              ) : (
+                <p className="mt-3 rounded-lg border border-border bg-secondary/30 px-3 py-3 text-xs text-muted-foreground">
+                  No sample data yet
+                </p>
+              )}
+            </div>
 
             {formError && <p className="text-xs text-destructive">{formError}</p>}
           </aside>
         </div>
       </div>
+
+      {saveDialogOpen && (
+        <ConfirmModal
+          title="Save rule changes?"
+          message={
+            activeReader
+              ? 'Save & Exit updates the rule and returns to the rules list. Save & Re-scan also re-processes emails from the configured lookback window using the updated rule.'
+              : 'Save & Exit updates the rule and returns to the rules list. Save & Re-scan needs an active reader, so it is unavailable right now.'
+          }
+          confirmLabel="Save & Re-scan"
+          secondaryLabel="Save & Exit"
+          confirmDisabled={!activeReader}
+          onConfirm={() => {
+            if (!activeReader) return
+            setSaveDialogOpen(false)
+            saveRule(true)
+          }}
+          onSecondary={() => {
+            setSaveDialogOpen(false)
+            saveRule(false)
+          }}
+          onCancel={() => setSaveDialogOpen(false)}
+        />
+      )}
     </div>
   )
 }

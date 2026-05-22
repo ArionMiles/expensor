@@ -5,18 +5,26 @@ interface ConfirmModalProps {
   title: string
   message: string
   confirmLabel?: string
+  secondaryLabel?: string
   variant?: 'destructive' | 'default'
   onConfirm: () => void
+  onSecondary?: () => void
   onCancel: () => void
+  confirmDisabled?: boolean
+  secondaryDisabled?: boolean
 }
 
 export function ConfirmModal({
   title,
   message,
   confirmLabel = 'Confirm',
+  secondaryLabel,
   variant = 'default',
   onConfirm,
+  onSecondary,
   onCancel,
+  confirmDisabled = false,
+  secondaryDisabled = false,
 }: ConfirmModalProps) {
   const titleId = useId()
 
@@ -46,17 +54,27 @@ export function ConfirmModal({
           {title}
         </h2>
         <p className="text-xs leading-relaxed text-muted-foreground">{message}</p>
-        <div className="flex justify-end gap-2 pt-1">
+        <div className="flex flex-wrap justify-end gap-2 pt-1">
           <button
             onClick={onCancel}
             className="rounded-md px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             Cancel
           </button>
+          {secondaryLabel && onSecondary && (
+            <button
+              onClick={onSecondary}
+              disabled={secondaryDisabled}
+              className="rounded-md border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {secondaryLabel}
+            </button>
+          )}
           <button
             onClick={onConfirm}
+            disabled={confirmDisabled}
             className={cn(
-              'rounded-md px-4 py-2 text-sm transition-colors',
+              'rounded-md px-4 py-2 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50',
               variant === 'destructive'
                 ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
                 : 'bg-primary text-primary-foreground hover:bg-primary/90',
