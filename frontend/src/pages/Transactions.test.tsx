@@ -224,7 +224,8 @@ describe('Transactions', () => {
     expect(table.querySelector('colgroup col:nth-child(2)')).toHaveClass('w-40')
     expect(table.querySelector('colgroup col:nth-child(3)')).toHaveClass('w-60')
     expect(table.querySelector('colgroup col:nth-child(4)')).toHaveClass('w-28')
-    expect(table.querySelector('colgroup col:nth-child(8)')).toHaveClass('w-64')
+    expect(table.querySelector('colgroup col:nth-child(7)')).toHaveClass('w-48')
+    expect(table.querySelector('colgroup col:nth-child(8)')).toHaveClass('w-52')
     expect(table.querySelector('thead th:last-child')).toHaveClass('sticky', 'right-0')
   })
 

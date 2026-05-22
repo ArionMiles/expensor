@@ -46,6 +46,19 @@ function stubLabels() {
   }
 }
 
+function stubManyLabels() {
+  server.use(
+    http.get('/api/config/labels', () =>
+      HttpResponse.json([
+        { name: '10min Delivery', color: '#8b5cf6' },
+        { name: 'ffd', color: '#6366f1' },
+        { name: 'fgf', color: '#06b6d4' },
+        { name: 'gfgf', color: '#10b981' },
+      ]),
+    ),
+  )
+}
+
 describe('LabelCombobox', () => {
   it('opens the input from the add button', async () => {
     const user = userEvent.setup()
@@ -158,5 +171,31 @@ describe('LabelCombobox', () => {
     await user.type(screen.getByPlaceholderText('label...'), 'Travel')
 
     expect(screen.getByText('+ Create "Travel"')).toBeInTheDocument()
+  })
+
+  it('caps visible labels and exposes the full list through an overflow popover', async () => {
+    const user = userEvent.setup()
+    stubManyLabels()
+
+    renderWithProviders(
+      <LabelCombobox
+        tx={{
+          ...baseTransaction,
+          labels: ['10min Delivery', 'ffd', 'fgf', 'gfgf'],
+        }}
+      />,
+    )
+
+    expect(await screen.findByText('10min Delivery')).toBeInTheDocument()
+    expect(screen.getByText('ffd')).toBeInTheDocument()
+    expect(screen.queryByText('fgf')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show 2 more labels' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add label' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Show 2 more labels' }))
+
+    expect(await screen.findByText('All labels')).toBeInTheDocument()
+    expect(screen.getByText('fgf')).toBeInTheDocument()
+    expect(screen.getByText('gfgf')).toBeInTheDocument()
   })
 })

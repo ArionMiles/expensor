@@ -8,16 +8,20 @@ import {
 import type { Transaction } from '@/api/types'
 import { LabelChip } from '@/components/LabelChip'
 import { SlideNotification } from '@/components/SlideNotification'
+import { useI18n } from '@/i18n/I18nProvider'
 import { cn } from '@/lib/utils'
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 interface LabelComboboxProps {
   tx: Transaction
+  maxVisibleLabels?: number
 }
 
-export function LabelCombobox({ tx }: LabelComboboxProps) {
+export function LabelCombobox({ tx, maxVisibleLabels = 2 }: LabelComboboxProps) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
+  const [overflowOpen, setOverflowOpen] = useState(false)
   const [input, setInput] = useState('')
   const [highlighted, setHighlighted] = useState(-1)
   const [dropdownPos, setDropdownPos] = useState<{
@@ -26,9 +30,12 @@ export function LabelCombobox({ tx }: LabelComboboxProps) {
     minWidth: number
     maxHeight: number
   } | null>(null)
+  const [overflowPos, setOverflowPos] = useState<{ top: number; left: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const addButtonRef = useRef<HTMLButtonElement>(null)
+  const overflowButtonRef = useRef<HTMLButtonElement>(null)
+  const overflowPortalRef = useRef<HTMLDivElement>(null)
   const optionRefs = useRef<Record<number, HTMLLIElement | null>>({})
   const escapeClosedRef = useRef(false)
   const listboxId = useId()
@@ -67,6 +74,48 @@ export function LabelCombobox({ tx }: LabelComboboxProps) {
       window.removeEventListener('keyup', handleEscape, true)
     }
   }, [open])
+
+  useEffect(() => {
+    if (!overflowOpen) return
+
+    const updateOverflowPos = () => {
+      const rect = overflowButtonRef.current?.getBoundingClientRect()
+      if (!rect) return
+
+      const viewportPadding = 8
+      const width = 224
+      setOverflowPos({
+        top: rect.bottom + 4,
+        left: Math.min(
+          Math.max(viewportPadding, rect.left),
+          window.innerWidth - width - viewportPadding,
+        ),
+      })
+    }
+
+    updateOverflowPos()
+    window.addEventListener('resize', updateOverflowPos)
+    window.addEventListener('scroll', updateOverflowPos, true)
+    return () => {
+      window.removeEventListener('resize', updateOverflowPos)
+      window.removeEventListener('scroll', updateOverflowPos, true)
+    }
+  }, [overflowOpen])
+
+  useEffect(() => {
+    if (!overflowOpen) return
+    const handler = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (
+        !overflowButtonRef.current?.contains(target) &&
+        !overflowPortalRef.current?.contains(target)
+      ) {
+        setOverflowOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [overflowOpen])
 
   useEffect(() => {
     if (!open) return
@@ -160,6 +209,8 @@ export function LabelCombobox({ tx }: LabelComboboxProps) {
   const optionCount = filtered.length + (showCreate ? 1 : 0)
   const activeOptionId =
     highlighted >= 0 && dropdownPos ? `${listboxId}-option-${highlighted}` : undefined
+  const visibleLabels = tx.labels.slice(0, maxVisibleLabels)
+  const hiddenLabelCount = Math.max(0, tx.labels.length - visibleLabels.length)
 
   useEffect(() => {
     if (highlighted < 0 || !open) return
@@ -176,18 +227,61 @@ export function LabelCombobox({ tx }: LabelComboboxProps) {
   }
 
   return (
-    <div ref={containerRef} className="flex min-w-0 flex-wrap items-center gap-1">
-      {tx.labels.map((label) => {
+    <div ref={containerRef} className="flex min-w-0 flex-nowrap items-center gap-1">
+      {visibleLabels.map((label) => {
         const meta = labels.find((l) => l.name === label)
         return (
           <LabelChip
             key={label}
             label={label}
             color={meta?.color}
+            className="max-w-[7.5rem] overflow-hidden text-ellipsis"
             onRemove={() => removeLabel({ id: tx.id, label })}
           />
         )
       })}
+
+      {hiddenLabelCount > 0 && (
+        <>
+          <button
+            ref={overflowButtonRef}
+            type="button"
+            onClick={() => setOverflowOpen((current) => !current)}
+            className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+            aria-label={t('labels.moreAria', { count: hiddenLabelCount })}
+            aria-expanded={overflowOpen}
+          >
+            +{hiddenLabelCount}
+          </button>
+          {overflowOpen &&
+            overflowPos &&
+            createPortal(
+              <div
+                ref={overflowPortalRef}
+                className="fixed z-50 w-56 rounded-md border border-border bg-card p-2 shadow-lg"
+                style={{ top: overflowPos.top, left: overflowPos.left }}
+              >
+                <div className="mb-1 px-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {t('labels.allLabels')}
+                </div>
+                <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">
+                  {tx.labels.map((label) => {
+                    const meta = labels.find((l) => l.name === label)
+                    return (
+                      <LabelChip
+                        key={label}
+                        label={label}
+                        color={meta?.color}
+                        onRemove={() => removeLabel({ id: tx.id, label })}
+                      />
+                    )
+                  })}
+                </div>
+              </div>,
+              document.body,
+            )}
+        </>
+      )}
 
       {open ? (
         <div className="relative">
