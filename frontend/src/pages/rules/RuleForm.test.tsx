@@ -297,7 +297,9 @@ describe('RuleForm diagnostics', () => {
     await screen.findByDisplayValue('Existing rule name')
     await user.click(screen.getByRole('button', { name: 'Save Rule' }))
 
-    expect(screen.queryByRole('dialog', { name: 'Export rule tests?' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('dialog', { name: 'Export contribution files?' }),
+    ).not.toBeInTheDocument()
     expect(screen.getByRole('dialog', { name: 'Save rule changes?' })).toBeInTheDocument()
     expect(
       screen.getByText(/Save & Exit updates the rule and returns to the rules list/),
@@ -329,7 +331,12 @@ describe('RuleForm diagnostics', () => {
     await screen.findByDisplayValue(/Amount: 0/)
     await user.click(screen.getByRole('button', { name: 'Save Rule' }))
 
-    expect(screen.getByRole('dialog', { name: 'Export rule tests?' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Export contribution files?' })).toBeInTheDocument()
+    expect(screen.getByText(/helping others with similar bank emails/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'See where these files go' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('.github/CONTRIBUTING.md#adding-bank-support'),
+    )
     expect(screen.queryByRole('dialog', { name: 'Save rule changes?' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Export & Continue' }))

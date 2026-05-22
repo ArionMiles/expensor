@@ -49,6 +49,9 @@ interface FieldErrors {
   sampleSender?: string
 }
 
+const RULE_CONTRIBUTION_GUIDE_URL =
+  'https://github.com/ArionMiles/expensor/blob/main/.github/CONTRIBUTING.md#adding-bank-support'
+
 const emptyForm: FormState = {
   name: '',
   subjectContains: '',
@@ -1093,10 +1096,26 @@ ${entries.join('\n')}
 
       {exportDialogOpen && (
         <ConfirmModal
-          title="Export rule tests?"
-          message="This workbench has sample data. Export the v2 rule JSON and the fixture bundle before saving so the tests can be checked in with the rule change."
+          title="Export contribution files?"
+          message={
+            <div className="space-y-3">
+              <p>
+                This workbench has sample emails. Export the rule JSON and matching test fixtures so
+                this rule can be shared with Expensor later, helping others with similar bank
+                emails.
+              </p>
+              <a
+                href={RULE_CONTRIBUTION_GUIDE_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex font-medium text-primary hover:underline"
+              >
+                See where these files go
+              </a>
+            </div>
+          }
           confirmLabel="Export & Continue"
-          secondaryLabel="Continue Without Export"
+          secondaryLabel="Skip Export"
           onConfirm={() => {
             exportRuleAndFixtures()
             setExportDialogOpen(false)

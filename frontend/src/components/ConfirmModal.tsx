@@ -1,9 +1,9 @@
 import { cn } from '@/lib/utils'
-import { useEffect, useId } from 'react'
+import { type ReactNode, useEffect, useId } from 'react'
 
 interface ConfirmModalProps {
   title: string
-  message: string
+  message: ReactNode
   confirmLabel?: string
   secondaryLabel?: string
   variant?: 'destructive' | 'default'
@@ -53,7 +53,7 @@ export function ConfirmModal({
         <h2 id={titleId} className="text-sm font-semibold text-foreground">
           {title}
         </h2>
-        <p className="text-xs leading-relaxed text-muted-foreground">{message}</p>
+        <div className="text-xs leading-relaxed text-muted-foreground">{message}</div>
         <div className="flex flex-wrap justify-end gap-2 pt-1">
           <button
             onClick={onCancel}

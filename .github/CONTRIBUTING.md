@@ -435,9 +435,13 @@ To add support for a new bank:
 1. Create an issue using the "Bank Support" template
 2. Provide a **redacted** sample email
 3. Fork and create a branch: `feature/bank-BANKNAME`
-4. Add or update the rule in `content/rules.json` and `backend/cmd/server/content/rules.json`
+4. Add or update the rule in `content/rules.json`
 5. Add one positive rule email fixture under `tests/data/rule-emails`
 6. Submit a pull request
+
+`content/rules.json` is the source of truth for contributed bundled rules. The repository currently also contains
+`backend/cmd/server/content/rules.json` because the Go binary embeds files from that package path; maintainers keep that mirror in sync while we work toward
+making `content/` the single definitive location for rule edits.
 
 Rules use the versioned v2 document format. Keep sender matching exact by adding every supported sender address to `sender_emails`, and set `source.type`,
 `source.label`, and `source.bank` so transactions can be filtered and charted by type and bank. If a rule introduces a new source type or bank, also add it
