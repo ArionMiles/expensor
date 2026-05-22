@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n/I18nProvider'
 import { type ReactNode, useEffect, useId } from 'react'
 
 interface ConfirmModalProps {
@@ -17,7 +18,7 @@ interface ConfirmModalProps {
 export function ConfirmModal({
   title,
   message,
-  confirmLabel = 'Confirm',
+  confirmLabel,
   secondaryLabel,
   variant = 'default',
   onConfirm,
@@ -26,6 +27,7 @@ export function ConfirmModal({
   confirmDisabled = false,
   secondaryDisabled = false,
 }: ConfirmModalProps) {
+  const { t } = useI18n()
   const titleId = useId()
 
   // Close on Escape
@@ -59,7 +61,7 @@ export function ConfirmModal({
             onClick={onCancel}
             className="rounded-md px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           {secondaryLabel && onSecondary && (
             <button
@@ -80,7 +82,7 @@ export function ConfirmModal({
                 : 'bg-primary text-primary-foreground hover:bg-primary/90',
             )}
           >
-            {confirmLabel}
+            {confirmLabel ?? t('common.confirm')}
           </button>
         </div>
       </div>

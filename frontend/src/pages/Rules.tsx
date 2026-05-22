@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useDeleteRule, useImportRules, useRules } from '@/api/queries'
 import type { Rule, RuleDocument, RuleImport } from '@/api/types'
 import { ConfirmModal } from '@/components/ConfirmModal'
+import { useI18n } from '@/i18n/I18nProvider'
 import { Trash2 } from 'lucide-react'
 
 type FilterKey = 'type' | 'bank' | 'origin'
@@ -11,10 +12,12 @@ type FilterKey = 'type' | 'bank' | 'origin'
 type FilterButtonProps = {
   id: FilterKey
   label: string
+  listboxLabel: string
   value: string
   options: string[]
   openFilter: FilterKey | null
   allLabel?: string
+  optionLabel?: (value: string) => string
   onChange: (value: string) => void
   onOpenChange: (value: FilterKey | null) => void
 }
@@ -30,10 +33,12 @@ function uniqueSorted(values: string[]) {
 function FilterButton({
   id,
   label,
+  listboxLabel,
   value,
   options,
   openFilter,
   allLabel = 'All',
+  optionLabel = (option) => option,
   onChange,
   onOpenChange,
 }: FilterButtonProps) {
@@ -93,7 +98,7 @@ function FilterButton({
         className="inline-flex min-w-36 items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-left text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
       >
         <span>
-          {label}: {value || allLabel}
+          {label}: {value ? optionLabel(value) : allLabel}
         </span>
         <span
           aria-hidden="true"
@@ -107,7 +112,7 @@ function FilterButton({
           <div
             ref={menuRef}
             role="listbox"
-            aria-label={`${label} filter options`}
+            aria-label={listboxLabel}
             className="fixed z-50 min-w-44 rounded-lg border border-border bg-card p-1 text-sm text-card-foreground shadow-xl"
             style={{ top: rect.bottom + 6, left: rect.left, width: Math.max(rect.width, 176) }}
           >
@@ -129,7 +134,7 @@ function FilterButton({
                 onClick={() => selectValue(option)}
                 className={`block w-full rounded-md px-3 py-2 text-left hover:bg-secondary ${value === option ? 'bg-secondary text-foreground' : 'text-muted-foreground'}`}
               >
-                {option}
+                {optionLabel(option)}
               </button>
             ))}
           </div>,
@@ -175,6 +180,7 @@ function downloadRules(rules: Rule[], selectedIds: Set<string>) {
 }
 
 export default function Rules() {
+  const { t } = useI18n()
   const { data: rules = [], isLoading } = useRules()
   const { mutate: deleteRule } = useDeleteRule()
   const { mutate: importRules, isPending: importing } = useImportRules()
@@ -269,9 +275,12 @@ export default function Rules() {
   const bulkDelete = () => {
     const deletable = rules.filter((r) => selected.has(r.id) && !r.predefined)
     if (deletable.length === 0) return
+    const countKey = deletable.length === 1 ? 'rules.bulkDeleteTitle.one' : 'rules.bulkDeleteTitle'
+    const messageKey =
+      deletable.length === 1 ? 'rules.bulkDeleteMessage.one' : 'rules.bulkDeleteMessage'
     setConfirmState({
-      title: `Delete ${deletable.length} rule${deletable.length !== 1 ? 's' : ''}`,
-      message: `Delete ${deletable.length} rule${deletable.length !== 1 ? 's' : ''}? This cannot be undone.`,
+      title: t(countKey, { count: deletable.length }),
+      message: t(messageKey, { count: deletable.length }),
       onConfirm: () => {
         deletable.forEach((r) =>
           deleteRule(r.id, {
@@ -296,12 +305,14 @@ export default function Rules() {
       try {
         parsed = JSON.parse(text) as RuleDocument
       } catch {
-        setImportMsg('Invalid JSON file')
+        setImportMsg(t('rules.importInvalid'))
         return
       }
       importRules(parsed, {
-        onSuccess: (data) =>
-          setImportMsg(`${data.imported} rule${data.imported !== 1 ? 's' : ''} imported`),
+        onSuccess: (data) => {
+          const key = data.imported === 1 ? 'rules.imported.one' : 'rules.imported'
+          setImportMsg(t(key, { count: data.imported }))
+        },
         onError: (err) => setImportMsg(err.message),
       })
     })
@@ -310,8 +321,8 @@ export default function Rules() {
 
   const handleDelete = (r: Rule) => {
     setConfirmState({
-      title: 'Delete rule',
-      message: `Delete rule "${r.name}"? This cannot be undone.`,
+      title: t('rules.deleteRule'),
+      message: t('rules.deleteRuleMessage', { name: r.name }),
       onConfirm: () => {
         deleteRule(r.id)
         setConfirmState(null)
@@ -322,7 +333,7 @@ export default function Rules() {
   if (isLoading) {
     return (
       <div className="mx-auto w-full max-w-6xl px-6 py-6">
-        <p className="text-xs text-muted-foreground">Loading…</p>
+        <p className="text-xs text-muted-foreground">{t('common.loading')}</p>
       </div>
     )
   }
@@ -334,20 +345,20 @@ export default function Rules() {
     <div className="mx-auto w-full max-w-6xl space-y-4 px-6 py-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium text-muted-foreground">Rules</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">Rules</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage extraction rules, source classification, and sender matching.
-          </p>
+          <p className="text-xs font-medium text-muted-foreground">{t('rules.pageTitle')}</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+            {t('rules.pageTitle')}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t('rules.listSummary')}</p>
         </div>
-        <div aria-label="Rule actions" className="flex flex-wrap items-center gap-2">
+        <div aria-label={t('rules.actions')} className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => downloadRules(rules, selected)}
             disabled={noneSelected}
             className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {noneSelected ? 'Export' : `Export (${selected.size} selected)`}
+            {noneSelected ? t('rules.export') : t('rules.exportSelected', { count: selected.size })}
           </button>
           <button
             type="button"
@@ -355,7 +366,7 @@ export default function Rules() {
             disabled={importing}
             className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground disabled:opacity-50"
           >
-            {importing ? 'Importing…' : 'Import'}
+            {importing ? t('rules.importing') : t('rules.import')}
           </button>
           <input
             ref={fileRef}
@@ -368,7 +379,7 @@ export default function Rules() {
             to="/rules/new"
             className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
           >
-            + New rule
+            {t('rules.newRule')}
           </Link>
         </div>
       </div>
@@ -377,36 +388,45 @@ export default function Rules() {
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="search"
-            aria-label="Search rules"
+            aria-label={t('rules.searchAria')}
             value={filters.q}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search rules, senders, subjects..."
+            placeholder={t('rules.searchPlaceholder')}
             className="min-w-64 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
           <FilterButton
             id="type"
-            label="Type"
+            label={t('common.type')}
+            listboxLabel={t('rules.typeFilterOptions')}
             value={filters.type}
             options={options.type}
             openFilter={openFilter}
+            allLabel={t('common.all')}
             onChange={(value) => setFilter('type', value)}
             onOpenChange={setOpenFilter}
           />
           <FilterButton
             id="bank"
-            label="Bank"
+            label={t('common.bank')}
+            listboxLabel={t('rules.bankFilterOptions')}
             value={filters.bank}
             options={options.bank}
             openFilter={openFilter}
+            allLabel={t('common.all')}
             onChange={(value) => setFilter('bank', value)}
             onOpenChange={setOpenFilter}
           />
           <FilterButton
             id="origin"
-            label="Origin"
+            label={t('rules.columns.origin')}
+            listboxLabel={t('rules.originFilterOptions')}
             value={filters.origin}
             options={options.origin}
             openFilter={openFilter}
+            allLabel={t('common.all')}
+            optionLabel={(value) =>
+              value === 'predefined' ? t('common.predefined') : t('common.custom')
+            }
             onChange={(value) => setFilter('origin', value)}
             onOpenChange={setOpenFilter}
           />
@@ -418,7 +438,7 @@ export default function Rules() {
                 onClick={bulkDelete}
                 className="rounded-lg border border-destructive/40 px-3 py-2 text-sm font-semibold text-destructive hover:bg-destructive/10"
               >
-                Delete ({selectedDeletableCount})
+                {t('common.delete')} ({selectedDeletableCount})
               </button>
             )}
           </div>
@@ -427,7 +447,7 @@ export default function Rules() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <table aria-label="Rules" className="w-full table-fixed text-sm">
+        <table aria-label={t('rules.tableAria')} className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b border-border bg-secondary/60">
               <td className="w-10 px-3 py-3">
@@ -435,44 +455,44 @@ export default function Rules() {
                   type="checkbox"
                   checked={allSelected}
                   onChange={toggleAll}
-                  aria-label="Select all"
+                  aria-label={t('rules.selectAll')}
                 />
               </td>
               <th
                 scope="col"
                 className="w-20 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
               >
-                Bank
+                {t('common.bank')}
               </th>
               <th
                 scope="col"
                 className="w-44 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
               >
-                Name
+                {t('common.name')}
               </th>
               <th
                 scope="col"
                 className="w-48 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
               >
-                Subject
+                {t('common.subject')}
               </th>
               <th
                 scope="col"
                 className="w-56 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
               >
-                Senders
+                {t('rules.columns.senders')}
               </th>
               <th
                 scope="col"
                 className="w-28 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
               >
-                Type
+                {t('common.type')}
               </th>
               <th
                 scope="col"
                 className="w-24 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
               >
-                Origin
+                {t('rules.columns.origin')}
               </th>
               <th
                 scope="col"
@@ -491,7 +511,7 @@ export default function Rules() {
                     type="checkbox"
                     checked={selected.has(rule.id)}
                     onChange={() => toggleRow(rule.id)}
-                    aria-label={`Select ${rule.name}`}
+                    aria-label={t('rules.selectRule', { name: rule.name })}
                   />
                 </td>
                 <td className="px-3 py-3 font-medium text-foreground">{rule.source.bank || '—'}</td>
@@ -528,11 +548,11 @@ export default function Rules() {
                 <td className="px-3 py-3">
                   {rule.predefined ? (
                     <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-primary/40 px-2 py-1 text-xs font-medium text-primary">
-                      Predefined
+                      {t('common.predefined')}
                     </span>
                   ) : (
                     <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-green-500/40 px-2 py-1 text-xs font-medium text-green-500">
-                      Custom
+                      {t('common.custom')}
                     </span>
                   )}
                 </td>
@@ -551,7 +571,7 @@ export default function Rules() {
                     >
                       <button
                         type="button"
-                        aria-label={`Delete ${rule.name}`}
+                        aria-label={t('rules.deleteRuleAria', { name: rule.name })}
                         disabled
                         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-destructive transition-colors hover:bg-destructive/10 hover:ring-1 hover:ring-destructive/30 disabled:cursor-not-allowed disabled:text-destructive/60"
                       >
@@ -561,7 +581,7 @@ export default function Rules() {
                   ) : (
                     <button
                       type="button"
-                      aria-label={`Delete ${rule.name}`}
+                      aria-label={t('rules.deleteRuleAria', { name: rule.name })}
                       onClick={() => handleDelete(rule)}
                       className="inline-flex h-8 w-8 items-center justify-center rounded-md text-destructive transition-colors hover:bg-destructive/10 hover:ring-1 hover:ring-destructive/30"
                     >
@@ -574,10 +594,10 @@ export default function Rules() {
             {visibleRules.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-3 py-8 text-center text-xs text-muted-foreground">
-                  {hasActiveFilter ? 'No rules match these filters.' : 'No rules yet.'}{' '}
+                  {hasActiveFilter ? t('rules.empty.filtered') : t('rules.empty.none')}{' '}
                   {!hasActiveFilter && (
                     <Link to="/rules/new" className="text-primary hover:underline">
-                      Create one
+                      {t('common.createOne')}
                     </Link>
                   )}
                 </td>
@@ -592,7 +612,7 @@ export default function Rules() {
           className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded bg-foreground px-2 py-1 text-xs text-background shadow-md"
           style={{ left: predefinedTooltip.x, top: predefinedTooltip.y }}
         >
-          Predefined rules cannot be deleted
+          {t('rules.deletePredefinedTooltip')}
         </div>
       )}
 
@@ -600,7 +620,7 @@ export default function Rules() {
         <ConfirmModal
           title={confirmState.title}
           message={confirmState.message}
-          confirmLabel="Delete"
+          confirmLabel={t('common.delete')}
           variant="destructive"
           onConfirm={confirmState.onConfirm}
           onCancel={() => setConfirmState(null)}

@@ -11,6 +11,8 @@ import {
   useUpdateRule,
 } from '@/api/queries'
 import { ConfirmModal } from '@/components/ConfirmModal'
+import { useI18n } from '@/i18n/I18nProvider'
+import type { ReactNode } from 'react'
 
 interface RegexResult {
   match: string | null
@@ -74,13 +76,16 @@ function testRegex(pattern: string, body: string): RegexResult {
   }
 }
 
-function diagnosticSample(diagnostic: {
-  sender_email: string
-  subject: string
-  email_body: string
-}): SampleState {
+function diagnosticSample(
+  diagnostic: {
+    sender_email: string
+    subject: string
+    email_body: string
+  },
+  name: string,
+): SampleState {
   return {
-    name: 'Diagnostic sample',
+    name,
     sender: diagnostic.sender_email,
     subject: diagnostic.subject,
     body: diagnostic.email_body,
@@ -92,9 +97,9 @@ function diagnosticSample(diagnostic: {
   }
 }
 
-function blankSample(index: number): SampleState {
+function blankSample(name: string): SampleState {
   return {
-    name: `Sample ${index}`,
+    name,
     sender: '',
     subject: '',
     body: '',
@@ -176,20 +181,24 @@ function downloadText(filename: string, text: string, type: string) {
 
 type ComboboxProps = {
   label: string
+  listboxLabel: string
   value: string
   options: string[]
   customValues: string[]
   onChange: (value: string) => void
   onAdd: (value: string) => void
+  addLabel: (value: string) => string
 }
 
 function SourceValueCombobox({
   label,
+  listboxLabel,
   value,
   options,
   customValues,
   onChange,
   onAdd,
+  addLabel,
 }: ComboboxProps) {
   const [open, setOpen] = useState(false)
   const [readOnly, setReadOnly] = useState(true)
@@ -266,7 +275,7 @@ function SourceValueCombobox({
         createPortal(
           <div
             role="listbox"
-            aria-label={`${label} options`}
+            aria-label={listboxLabel}
             className="fixed z-50 rounded-lg border border-border bg-card p-1 text-sm text-card-foreground shadow-xl"
             style={{ left: rect.left, top: rect.bottom + 6, width: rect.width }}
           >
@@ -292,7 +301,7 @@ function SourceValueCombobox({
                 onClick={add}
                 className="block w-full rounded-md px-3 py-2 text-left font-medium text-primary hover:bg-secondary"
               >
-                Add &quot;{value.trim()}&quot;
+                {addLabel(value.trim())}
               </button>
             )}
           </div>,
@@ -303,15 +312,16 @@ function SourceValueCombobox({
 }
 
 function ResultValue({ result, optional = false }: { result: RegexResult; optional?: boolean }) {
-  if (result.invalid) return <span className="text-destructive">invalid</span>
+  const { t } = useI18n()
+  if (result.invalid) return <span className="text-destructive">{t('common.invalid')}</span>
   if (result.match !== null && result.match.trim() !== '') {
     return <span className="font-mono text-green-500">{result.match}</span>
   }
-  if (optional) return <span className="text-muted-foreground">optional</span>
-  return <span className="text-destructive">missing</span>
+  if (optional) return <span className="text-muted-foreground">{t('common.optional')}</span>
+  return <span className="text-destructive">{t('common.missing')}</span>
 }
 
-function HintDot({ label, children }: { label: string; children: string }) {
+function HintDot({ label, children }: { label: string; children: ReactNode }) {
   return (
     <span className="group relative inline-flex items-center">
       <button
@@ -327,6 +337,7 @@ function HintDot({ label, children }: { label: string; children: string }) {
 }
 
 export function RuleForm() {
+  const { t } = useI18n()
   const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -340,8 +351,10 @@ export function RuleForm() {
   const { data: facets } = useFacets()
 
   const [form, setForm] = useState<FormState>(emptyForm)
-  const [lastSavedName, setLastSavedName] = useState('New Rule')
-  const [samples, setSamples] = useState<SampleState[]>([blankSample(1)])
+  const [lastSavedName, setLastSavedName] = useState(t('rules.editor.newRuleName'))
+  const [samples, setSamples] = useState<SampleState[]>([
+    blankSample(t('rules.editor.sampleDefaultName', { index: 1 })),
+  ])
   const [activeSample, setActiveSample] = useState(0)
   const [customTypes, setCustomTypes] = useState<string[]>([])
   const [customBanks, setCustomBanks] = useState<string[]>([])
@@ -357,7 +370,7 @@ export function RuleForm() {
 
   useEffect(() => {
     if (!rule) return
-    const nextName = rule.name || 'New Rule'
+    const nextName = rule.name || t('rules.editor.newRuleName')
     setLastSavedName(nextName)
     setForm({
       name: nextName,
@@ -378,11 +391,11 @@ export function RuleForm() {
   useEffect(() => {
     if (!diagnostic) return
 
-    setSamples([diagnosticSample(diagnostic)])
+    setSamples([diagnosticSample(diagnostic, t('rules.editor.diagnosticSample'))])
     setActiveSample(0)
     if (!isCreate) return
 
-    const nextName = diagnostic.rule_name || 'New Rule'
+    const nextName = diagnostic.rule_name || t('rules.editor.newRuleName')
     setLastSavedName(nextName)
     setForm({
       name: nextName,
@@ -426,7 +439,11 @@ export function RuleForm() {
 
   const addSample = () => {
     setSamples((current) => {
-      const next = [...current, blankSample(current.length + 1)]
+      const nextIndex = current.length + 1
+      const next = [
+        ...current,
+        blankSample(t('rules.editor.sampleDefaultName', { index: nextIndex })),
+      ]
       setActiveSample(next.length - 1)
       return next
     })
@@ -436,7 +453,7 @@ export function RuleForm() {
     setSamples((current) => {
       if (current.length === 1) {
         setActiveSample(0)
-        return [blankSample(1)]
+        return [blankSample(t('rules.editor.sampleDefaultName', { index: 1 }))]
       }
       const next = current.filter((_, index) => index !== sampleIndex)
       setActiveSample((currentActive) => {
@@ -482,7 +499,7 @@ ${indentBlock(sample.body || '', '      ')}
     })
 
     return `version: 1
-rule: ${yamlScalar(form.name || 'New Rule')}
+rule: ${yamlScalar(form.name || t('rules.editor.newRuleName'))}
 samples:
 ${entries.join('\n')}
 `
@@ -560,19 +577,19 @@ ${entries.join('\n')}
     const errors: FieldErrors = {}
     const name = form.name.trim()
     if (!name) {
-      errors.name = 'Rule name is required.'
+      errors.name = t('rules.editor.ruleNameRequired')
     }
     if (form.senders.length === 0) {
-      errors.senders = 'Add at least one sender email.'
+      errors.senders = t('rules.editor.senderRequired')
     }
     if (!form.amountRegex.trim()) {
-      errors.amountRegex = 'Amount regex is required.'
+      errors.amountRegex = t('rules.editor.amountRegexRequired')
     }
     if (!form.merchantRegex.trim()) {
-      errors.merchantRegex = 'Merchant regex is required.'
+      errors.merchantRegex = t('rules.editor.merchantRegexRequired')
     }
     if (selectedSampleSenderInvalid) {
-      errors.sampleSender = 'Enter a valid sender email address.'
+      errors.sampleSender = t('rules.editor.senderEmailInvalid')
     }
     setFieldErrors(errors)
     return { valid: Object.keys(errors).length === 0, name }
@@ -601,8 +618,8 @@ ${entries.join('\n')}
             onSuccess: (data) => {
               const msg =
                 data.status === 'rescanning'
-                  ? 'Rule saved. Retroactive scan started.'
-                  : 'Rule saved. Retroactive scan queued — will run on the next daemon start.'
+                  ? t('rules.editor.toastRescanStarted')
+                  : t('rules.editor.toastRescanQueued')
               setToast(msg)
               setTimeout(() => navigate('/rules'), 2500)
             },
@@ -638,7 +655,7 @@ ${entries.join('\n')}
   if (!isCreate && rulesLoading) {
     return (
       <div className="mx-auto w-full max-w-6xl px-6 py-6">
-        <p className="text-xs text-muted-foreground">Loading...</p>
+        <p className="text-xs text-muted-foreground">{t('rules.editor.loading')}</p>
       </div>
     )
   }
@@ -646,9 +663,9 @@ ${entries.join('\n')}
   if (!isCreate && !rule) {
     return (
       <div className="mx-auto w-full max-w-6xl px-6 py-6">
-        <p className="text-sm text-destructive">Rule not found.</p>
+        <p className="text-sm text-destructive">{t('rules.editor.ruleNotFound')}</p>
         <Link to="/rules" className="text-xs text-primary hover:underline">
-          Back to rules
+          {t('rules.backToRules')}
         </Link>
       </div>
     )
@@ -662,13 +679,15 @@ ${entries.join('\n')}
         <div className="min-w-0">
           <nav className="flex items-center gap-2 text-sm text-muted-foreground">
             <Link to="/rules" className="hover:text-foreground">
-              Rules
+              {t('rules.pageTitle')}
             </Link>
             <span aria-hidden="true">›</span>
-            <span className="text-foreground">{isCreate ? 'New Rule' : 'Edit Rule'}</span>
+            <span className="text-foreground">
+              {isCreate ? t('rules.editor.newRuleName') : t('rules.editor.editRule')}
+            </span>
           </nav>
           <input
-            aria-label="Rule name"
+            aria-label={t('rules.editor.ruleName')}
             value={form.name}
             onChange={(event) => updateForm({ name: event.target.value })}
             onBlur={() => {
@@ -681,14 +700,12 @@ ${entries.join('\n')}
             }`}
           />
           {fieldErrors.name && <p className="mt-1 text-xs text-destructive">{fieldErrors.name}</p>}
-          <p className="mt-1 text-sm text-muted-foreground">
-            Edit the rule once, switch samples freely, and watch match status update inline.
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{t('rules.editor.formSummary')}</p>
         </div>
-        <div aria-label="Rule editor actions" className="flex flex-wrap items-center gap-2">
+        <div aria-label={t('rules.editor.actions')} className="flex flex-wrap items-center gap-2">
           {rule?.predefined && (
             <span className="rounded-full border border-primary/40 px-3 py-1 text-xs font-medium text-primary">
-              Predefined
+              {t('common.predefined')}
             </span>
           )}
           <button
@@ -697,13 +714,13 @@ ${entries.join('\n')}
             disabled={isPending}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
-            {isPending ? 'Saving...' : 'Save Rule'}
+            {isPending ? t('common.saving') : t('rules.editor.saveRule')}
           </button>
           <Link
             to="/rules"
             className="inline-flex rounded-lg border border-border px-4 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
           >
-            Cancel
+            {t('rules.editor.cancel')}
           </Link>
         </div>
       </div>
@@ -716,15 +733,15 @@ ${entries.join('\n')}
 
       <div className="grid min-h-[32rem] grid-cols-1 gap-4 lg:grid-cols-[24rem_minmax(0,1fr)]">
         <aside
-          aria-label="Rule settings"
+          aria-label={t('rules.editor.ruleSettings')}
           className="space-y-4 rounded-xl border border-border bg-card p-4"
         >
           <section className="space-y-2 border-b border-border pb-4">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Subject Contains
+              {t('rules.editor.subjectContains')}
             </h2>
             <input
-              aria-label="Subject contains"
+              aria-label={t('rules.editor.subjectContainsInput')}
               value={form.subjectContains}
               onChange={(event) => updateForm({ subjectContains: event.target.value })}
               className="w-full rounded-lg border border-border bg-input px-3 py-2 text-sm text-foreground"
@@ -733,7 +750,7 @@ ${entries.join('\n')}
 
           <section className="space-y-2 border-b border-border pb-4">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Sender
+              {t('common.sender')}
             </h2>
             <div className="flex flex-wrap gap-2">
               {form.senders.map((sender) => (
@@ -745,7 +762,7 @@ ${entries.join('\n')}
                   <button
                     type="button"
                     onClick={() => removeSender(sender)}
-                    aria-label={`Remove ${sender}`}
+                    aria-label={t('rules.editor.removeSender', { sender })}
                     className="text-sm leading-none text-muted-foreground hover:text-foreground"
                   >
                     x
@@ -757,7 +774,7 @@ ${entries.join('\n')}
               <p className="text-xs text-destructive">{fieldErrors.senders}</p>
             )}
             <input
-              aria-label="Add sender"
+              aria-label={t('rules.addSender')}
               value={form.senderDraft}
               onChange={(event) => updateForm({ senderDraft: event.target.value })}
               onKeyDown={(event) => {
@@ -777,30 +794,31 @@ ${entries.join('\n')}
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Extract
+                  {t('rules.editor.extract')}
                 </h2>
                 {selectedSampleExtractMissing && (
-                  <HintDot label="Extract regex needed">Fill amount and merchant regex</HintDot>
+                  <HintDot label={t('rules.editor.extractRegexNeeded')}>
+                    {t('rules.editor.extractRegexNeededHint')}
+                  </HintDot>
                 )}
               </div>
               <div className="group relative">
                 <button
                   type="button"
-                  aria-label="Go-compatible regex help"
+                  aria-label={t('rules.editor.extractSyntaxHelp')}
                   className="flex h-6 w-6 items-center justify-center rounded-full border border-border text-xs font-semibold text-muted-foreground hover:text-foreground"
                 >
                   ?
                 </button>
                 <div className="pointer-events-none absolute right-0 top-8 z-50 hidden w-72 rounded-lg border border-border bg-card p-3 text-xs normal-case leading-relaxed text-card-foreground shadow-xl ring-1 ring-border group-hover:block">
-                  Use Go-compatible regular expressions. Put the extracted value in the first
-                  capture group.
+                  {t('rules.editor.extractSyntaxHelpText')}
                 </div>
               </div>
             </div>
             <label className="block text-sm text-muted-foreground">
-              Amount regex
+              {t('rules.editor.amountRegex')}
               <input
-                aria-label="Amount regex"
+                aria-label={t('rules.editor.amountRegex')}
                 value={form.amountRegex}
                 onChange={(event) => updateForm({ amountRegex: event.target.value })}
                 className={inputClasses(Boolean(fieldErrors.amountRegex), 'font-mono text-xs')}
@@ -812,9 +830,9 @@ ${entries.join('\n')}
               )}
             </label>
             <label className="block text-sm text-muted-foreground">
-              Merchant regex
+              {t('rules.editor.merchantRegex')}
               <input
-                aria-label="Merchant regex"
+                aria-label={t('rules.editor.merchantRegex')}
                 value={form.merchantRegex}
                 onChange={(event) => updateForm({ merchantRegex: event.target.value })}
                 className={inputClasses(Boolean(fieldErrors.merchantRegex), 'font-mono text-xs')}
@@ -826,12 +844,12 @@ ${entries.join('\n')}
               )}
             </label>
             <label className="block text-sm text-muted-foreground">
-              Currency regex
+              {t('rules.editor.currencyRegex')}
               <input
-                aria-label="Currency regex"
+                aria-label={t('rules.editor.currencyRegex')}
                 value={form.currencyRegex}
                 onChange={(event) => updateForm({ currencyRegex: event.target.value })}
-                placeholder="Optional"
+                placeholder={t('common.optional')}
                 className={inputClasses(false, 'font-mono text-xs')}
               />
             </label>
@@ -839,39 +857,43 @@ ${entries.join('\n')}
 
           <section className="space-y-3">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Source Type
+              {t('rules.editor.sourceTypeSection')}
             </h2>
             <SourceValueCombobox
-              label="Type"
+              label={t('common.type')}
+              listboxLabel={t('rules.editor.typeOptions')}
               value={form.sourceType}
               options={facets?.source_types ?? []}
               customValues={customTypes}
               onChange={(value) => updateForm({ sourceType: value })}
               onAdd={(value) => setCustomTypes((current) => uniqueSorted([...current, value]))}
+              addLabel={(value) => t('rules.editor.addOption', { value })}
             />
             <h2 className="border-t border-border pt-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Bank
+              {t('rules.editor.bankSection')}
             </h2>
             <SourceValueCombobox
-              label="Bank"
+              label={t('common.bank')}
+              listboxLabel={t('rules.editor.bankOptions')}
               value={form.bank}
               options={facets?.banks ?? []}
               customValues={customBanks}
               onChange={(value) => updateForm({ bank: value })}
               onAdd={(value) => setCustomBanks((current) => uniqueSorted([...current, value]))}
+              addLabel={(value) => t('rules.editor.addOption', { value })}
             />
           </section>
         </aside>
 
         <div
-          aria-label="Sample workbench"
+          aria-label={t('rules.editor.sampleWorkbench')}
           className="grid min-w-0 overflow-hidden rounded-xl border border-border bg-card lg:grid-cols-[minmax(0,1fr)_20rem]"
         >
           <main className="min-w-0 border-b border-border lg:border-b-0 lg:border-r">
             <div className="flex min-w-0 items-center gap-3 border-b border-border p-4">
               <div
                 role="tablist"
-                aria-label="Sample tabs"
+                aria-label={t('rules.editor.sampleTabs')}
                 className="flex min-w-0 flex-1 flex-nowrap gap-2 overflow-x-auto pb-1"
               >
                 {samples.map((sample, index) => (
@@ -894,7 +916,7 @@ ${entries.join('\n')}
                     </button>
                     <button
                       type="button"
-                      aria-label={`Remove sample ${sample.name}`}
+                      aria-label={t('rules.editor.removeSample', { name: sample.name })}
                       onClick={(event) => {
                         event.stopPropagation()
                         deleteSampleAt(index)
@@ -911,14 +933,14 @@ ${entries.join('\n')}
                 onClick={addSample}
                 className="shrink-0 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary"
               >
-                + Add sample
+                {t('rules.addSample')}
               </button>
             </div>
 
             <div className="grid gap-3 overflow-y-auto p-4">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <label className="text-sm text-muted-foreground">
-                  Name
+                  {t('common.name')}
                   <input
                     value={selectedSample.name}
                     onChange={(event) => updateSample({ name: event.target.value })}
@@ -926,7 +948,7 @@ ${entries.join('\n')}
                   />
                 </label>
                 <label className="text-sm text-muted-foreground">
-                  Sender
+                  {t('common.sender')}
                   <input
                     value={selectedSample.sender}
                     onChange={(event) => updateSample({ sender: event.target.value })}
@@ -937,12 +959,12 @@ ${entries.join('\n')}
                   />
                   {(fieldErrors.sampleSender || selectedSampleSenderInvalid) && (
                     <span className="mt-1 block text-xs text-destructive">
-                      Enter a valid sender email address.
+                      {t('rules.editor.senderEmailInvalid')}
                     </span>
                   )}
                 </label>
                 <label className="text-sm text-muted-foreground md:col-span-2">
-                  Subject
+                  {t('common.subject')}
                   <input
                     value={selectedSample.subject}
                     onChange={(event) => updateSample({ subject: event.target.value })}
@@ -951,7 +973,7 @@ ${entries.join('\n')}
                 </label>
               </div>
               <label className="flex min-h-0 flex-col text-sm text-muted-foreground">
-                Email body
+                {t('rules.editor.emailBody')}
                 <textarea
                   value={selectedSample.body}
                   onChange={(event) => updateSample({ body: event.target.value })}
@@ -965,37 +987,37 @@ ${entries.join('\n')}
             <div className="rounded-xl border border-border p-4">
               <div className="flex items-center gap-2">
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Expected
+                  {t('rules.editor.expected')}
                 </h2>
                 {selectedSampleExpectedMissing && (
-                  <HintDot label="Expected values needed">
-                    Fill expected amount and merchant
+                  <HintDot label={t('rules.editor.expectedValuesNeeded')}>
+                    {t('rules.editor.fillExpectedHint')}
                   </HintDot>
                 )}
               </div>
               <div className="mt-3 space-y-3">
                 <label className="block text-sm text-muted-foreground">
-                  Amount
+                  {t('common.amount')}
                   <input
-                    aria-label="Expected amount"
+                    aria-label={t('rules.editor.expectedAmount')}
                     value={selectedSample.expected.amount}
                     onChange={(event) => updateExpected({ amount: event.target.value })}
                     className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-sm text-foreground"
                   />
                 </label>
                 <label className="block text-sm text-muted-foreground">
-                  Merchant
+                  {t('common.merchant')}
                   <input
-                    aria-label="Expected merchant"
+                    aria-label={t('rules.editor.expectedMerchant')}
                     value={selectedSample.expected.merchant}
                     onChange={(event) => updateExpected({ merchant: event.target.value })}
                     className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-sm text-foreground"
                   />
                 </label>
                 <label className="block text-sm text-muted-foreground">
-                  Currency
+                  {t('common.currency')}
                   <input
-                    aria-label="Expected currency"
+                    aria-label={t('rules.editor.expectedCurrency')}
                     value={selectedSample.expected.currency}
                     onChange={(event) => updateExpected({ currency: event.target.value })}
                     className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-sm text-foreground"
@@ -1007,7 +1029,7 @@ ${entries.join('\n')}
             <div className="rounded-xl border border-border p-4">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Live Result
+                  {t('rules.editor.liveResult')}
                 </h2>
                 {selectedSampleHasData && (
                   <span
@@ -1017,7 +1039,9 @@ ${entries.join('\n')}
                         : 'border-green-500/40 text-green-500'
                     }`}
                   >
-                    {needsAttention ? 'Needs attention' : 'All checks pass'}
+                    {needsAttention
+                      ? t('rules.editor.needsAttention')
+                      : t('rules.editor.allChecksPass')}
                   </span>
                 )}
               </div>
@@ -1025,7 +1049,7 @@ ${entries.join('\n')}
                 <dl className="mt-3 divide-y divide-border text-sm">
                   {selectedSample.sender.trim() !== '' && (
                     <div className="flex items-center justify-between gap-3 py-2">
-                      <dt className="text-muted-foreground">Sender</dt>
+                      <dt className="text-muted-foreground">{t('common.sender')}</dt>
                       <dd
                         className={
                           !selectedSampleSenderInvalid &&
@@ -1036,14 +1060,14 @@ ${entries.join('\n')}
                       >
                         {!selectedSampleSenderInvalid &&
                         form.senders.includes(selectedSample.sender)
-                          ? 'matches'
-                          : 'missing'}
+                          ? t('common.matches')
+                          : t('common.missing')}
                       </dd>
                     </div>
                   )}
                   {selectedSample.subject.trim() !== '' && (
                     <div className="flex items-center justify-between gap-3 py-2">
-                      <dt className="text-muted-foreground">Subject</dt>
+                      <dt className="text-muted-foreground">{t('common.subject')}</dt>
                       <dd
                         className={
                           !form.subjectContains ||
@@ -1054,27 +1078,27 @@ ${entries.join('\n')}
                       >
                         {!form.subjectContains ||
                         selectedSample.subject.includes(form.subjectContains)
-                          ? 'matches'
-                          : 'missing'}
+                          ? t('common.matches')
+                          : t('common.missing')}
                       </dd>
                     </div>
                   )}
                   {selectedSample.body.trim() !== '' && (
                     <>
                       <div className="flex items-center justify-between gap-3 py-2">
-                        <dt className="text-muted-foreground">Amount</dt>
+                        <dt className="text-muted-foreground">{t('common.amount')}</dt>
                         <dd>
                           <ResultValue result={live.amount} />
                         </dd>
                       </div>
                       <div className="flex items-center justify-between gap-3 py-2">
-                        <dt className="text-muted-foreground">Merchant</dt>
+                        <dt className="text-muted-foreground">{t('common.merchant')}</dt>
                         <dd>
                           <ResultValue result={live.merchant} />
                         </dd>
                       </div>
                       <div className="flex items-center justify-between gap-3 py-2">
-                        <dt className="text-muted-foreground">Currency</dt>
+                        <dt className="text-muted-foreground">{t('common.currency')}</dt>
                         <dd>
                           <ResultValue result={live.currency} optional />
                         </dd>
@@ -1084,7 +1108,7 @@ ${entries.join('\n')}
                 </dl>
               ) : (
                 <p className="mt-3 rounded-lg border border-border bg-secondary/30 px-3 py-3 text-xs text-muted-foreground">
-                  No sample data yet
+                  {t('rules.editor.noSampleData')}
                 </p>
               )}
             </div>
@@ -1096,26 +1120,22 @@ ${entries.join('\n')}
 
       {exportDialogOpen && (
         <ConfirmModal
-          title="Export contribution files?"
+          title={t('rules.editor.exportContributionTitle')}
           message={
             <div className="space-y-3">
-              <p>
-                This workbench has sample emails. Export the rule JSON and matching test fixtures so
-                this rule can be shared with Expensor later, helping others with similar bank
-                emails.
-              </p>
+              <p>{t('rules.editor.exportContributionBody')}</p>
               <a
                 href={RULE_CONTRIBUTION_GUIDE_URL}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex font-medium text-primary hover:underline"
               >
-                See where these files go
+                {t('rules.editor.contributionGuide')}
               </a>
             </div>
           }
-          confirmLabel="Export & Continue"
-          secondaryLabel="Skip Export"
+          confirmLabel={t('rules.editor.exportContinue')}
+          secondaryLabel={t('rules.editor.skipExport')}
           onConfirm={() => {
             exportRuleAndFixtures()
             setExportDialogOpen(false)
@@ -1131,14 +1151,14 @@ ${entries.join('\n')}
 
       {saveDialogOpen && (
         <ConfirmModal
-          title="Save rule changes?"
+          title={t('rules.editor.saveDialogTitle')}
           message={
             activeReader
-              ? 'Save & Exit updates the rule and returns to the rules list. Save & Re-scan also re-processes emails from the configured lookback window using the updated rule.'
-              : 'Save & Exit updates the rule and returns to the rules list. Save & Re-scan needs an active reader, so it is unavailable right now.'
+              ? t('rules.editor.saveDialogWithReader')
+              : t('rules.editor.saveDialogNoReader')
           }
-          confirmLabel="Save & Re-scan"
-          secondaryLabel="Save & Exit"
+          confirmLabel={t('rules.editor.saveAndRescan')}
+          secondaryLabel={t('rules.editor.saveAndExit')}
           confirmDisabled={!activeReader}
           onConfirm={() => {
             if (!activeReader) return

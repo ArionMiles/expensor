@@ -543,6 +543,7 @@ function FilterPanel({
   updateFilter,
   updateParams,
 }: FilterPanelProps) {
+  const { t } = useI18n()
   const [addOpen, setAddOpen] = useState(false)
   const [addHighlighted, setAddHighlighted] = useState(-1)
   const addBtnRef = useRef<HTMLButtonElement>(null)
@@ -624,8 +625,8 @@ function FilterPanel({
         value={filters.source_type ?? ''}
         onChange={(v) => updateFilter('source_type', v)}
         options={facets?.source_types ?? []}
-        placeholder="Type"
-        label="Filter by source type"
+        placeholder={t('common.type')}
+        label={t('transactions.filter.sourceType')}
       />
 
       {/* Always-visible: Bank */}
@@ -633,8 +634,8 @@ function FilterPanel({
         value={filters.bank ?? ''}
         onChange={(v) => updateFilter('bank', v)}
         options={facets?.banks ?? []}
-        placeholder="Bank"
-        label="Filter by bank"
+        placeholder={t('common.bank')}
+        label={t('transactions.filter.bank')}
       />
 
       {/* Always-visible: Label */}
@@ -1247,13 +1248,13 @@ export function Transactions() {
                 scope="col"
                 className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
               >
-                Bank
+                {t('common.bank')}
               </th>
               <th
                 scope="col"
                 className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
               >
-                Type
+                {t('common.type')}
               </th>
               <th
                 scope="col"
@@ -1307,8 +1308,8 @@ export function Transactions() {
               <tr>
                 <td colSpan={10} className="px-3 py-12 text-center text-xs text-muted-foreground">
                   {hasActiveFilters
-                    ? 'No transactions match the current filters'
-                    : 'No transactions found'}
+                    ? t('transactions.empty.filtered')
+                    : t('transactions.empty.none')}
                 </td>
               </tr>
             )}

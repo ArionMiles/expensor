@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DisplayProvider } from '@/contexts/DisplayContext'
+import { I18nProvider } from '@/i18n/I18nProvider'
 import { createTestQueryClient } from '@/test/render'
 import { RuleForm } from './RuleForm'
 
@@ -85,13 +86,15 @@ function renderRuleForm(route: string, path: string) {
   const queryClient = createTestQueryClient()
   return render(
     <QueryClientProvider client={queryClient}>
-      <DisplayProvider>
-        <MemoryRouter initialEntries={[route]}>
-          <Routes>
-            <Route path={path} element={<RuleForm />} />
-          </Routes>
-        </MemoryRouter>
-      </DisplayProvider>
+      <I18nProvider>
+        <DisplayProvider>
+          <MemoryRouter initialEntries={[route]}>
+            <Routes>
+              <Route path={path} element={<RuleForm />} />
+            </Routes>
+          </MemoryRouter>
+        </DisplayProvider>
+      </I18nProvider>
     </QueryClientProvider>,
   )
 }

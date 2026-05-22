@@ -1007,6 +1007,7 @@ function SummarySection({
   currentMonthRange?: { from: string; to: string } | null
 }) {
   const navigate = useNavigate()
+  const { t } = useI18n()
 
   const monthRange = summaryMode === 'current_month' ? currentMonthRange : null
 
@@ -1047,31 +1048,31 @@ function SummarySection({
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <BreakdownChart
-          title="By category"
+          title={t('dashboard.breakdown.byCategory')}
           data={dashboardBreakdownData(summary.charts.by_category)}
           currency={currency}
           onSliceClick={(slice) => goToBreakdownSlice(slice, 'category')}
         />
         <BreakdownChart
-          title="By bucket"
+          title={t('dashboard.breakdown.byBucket')}
           data={dashboardBreakdownData(summary.charts.by_bucket, 'bucket')}
           currency={currency}
           onSliceClick={(slice) => goToBreakdownSlice(slice, 'bucket')}
         />
         <BreakdownChart
-          title="By label"
+          title={t('dashboard.breakdown.byLabel')}
           data={dashboardBreakdownData(summary.charts.by_label)}
           currency={currency}
           onSliceClick={(slice) => goToBreakdownSlice(slice, 'label')}
         />
         <BreakdownChart
-          title="By source type"
+          title={t('dashboard.breakdown.bySourceType')}
           data={summary.charts.by_source_type}
           currency={currency}
           onSliceClick={(slice) => goToBreakdownSlice(slice, 'source_type')}
         />
         <BreakdownChart
-          title="By bank"
+          title={t('dashboard.breakdown.byBank')}
           data={summary.charts.by_bank}
           currency={currency}
           onSliceClick={(slice) => goToBreakdownSlice(slice, 'bank')}
