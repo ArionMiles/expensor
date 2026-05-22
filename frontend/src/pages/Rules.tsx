@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useDeleteRule, useImportRules, useRules } from '@/api/queries'
@@ -9,11 +9,14 @@ import { Trash2 } from 'lucide-react'
 type FilterKey = 'type' | 'bank' | 'origin'
 
 type FilterButtonProps = {
+  id: FilterKey
   label: string
   value: string
   options: string[]
+  openFilter: FilterKey | null
   allLabel?: string
   onChange: (value: string) => void
+  onOpenChange: (value: FilterKey | null) => void
 }
 
 function sourceValue(rule: Rule, key: 'type' | 'bank') {
@@ -24,24 +27,60 @@ function uniqueSorted(values: string[]) {
   return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b))
 }
 
-function FilterButton({ label, value, options, allLabel = 'All', onChange }: FilterButtonProps) {
+function FilterButton({
+  id,
+  label,
+  value,
+  options,
+  openFilter,
+  allLabel = 'All',
+  onChange,
+  onOpenChange,
+}: FilterButtonProps) {
   const [rect, setRect] = useState<DOMRect | null>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const open = rect !== null
+  const menuRef = useRef<HTMLDivElement>(null)
+  const open = openFilter === id && rect !== null
 
   const toggle = () => {
     if (open) {
       setRect(null)
+      onOpenChange(null)
       return
     }
     const nextRect = buttonRef.current?.getBoundingClientRect()
-    if (nextRect) setRect(nextRect)
+    if (nextRect) {
+      setRect(nextRect)
+      onOpenChange(id)
+    }
   }
 
   const selectValue = (nextValue: string) => {
     onChange(nextValue)
     setRect(null)
+    onOpenChange(null)
   }
+
+  useEffect(() => {
+    if (!open) return
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) return
+      setRect(null)
+      onOpenChange(null)
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setRect(null)
+      onOpenChange(null)
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [onOpenChange, open])
 
   return (
     <>
@@ -66,6 +105,7 @@ function FilterButton({ label, value, options, allLabel = 'All', onChange }: Fil
         rect &&
         createPortal(
           <div
+            ref={menuRef}
             role="listbox"
             aria-label={`${label} filter options`}
             className="fixed z-50 min-w-44 rounded-lg border border-border bg-card p-1 text-sm text-card-foreground shadow-xl"
@@ -142,6 +182,7 @@ export default function Rules() {
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [importMsg, setImportMsg] = useState('')
+  const [openFilter, setOpenFilter] = useState<FilterKey | null>(null)
   const [predefinedTooltip, setPredefinedTooltip] = useState<{ x: number; y: number } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [confirmState, setConfirmState] = useState<{
@@ -343,22 +384,31 @@ export default function Rules() {
             className="min-w-64 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
           <FilterButton
+            id="type"
             label="Type"
             value={filters.type}
             options={options.type}
+            openFilter={openFilter}
             onChange={(value) => setFilter('type', value)}
+            onOpenChange={setOpenFilter}
           />
           <FilterButton
+            id="bank"
             label="Bank"
             value={filters.bank}
             options={options.bank}
+            openFilter={openFilter}
             onChange={(value) => setFilter('bank', value)}
+            onOpenChange={setOpenFilter}
           />
           <FilterButton
+            id="origin"
             label="Origin"
             value={filters.origin}
             options={options.origin}
+            openFilter={openFilter}
             onChange={(value) => setFilter('origin', value)}
+            onOpenChange={setOpenFilter}
           />
 
           <div className="ml-auto flex flex-wrap items-center gap-2">

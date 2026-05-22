@@ -137,6 +137,22 @@ describe('Rules', () => {
     expect(screen.getByRole('listbox', { name: 'Type filter options' })).toHaveClass('bg-card')
   })
 
+  it('closes filter dropdowns when switching filters or clicking outside', async () => {
+    const user = userEvent.setup()
+
+    renderWithProviders(<Rules />, { route: '/rules' })
+
+    await user.click(screen.getByRole('button', { name: 'Type: All' }))
+    expect(screen.getByRole('listbox', { name: 'Type filter options' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Bank: All' }))
+    expect(screen.queryByRole('listbox', { name: 'Type filter options' })).not.toBeInTheDocument()
+    expect(screen.getByRole('listbox', { name: 'Bank filter options' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('heading', { name: 'Rules' }))
+    expect(screen.queryByRole('listbox', { name: 'Bank filter options' })).not.toBeInTheDocument()
+  })
+
   it('uses icon-only delete actions and keeps disabled delete icons readable', () => {
     renderWithProviders(<Rules />, { route: '/rules' })
 
