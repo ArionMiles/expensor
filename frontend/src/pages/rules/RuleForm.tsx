@@ -460,24 +460,6 @@ export function RuleForm() {
     },
   })
 
-  const exportFixture = () => {
-    const sample = selectedSample
-    const bankSlug = slug(form.bank || 'bank')
-    const typeSlug = slug(form.sourceType || 'source-type')
-    const caseSlug = slug(sample.name || form.name || 'sample')
-    const body = `rule: ${yamlScalar(form.name || 'New Rule')}
-sender: ${yamlScalar(sample.sender)}
-subject: ${yamlScalar(sample.subject)}
-body: |
-${indentBlock(sample.body || '')}
-expected:
-  amount: ${yamlScalar(sample.expected.amount || '0.00')}
-  merchant: ${yamlScalar(sample.expected.merchant || '')}
-  currency: ${yamlScalar(sample.expected.currency || '')}
-`
-    downloadText(`${bankSlug}_${typeSlug}_${caseSlug}.yaml`, body, 'text/yaml')
-  }
-
   const buildFixtureBundle = () => {
     const bankSlug = slug(form.bank || 'bank')
     const typeSlug = slug(form.sourceType || 'source-type')
@@ -706,13 +688,6 @@ ${entries.join('\n')}
               Predefined
             </span>
           )}
-          <button
-            type="button"
-            onClick={exportFixture}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
-          >
-            Export fixture
-          </button>
           <button
             type="button"
             onClick={handleSubmit}

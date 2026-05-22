@@ -356,15 +356,16 @@ describe('RuleForm diagnostics', () => {
     expect(queryMocks.rescan).not.toHaveBeenCalled()
   })
 
-  it('keeps cancel next to save rule and exposes fixture export', () => {
+  it('keeps cancel next to save rule without a standalone fixture export', () => {
     renderRuleForm('/rules/new', '/rules/new')
 
     const actions = screen.getByLabelText('Rule editor actions')
-    const exportButton = within(actions).getByRole('button', { name: 'Export fixture' })
     const saveButton = within(actions).getByRole('button', { name: 'Save Rule' })
     const cancelLink = within(actions).getByRole('link', { name: 'Cancel' })
 
-    expect(exportButton).toBeInTheDocument()
+    expect(
+      within(actions).queryByRole('button', { name: 'Export fixture' }),
+    ).not.toBeInTheDocument()
     expect(saveButton.compareDocumentPosition(cancelLink)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
   })
 
