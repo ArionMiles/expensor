@@ -78,11 +78,11 @@ describe('Diagnostics', () => {
     expect(screen.getByRole('table', { name: 'Extraction diagnostics' })).toBeInTheDocument()
   })
 
-  it('links fix rule to the rule editor with the diagnostic id', async () => {
+  it('links fix rule to the existing rule editor when the diagnostic has a rule id', async () => {
     renderWithProviders(<Diagnostics />, { route: '/diagnostics' })
 
     const link = await screen.findByRole('link', { name: /fix rule/i })
-    expect(link).toHaveAttribute('href', '/rules/new?diagnostic=diag-1')
+    expect(link).toHaveAttribute('href', '/rules/rule-1?diagnostic=diag-1')
   })
 
   it('uses readable resolved action styling in light and dark mode', async () => {
