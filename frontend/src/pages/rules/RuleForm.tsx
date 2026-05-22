@@ -123,12 +123,16 @@ function slug(value: string) {
   )
 }
 
-function indentBlock(value: string) {
+function indentBlock(value: string, prefix = '  ') {
   return value
     .replace(/\r\n/g, '\n')
     .split('\n')
-    .map((line) => `  ${line}`)
+    .map((line) => `${prefix}${line}`)
     .join('\n')
+}
+
+function yamlScalar(value: string) {
+  return JSON.stringify(value)
 }
 
 function isValidEmail(value: string) {
@@ -304,6 +308,21 @@ function ResultValue({ result, optional = false }: { result: RegexResult; option
   return <span className="text-destructive">missing</span>
 }
 
+function HintDot({ label, children }: { label: string; children: string }) {
+  return (
+    <span className="group relative inline-flex items-center">
+      <button
+        type="button"
+        aria-label={label}
+        className="h-2.5 w-2.5 rounded-full bg-amber-500 ring-4 ring-amber-500/15"
+      />
+      <span className="pointer-events-none absolute right-0 top-4 z-50 hidden w-56 rounded-lg border border-border bg-card p-2 text-xs normal-case leading-relaxed text-card-foreground shadow-xl ring-1 ring-border group-hover:block">
+        {children}
+      </span>
+    </span>
+  )
+}
+
 export function RuleForm() {
   const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
@@ -326,6 +345,7 @@ export function RuleForm() {
   const [toast, setToast] = useState('')
   const [formError, setFormError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
 
   const { mutate: createRule, isPending: creating } = useCreateRule()
@@ -409,34 +429,105 @@ export function RuleForm() {
     })
   }
 
-  const deleteSample = () => {
+  const deleteSampleAt = (sampleIndex: number) => {
     setSamples((current) => {
       if (current.length === 1) {
         setActiveSample(0)
         return [blankSample(1)]
       }
-      const next = current.filter((_, index) => index !== activeSample)
-      setActiveSample(Math.max(0, Math.min(activeSample, next.length - 1)))
+      const next = current.filter((_, index) => index !== sampleIndex)
+      setActiveSample((currentActive) => {
+        if (currentActive === sampleIndex)
+          return Math.max(0, Math.min(sampleIndex, next.length - 1))
+        if (currentActive > sampleIndex) return currentActive - 1
+        return currentActive
+      })
       return next
     })
   }
+
+  const buildRulePayload = () => ({
+    name: form.name.trim(),
+    sender_emails: form.senders,
+    subject_contains: form.subjectContains,
+    amount_regex: form.amountRegex,
+    merchant_regex: form.merchantRegex,
+    currency_regex: form.currencyRegex,
+    source: {
+      type: form.sourceType,
+      bank: form.bank,
+      label: sourceLabel(form.bank, form.sourceType),
+    },
+  })
 
   const exportFixture = () => {
     const sample = selectedSample
     const bankSlug = slug(form.bank || 'bank')
     const typeSlug = slug(form.sourceType || 'source-type')
     const caseSlug = slug(sample.name || form.name || 'sample')
-    const body = `rule: ${form.name || 'New Rule'}
-sender: ${sample.sender}
-subject: "${sample.subject.replace(/"/g, '\\"')}"
+    const body = `rule: ${yamlScalar(form.name || 'New Rule')}
+sender: ${yamlScalar(sample.sender)}
+subject: ${yamlScalar(sample.subject)}
 body: |
 ${indentBlock(sample.body || '')}
 expected:
-  amount: ${sample.expected.amount || '0.00'}
-  merchant: ${sample.expected.merchant || ''}
-  currency: ${sample.expected.currency || ''}
+  amount: ${yamlScalar(sample.expected.amount || '0.00')}
+  merchant: ${yamlScalar(sample.expected.merchant || '')}
+  currency: ${yamlScalar(sample.expected.currency || '')}
 `
     downloadText(`${bankSlug}_${typeSlug}_${caseSlug}.yaml`, body, 'text/yaml')
+  }
+
+  const buildFixtureBundle = () => {
+    const bankSlug = slug(form.bank || 'bank')
+    const typeSlug = slug(form.sourceType || 'source-type')
+    const populatedSamples = samples.filter(sampleHasValidationData)
+    const entries = populatedSamples.map((sample) => {
+      const caseSlug = slug(sample.name || form.name || 'sample')
+      return `  - file: ${yamlScalar(`${bankSlug}_${typeSlug}_${caseSlug}.yaml`)}
+    name: ${yamlScalar(sample.name)}
+    sender: ${yamlScalar(sample.sender)}
+    subject: ${yamlScalar(sample.subject)}
+    body: |
+${indentBlock(sample.body || '', '      ')}
+    expected:
+      amount: ${yamlScalar(sample.expected.amount || '')}
+      merchant: ${yamlScalar(sample.expected.merchant || '')}
+      currency: ${yamlScalar(sample.expected.currency || '')}`
+    })
+
+    return `version: 1
+rule: ${yamlScalar(form.name || 'New Rule')}
+samples:
+${entries.join('\n')}
+`
+  }
+
+  const exportRuleAndFixtures = () => {
+    const rulePayload = buildRulePayload()
+    const sourceTypes = uniqueSorted([...(facets?.source_types ?? []), form.sourceType])
+    const banks = uniqueSorted([...(facets?.banks ?? []), form.bank])
+    const ruleFile = {
+      version: 2,
+      presets: {
+        source_types: sourceTypes.map((value) => ({
+          value,
+          origin: facets?.source_types?.includes(value) ? 'predefined' : 'custom',
+        })),
+        banks: banks.map((value) => ({
+          value,
+          origin: facets?.banks?.includes(value) ? 'predefined' : 'custom',
+        })),
+      },
+      rules: [rulePayload],
+    }
+
+    downloadText(
+      `${slug(form.name || 'rule')}.rule.json`,
+      JSON.stringify(ruleFile, null, 2),
+      'application/json',
+    )
+    downloadText(`${slug(form.name || 'rule')}.fixtures.yaml`, buildFixtureBundle(), 'text/yaml')
   }
 
   const selectedSample = samples[activeSample] ?? samples[0]
@@ -453,6 +544,7 @@ expected:
     selectedSampleHasSenderAndBody &&
     !selectedSampleExpectedMissing &&
     (!form.amountRegex.trim() || !form.merchantRegex.trim())
+  const hasExportableSamples = samples.some(sampleHasValidationData)
   const live = useMemo(
     () => ({
       amount: testRegex(form.amountRegex, selectedSample?.body ?? ''),
@@ -502,21 +594,7 @@ expected:
   }
 
   const saveRule = (shouldRescan: boolean) => {
-    const name = form.name.trim()
-
-    const body = {
-      name,
-      sender_emails: form.senders,
-      subject_contains: form.subjectContains,
-      amount_regex: form.amountRegex,
-      merchant_regex: form.merchantRegex,
-      currency_regex: form.currencyRegex,
-      source: {
-        type: form.sourceType,
-        bank: form.bank,
-        label: sourceLabel(form.bank, form.sourceType),
-      },
-    }
+    const body = buildRulePayload()
 
     if (isCreate) {
       createRule(body, {
@@ -555,6 +633,15 @@ expected:
     const result = validateForm()
     if (!result.valid) return
 
+    if (hasExportableSamples) {
+      setExportDialogOpen(true)
+      return
+    }
+
+    continueSaveFlow()
+  }
+
+  const continueSaveFlow = () => {
     if (!isCreate) {
       setSaveDialogOpen(true)
       return
@@ -710,9 +797,14 @@ expected:
 
           <section className="space-y-2 border-b border-border pb-4">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Extract
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Extract
+                </h2>
+                {selectedSampleExtractMissing && (
+                  <HintDot label="Extract regex needed">Fill amount and merchant regex</HintDot>
+                )}
+              </div>
               <div className="group relative">
                 <button
                   type="button"
@@ -721,18 +813,12 @@ expected:
                 >
                   ?
                 </button>
-                <div className="bg-popover text-popover-foreground pointer-events-none absolute right-0 top-8 z-10 hidden w-64 rounded-lg border border-border p-3 text-xs normal-case leading-relaxed shadow-xl group-hover:block">
+                <div className="pointer-events-none absolute right-0 top-8 z-50 hidden w-72 rounded-lg border border-border bg-card p-3 text-xs normal-case leading-relaxed text-card-foreground shadow-xl ring-1 ring-border group-hover:block">
                   Use Go-compatible regular expressions. Put the extracted value in the first
                   capture group.
                 </div>
               </div>
             </div>
-            {selectedSampleExtractMissing && (
-              <p className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary">
-                Expected values are present. Fill amount and merchant regex next so the sample can
-                validate extraction.
-              </p>
-            )}
             <label className="block text-sm text-muted-foreground">
               Amount regex
               <input
@@ -804,42 +890,51 @@ expected:
           className="grid min-w-0 overflow-hidden rounded-xl border border-border bg-card lg:grid-cols-[minmax(0,1fr)_20rem]"
         >
           <main className="min-w-0 border-b border-border lg:border-b-0 lg:border-r">
-            <div className="flex items-center justify-between gap-3 border-b border-border p-4">
-              <div role="tablist" aria-label="Samples" className="flex flex-wrap gap-2">
+            <div className="flex min-w-0 items-center gap-3 border-b border-border p-4">
+              <div
+                role="tablist"
+                aria-label="Sample tabs"
+                className="flex min-w-0 flex-1 flex-nowrap gap-2 overflow-x-auto pb-1"
+              >
                 {samples.map((sample, index) => (
-                  <button
+                  <span
                     key={`${sample.name}-${index}`}
-                    type="button"
-                    role="tab"
-                    aria-selected={index === activeSample}
-                    onClick={() => setActiveSample(index)}
-                    className={`rounded-full border px-3 py-1.5 text-sm font-medium ${
+                    className={`inline-flex shrink-0 items-center overflow-hidden rounded-full border text-sm font-medium ${
                       index === activeSample
                         ? 'border-primary/50 bg-primary/10 text-foreground'
                         : 'border-border text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    {sample.name}
-                  </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={index === activeSample}
+                      onClick={() => setActiveSample(index)}
+                      className="px-3 py-1.5"
+                    >
+                      {sample.name}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Remove sample ${sample.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        deleteSampleAt(index)
+                      }}
+                      className="pr-3 text-sm leading-none text-muted-foreground hover:text-destructive"
+                    >
+                      x
+                    </button>
+                  </span>
                 ))}
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={deleteSample}
-                  aria-label={`Delete sample ${selectedSample.name}`}
-                  className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-destructive"
-                >
-                  Delete sample
-                </button>
-                <button
-                  type="button"
-                  onClick={addSample}
-                  className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary"
-                >
-                  + Add sample
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={addSample}
+                className="shrink-0 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary"
+              >
+                + Add sample
+              </button>
             </div>
 
             <div className="grid gap-3 overflow-y-auto p-4">
@@ -885,20 +980,21 @@ expected:
                   className="mt-1 h-[20rem] min-h-[14rem] resize-y rounded-lg border border-border bg-input px-3 py-3 font-mono text-xs text-foreground"
                 />
               </label>
-              {selectedSampleHasSenderAndBody && selectedSampleExpectedMissing && (
-                <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-500">
-                  Fill expected amount and merchant first. Once those are set, tune the extract
-                  regex fields against this sample.
-                </p>
-              )}
             </div>
           </main>
 
           <aside className="space-y-4 p-4">
             <div className="rounded-xl border border-border p-4">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Expected
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Expected
+                </h2>
+                {selectedSampleExpectedMissing && (
+                  <HintDot label="Expected values needed">
+                    Fill expected amount and merchant
+                  </HintDot>
+                )}
+              </div>
               <div className="mt-3 space-y-3">
                 <label className="block text-sm text-muted-foreground">
                   Amount
@@ -1019,6 +1115,25 @@ expected:
           </aside>
         </div>
       </div>
+
+      {exportDialogOpen && (
+        <ConfirmModal
+          title="Export rule tests?"
+          message="This workbench has sample data. Export the v2 rule JSON and the fixture bundle before saving so the tests can be checked in with the rule change."
+          confirmLabel="Export & Continue"
+          secondaryLabel="Continue Without Export"
+          onConfirm={() => {
+            exportRuleAndFixtures()
+            setExportDialogOpen(false)
+            continueSaveFlow()
+          }}
+          onSecondary={() => {
+            setExportDialogOpen(false)
+            continueSaveFlow()
+          }}
+          onCancel={() => setExportDialogOpen(false)}
+        />
+      )}
 
       {saveDialogOpen && (
         <ConfirmModal

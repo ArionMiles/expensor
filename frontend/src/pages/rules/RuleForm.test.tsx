@@ -218,11 +218,45 @@ describe('RuleForm diagnostics', () => {
 
     await user.click(screen.getByRole('button', { name: '+ Add sample' }))
     expect(screen.getByRole('tab', { name: 'Sample 2' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete sample Sample 2' })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Delete sample Sample 2' }))
+    await user.click(screen.getByRole('button', { name: 'Remove sample Sample 2' }))
 
     expect(screen.queryByRole('tab', { name: 'Sample 2' })).not.toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Sample 1' })).toBeInTheDocument()
+  })
+
+  it('keeps sample tabs in one horizontal scrolling row', async () => {
+    const user = userEvent.setup()
+
+    renderRuleForm('/rules/new', '/rules/new')
+
+    for (let index = 0; index < 8; index += 1) {
+      await user.click(screen.getByRole('button', { name: '+ Add sample' }))
+    }
+
+    expect(screen.getByLabelText('Sample tabs')).toHaveClass('overflow-x-auto', 'flex-nowrap')
+    expect(screen.getByRole('tab', { name: 'Sample 9' })).toBeInTheDocument()
+  })
+
+  it('moves sample guidance hints to Expected before Extract', async () => {
+    const user = userEvent.setup()
+
+    renderRuleForm('/rules/new', '/rules/new')
+
+    await user.type(screen.getByLabelText('Sender'), 'alerts@example.com')
+    await user.type(screen.getByLabelText('Email body'), 'Amount: 999 paid at SWIGGY')
+
+    expect(screen.getByRole('button', { name: 'Expected values needed' })).toBeInTheDocument()
+    expect(screen.getByText('Fill expected amount and merchant')).toBeInTheDocument()
+    expect(screen.queryByText(/Fill expected amount and merchant first/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Extract regex needed' })).not.toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Expected amount'), '999')
+    await user.type(screen.getByLabelText('Expected merchant'), 'SWIGGY')
+
+    expect(screen.queryByRole('button', { name: 'Expected values needed' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Extract regex needed' })).toBeInTheDocument()
   })
 
   it('validates sample sender email inline', async () => {
@@ -263,6 +297,7 @@ describe('RuleForm diagnostics', () => {
     await screen.findByDisplayValue('Existing rule name')
     await user.click(screen.getByRole('button', { name: 'Save Rule' }))
 
+    expect(screen.queryByRole('dialog', { name: 'Export rule tests?' })).not.toBeInTheDocument()
     expect(screen.getByRole('dialog', { name: 'Save rule changes?' })).toBeInTheDocument()
     expect(
       screen.getByText(/Save & Exit updates the rule and returns to the rules list/),
@@ -273,6 +308,39 @@ describe('RuleForm diagnostics', () => {
 
     expect(queryMocks.updateRule).toHaveBeenCalledTimes(1)
     expect(queryMocks.rescan).toHaveBeenCalledWith('gmail', expect.any(Object))
+  })
+
+  it('offers fixture and rule export before saving when samples contain data', async () => {
+    const user = userEvent.setup()
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:test'),
+    })
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    })
+
+    queryMocks.updateRule.mockImplementation((_variables, options) => options?.onSuccess?.())
+
+    renderRuleForm('/rules/rule-1?diagnostic=diag-1', '/rules/:id')
+
+    await screen.findByDisplayValue(/Amount: 0/)
+    await user.click(screen.getByRole('button', { name: 'Save Rule' }))
+
+    expect(screen.getByRole('dialog', { name: 'Export rule tests?' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Save rule changes?' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Export & Continue' }))
+
+    expect(anchorClick).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('dialog', { name: 'Save rule changes?' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Save & Exit' }))
+    expect(queryMocks.updateRule).toHaveBeenCalledTimes(1)
+
+    anchorClick.mockRestore()
   })
 
   it('can save existing rules without re-scanning', async () => {
