@@ -638,18 +638,18 @@ function CategoryMonthlyCard({
     <div className="flex h-full min-h-[220px] flex-col rounded-lg border border-border bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-xs uppercase tracking-wider text-muted-foreground">{cardTitle}</h3>
-        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-3 rounded-sm bg-primary/80" />
-            {currentLabel}
-          </span>
-          {showPrior && (
+        {showPrior && (
+          <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2 w-3 rounded-sm bg-primary/80" />
+              {currentLabel}
+            </span>
             <span className="flex items-center gap-1">
               <span className="inline-block h-2 w-3 rounded-sm bg-secondary-foreground/20" />
               {priorLabel}
             </span>
-          )}
-        </div>
+          </div>
+        )}
       </div>
       <div className="space-y-2">
         {rows.map(([cat, entry]) => {
@@ -702,14 +702,19 @@ function CategoryMonthlyCard({
                     style={{ width: `${(entry.current / maxVal) * 100}%` }}
                   />
                 </div>
-                {showPrior && (
-                  <div className="h-1 overflow-hidden rounded-full bg-secondary">
+                <div
+                  className={[
+                    'h-1 overflow-hidden rounded-full bg-secondary',
+                    !showPrior && 'invisible',
+                  ].join(' ')}
+                >
+                  {showPrior && (
                     <div
                       className="h-full rounded-full bg-secondary-foreground/20 transition-all"
                       style={{ width: `${(entry.prior / maxVal) * 100}%` }}
                     />
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </button>
           )

@@ -15,7 +15,7 @@ import {
   subDays,
   subMonths,
 } from 'date-fns'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
@@ -529,9 +529,9 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
               e.stopPropagation()
               clear()
             }}
-            className="ml-1 text-sm leading-none hover:text-destructive"
+            className="ml-1 grid h-4 w-4 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-primary/15 hover:text-primary"
           >
-            x
+            <X size={12} strokeWidth={2.5} />
           </span>
         )}
       </button>

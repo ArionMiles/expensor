@@ -342,21 +342,29 @@ function SourceCell({ tx, banks }: { tx: Transaction; banks?: BankColor[] }) {
     return <span className="text-xs text-muted-foreground">—</span>
   }
 
+  const bankColor = getSourceColor(tx.source.bank, banks)
+
   return (
-    <div className="flex min-w-0 flex-col gap-0.5">
+    <div className="flex min-w-0 flex-col gap-0.5 leading-tight">
       {tx.source.bank && (
-        <span
-          className="inline-block max-w-full truncate rounded-sm border border-border py-0.5 pl-1.5 pr-2 font-mono text-[10px] text-muted-foreground"
-          style={{
-            borderLeftColor: getSourceColor(tx.source.bank, banks),
-            borderLeftWidth: '2px',
-          }}
-        >
-          {tx.source.bank}
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span
+            className="h-2 w-2 flex-shrink-0 rounded-full shadow-[0_0_0_2px_hsl(var(--background))]"
+            style={{ backgroundColor: bankColor }}
+            aria-hidden="true"
+          />
+          <span className="truncate font-medium text-foreground">{tx.source.bank}</span>
         </span>
       )}
       {tx.source.type && (
-        <span className="block truncate text-xs text-muted-foreground">{tx.source.type}</span>
+        <span
+          className={cn(
+            'block truncate text-[11px] text-muted-foreground',
+            tx.source.bank && 'pl-3.5',
+          )}
+        >
+          {tx.source.type}
+        </span>
       )}
     </div>
   )
@@ -1210,18 +1218,18 @@ export function Transactions() {
       <div className="flex-1 overflow-x-auto rounded-lg border border-border bg-card shadow-sm">
         <table
           aria-label="Transactions"
-          className="min-w-[92rem] table-fixed"
+          className="min-w-[84rem] table-fixed"
           style={{ borderCollapse: 'collapse' }}
         >
           <colgroup>
             <col className="w-10" />
-            <col className="w-52" />
-            <col className="w-72" />
-            <col className="w-40" />
-            <col className="w-32" />
-            <col className="w-56" />
             <col className="w-44" />
-            <col className="w-56" />
+            <col className="w-64" />
+            <col className="w-36" />
+            <col className="w-32" />
+            <col className="w-48" />
+            <col className="w-40" />
+            <col className="w-52" />
             <col className="w-10" />
           </colgroup>
           <thead>
