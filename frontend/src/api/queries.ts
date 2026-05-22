@@ -516,13 +516,8 @@ export function useCreateRule() {
 export function useUpdateRule() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({
-      id,
-      body,
-    }: {
-      id: string
-      body: Partial<RulePayload>
-    }) => api.rules.update(id, body).then((r) => r.data),
+    mutationFn: ({ id, body }: { id: string; body: Partial<RulePayload> }) =>
+      api.rules.update(id, body).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['rules'] }),
   })
 }

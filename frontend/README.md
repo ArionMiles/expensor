@@ -149,6 +149,11 @@ function MyCombobox({ value, onChange, options }: { value: string; onChange: (v:
 
 **Rule without exception:** use `position: fixed` + `getBoundingClientRect()` + `createPortal(…, document.body)` for all floating UI:
 
+Floating menus must use an opaque semantic surface. Prefer `bg-card text-card-foreground` with
+`border border-border shadow-lg` for dropdowns, listboxes, and combobox menus. Do not use a
+background utility unless it is defined in `tailwind.config.js`; undefined utilities such as an
+unconfigured `bg-popover` compile to no background and make menus look transparent.
+
 ```tsx
 // 1. Capture position from the trigger element:
 const ref = useRef<HTMLElement>(null)

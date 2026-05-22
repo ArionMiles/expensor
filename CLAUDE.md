@@ -112,6 +112,8 @@ New frontend changes must be i18n-friendly by default. When touching existing fr
 
 **Overflow clipping — tooltips and dropdowns (CRITICAL):** Any absolutely-positioned UI (tooltips, dropdowns, popovers) inside a container with `overflow-hidden`, `overflow-x-auto`, or `overflow-y-auto` WILL be clipped. This has caused multiple bugs. The rule without exception: use `position: fixed` + `getBoundingClientRect()` + `createPortal(…, document.body)` to escape the clipping ancestor. Never use `position: absolute` for floating UI inside sidebar, table rows, or any scrollable container. See `Sidebar.tsx` (toggle tooltip), `LabelCombobox.tsx`, and `InlineSelect.tsx` for the established pattern.
 
+**Dropdown surfaces:** Dropdowns, combobox menus, and listboxes must use an opaque semantic surface such as `bg-card text-card-foreground border border-border shadow-lg`. Do not use background utility classes that are not defined in `frontend/tailwind.config.js`; they compile away and create transparent menus.
+
 **Disabled elements and mouse events:** Disabled form elements (`<button disabled>`, `<input disabled>`) do not fire `mouseenter`/`mouseleave` in browsers. Wrap them in a `<span>` to handle hover events when needed.
 
 **URL state persistence (required):** Any page with tabs, filters, or navigation state MUST persist that state in the URL via `useSearchParams` (react-router-dom) so that refreshing or duplicating the tab restores the same view. Do NOT use `useState` for tab selection or filter state that the user might want to share or return to. The `Transactions` page is the reference implementation. Pages not yet compliant (Settings tabs, Dashboard heatmap year) should be migrated when touched.

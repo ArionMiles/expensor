@@ -53,6 +53,7 @@ describe('Rules', () => {
 
     const headers = screen.getAllByRole('columnheader').map((header) => header.textContent)
     expect(headers).toEqual(['Bank', 'Name', 'Subject', 'Senders', 'Type', 'Origin', ''])
+    expect(screen.getByRole('table', { name: 'Rules' })).not.toHaveClass('min-w-[980px]')
   })
 
   it('labels row selection controls', () => {
@@ -92,11 +93,48 @@ describe('Rules', () => {
     )
 
     await user.click(screen.getByRole('button', { name: 'Type: All' }))
-    await user.click(screen.getByRole('button', { name: 'Credit Card' }))
+    await user.click(screen.getByRole('option', { name: 'Credit Card' }))
 
     expect(screen.getByTestId('location')).toHaveTextContent('/rules?type=Credit+Card')
     expect(screen.getByRole('row', { name: /HDFC Credit Card/ })).toBeInTheDocument()
     expect(screen.queryByRole('row', { name: /ICICI UPI/ })).not.toBeInTheDocument()
+  })
+
+  it('filters rules by search and persists the search in the URL', async () => {
+    const user = userEvent.setup()
+
+    renderWithProviders(
+      <>
+        <Rules />
+        <LocationProbe />
+      </>,
+      { route: '/rules' },
+    )
+
+    await user.type(screen.getByRole('searchbox', { name: 'Search rules' }), 'upi')
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/rules?q=upi')
+    expect(screen.getByRole('row', { name: /ICICI UPI/ })).toBeInTheDocument()
+    expect(screen.queryByRole('row', { name: /HDFC Credit Card/ })).not.toBeInTheDocument()
+  })
+
+  it('keeps import and export actions beside the new rule action', () => {
+    renderWithProviders(<Rules />, { route: '/rules' })
+
+    const actions = screen.getByLabelText('Rule actions')
+    expect(within(actions).getByRole('button', { name: 'Export' })).toBeInTheDocument()
+    expect(within(actions).getByRole('button', { name: 'Import' })).toBeInTheDocument()
+    expect(within(actions).getByRole('link', { name: '+ New rule' })).toBeInTheDocument()
+  })
+
+  it('uses an opaque card surface for filter dropdowns', async () => {
+    const user = userEvent.setup()
+
+    renderWithProviders(<Rules />, { route: '/rules' })
+
+    await user.click(screen.getByRole('button', { name: 'Type: All' }))
+
+    expect(screen.getByRole('listbox', { name: 'Type filter options' })).toHaveClass('bg-card')
   })
 
   it('uses icon-only delete actions and keeps disabled delete icons readable', () => {

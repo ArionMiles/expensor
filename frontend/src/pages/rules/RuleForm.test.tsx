@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
@@ -126,6 +126,20 @@ describe('RuleForm diagnostics', () => {
     await user.type(screen.getByLabelText('Add sender'), 'alerts@hdfcbank.net{Enter}')
 
     expect(screen.getByText('alerts@hdfcbank.net')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove alerts@hdfcbank.net' })).toBeInTheDocument()
+  })
+
+  it('shows extract labels and expected sample assertions', async () => {
+    renderRuleForm('/rules/new', '/rules/new')
+
+    expect(screen.getByText(/Use Go-compatible regular expressions/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Amount regex')).toBeInTheDocument()
+    expect(screen.getByLabelText('Merchant regex')).toBeInTheDocument()
+    expect(screen.getByLabelText('Currency regex')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Expected' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Expected amount')).toBeInTheDocument()
+    expect(screen.getByLabelText('Expected merchant')).toBeInTheDocument()
+    expect(screen.getByLabelText('Expected currency')).toBeInTheDocument()
   })
 
   it('shows add options only for source type and bank values with no matches', async () => {
@@ -135,12 +149,12 @@ describe('RuleForm diagnostics', () => {
 
     const type = screen.getByLabelText('Type')
     await user.type(type, 'Cre')
-    expect(screen.getByRole('button', { name: 'Credit Card' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Add "Cre"/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Credit Card' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Add "Cre"/ })).not.toBeInTheDocument()
 
     await user.clear(type)
     await user.type(type, 'Wallet')
-    await user.click(screen.getByRole('button', { name: 'Add "Wallet"' }))
+    await user.click(screen.getByRole('option', { name: 'Add "Wallet"' }))
 
     expect(type).toHaveValue('Wallet')
   })
@@ -157,5 +171,24 @@ describe('RuleForm diagnostics', () => {
     expect(
       screen.getAllByText('missing').some((node) => node.classList.contains('text-destructive')),
     ).toBe(true)
+  })
+
+  it('keeps cancel next to save rule and exposes fixture export', () => {
+    renderRuleForm('/rules/new', '/rules/new')
+
+    const actions = screen.getByLabelText('Rule editor actions')
+    expect(within(actions).getByRole('link', { name: 'Cancel' })).toBeInTheDocument()
+    expect(within(actions).getByRole('button', { name: 'Export fixture' })).toBeInTheDocument()
+    expect(within(actions).getByRole('button', { name: 'Save Rule' })).toBeInTheDocument()
+  })
+
+  it('uses an opaque card surface for source dropdowns', async () => {
+    const user = userEvent.setup()
+
+    renderRuleForm('/rules/new', '/rules/new')
+
+    await user.click(screen.getByLabelText('Type'))
+
+    expect(screen.getByRole('listbox', { name: 'Type options' })).toHaveClass('bg-card')
   })
 })

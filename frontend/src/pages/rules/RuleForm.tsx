@@ -33,6 +33,11 @@ interface SampleState {
   sender: string
   subject: string
   body: string
+  expected: {
+    amount: string
+    merchant: string
+    currency: string
+  }
 }
 
 const emptyForm: FormState = {
@@ -67,6 +72,11 @@ function diagnosticSample(diagnostic: {
     sender: diagnostic.sender_email,
     subject: diagnostic.subject,
     body: diagnostic.email_body,
+    expected: {
+      amount: '',
+      merchant: '',
+      currency: '',
+    },
   }
 }
 
@@ -76,6 +86,11 @@ function blankSample(index: number): SampleState {
     sender: '',
     subject: '',
     body: '',
+    expected: {
+      amount: '',
+      merchant: '',
+      currency: '',
+    },
   }
 }
 
@@ -87,6 +102,34 @@ function uniqueSorted(values: string[]) {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort((a, b) =>
     a.localeCompare(b),
   )
+}
+
+function slug(value: string) {
+  return (
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'rule'
+  )
+}
+
+function indentBlock(value: string) {
+  return value
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => `  ${line}`)
+    .join('\n')
+}
+
+function downloadText(filename: string, text: string, type: string) {
+  const blob = new Blob([text], { type })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
+  URL.revokeObjectURL(url)
 }
 
 type ComboboxProps = {
@@ -180,13 +223,17 @@ function SourceValueCombobox({
         rect &&
         createPortal(
           <div
-            className="bg-popover text-popover-foreground fixed z-50 rounded-lg border border-border p-1 text-sm shadow-xl"
+            role="listbox"
+            aria-label={`${label} options`}
+            className="fixed z-50 rounded-lg border border-border bg-card p-1 text-sm text-card-foreground shadow-xl"
             style={{ left: rect.left, top: rect.bottom + 6, width: rect.width }}
           >
             {filtered.map((option) => (
               <button
                 key={option}
                 type="button"
+                role="option"
+                aria-selected={value === option}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => select(option)}
                 className="block w-full rounded-md px-3 py-2 text-left text-muted-foreground hover:bg-secondary hover:text-foreground"
@@ -197,6 +244,8 @@ function SourceValueCombobox({
             {canAdd && (
               <button
                 type="button"
+                role="option"
+                aria-selected={false}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={add}
                 className="block w-full rounded-md px-3 py-2 text-left font-medium text-primary hover:bg-secondary"
@@ -309,12 +358,37 @@ export function RuleForm() {
       current.map((sample, index) => (index === activeSample ? { ...sample, ...patch } : sample)),
     )
 
+  const updateExpected = (patch: Partial<SampleState['expected']>) =>
+    setSamples((current) =>
+      current.map((sample, index) =>
+        index === activeSample ? { ...sample, expected: { ...sample.expected, ...patch } } : sample,
+      ),
+    )
+
   const addSample = () => {
     setSamples((current) => {
       const next = [...current, blankSample(current.length + 1)]
       setActiveSample(next.length - 1)
       return next
     })
+  }
+
+  const exportFixture = () => {
+    const sample = selectedSample
+    const bankSlug = slug(form.bank || 'bank')
+    const typeSlug = slug(form.sourceType || 'source-type')
+    const caseSlug = slug(sample.name || form.name || 'sample')
+    const body = `rule: ${form.name || 'New Rule'}
+sender: ${sample.sender}
+subject: "${sample.subject.replace(/"/g, '\\"')}"
+body: |
+${indentBlock(sample.body || '')}
+expected:
+  amount: ${sample.expected.amount || '0.00'}
+  merchant: ${sample.expected.merchant || ''}
+  currency: ${sample.expected.currency || ''}
+`
+    downloadText(`${bankSlug}_${typeSlug}_${caseSlug}.yaml`, body, 'text/yaml')
   }
 
   const selectedSample = samples[activeSample] ?? samples[0]
@@ -332,7 +406,13 @@ export function RuleForm() {
     live.amount.match === null ||
     live.amount.match.trim() === '' ||
     live.merchant.match === null ||
-    live.merchant.match.trim() === ''
+    live.merchant.match.trim() === '' ||
+    (selectedSample.expected.amount.trim() !== '' &&
+      live.amount.match !== selectedSample.expected.amount.trim()) ||
+    (selectedSample.expected.merchant.trim() !== '' &&
+      live.merchant.match !== selectedSample.expected.merchant.trim()) ||
+    (selectedSample.expected.currency.trim() !== '' &&
+      live.currency.match !== selectedSample.expected.currency.trim())
 
   const handleSubmit = () => {
     setFormError('')
@@ -446,19 +526,32 @@ export function RuleForm() {
             Edit the rule once, switch samples freely, and watch match status update inline.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div aria-label="Rule editor actions" className="flex flex-wrap items-center gap-2">
           {rule?.predefined && (
             <span className="rounded-full border border-primary/40 px-3 py-1 text-xs font-medium text-primary">
               Predefined
             </span>
           )}
+          <Link
+            to="/rules"
+            className="inline-flex rounded-lg border border-border px-4 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
+          >
+            Cancel
+          </Link>
+          <button
+            type="button"
+            onClick={exportFixture}
+            className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
+          >
+            Export fixture
+          </button>
           <button
             type="button"
             onClick={handleSubmit}
             disabled={isPending}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
-            {isPending ? 'Saving...' : 'Save rule'}
+            {isPending ? 'Saving...' : 'Save Rule'}
           </button>
         </div>
       </div>
@@ -489,14 +582,20 @@ export function RuleForm() {
             </h2>
             <div className="flex flex-wrap gap-2">
               {form.senders.map((sender) => (
-                <button
+                <span
                   key={sender}
-                  type="button"
-                  onClick={() => removeSender(sender)}
-                  className="rounded-full border border-border px-3 py-1.5 font-mono text-xs text-muted-foreground hover:text-foreground"
+                  className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 font-mono text-xs text-muted-foreground"
                 >
                   {sender}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => removeSender(sender)}
+                    aria-label={`Remove ${sender}`}
+                    className="text-sm leading-none text-muted-foreground hover:text-foreground"
+                  >
+                    x
+                  </button>
+                </span>
               ))}
             </div>
             <input
@@ -523,27 +622,38 @@ export function RuleForm() {
                 Go regexp syntax
               </span>
             </div>
-            <input
-              aria-label="Amount regex"
-              value={form.amountRegex}
-              onChange={(event) => updateForm({ amountRegex: event.target.value })}
-              placeholder="Amount regex"
-              className="w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-xs text-foreground"
-            />
-            <input
-              aria-label="Merchant regex"
-              value={form.merchantRegex}
-              onChange={(event) => updateForm({ merchantRegex: event.target.value })}
-              placeholder="Merchant regex"
-              className="w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-xs text-foreground"
-            />
-            <input
-              aria-label="Currency regex"
-              value={form.currencyRegex}
-              onChange={(event) => updateForm({ currencyRegex: event.target.value })}
-              placeholder="Optional"
-              className="w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-xs text-foreground"
-            />
+            <p className="text-xs text-muted-foreground">
+              Use Go-compatible regular expressions. Each regex should expose the target value in a
+              capture group.
+            </p>
+            <label className="block text-sm text-muted-foreground">
+              Amount regex
+              <input
+                aria-label="Amount regex"
+                value={form.amountRegex}
+                onChange={(event) => updateForm({ amountRegex: event.target.value })}
+                className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-xs text-foreground"
+              />
+            </label>
+            <label className="block text-sm text-muted-foreground">
+              Merchant regex
+              <input
+                aria-label="Merchant regex"
+                value={form.merchantRegex}
+                onChange={(event) => updateForm({ merchantRegex: event.target.value })}
+                className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-xs text-foreground"
+              />
+            </label>
+            <label className="block text-sm text-muted-foreground">
+              Currency regex
+              <input
+                aria-label="Currency regex"
+                value={form.currencyRegex}
+                onChange={(event) => updateForm({ currencyRegex: event.target.value })}
+                placeholder="Optional"
+                className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-xs text-foreground"
+              />
+            </label>
           </section>
 
           <section className="space-y-3">
@@ -601,7 +711,7 @@ export function RuleForm() {
             </button>
           </div>
 
-          <div className="grid max-h-[34rem] grid-rows-[auto_minmax(14rem,1fr)] gap-3 overflow-y-auto p-4">
+          <div className="grid gap-3 overflow-y-auto p-4">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <label className="text-sm text-muted-foreground">
                 Name
@@ -633,13 +743,48 @@ export function RuleForm() {
               <textarea
                 value={selectedSample.body}
                 onChange={(event) => updateSample({ body: event.target.value })}
-                className="mt-1 min-h-[16rem] flex-1 resize-y rounded-lg border border-border bg-input px-3 py-3 font-mono text-xs text-foreground"
+                className="mt-1 h-[20rem] min-h-[14rem] resize-y rounded-lg border border-border bg-input px-3 py-3 font-mono text-xs text-foreground"
               />
             </label>
           </div>
         </main>
 
         <aside className="space-y-4 p-4">
+          <div className="rounded-xl border border-border p-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Expected
+            </h2>
+            <div className="mt-3 space-y-3">
+              <label className="block text-sm text-muted-foreground">
+                Amount
+                <input
+                  aria-label="Expected amount"
+                  value={selectedSample.expected.amount}
+                  onChange={(event) => updateExpected({ amount: event.target.value })}
+                  className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-sm text-foreground"
+                />
+              </label>
+              <label className="block text-sm text-muted-foreground">
+                Merchant
+                <input
+                  aria-label="Expected merchant"
+                  value={selectedSample.expected.merchant}
+                  onChange={(event) => updateExpected({ merchant: event.target.value })}
+                  className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-sm text-foreground"
+                />
+              </label>
+              <label className="block text-sm text-muted-foreground">
+                Currency
+                <input
+                  aria-label="Expected currency"
+                  value={selectedSample.expected.currency}
+                  onChange={(event) => updateExpected({ currency: event.target.value })}
+                  className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 font-mono text-sm text-foreground"
+                />
+              </label>
+            </div>
+          </div>
+
           <div className="rounded-xl border border-border p-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -721,12 +866,6 @@ export function RuleForm() {
           )}
 
           {formError && <p className="text-xs text-destructive">{formError}</p>}
-          <Link
-            to="/rules"
-            className="inline-flex rounded-lg border border-border px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
-          >
-            Cancel
-          </Link>
         </aside>
       </div>
     </div>

@@ -66,11 +66,15 @@ function FilterButton({ label, value, options, allLabel = 'All', onChange }: Fil
         rect &&
         createPortal(
           <div
-            className="bg-popover text-popover-foreground fixed z-50 min-w-44 rounded-lg border border-border p-1 text-sm shadow-xl"
+            role="listbox"
+            aria-label={`${label} filter options`}
+            className="fixed z-50 min-w-44 rounded-lg border border-border bg-card p-1 text-sm text-card-foreground shadow-xl"
             style={{ top: rect.bottom + 6, left: rect.left, width: Math.max(rect.width, 176) }}
           >
             <button
               type="button"
+              role="option"
+              aria-selected={value === ''}
               onClick={() => selectValue('')}
               className={`block w-full rounded-md px-3 py-2 text-left hover:bg-secondary ${value === '' ? 'bg-secondary text-foreground' : 'text-muted-foreground'}`}
             >
@@ -80,6 +84,8 @@ function FilterButton({ label, value, options, allLabel = 'All', onChange }: Fil
               <button
                 key={option}
                 type="button"
+                role="option"
+                aria-selected={value === option}
                 onClick={() => selectValue(option)}
                 className={`block w-full rounded-md px-3 py-2 text-left hover:bg-secondary ${value === option ? 'bg-secondary text-foreground' : 'text-muted-foreground'}`}
               >
@@ -145,6 +151,7 @@ export default function Rules() {
   } | null>(null)
 
   const filters = {
+    q: searchParams.get('q') ?? '',
     type: searchParams.get('type') ?? '',
     bank: searchParams.get('bank') ?? '',
     origin: searchParams.get('origin') ?? '',
@@ -162,13 +169,26 @@ export default function Rules() {
   const visibleRules = useMemo(
     () =>
       rules.filter((rule) => {
+        const query = filters.q.trim().toLowerCase()
+        if (
+          query &&
+          ![
+            rule.name,
+            rule.subject_contains,
+            rule.source.bank,
+            rule.source.type,
+            ...rule.sender_emails,
+          ].some((value) => value.toLowerCase().includes(query))
+        ) {
+          return false
+        }
         if (filters.type && rule.source.type !== filters.type) return false
         if (filters.bank && rule.source.bank !== filters.bank) return false
         if (filters.origin === 'predefined' && !rule.predefined) return false
         if (filters.origin === 'custom' && rule.predefined) return false
         return true
       }),
-    [filters.bank, filters.origin, filters.type, rules],
+    [filters.bank, filters.origin, filters.q, filters.type, rules],
   )
 
   const allSelected = visibleRules.length > 0 && visibleRules.every((rule) => selected.has(rule.id))
@@ -178,6 +198,13 @@ export default function Rules() {
     const next = new URLSearchParams(searchParams)
     if (value) next.set(key, value)
     else next.delete(key)
+    setSearchParams(next, { replace: true })
+  }
+
+  const setSearch = (value: string) => {
+    const next = new URLSearchParams(searchParams)
+    if (value) next.set('q', value)
+    else next.delete('q')
     setSearchParams(next, { replace: true })
   }
 
@@ -260,7 +287,7 @@ export default function Rules() {
   }
 
   const selectedDeletableCount = rules.filter((r) => selected.has(r.id) && !r.predefined).length
-  const hasActiveFilter = Boolean(filters.type || filters.bank || filters.origin)
+  const hasActiveFilter = Boolean(filters.q || filters.type || filters.bank || filters.origin)
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4 px-6 py-6">
@@ -272,16 +299,49 @@ export default function Rules() {
             Manage extraction rules, source classification, and sender matching.
           </p>
         </div>
-        <Link
-          to="/rules/new"
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-        >
-          + New rule
-        </Link>
+        <div aria-label="Rule actions" className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => downloadRules(rules, selected)}
+            disabled={noneSelected}
+            className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {noneSelected ? 'Export' : `Export (${selected.size} selected)`}
+          </button>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={importing}
+            className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground disabled:opacity-50"
+          >
+            {importing ? 'Importing…' : 'Import'}
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          <Link
+            to="/rules/new"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            + New rule
+          </Link>
+        </div>
       </div>
 
       <div className="rounded-xl border border-border bg-card p-3">
         <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            aria-label="Search rules"
+            value={filters.q}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search rules, senders, subjects..."
+            className="min-w-64 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          />
           <FilterButton
             label="Type"
             value={filters.type}
@@ -302,29 +362,6 @@ export default function Rules() {
           />
 
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => downloadRules(rules, selected)}
-              disabled={noneSelected}
-              className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {noneSelected ? 'Export' : `Export (${selected.size} selected)`}
-            </button>
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={importing}
-              className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground disabled:opacity-50"
-            >
-              {importing ? 'Importing…' : 'Import'}
-            </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".json"
-              className="hidden"
-              onChange={handleFileChange}
-            />
             {!noneSelected && selectedDeletableCount > 0 && (
               <button
                 type="button"
@@ -339,8 +376,8 @@ export default function Rules() {
         {importMsg && <p className="mt-2 text-xs text-muted-foreground">{importMsg}</p>}
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-border bg-card">
-        <table aria-label="Rules" className="w-full min-w-[980px] table-fixed text-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <table aria-label="Rules" className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b border-border bg-secondary/60">
               <td className="w-10 px-3 py-3">
@@ -353,37 +390,37 @@ export default function Rules() {
               </td>
               <th
                 scope="col"
-                className="w-28 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
+                className="w-20 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
               >
                 Bank
               </th>
               <th
                 scope="col"
-                className="w-52 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
+                className="w-44 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
               >
                 Name
               </th>
               <th
                 scope="col"
-                className="w-56 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
+                className="w-48 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
               >
                 Subject
               </th>
               <th
                 scope="col"
-                className="w-72 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
+                className="w-56 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
               >
                 Senders
               </th>
               <th
                 scope="col"
-                className="w-32 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
+                className="w-28 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
               >
                 Type
               </th>
               <th
                 scope="col"
-                className="w-28 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
+                className="w-24 px-3 py-3 text-left text-xs uppercase tracking-wider text-muted-foreground"
               >
                 Origin
               </th>
