@@ -53,7 +53,7 @@ export const messages = {
     'dashboard.breakdown.byCategory': 'By category',
     'dashboard.breakdown.byLabel': 'By label',
     'dashboard.breakdown.bySourceType': 'By source type',
-    'dashboard.breakdown.bankAndType': 'By bank & type',
+    'dashboard.breakdown.bankAndType': 'By Bank and Transaction Type',
     'dashboard.breakdown.spendByCategory': 'Spend By Category',
     'common.add': 'Add',
     'common.adding': 'Adding...',

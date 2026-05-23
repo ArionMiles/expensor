@@ -39,12 +39,15 @@ const stats: Stats = {
   top_merchants: [],
 }
 
-function renderSummarySection(summaryMode: 'current_month' | 'all_time') {
+function renderSummarySection(
+  summaryMode: 'current_month' | 'all_time',
+  charts: ChartData = chartData,
+) {
   return render(
     <I18nProvider>
       <MemoryRouter>
         <SummarySection
-          summary={{ label: 'April 2026', stats, charts: chartData }}
+          summary={{ label: 'April 2026', stats, charts }}
           currency="INR"
           locale="en-IN"
           summaryMode={summaryMode}
@@ -144,7 +147,10 @@ describe('SummarySection', () => {
     expect(screen.queryByText('By bucket')).not.toBeInTheDocument()
     expect(screen.queryByText('By source type')).not.toBeInTheDocument()
     expect(screen.queryByText('By bank')).not.toBeInTheDocument()
-    expect(screen.getByText('By bank & type')).toBeInTheDocument()
+    expect(screen.getByText('By Bank and Transaction Type')).toBeInTheDocument()
+    expect(screen.queryByText(/Bank:\s*\d+/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Type:\s*\d+/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Total:/)).not.toBeInTheDocument()
   })
 
   it('shows the category monthly chart for all time without prior comparison copy', () => {
@@ -153,6 +159,23 @@ describe('SummarySection', () => {
     expect(screen.getByText('Spend By Category')).toBeInTheDocument()
     expect(screen.queryByText(/March 2026/)).not.toBeInTheDocument()
     expect(screen.queryByText(/\+33%/)).not.toBeInTheDocument()
+  })
+
+  it('keeps uncategorized category spend visible even outside the top five', () => {
+    renderSummarySection('current_month', {
+      ...chartData,
+      by_category_monthly: {
+        Food: { current: 600, prior: 500 },
+        Travel: { current: 500, prior: 400 },
+        Shopping: { current: 400, prior: 300 },
+        Utilities: { current: 300, prior: 200 },
+        Healthcare: { current: 200, prior: 100 },
+        Uncategorized: { current: 50, prior: 0 },
+      },
+    })
+
+    expect(screen.getByText('Uncategorized')).toBeInTheDocument()
+    expect(screen.queryByText('Healthcare')).not.toBeInTheDocument()
   })
 })
 

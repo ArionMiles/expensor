@@ -192,6 +192,23 @@ export function topBreakdownSlices(data: Record<string, number>): BreakdownSlice
     }))
 }
 
+function prioritizedCategoryRows(
+  data: Record<string, CategoryMonthlyEntry>,
+  showPrior: boolean,
+  limit = 5,
+): Array<[string, CategoryMonthlyEntry]> {
+  const rows = Object.entries(data)
+    .filter(([, entry]) => entry.current > 0 || (showPrior && entry.prior > 0))
+    .sort(([, a], [, b]) => b.current - a.current)
+
+  const uncategorized = rows.find(([category]) => category === UNCATEGORIZED_LABEL)
+  if (!uncategorized || rows.indexOf(uncategorized) < limit) {
+    return rows.slice(0, limit)
+  }
+
+  return [...rows.slice(0, limit - 1), uncategorized]
+}
+
 // ─── Breakdown charts ────────────────────────────────────────────────────────
 
 function BreakdownChart({
@@ -208,8 +225,6 @@ function BreakdownChart({
   embedded?: boolean
 }) {
   const slices = topBreakdownSlices(data)
-
-  const total = slices.reduce((sum, s) => sum + s.value, 0)
 
   if (slices.length === 0) {
     return (
@@ -264,9 +279,6 @@ function BreakdownChart({
           />
         </div>
       </div>
-      <p className="mt-auto border-t border-border pt-3 text-xs text-muted-foreground">
-        Total: <span className="font-mono text-foreground">{formatCurrency(total, currency)}</span>
-      </p>
     </div>
   )
 }
@@ -296,7 +308,6 @@ function ConcentricBreakdownChart({
     ...slice,
     color: chartColor(index + 3),
   }))
-  const total = outerSlices.reduce((sum, slice) => sum + slice.value, 0)
   const hasData = outerSlices.length > 0 || innerSlices.length > 0
 
   if (!hasData) {
@@ -391,25 +402,8 @@ function ConcentricBreakdownChart({
             {buildRing(outerSlices, 68, 20, outerLabel, onOuterSliceClick)}
             {buildRing(innerSlices, 41, 18, innerLabel, onInnerSliceClick)}
           </g>
-          <text
-            x={cx}
-            y={cy - 6}
-            textAnchor="middle"
-            fontSize={9}
-            fill="currentColor"
-            opacity={0.5}
-          >
-            Total
-          </text>
-          <text x={cx} y={cy + 8} textAnchor="middle" fontSize={11} fill="currentColor">
-            {formatCurrency(total, currency)}
-          </text>
         </svg>
       </div>
-      <p className="mt-auto border-t border-border pt-3 text-xs text-muted-foreground">
-        {innerLabel}: <span className="text-foreground">{innerSlices.length}</span> · {outerLabel}:{' '}
-        <span className="text-foreground">{outerSlices.length}</span>
-      </p>
       {tooltip &&
         createPortal(
           <div
@@ -613,10 +607,7 @@ function CategoryMonthlyCard({
 
   const cardTitle = title ?? `${currentLabel} vs ${priorLabel}`
 
-  const rows = Object.entries(data)
-    .filter(([, entry]) => entry.current > 0 || (showPrior && entry.prior > 0))
-    .sort(([, a], [, b]) => b.current - a.current)
-    .slice(0, 5)
+  const rows = prioritizedCategoryRows(data, showPrior)
 
   if (rows.length === 0) {
     return (
