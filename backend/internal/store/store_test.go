@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"reflect"
@@ -18,6 +19,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 	pgwriter "github.com/ArionMiles/expensor/backend/pkg/writer/postgres"
@@ -1508,6 +1510,68 @@ func TestDeleteRule_PredefinedRuleNotDeleted(t *testing.T) {
 	delErr := ts.DeleteRule(context.Background(), predefinedRule.ID)
 	if !errors.Is(delErr, store.ErrNotFound) {
 		t.Errorf("expected ErrNotFound when deleting predefined rule, got %v", delErr)
+	}
+}
+
+func TestPredefinedRulesV2MigrationRemovesStaleV1Rules(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+
+	_, err := ts.PoolForTest().Exec(ctx, `
+		INSERT INTO rules
+			(name, sender_email, subject_contains, amount_regex, merchant_regex, transaction_source, predefined)
+		VALUES
+			('HDFC Credit Card (debit alert)', '@hdfcbank', 'debited via Credit Card', '(\d+)', '(.+)', 'Credit Card - HDFC', true),
+			('HDFC Credit Card', '@hdfcbank', 'Alert : Update on your HDFC Bank Credit Card', '(\d+)', '(.+)', 'Credit Card - HDFC', true),
+			('Custom Legacy Rule', '@legacy', 'legacy subject', '(\d+)', '(.+)', 'Legacy Source', false)
+	`)
+	if err != nil {
+		t.Fatalf("seed legacy rules: %v", err)
+	}
+
+	migrationSQL, err := fs.ReadFile(migrations.FS, "003_predefined_rules_v2.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	if _, err = ts.PoolForTest().Exec(ctx, string(migrationSQL)); err != nil {
+		t.Fatalf("run migration: %v", err)
+	}
+
+	var exists bool
+	if err = ts.PoolForTest().QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM rules WHERE name = 'HDFC Credit Card (debit alert)' AND predefined = true)`,
+	).Scan(&exists); err != nil {
+		t.Fatalf("check stale predefined rule: %v", err)
+	}
+	if exists {
+		t.Fatal("expected stale v1 predefined rule to be removed")
+	}
+
+	if err = ts.PoolForTest().QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM rules WHERE name = 'Custom Legacy Rule' AND predefined = false)`,
+	).Scan(&exists); err != nil {
+		t.Fatalf("check custom legacy rule: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected custom legacy rule to remain")
+	}
+
+	var senderEmails []string
+	var sourceType, sourceLabel, bank string
+	if err = ts.PoolForTest().QueryRow(ctx, `
+		SELECT sender_emails, source_type, source_label, bank
+		FROM rules
+		WHERE name = 'HDFC Credit Card' AND predefined = true
+	`).Scan(&senderEmails, &sourceType, &sourceLabel, &bank); err != nil {
+		t.Fatalf("check migrated predefined rule: %v", err)
+	}
+	wantSenders := []string{"alerts@hdfcbank.bank.in", "alerts@hdfcbank.net"}
+	if !reflect.DeepEqual(senderEmails, wantSenders) {
+		t.Fatalf("sender_emails = %#v, want %#v", senderEmails, wantSenders)
+	}
+	if sourceType != "Credit Card" || sourceLabel != "HDFC Credit Card" || bank != "HDFC" {
+		t.Fatalf("source fields = (%q, %q, %q), want (Credit Card, HDFC Credit Card, HDFC)", sourceType, sourceLabel, bank)
 	}
 }
 
