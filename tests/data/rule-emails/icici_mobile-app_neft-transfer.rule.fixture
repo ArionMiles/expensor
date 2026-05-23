@@ -1,0 +1,19 @@
+---
+rule: ICICI NEFT iMobile
+sender: customernotification@icici.bank.in
+subject: "NEFT transaction through ICICI Bank iMobile."
+expected:
+  amount: 60000.00
+  merchant: ACME INC
+  currency: INR
+---
+Dear Customer,
+
+You have made an online NEFT payment of Rs. 60,000.00 towards ACME INC on Apr 07, 2026 at 08:34 p.m. from your ICICI Bank Savings Account XXXX1234. The Transaction ID is IN12345678901234.
+
+If you have not initiated this request, please call our Customer Care.
+
+Never share your card number, OTP, CVV, user ID, password, etc. with anyone, even if the person claims to be from ICICI Bank. Bank employees will never ask you for these details.
+
+Sincerely,
+Team ICICI Bank

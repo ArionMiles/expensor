@@ -124,11 +124,45 @@ func TestWrite_SingleTransaction(t *testing.T) {
 		MerchantInfo: "Test Merchant",
 		Category:     "Test Category",
 		Bucket:       "Wants",
-		Source:       "Test Source",
+		Source:       api.Source{Label: "Test Source"},
 		Description:  "Test transaction",
 	}
 
 	assertWrite(t, w, []*api.TransactionDetails{txn}, 5*time.Second)
+}
+
+func TestWrite_PersistsStructuredSourceFields(t *testing.T) {
+	w := newTestWriter(t, Config{BatchSize: 1, FlushInterval: time.Second})
+	ctx := context.Background()
+
+	txn := &api.TransactionDetails{
+		MessageID:    fmt.Sprintf("structured-source-%d", time.Now().UnixNano()),
+		Amount:       999.00,
+		Currency:     "INR",
+		Timestamp:    time.Now().Format(time.RFC3339),
+		MerchantInfo: "Swiggy",
+		Category:     "Food",
+		Bucket:       "Wants",
+		Source:       api.Source{Type: "Credit Card", Label: "HDFC Credit Card", Bank: "HDFC"},
+	}
+
+	assertWrite(t, w, []*api.TransactionDetails{txn}, 5*time.Second)
+
+	var source, sourceType, sourceLabel, bank string
+	err := w.pool.QueryRow(ctx, `
+		SELECT source, source_type, source_label, bank
+		FROM transactions
+		WHERE message_id = $1
+	`, txn.MessageID).Scan(&source, &sourceType, &sourceLabel, &bank)
+	if err != nil {
+		t.Fatalf("query transaction source: %v", err)
+	}
+	if source != "HDFC Credit Card" {
+		t.Fatalf("source = %q, want HDFC Credit Card", source)
+	}
+	if sourceType != "Credit Card" || sourceLabel != "HDFC Credit Card" || bank != "HDFC" {
+		t.Fatalf("structured source = (%q, %q, %q)", sourceType, sourceLabel, bank)
+	}
 }
 
 // TestWrite_MultiCurrency verifies a transaction with currency conversion fields is stored correctly.
@@ -150,7 +184,7 @@ func TestWrite_MultiCurrency(t *testing.T) {
 		MerchantInfo:     "Amazon.com",
 		Category:         "Shopping",
 		Bucket:           "Wants",
-		Source:           "Credit Card - ICICI",
+		Source:           api.Source{Label: "Credit Card - ICICI"},
 	}
 
 	assertWrite(t, w, []*api.TransactionDetails{txn}, 5*time.Second)
@@ -168,7 +202,7 @@ func TestWrite_WithLabels(t *testing.T) {
 		MerchantInfo: "Starbucks",
 		Category:     "Food",
 		Bucket:       "Wants",
-		Source:       "Credit Card - ICICI",
+		Source:       api.Source{Label: "Credit Card - ICICI"},
 		Description:  "Coffee with team",
 		Labels:       []string{"work", "coffee", "team-expense"},
 	}
@@ -190,7 +224,7 @@ func TestWrite_PersistsManualLabelProvenanceForPayloadLabels(t *testing.T) {
 		MerchantInfo: "Netflix",
 		Category:     "Entertainment",
 		Bucket:       "Wants",
-		Source:       "Credit Card - ICICI",
+		Source:       api.Source{Label: "Credit Card - ICICI"},
 		Labels:       []string{"subscription"},
 	}
 
@@ -228,7 +262,7 @@ func TestWrite_Batch(t *testing.T) {
 			MerchantInfo: fmt.Sprintf("Merchant %d", i),
 			Category:     "Test",
 			Bucket:       "Wants",
-			Source:       "Test Source",
+			Source:       api.Source{Label: "Test Source"},
 		}
 	}
 
@@ -253,7 +287,7 @@ func TestWrite_Upsert_PreservesUserEdits(t *testing.T) {
 		MerchantInfo: "Swiggy",
 		Category:     "Food",
 		Bucket:       "Wants",
-		Source:       "Credit Card - HDFC",
+		Source:       api.Source{Label: "Credit Card - HDFC"},
 		Description:  "",
 	}
 	assertWrite(t, w, []*api.TransactionDetails{initial}, 5*time.Second)
@@ -276,7 +310,7 @@ func TestWrite_Upsert_PreservesUserEdits(t *testing.T) {
 		MerchantInfo: "Swiggy Food",
 		Category:     "Food & Dining", // extraction now returns a different category
 		Bucket:       "Wants",
-		Source:       "Credit Card - HDFC",
+		Source:       api.Source{Label: "Credit Card - HDFC"},
 		Description:  "some extracted description", // extraction should never overwrite description
 	}
 	assertWrite(t, w, []*api.TransactionDetails{reprocessed}, 5*time.Second)
@@ -329,7 +363,7 @@ func TestWrite_Upsert_PopulatesEmptyCategoryBucket(t *testing.T) {
 		MerchantInfo: "Uber",
 		Category:     "",
 		Bucket:       "",
-		Source:       "UPI",
+		Source:       api.Source{Label: "UPI"},
 	}
 	assertWrite(t, w, []*api.TransactionDetails{initial}, 5*time.Second)
 
@@ -342,7 +376,7 @@ func TestWrite_Upsert_PopulatesEmptyCategoryBucket(t *testing.T) {
 		MerchantInfo: "Uber",
 		Category:     "Transport",
 		Bucket:       "Needs",
-		Source:       "UPI",
+		Source:       api.Source{Label: "UPI"},
 	}
 	assertWrite(t, w, []*api.TransactionDetails{reprocessed}, 5*time.Second)
 
@@ -393,7 +427,7 @@ func TestWrite_AutoAppliesMerchantLabelToFutureTransactions(t *testing.T) {
 		MerchantInfo: merchant,
 		Category:     "Entertainment",
 		Bucket:       "Wants",
-		Source:       "Credit Card - HDFC",
+		Source:       api.Source{Label: "Credit Card - HDFC"},
 	}
 	assertWrite(t, w, []*api.TransactionDetails{txn}, 5*time.Second)
 
@@ -465,7 +499,7 @@ func TestWrite_AutoAppliesMerchantCategoryBucketToFutureTransactions(t *testing.
 			MerchantInfo: "Uber Black",
 			Category:     "",
 			Bucket:       "",
-			Source:       "UPI",
+			Source:       api.Source{Label: "UPI"},
 		},
 		{
 			MessageID:    fmt.Sprintf("future-category-uber-eats-%d", time.Now().UnixNano()),
@@ -475,7 +509,7 @@ func TestWrite_AutoAppliesMerchantCategoryBucketToFutureTransactions(t *testing.
 			MerchantInfo: "Uber Eats Pass",
 			Category:     "",
 			Bucket:       "",
-			Source:       "UPI",
+			Source:       api.Source{Label: "UPI"},
 		},
 	}
 	assertWrite(t, w, txns, 5*time.Second)

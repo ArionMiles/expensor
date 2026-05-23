@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -44,13 +45,70 @@ function chartColor(index: number): string {
 }
 
 const UNCATEGORIZED_LABEL = 'Uncategorized'
+const UNCATEGORIZED_COLOR = '#64748b'
 
-type BreakdownDimension = 'category' | 'bucket' | 'label' | 'source'
+const DASHBOARD_PREF_KEYS = {
+  summaryMode: 'expensor.dashboard.summaryMode',
+  showUncategorizedLabels: 'expensor.dashboard.showUncategorizedLabels',
+  spendBreakdownMode: 'expensor.dashboard.spendBreakdownMode',
+  heatmapMetric: 'expensor.dashboard.heatmapMetric',
+  weekdayHeatmapMonth: 'expensor.dashboard.weekdayHeatmapMonth',
+  annualHeatmapYear: 'expensor.dashboard.annualHeatmapYear',
+} as const
+
+type BreakdownDimension = 'category' | 'bucket' | 'label' | 'source' | 'source_type' | 'bank'
 
 type SpendBreakdownMode = 'labels' | 'categories' | 'buckets'
 
 export const DEFAULT_SPEND_BREAKDOWN_MODE: SpendBreakdownMode = 'categories'
 export const DEFAULT_HEATMAP_METRIC = 'count'
+
+function browserStorage(): Storage | null {
+  if (typeof window === 'undefined' || !window.localStorage) return null
+  return window.localStorage
+}
+
+function readDashboardPreference(key: string): string | null {
+  try {
+    return browserStorage()?.getItem(key) ?? null
+  } catch {
+    return null
+  }
+}
+
+function writeDashboardPreference(key: string, value: string | null) {
+  try {
+    const storage = browserStorage()
+    if (!storage) return
+    if (value === null) storage.removeItem(key)
+    else storage.setItem(key, value)
+  } catch {
+    // Local storage is a convenience preference layer; ignore quota/privacy failures.
+  }
+}
+
+function isSummaryMode(value: string | null): value is SummaryMode {
+  return value === 'current_month' || value === 'all_time'
+}
+
+function isSpendBreakdownMode(value: string | null): value is SpendBreakdownMode {
+  return value === 'labels' || value === 'categories' || value === 'buckets'
+}
+
+function isHeatmapMetric(value: string | null): value is HeatmapMetric {
+  return value === 'amount' || value === 'count'
+}
+
+function parseMonthPreference(value: string | null): MonthNav | null {
+  if (!value || !/^\d{4}-\d{2}$/.test(value)) return null
+  const [year, month] = value.split('-').map(Number)
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null
+  return { year, month }
+}
+
+function chartColorForLabel(label: string, index: number): string {
+  return label === UNCATEGORIZED_LABEL ? UNCATEGORIZED_COLOR : chartColor(index)
+}
 
 export function displayBucketLabel(label: string): string {
   return label
@@ -94,6 +152,7 @@ interface DonutTooltipState {
   label: string
   amount: number
   pct: number
+  group?: string
 }
 
 function DonutChart({
@@ -133,6 +192,7 @@ function DonutChart({
           {slices.map((s, i) => (
             <circle
               key={`${s.label}-${i}`}
+              className="transition-all duration-500 ease-out"
               cx={cx}
               cy={cy}
               r={r}
@@ -141,6 +201,9 @@ function DonutChart({
               strokeWidth={strokeWidth}
               strokeDasharray={`${s.length} ${C - s.length}`}
               strokeDashoffset={C - s.offset}
+              role={onSliceClick ? 'button' : undefined}
+              tabIndex={onSliceClick ? 0 : -1}
+              aria-label={`${s.label}, ${formatCurrency(s.value, currency)}, ${Math.round((s.value / total) * 100)} percent`}
               style={{ cursor: onSliceClick ? 'pointer' : 'default' }}
               onMouseEnter={(e) =>
                 setTooltip({
@@ -158,6 +221,12 @@ function DonutChart({
               }
               onMouseLeave={() => setTooltip(null)}
               onClick={() => onSliceClick?.(s.label)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onSliceClick?.(s.label)
+                }
+              }}
             />
           ))}
         </g>
@@ -187,11 +256,33 @@ export function topBreakdownSlices(data: Record<string, number>): BreakdownSlice
     .map(([label, value], index) => ({
       label,
       value,
-      color: chartColor(index),
+      color: chartColorForLabel(label, index),
     }))
 }
 
-// ─── Breakdown chart (donut + legend) ────────────────────────────────────────
+function prioritizedCategoryRows(
+  data: Record<string, CategoryMonthlyEntry>,
+  showPrior: boolean,
+  limit = 5,
+): Array<[string, CategoryMonthlyEntry]> {
+  const rows = Object.entries(data)
+    .filter(([category, entry]) => {
+      if (category === UNCATEGORIZED_LABEL) {
+        return entry.current > 0
+      }
+      return entry.current > 0 || (showPrior && entry.prior > 0)
+    })
+    .sort(([, a], [, b]) => b.current - a.current)
+
+  const uncategorized = rows.find(([category]) => category === UNCATEGORIZED_LABEL)
+  if (!uncategorized || rows.indexOf(uncategorized) < limit) {
+    return rows.slice(0, limit)
+  }
+
+  return [...rows.slice(0, limit - 1), uncategorized]
+}
+
+// ─── Breakdown charts ────────────────────────────────────────────────────────
 
 function BreakdownChart({
   title,
@@ -199,16 +290,16 @@ function BreakdownChart({
   currency,
   onSliceClick,
   embedded = false,
+  action,
 }: {
   title: string
   data: Record<string, number>
   currency: string
   onSliceClick?: (slice: BreakdownSlice) => void
   embedded?: boolean
+  action?: ReactNode
 }) {
   const slices = topBreakdownSlices(data)
-
-  const total = slices.reduce((sum, s) => sum + s.value, 0)
 
   if (slices.length === 0) {
     return (
@@ -218,15 +309,18 @@ function BreakdownChart({
           'flex min-h-[220px] flex-col rounded-lg border border-border bg-card p-4 shadow-sm',
         ].join(' ')}
       >
-        <h3
-          className={
-            embedded
-              ? 'mb-3 text-[10px] text-muted-foreground'
-              : 'mb-3 text-xs uppercase tracking-wider text-muted-foreground'
-          }
-        >
-          {title}
-        </h3>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3
+            className={
+              embedded
+                ? 'text-[10px] text-muted-foreground'
+                : 'text-xs uppercase tracking-wider text-muted-foreground'
+            }
+          >
+            {title}
+          </h3>
+          {action}
+        </div>
         <p className="flex flex-1 items-center justify-center py-4 text-center text-xs text-muted-foreground">
           No data
         </p>
@@ -241,20 +335,23 @@ function BreakdownChart({
         'flex min-h-[220px] flex-col rounded-lg border border-border bg-card p-4 shadow-sm',
       ].join(' ')}
     >
-      <h3
-        className={
-          embedded
-            ? 'mb-3 text-[10px] text-muted-foreground'
-            : 'mb-3 text-xs uppercase tracking-wider text-muted-foreground'
-        }
-      >
-        {title}
-      </h3>
-      <div className="flex flex-1 items-start gap-4">
-        <div className="flex flex-shrink-0 items-center justify-center pt-1">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3
+          className={
+            embedded
+              ? 'text-[10px] text-muted-foreground'
+              : 'text-xs uppercase tracking-wider text-muted-foreground'
+          }
+        >
+          {title}
+        </h3>
+        {action}
+      </div>
+      <div className="flex flex-1 items-center justify-center py-2">
+        <div className="flex flex-shrink-0 items-center justify-center">
           <DonutChart
             data={slices}
-            size={104}
+            size={156}
             currency={currency}
             onSliceClick={(label) => {
               const slice = slices.find((entry) => entry.label === label)
@@ -262,32 +359,155 @@ function BreakdownChart({
             }}
           />
         </div>
-        <div className="min-w-0 flex-1 space-y-1.5 pt-1">
-          {slices.map((s) => (
-            <button
-              key={s.label}
-              type="button"
-              className="grid w-full min-w-0 grid-cols-[auto,minmax(0,1fr),auto] items-center gap-2"
-              style={{ cursor: onSliceClick ? 'pointer' : 'default' }}
-              onClick={() => onSliceClick?.(s)}
-            >
-              <span
-                className="h-2 w-2 flex-shrink-0 rounded-full"
-                style={{ backgroundColor: s.color }}
-              />
-              <span className="flex-1 truncate text-left text-xs text-muted-foreground">
-                {s.label}
-              </span>
-              <span className="flex-shrink-0 font-mono text-xs text-foreground">
-                {total > 0 ? `${Math.round((s.value / total) * 100)}%` : '—'}
-              </span>
-            </button>
-          ))}
-        </div>
       </div>
-      <p className="mt-auto border-t border-border pt-3 text-xs text-muted-foreground">
-        Total: <span className="font-mono text-foreground">{formatCurrency(total, currency)}</span>
-      </p>
+    </div>
+  )
+}
+
+function ConcentricBreakdownChart({
+  title,
+  outerData,
+  innerData,
+  outerLabel,
+  innerLabel,
+  currency,
+  onOuterSliceClick,
+  onInnerSliceClick,
+}: {
+  title: string
+  outerData: Record<string, number>
+  innerData: Record<string, number>
+  outerLabel: string
+  innerLabel: string
+  currency: string
+  onOuterSliceClick?: (slice: BreakdownSlice) => void
+  onInnerSliceClick?: (slice: BreakdownSlice) => void
+}) {
+  const [tooltip, setTooltip] = useState<DonutTooltipState | null>(null)
+  const outerSlices = topBreakdownSlices(outerData)
+  const innerSlices = topBreakdownSlices(innerData).map((slice, index) => ({
+    ...slice,
+    color: chartColor(index + 3),
+  }))
+  const hasData = outerSlices.length > 0 || innerSlices.length > 0
+
+  if (!hasData) {
+    return (
+      <div className="flex min-h-[220px] flex-col rounded-lg border border-border bg-card p-4 shadow-sm">
+        <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">{title}</h3>
+        <p className="flex flex-1 items-center justify-center py-4 text-center text-xs text-muted-foreground">
+          No data
+        </p>
+      </div>
+    )
+  }
+
+  const size = 176
+  const cx = size / 2
+  const cy = size / 2
+  const buildRing = (
+    slices: BreakdownSlice[],
+    radius: number,
+    strokeWidth: number,
+    group: string,
+    onSliceClick?: (slice: BreakdownSlice) => void,
+  ) => {
+    const ringTotal = slices.reduce((sum, slice) => sum + slice.value, 0)
+    const circumference = 2 * Math.PI * radius
+    let cumulativeOffset = 0
+
+    return slices.map((slice, index) => {
+      const length = ringTotal > 0 ? (slice.value / ringTotal) * circumference : 0
+      const dashOffset = circumference - cumulativeOffset
+      cumulativeOffset += length
+
+      return (
+        <circle
+          key={`${group}-${slice.label}-${index}`}
+          className="transition-all duration-500 ease-out"
+          cx={cx}
+          cy={cy}
+          r={radius}
+          fill="none"
+          stroke={slice.color}
+          strokeWidth={strokeWidth}
+          strokeDasharray={`${length} ${circumference - length}`}
+          strokeDashoffset={dashOffset}
+          tabIndex={onSliceClick ? 0 : -1}
+          role={onSliceClick ? 'button' : undefined}
+          aria-label={
+            onSliceClick
+              ? `${group}: ${slice.label}, ${formatCurrency(slice.value, currency)}, ${Math.round((slice.value / ringTotal) * 100)} percent`
+              : undefined
+          }
+          style={{ cursor: onSliceClick ? 'pointer' : 'default' }}
+          onMouseEnter={(event) =>
+            setTooltip({
+              x: event.clientX + 12,
+              y: event.clientY + 12,
+              label: slice.label,
+              amount: slice.value,
+              pct: ringTotal > 0 ? (slice.value / ringTotal) * 100 : 0,
+              group,
+            })
+          }
+          onMouseMove={(event) =>
+            setTooltip((prev) =>
+              prev ? { ...prev, x: event.clientX + 12, y: event.clientY + 12 } : prev,
+            )
+          }
+          onMouseLeave={() => setTooltip(null)}
+          onClick={() => onSliceClick?.(slice)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              onSliceClick?.(slice)
+            }
+          }}
+        />
+      )
+    })
+  }
+
+  return (
+    <div className="flex min-h-[220px] flex-col rounded-lg border border-border bg-card p-4 shadow-sm">
+      <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">{title}</h3>
+      <div className="flex flex-1 items-center justify-center py-1">
+        <svg
+          width={size}
+          height={size}
+          viewBox={`0 0 ${size} ${size}`}
+          aria-label={title}
+          className="overflow-visible"
+        >
+          <g transform={`rotate(-90, ${cx}, ${cy})`}>
+            {buildRing(outerSlices, 68, 20, outerLabel, onOuterSliceClick)}
+            {buildRing(innerSlices, 41, 18, innerLabel, onInnerSliceClick)}
+          </g>
+        </svg>
+      </div>
+      {tooltip &&
+        createPortal(
+          <div
+            className="pointer-events-none fixed z-50 rounded border border-border bg-secondary px-2 py-1 text-xs shadow-lg"
+            style={{ left: tooltip.x, top: tooltip.y }}
+          >
+            {tooltip.group && (
+              <>
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {tooltip.group}
+                </span>
+                <br />
+              </>
+            )}
+            <span className="font-medium text-foreground">{tooltip.label}</span>
+            <br />
+            <span className="text-muted-foreground">
+              {formatCurrency(tooltip.amount, currency)} · {tooltip.pct.toFixed(1)}%
+            </span>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
@@ -297,6 +517,7 @@ const BUCKET_COLORS: Record<string, string> = {
   Wants: '#f59e0b',
   Investments: '#10b981',
   Income: '#8b5cf6',
+  [UNCATEGORIZED_LABEL]: UNCATEGORIZED_COLOR,
 }
 
 function BucketRing({
@@ -328,7 +549,7 @@ function BucketRing({
   }
 
   const total = entries.reduce((sum, [, value]) => sum + value, 0)
-  const size = 128
+  const size = 156
   const r = size * 0.36
   const strokeWidth = size * 0.15
   const cx = size / 2
@@ -354,7 +575,7 @@ function BucketRing({
       <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">
         Needs · Wants · Investments
       </h3>
-      <div className="flex flex-1 flex-col items-center gap-4">
+      <div className="flex flex-1 flex-col items-center justify-center">
         <div className="relative flex items-center justify-center">
           <svg
             width={size}
@@ -366,6 +587,7 @@ function BucketRing({
               {slices.map((s) => (
                 <circle
                   key={s.label}
+                  className="transition-all duration-500 ease-out"
                   cx={cx}
                   cy={cy}
                   r={r}
@@ -407,40 +629,7 @@ function BucketRing({
                 />
               ))}
             </g>
-            <text
-              x={cx}
-              y={cy - 6}
-              textAnchor="middle"
-              fontSize={9}
-              fill="currentColor"
-              opacity={0.5}
-            >
-              Total
-            </text>
-            <text x={cx} y={cy + 8} textAnchor="middle" fontSize={11} fill="currentColor">
-              {formatCurrency(total, currency)}
-            </text>
           </svg>
-        </div>
-        <div className="flex w-full flex-wrap justify-center gap-x-4 gap-y-1">
-          {slices.map((s) => (
-            <button
-              key={s.label}
-              type="button"
-              className="flex items-center gap-1.5"
-              style={{ cursor: onSliceClick ? 'pointer' : 'default' }}
-              onClick={() => onSliceClick?.(s.label)}
-            >
-              <span
-                className="h-2 w-2 flex-shrink-0 rounded-full"
-                style={{ backgroundColor: s.color }}
-              />
-              <span className="text-xs text-muted-foreground">{displayBucketLabel(s.label)}</span>
-              <span className="font-mono text-xs text-foreground">
-                {Math.round((s.value / total) * 100)}%
-              </span>
-            </button>
-          ))}
         </div>
       </div>
       {tooltip &&
@@ -466,12 +655,16 @@ function CategoryMonthlyCard({
   currency,
   monthLabel,
   locale,
+  title,
+  showPrior = true,
   onRowClick,
 }: {
   data: Record<string, CategoryMonthlyEntry>
   currency: string
   monthLabel: string
   locale: string
+  title?: string
+  showPrior?: boolean
   onRowClick?: (category: string) => void
 }) {
   const currentMonth = parseMonthLabel(monthLabel)
@@ -483,17 +676,14 @@ function CategoryMonthlyCard({
     ? formatMonthForLocale(new Date(priorMonth.year, priorMonth.month - 1, 1), locale)
     : 'Prior'
 
-  const rows = Object.entries(data)
-    .filter(([, entry]) => entry.current > 0 || entry.prior > 0)
-    .sort(([, a], [, b]) => b.current - a.current)
-    .slice(0, 5)
+  const cardTitle = title ?? `${currentLabel} vs ${priorLabel}`
+
+  const rows = prioritizedCategoryRows(data, showPrior)
 
   if (rows.length === 0) {
     return (
       <div className="flex h-full min-h-[220px] flex-col rounded-lg border border-border bg-card p-4 shadow-sm">
-        <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">
-          {currentLabel} vs {priorLabel}
-        </h3>
+        <h3 className="mb-3 text-xs uppercase tracking-wider text-muted-foreground">{cardTitle}</h3>
         <p className="flex flex-1 items-center justify-center py-4 text-center text-xs text-muted-foreground">
           No data
         </p>
@@ -501,28 +691,34 @@ function CategoryMonthlyCard({
     )
   }
 
-  const maxVal = Math.max(...rows.flatMap(([, entry]) => [entry.current, entry.prior]), 1)
+  const maxVal = Math.max(
+    ...rows.flatMap(([, entry]) => (showPrior ? [entry.current, entry.prior] : [entry.current])),
+    1,
+  )
 
   return (
     <div className="flex h-full min-h-[220px] flex-col rounded-lg border border-border bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-xs uppercase tracking-wider text-muted-foreground">
-          {currentLabel} vs {priorLabel}
-        </h3>
-        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-3 rounded-sm bg-primary/80" />
-            {currentLabel}
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-3 rounded-sm bg-secondary-foreground/20" />
-            {priorLabel}
-          </span>
-        </div>
+        <h3 className="text-xs uppercase tracking-wider text-muted-foreground">{cardTitle}</h3>
+        {showPrior && (
+          <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2 w-3 rounded-sm bg-primary/80" />
+              {currentLabel}
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2 w-3 rounded-sm bg-secondary-foreground/20" />
+              {priorLabel}
+            </span>
+          </div>
+        )}
       </div>
       <div className="space-y-2">
         {rows.map(([cat, entry]) => {
-          const delta = entry.prior > 0 ? ((entry.current - entry.prior) / entry.prior) * 100 : null
+          const delta =
+            showPrior && entry.prior > 0
+              ? ((entry.current - entry.prior) / entry.prior) * 100
+              : null
           const isClickable = Boolean(onRowClick) && entry.current > 0
           return (
             <button
@@ -568,11 +764,18 @@ function CategoryMonthlyCard({
                     style={{ width: `${(entry.current / maxVal) * 100}%` }}
                   />
                 </div>
-                <div className="h-1 overflow-hidden rounded-full bg-secondary">
-                  <div
-                    className="h-full rounded-full bg-secondary-foreground/20 transition-all"
-                    style={{ width: `${(entry.prior / maxVal) * 100}%` }}
-                  />
+                <div
+                  className={[
+                    'h-1 overflow-hidden rounded-full bg-secondary',
+                    !showPrior && 'invisible',
+                  ].join(' ')}
+                >
+                  {showPrior && (
+                    <div
+                      className="h-full rounded-full bg-secondary-foreground/20 transition-all"
+                      style={{ width: `${(entry.prior / maxVal) * 100}%` }}
+                    />
+                  )}
                 </div>
               </div>
             </button>
@@ -860,44 +1063,6 @@ function DailySpendChart({
   )
 }
 
-// ─── Stats section ───────────────────────────────────────────────────────────
-
-function CategoryBar({
-  category,
-  amount,
-  count,
-  maxAmount,
-  currency,
-  onBarClick,
-}: {
-  category: string
-  amount: number
-  count?: number
-  maxAmount: number
-  currency: string
-  onBarClick?: (category: string) => void
-}) {
-  const pct = maxAmount > 0 ? (amount / maxAmount) * 100 : 0
-  return (
-    <div
-      className="flex items-center gap-3 py-1.5"
-      style={{ cursor: onBarClick ? 'pointer' : 'default' }}
-      onClick={() => onBarClick?.(category)}
-    >
-      <span className="w-28 flex-shrink-0 truncate text-xs text-muted-foreground">{category}</span>
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
-        <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
-      </div>
-      <span className="flex-shrink-0 text-right font-mono text-xs text-primary">
-        {formatCurrency(amount, currency)}
-        {count !== undefined && (
-          <span className="ml-1 font-sans text-[10px] text-muted-foreground">· {count}</span>
-        )}
-      </span>
-    </div>
-  )
-}
-
 type SummaryMode = 'current_month' | 'all_time'
 
 const SUMMARY_MODE_OPTIONS: SummaryMode[] = ['current_month', 'all_time']
@@ -993,7 +1158,7 @@ function buildTransactionSearch(
   return search.toString()
 }
 
-function SummarySection({
+export function SummarySection({
   summary,
   currency,
   locale,
@@ -1007,6 +1172,10 @@ function SummarySection({
   currentMonthRange?: { from: string; to: string } | null
 }) {
   const navigate = useNavigate()
+  const { t } = useI18n()
+  const [showUncategorizedLabels, setShowUncategorizedLabels] = useState(
+    () => readDashboardPreference(DASHBOARD_PREF_KEYS.showUncategorizedLabels) !== 'false',
+  )
 
   const monthRange = summaryMode === 'current_month' ? currentMonthRange : null
 
@@ -1018,59 +1187,110 @@ function SummarySection({
     goToTransactions(dashboardBreakdownParams(includeKey, slice.label))
   }
 
+  const categoryCardData =
+    summaryMode === 'all_time'
+      ? Object.fromEntries(
+          Object.entries(dashboardBreakdownData(summary.charts.by_category)).map(
+            ([category, amount]) => [category, { current: amount, prior: 0 }],
+          ),
+        )
+      : summary.charts.by_category_monthly
+  const labelBreakdownData = Object.fromEntries(
+    Object.entries(dashboardBreakdownData(summary.charts.by_label, 'label')).filter(
+      ([label]) => showUncategorizedLabels || label !== UNCATEGORIZED_LABEL,
+    ),
+  )
+
+  const toggleUncategorizedLabels = () => {
+    setShowUncategorizedLabels((prev) => {
+      const next = !prev
+      writeDashboardPreference(DASHBOARD_PREF_KEYS.showUncategorizedLabels, String(next))
+      return next
+    })
+  }
+
   return (
     <div className="space-y-4">
-      {summaryMode === 'current_month' && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="md:col-span-1">
-            <BucketRing
-              data={summary.charts.by_bucket}
-              currency={currency}
-              onSliceClick={(label) =>
-                goToTransactions(dashboardBreakdownParams('bucket', displayBucketLabel(label)))
-              }
-            />
-          </div>
-          <div className="md:col-span-2">
-            <CategoryMonthlyCard
-              data={summary.charts.by_category_monthly}
-              currency={currency}
-              locale={locale}
-              monthLabel={summary.label}
-              onRowClick={(category) =>
-                goToTransactions(dashboardBreakdownParams('category', category))
-              }
-            />
-          </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="md:col-span-1">
+          <BucketRing
+            data={summary.charts.by_bucket}
+            currency={currency}
+            onSliceClick={(label) =>
+              goToTransactions(dashboardBreakdownParams('bucket', displayBucketLabel(label)))
+            }
+          />
         </div>
-      )}
+        <div className="md:col-span-2">
+          <CategoryMonthlyCard
+            data={categoryCardData}
+            currency={currency}
+            locale={locale}
+            monthLabel={summary.label}
+            title={
+              summaryMode === 'all_time' ? t('dashboard.breakdown.spendByCategory') : undefined
+            }
+            showPrior={summaryMode === 'current_month'}
+            onRowClick={(category) =>
+              goToTransactions(dashboardBreakdownParams('category', category))
+            }
+          />
+        </div>
+      </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <BreakdownChart
-          title="By category"
+          title={t('dashboard.breakdown.byCategory')}
           data={dashboardBreakdownData(summary.charts.by_category)}
           currency={currency}
           onSliceClick={(slice) => goToBreakdownSlice(slice, 'category')}
         />
         <BreakdownChart
-          title="By bucket"
-          data={dashboardBreakdownData(summary.charts.by_bucket, 'bucket')}
-          currency={currency}
-          onSliceClick={(slice) => goToBreakdownSlice(slice, 'bucket')}
-        />
-        <BreakdownChart
-          title="By label"
-          data={dashboardBreakdownData(summary.charts.by_label)}
+          title={t('dashboard.breakdown.byLabel')}
+          data={labelBreakdownData}
           currency={currency}
           onSliceClick={(slice) => goToBreakdownSlice(slice, 'label')}
+          action={
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showUncategorizedLabels}
+              aria-label={t('dashboard.breakdown.showUncategorizedLabels')}
+              onClick={toggleUncategorizedLabels}
+              className={[
+                'inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-1 text-[10px] transition-colors',
+                showUncategorizedLabels
+                  ? 'bg-primary/10 text-primary'
+                  : 'bg-card text-muted-foreground hover:text-foreground',
+              ].join(' ')}
+            >
+              <span
+                className={[
+                  'h-2 w-2 rounded-full transition-colors',
+                  showUncategorizedLabels ? 'bg-primary' : 'bg-muted-foreground/50',
+                ].join(' ')}
+              />
+              {t('common.uncategorized')}
+            </button>
+          }
         />
-        <BreakdownChart
-          title="By source"
-          data={summary.charts.by_source}
+        <ConcentricBreakdownChart
+          title={t('dashboard.breakdown.bankAndType')}
+          outerData={summary.charts.by_source_type}
+          innerData={summary.charts.by_bank}
+          outerLabel={t('common.type')}
+          innerLabel={t('common.bank')}
           currency={currency}
-          onSliceClick={(slice) => goToBreakdownSlice(slice, 'source')}
+          onOuterSliceClick={(slice) => goToBreakdownSlice(slice, 'source_type')}
+          onInnerSliceClick={(slice) => goToBreakdownSlice(slice, 'bank')}
         />
       </div>
+
+      <div
+        data-testid="summary-static-charts-separator"
+        className="border-t border-border/70"
+        aria-hidden="true"
+      />
     </div>
   )
 }
@@ -1089,22 +1309,10 @@ function SummaryOverviewCard({
   currentMonthRange?: { from: string; to: string } | null
 }) {
   const navigate = useNavigate()
-  const sortedCategories = Object.entries(
-    dashboardBreakdownData(summary.stats.total_by_category ?? {}),
-  )
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 5)
-  const maxCategoryAmount = sortedCategories[0]?.[1] ?? 1
   const monthRange = summaryMode === 'current_month' ? currentMonthRange : null
 
   const goToTransactions = () => {
     navigate(`/transactions?${buildTransactionSearch({ show_filters: '1' }, monthRange)}`)
-  }
-
-  const goToCategory = (category: string) => {
-    navigate(
-      `/transactions?${buildTransactionSearch(dashboardBreakdownParams('category', category), monthRange)}`,
-    )
   }
 
   return (
@@ -1127,29 +1335,6 @@ function SummaryOverviewCard({
             {formatNumberForLocale(summary.stats.total_count, locale)} transactions
           </button>
         </div>
-      </div>
-
-      <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-        <h3 className="mb-4 text-xs uppercase tracking-wider text-muted-foreground">
-          Spend by category
-        </h3>
-        {sortedCategories.length > 0 ? (
-          <div className="divide-y divide-border">
-            {sortedCategories.map(([category, amount]) => (
-              <CategoryBar
-                key={category}
-                category={category}
-                amount={amount}
-                count={summary.stats.total_category_count?.[category]}
-                maxAmount={maxCategoryAmount}
-                currency={currency}
-                onBarClick={goToCategory}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="py-4 text-center text-xs text-muted-foreground">No data</p>
-        )}
       </div>
     </div>
   )
@@ -1235,7 +1420,10 @@ export function MetricToggle({
 function SpendingPatternsSection() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [metric, setMetric] = useState<HeatmapMetric>(DEFAULT_HEATMAP_METRIC)
+  const [metric, setMetricState] = useState<HeatmapMetric>(() => {
+    const stored = readDashboardPreference(DASHBOARD_PREF_KEYS.heatmapMetric)
+    return isHeatmapMetric(stored) ? stored : DEFAULT_HEATMAP_METRIC
+  })
   const { data: status } = useStatus()
   const { data: timezone } = useTimezone()
   const currency = status?.stats?.base_currency ?? 'INR'
@@ -1243,10 +1431,12 @@ function SpendingPatternsSection() {
   const currentYear = now.getFullYear()
   const heatmapTimezone = timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
 
-  // Item 4: year persisted in URL
   const yearParam = searchParams.get('heatmap_year')
-  const year = yearParam ? parseInt(yearParam, 10) : currentYear
+  const storedYear = Number(readDashboardPreference(DASHBOARD_PREF_KEYS.annualHeatmapYear))
+  const parsedYear = yearParam ? parseInt(yearParam, 10) : storedYear
+  const year = Number.isInteger(parsedYear) && parsedYear > 0 ? parsedYear : currentYear
   const setYear = (y: number) => {
+    writeDashboardPreference(DASHBOARD_PREF_KEYS.annualHeatmapYear, String(y))
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev)
@@ -1257,15 +1447,15 @@ function SpendingPatternsSection() {
     )
   }
 
-  // Item 5: month filter persisted in URL
   const monthParam = searchParams.get('heatmap_month') // format YYYY-MM or absent
-  const monthNav: MonthNav | null = monthParam
-    ? {
-        year: parseInt(monthParam.split('-')[0]!, 10),
-        month: parseInt(monthParam.split('-')[1]!, 10),
-      }
-    : null
+  const monthNav = parseMonthPreference(
+    monthParam ?? readDashboardPreference(DASHBOARD_PREF_KEYS.weekdayHeatmapMonth),
+  )
   const setMonthNav = (nav: MonthNav | null) => {
+    writeDashboardPreference(
+      DASHBOARD_PREF_KEYS.weekdayHeatmapMonth,
+      nav ? `${nav.year}-${String(nav.month).padStart(2, '0')}` : null,
+    )
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev)
@@ -1278,6 +1468,10 @@ function SpendingPatternsSection() {
       },
       { replace: true },
     )
+  }
+  const setMetric = (nextMetric: HeatmapMetric) => {
+    writeDashboardPreference(DASHBOARD_PREF_KEYS.heatmapMetric, nextMetric)
+    setMetricState(nextMetric)
   }
 
   const dateRange = monthNav ? monthRangeISO(monthNav) : undefined
@@ -1849,11 +2043,14 @@ function RecentTransactions() {
 export default function Dashboard() {
   const [searchParams, setSearchParams] = useSearchParams()
   const breakdownParam = searchParams.get('breakdown')
-  const breakdownMode: SpendBreakdownMode =
-    breakdownParam === 'labels' || breakdownParam === 'buckets'
-      ? breakdownParam
+  const storedBreakdownMode = readDashboardPreference(DASHBOARD_PREF_KEYS.spendBreakdownMode)
+  const breakdownMode: SpendBreakdownMode = isSpendBreakdownMode(breakdownParam)
+    ? breakdownParam
+    : isSpendBreakdownMode(storedBreakdownMode)
+      ? storedBreakdownMode
       : DEFAULT_SPEND_BREAKDOWN_MODE
   const setBreakdownMode = (mode: SpendBreakdownMode) => {
+    writeDashboardPreference(DASHBOARD_PREF_KEYS.spendBreakdownMode, mode)
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev)
@@ -1905,8 +2102,12 @@ export default function Dashboard() {
   const currentMonth = dashboardData?.current_month
   const allTime = dashboardData?.all_time
   const summaryParam = searchParams.get('summary')
-  const requestedSummaryMode: SummaryMode =
-    summaryParam === 'all_time' ? 'all_time' : 'current_month'
+  const storedSummaryMode = readDashboardPreference(DASHBOARD_PREF_KEYS.summaryMode)
+  const requestedSummaryMode: SummaryMode = isSummaryMode(summaryParam)
+    ? summaryParam
+    : isSummaryMode(storedSummaryMode)
+      ? storedSummaryMode
+      : 'current_month'
   const effectiveSummaryMode: SummaryMode =
     requestedSummaryMode === 'current_month'
       ? currentMonth
@@ -1931,6 +2132,7 @@ export default function Dashboard() {
     all_time: 'All Time',
   }
   const setSummaryMode = (mode: SummaryMode) => {
+    writeDashboardPreference(DASHBOARD_PREF_KEYS.summaryMode, mode)
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev)

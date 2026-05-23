@@ -1,3 +1,9 @@
+export interface Source {
+  type: string
+  label: string
+  bank: string
+}
+
 export interface Transaction {
   id: string
   message_id: string
@@ -10,7 +16,7 @@ export interface Transaction {
   merchant_info: string
   category: string
   bucket: string
-  source: string
+  source: Source
   description: string
   labels: string[]
   muted: boolean
@@ -114,6 +120,8 @@ export interface ChartData {
   by_bucket: Record<string, number>
   by_label: Record<string, number>
   by_source: Record<string, number>
+  by_source_type: Record<string, number>
+  by_bank: Record<string, number>
   by_category_monthly: Record<string, CategoryMonthlyEntry>
 }
 
@@ -149,16 +157,29 @@ export interface AnnualHeatmapData {
 export interface Rule {
   id: string
   name: string
-  sender_email: string
+  sender_email?: string
+  sender_emails: string[]
   subject_contains: string
   amount_regex: string
   merchant_regex: string
   currency_regex: string
-  transaction_source: string
+  transaction_source?: string
+  source: Source
   predefined: boolean
   created_at: string
   updated_at: string
 }
+
+export type RulePayload = Pick<
+  Rule,
+  | 'name'
+  | 'sender_emails'
+  | 'subject_contains'
+  | 'amount_regex'
+  | 'merchant_regex'
+  | 'currency_regex'
+  | 'source'
+>
 
 export type ExtractionDiagnosticStatus = 'open' | 'resolved' | 'ignored'
 export type ExtractionDiagnosticListStatus = ExtractionDiagnosticStatus | 'all'
@@ -188,11 +209,26 @@ export interface ExtractionDiagnostic {
 
 export interface RuleImport {
   name: string
-  senderEmail: string
-  subjectContains: string
-  amountRegex: string
-  merchantInfoRegex: string
-  currencyRegex?: string
+  sender_emails: string[]
+  subject_contains: string
+  amount_regex: string
+  merchant_regex: string
+  currency_regex: string
+  source: Source
+}
+
+export interface PresetValue {
+  value: string
+  origin: 'predefined' | 'custom'
+}
+
+export interface RuleDocument {
+  version: 2
+  presets: {
+    source_types: PresetValue[]
+    banks: PresetValue[]
+  }
+  rules: RuleImport[]
 }
 
 export interface StatusResponse {
@@ -279,6 +315,8 @@ export interface TransactionsResponse {
 
 export interface Facets {
   sources: string[]
+  source_types: string[]
+  banks: string[]
   categories: string[]
   category_counts?: Record<string, number>
   currencies: string[]
@@ -298,6 +336,10 @@ export interface TransactionFilters {
   currency?: string
   source?: string
   exclude_sources?: string[]
+  source_type?: string
+  exclude_source_types?: string[]
+  bank?: string
+  exclude_banks?: string[]
   bucket?: string
   bucket_missing?: boolean
   exclude_buckets?: string[]

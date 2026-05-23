@@ -1,0 +1,14 @@
+---
+rule: HDFC Credit Card Payment Made
+sender: alerts@hdfcbank.net
+subject: "A payment was made using your Credit Card"
+expected:
+  amount: 1007.00
+  merchant: WWW SWIGGY IN
+  currency: INR
+---
+Dear Customer,
+
+Greetings from HDFC Bank.
+
+We would like to inform you that Rs. 1007.00 has been debited from your HDFC Bank Credit Card ending 1234 towards WWW SWIGGY IN on 16 Apr, 2026 at 10:28:40.

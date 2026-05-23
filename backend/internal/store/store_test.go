@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 	pgwriter "github.com/ArionMiles/expensor/backend/pkg/writer/postgres"
@@ -1485,6 +1488,56 @@ func TestCreateAndGetRule(t *testing.T) {
 	}
 }
 
+func TestCreateRuleDuplicateNameReturnsConflict(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+	row := store.RuleRow{
+		Name:          "duplicate rule",
+		AmountRegex:   `(\d+)`,
+		MerchantRegex: `(.+)`,
+	}
+	if _, err := ts.CreateRule(ctx, row); err != nil {
+		t.Fatalf("CreateRule first insert: %v", err)
+	}
+
+	_, err := ts.CreateRule(ctx, row)
+	if !errors.Is(err, store.ErrRuleNameConflict) {
+		t.Fatalf("CreateRule duplicate error = %v, want ErrRuleNameConflict", err)
+	}
+}
+
+func TestUpdateRuleDuplicateNameReturnsConflict(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+	first, err := ts.CreateRule(ctx, store.RuleRow{
+		Name:          "first rule",
+		AmountRegex:   `(\d+)`,
+		MerchantRegex: `(.+)`,
+	})
+	if err != nil {
+		t.Fatalf("CreateRule first: %v", err)
+	}
+	second, err := ts.CreateRule(ctx, store.RuleRow{
+		Name:          "second rule",
+		AmountRegex:   `(\d+)`,
+		MerchantRegex: `(.+)`,
+	})
+	if err != nil {
+		t.Fatalf("CreateRule second: %v", err)
+	}
+
+	_, err = ts.UpdateRule(ctx, second.ID, store.RuleRow{
+		Name:          first.Name,
+		AmountRegex:   `(\d+)`,
+		MerchantRegex: `(.+)`,
+	})
+	if !errors.Is(err, store.ErrRuleNameConflict) {
+		t.Fatalf("UpdateRule duplicate error = %v, want ErrRuleNameConflict", err)
+	}
+}
+
 func TestDeleteRule_PredefinedRuleNotDeleted(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
@@ -1507,6 +1560,117 @@ func TestDeleteRule_PredefinedRuleNotDeleted(t *testing.T) {
 	delErr := ts.DeleteRule(context.Background(), predefinedRule.ID)
 	if !errors.Is(delErr, store.ErrNotFound) {
 		t.Errorf("expected ErrNotFound when deleting predefined rule, got %v", delErr)
+	}
+}
+
+func TestV2MigrationBackfillsRulesAndTransactions(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+
+	_, err := ts.PoolForTest().Exec(ctx, `
+		INSERT INTO rules
+			(name, sender_email, subject_contains, amount_regex, merchant_regex, transaction_source, predefined)
+		VALUES
+			('HDFC Credit Card (debit alert)', '@hdfcbank', 'debited via Credit Card', '(\d+)', '(.+)', 'Credit Card - HDFC', true),
+			('HDFC Credit Card', '@hdfcbank', 'Alert : Update on your HDFC Bank Credit Card', '(\d+)', '(.+)', 'Credit Card - HDFC', true),
+			('Custom Legacy Rule', '@legacy', 'legacy subject', '(\d+)', '(.+)', 'Legacy Source', false)
+	`)
+	if err != nil {
+		t.Fatalf("seed legacy rules: %v", err)
+	}
+
+	_, err = ts.PoolForTest().Exec(ctx, `
+		INSERT INTO transactions
+			(message_id, amount, currency, timestamp, merchant_info, source, source_label, source_type, bank)
+		VALUES
+			('legacy-hdfc-card', 100, 'INR', NOW(), 'Swiggy', 'Credit Card - HDFC', 'Credit Card - HDFC', '', ''),
+			('legacy-icici-imobile', 200, 'INR', NOW(), 'Rent', 'iMobile - ICICI', 'iMobile - ICICI', '', ''),
+			('already-structured', 300, 'INR', NOW(), 'Cafe', 'Manual', 'Manual Source', 'UPI', 'SBI')
+	`)
+	if err != nil {
+		t.Fatalf("seed legacy transactions: %v", err)
+	}
+
+	migrationSQL, err := fs.ReadFile(migrations.FS, "003_predefined_rules_v2.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	if _, err = ts.PoolForTest().Exec(ctx, string(migrationSQL)); err != nil {
+		t.Fatalf("run v2 migration: %v", err)
+	}
+
+	var exists bool
+	if err = ts.PoolForTest().QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM rules WHERE name = 'HDFC Credit Card (debit alert)' AND predefined = true)`,
+	).Scan(&exists); err != nil {
+		t.Fatalf("check stale predefined rule: %v", err)
+	}
+	if exists {
+		t.Fatal("expected stale v1 predefined rule to be removed")
+	}
+
+	if err = ts.PoolForTest().QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM rules WHERE name = 'Custom Legacy Rule' AND predefined = false)`,
+	).Scan(&exists); err != nil {
+		t.Fatalf("check custom legacy rule: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected custom legacy rule to remain")
+	}
+
+	var senderEmails []string
+	var sourceType, sourceLabel, bank string
+	if err = ts.PoolForTest().QueryRow(ctx, `
+		SELECT sender_emails, source_type, source_label, bank
+		FROM rules
+		WHERE name = 'HDFC Credit Card' AND predefined = true
+	`).Scan(&senderEmails, &sourceType, &sourceLabel, &bank); err != nil {
+		t.Fatalf("check migrated predefined rule: %v", err)
+	}
+	wantSenders := []string{"alerts@hdfcbank.bank.in", "alerts@hdfcbank.net"}
+	if !reflect.DeepEqual(senderEmails, wantSenders) {
+		t.Fatalf("sender_emails = %#v, want %#v", senderEmails, wantSenders)
+	}
+	if sourceType != "Credit Card" || sourceLabel != "HDFC Credit Card" || bank != "HDFC" {
+		t.Fatalf("source fields = (%q, %q, %q), want (Credit Card, HDFC Credit Card, HDFC)", sourceType, sourceLabel, bank)
+	}
+
+	type sourceFields struct {
+		sourceLabel string
+		sourceType  string
+		bank        string
+	}
+	rows, err := ts.PoolForTest().Query(ctx, `
+		SELECT message_id, source_label, source_type, bank
+		FROM transactions
+		WHERE message_id IN ('legacy-hdfc-card', 'legacy-icici-imobile', 'already-structured')
+	`)
+	if err != nil {
+		t.Fatalf("query transactions: %v", err)
+	}
+	defer rows.Close()
+
+	got := map[string]sourceFields{}
+	for rows.Next() {
+		var messageID string
+		var fields sourceFields
+		if err = rows.Scan(&messageID, &fields.sourceLabel, &fields.sourceType, &fields.bank); err != nil {
+			t.Fatalf("scan transaction: %v", err)
+		}
+		got[messageID] = fields
+	}
+	if err = rows.Err(); err != nil {
+		t.Fatalf("iterate transactions: %v", err)
+	}
+
+	want := map[string]sourceFields{
+		"legacy-hdfc-card":     {sourceLabel: "HDFC Credit Card", sourceType: "Credit Card", bank: "HDFC"},
+		"legacy-icici-imobile": {sourceLabel: "ICICI iMobile", sourceType: "Mobile App", bank: "ICICI"},
+		"already-structured":   {sourceLabel: "Manual Source", sourceType: "UPI", bank: "SBI"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("source fields = %#v, want %#v", got, want)
 	}
 }
 
@@ -1608,6 +1772,82 @@ func TestGetFacets_IncludesLabelCounts(t *testing.T) {
 	}
 }
 
+func TestRulesRepository_PersistsSenderEmailsAndSourceFields(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+
+	created, err := ts.CreateRule(ctx, store.RuleRow{
+		Name:            "Structured HDFC",
+		SenderEmails:    []string{"alerts@hdfcbank.net", "alerts@hdfcbank.bank.in"},
+		SubjectContains: "HDFC Credit Card",
+		AmountRegex:     `Rs\.([\d.]+)`,
+		MerchantRegex:   `at (.*?) on`,
+		SourceType:      "Credit Card",
+		SourceLabel:     "HDFC Credit Card",
+		Bank:            "HDFC",
+	})
+	if err != nil {
+		t.Fatalf("CreateRule: %v", err)
+	}
+
+	got, err := ts.GetRule(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("GetRule: %v", err)
+	}
+	if !reflect.DeepEqual(got.SenderEmails, []string{"alerts@hdfcbank.net", "alerts@hdfcbank.bank.in"}) {
+		t.Fatalf("sender emails = %#v", got.SenderEmails)
+	}
+	if got.SourceType != "Credit Card" || got.SourceLabel != "HDFC Credit Card" || got.Bank != "HDFC" {
+		t.Fatalf("source fields = (%q, %q, %q)", got.SourceType, got.SourceLabel, got.Bank)
+	}
+}
+
+func TestTransactionsStructuredSourceFacetsAndFilters(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+
+	seed := []store.InsertParams{
+		{MessageID: "structured-source-1", Amount: 100, MerchantInfo: "Amazon", SourceType: "Credit Card", SourceLabel: "HDFC Credit Card", Bank: "HDFC"},
+		{MessageID: "structured-source-2", Amount: 200, MerchantInfo: "Swiggy", SourceType: "UPI", SourceLabel: "ICICI UPI", Bank: "ICICI"},
+		{MessageID: "structured-source-3", Amount: 300, MerchantInfo: "Uber", SourceType: "Credit Card", SourceLabel: "ICICI Credit Card", Bank: "ICICI"},
+	}
+	for _, p := range seed {
+		if _, err := ts.InsertForTest(ctx, p); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+
+	facets, err := ts.GetFacets(ctx)
+	if err != nil {
+		t.Fatalf("GetFacets: %v", err)
+	}
+	if !reflect.DeepEqual(facets.SourceTypes, []string{"Credit Card", "UPI"}) {
+		t.Fatalf("source types = %#v", facets.SourceTypes)
+	}
+	if !reflect.DeepEqual(facets.Banks, []string{"HDFC", "ICICI"}) {
+		t.Fatalf("banks = %#v", facets.Banks)
+	}
+
+	txns, _, err := ts.ListTransactions(ctx, store.ListFilter{SourceType: "Credit Card", Bank: "HDFC", PageSize: 10})
+	if err != nil {
+		t.Fatalf("ListTransactions: %v", err)
+	}
+	if len(txns) != 1 || txns[0].MessageID != "structured-source-1" {
+		t.Fatalf("filtered transactions = %#v", txns)
+	}
+	if txns[0].Source.Type != "Credit Card" || txns[0].Source.Bank != "HDFC" || txns[0].Source.Label != "HDFC Credit Card" {
+		t.Fatalf("transaction source = %#v", txns[0].Source)
+	}
+}
+
 func TestGetChartData_BySource(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test")
@@ -1617,9 +1857,9 @@ func TestGetChartData_BySource(t *testing.T) {
 	ctx := context.Background()
 
 	for _, p := range []store.InsertParams{
-		{MessageID: "src-1", Amount: 100, Currency: "INR", MerchantInfo: "Amazon", Category: "Shopping", Source: "HDFC Credit Card"},
-		{MessageID: "src-2", Amount: 200, Currency: "INR", MerchantInfo: "Swiggy", Category: "Food", Source: "SBI Debit Card"},
-		{MessageID: "src-3", Amount: 50, Currency: "INR", MerchantInfo: "Netflix", Category: "Entertainment", Source: "HDFC Credit Card"},
+		{MessageID: "src-1", Amount: 100, Currency: "INR", MerchantInfo: "Amazon", Category: "Shopping", Source: "HDFC Credit Card", SourceType: "Credit Card", Bank: "HDFC"},
+		{MessageID: "src-2", Amount: 200, Currency: "INR", MerchantInfo: "Swiggy", Category: "Food", Source: "SBI Debit Card", SourceType: "Debit Card", Bank: "SBI"},
+		{MessageID: "src-3", Amount: 50, Currency: "INR", MerchantInfo: "Netflix", Category: "Entertainment", Source: "HDFC Credit Card", SourceType: "Credit Card", Bank: "HDFC"},
 	} {
 		if _, err := ts.InsertForTest(ctx, p); err != nil {
 			t.Fatalf("seed: %v", err)
@@ -1635,6 +1875,18 @@ func TestGetChartData_BySource(t *testing.T) {
 	}
 	if cd.BySource["SBI Debit Card"] != 200 {
 		t.Errorf("want SBI=200, got %v", cd.BySource["SBI Debit Card"])
+	}
+	if cd.BySourceType["Credit Card"] != 150 {
+		t.Errorf("want Credit Card=150, got %v", cd.BySourceType["Credit Card"])
+	}
+	if cd.BySourceType["Debit Card"] != 200 {
+		t.Errorf("want Debit Card=200, got %v", cd.BySourceType["Debit Card"])
+	}
+	if cd.ByBank["HDFC"] != 150 {
+		t.Errorf("want HDFC bank=150, got %v", cd.ByBank["HDFC"])
+	}
+	if cd.ByBank["SBI"] != 200 {
+		t.Errorf("want SBI bank=200, got %v", cd.ByBank["SBI"])
 	}
 }
 

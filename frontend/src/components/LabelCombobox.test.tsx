@@ -1,11 +1,12 @@
 import { http, HttpResponse } from 'msw'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { LabelCombobox } from './LabelCombobox'
 import { renderWithProviders } from '@/test/render'
 import { server } from '@/test/server'
 import type { Transaction } from '@/api/types'
+import { LABEL_SWATCH_COLORS } from '@/lib/utils'
 
 const baseTransaction: Transaction = {
   id: 'tx-1',
@@ -16,7 +17,7 @@ const baseTransaction: Transaction = {
   merchant_info: '',
   category: 'Food',
   bucket: 'Needs',
-  source: 'gmail',
+  source: { type: 'Credit Card', label: 'HDFC Credit Card', bank: 'HDFC' },
   description: 'Lunch',
   labels: [],
   muted: false,
@@ -27,6 +28,7 @@ const baseTransaction: Transaction = {
 
 function stubLabels() {
   let addLabelCalls = 0
+  let createLabelColor = ''
 
   server.use(
     http.get('/api/config/labels', () =>
@@ -39,11 +41,30 @@ function stubLabels() {
       addLabelCalls += 1
       return HttpResponse.json({})
     }),
+    http.post('/api/config/labels', async ({ request }) => {
+      const body = (await request.json()) as { name?: string; color?: string }
+      createLabelColor = body.color ?? ''
+      return HttpResponse.json({ name: body.name ?? '', color: body.color ?? '' })
+    }),
   )
 
   return {
     getAddLabelCalls: () => addLabelCalls,
+    getCreateLabelColor: () => createLabelColor,
   }
+}
+
+function stubManyLabels() {
+  server.use(
+    http.get('/api/config/labels', () =>
+      HttpResponse.json([
+        { name: '10min Delivery', color: '#8b5cf6' },
+        { name: 'ffd', color: '#6366f1' },
+        { name: 'fgf', color: '#06b6d4' },
+        { name: 'gfgf', color: '#10b981' },
+      ]),
+    ),
+  )
 }
 
 describe('LabelCombobox', () => {
@@ -158,5 +179,49 @@ describe('LabelCombobox', () => {
     await user.type(screen.getByPlaceholderText('label...'), 'Travel')
 
     expect(screen.getByText('+ Create "Travel"')).toBeInTheDocument()
+  })
+
+  it('caps visible labels and exposes the full list through an overflow popover', async () => {
+    const user = userEvent.setup()
+    stubManyLabels()
+
+    renderWithProviders(
+      <LabelCombobox
+        tx={{
+          ...baseTransaction,
+          labels: ['10min Delivery', 'ffd', 'fgf', 'gfgf'],
+        }}
+      />,
+    )
+
+    expect(await screen.findByText('10min Delivery')).toBeInTheDocument()
+    expect(screen.getByText('ffd')).toBeInTheDocument()
+    expect(screen.queryByText('fgf')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show 2 more labels' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add label' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Show 2 more labels' }))
+
+    const popover = await screen.findByRole('dialog', { name: 'More labels' })
+    expect(within(popover).getByText('More labels')).toBeInTheDocument()
+    expect(within(popover).queryByText('10min Delivery')).not.toBeInTheDocument()
+    expect(within(popover).queryByText('ffd')).not.toBeInTheDocument()
+    expect(within(popover).getByText('fgf')).toBeInTheDocument()
+    expect(within(popover).getByText('gfgf')).toBeInTheDocument()
+  })
+
+  it('assigns new labels the next shared swatch color', async () => {
+    const user = userEvent.setup()
+    const state = stubLabels()
+
+    renderWithProviders(<LabelCombobox tx={baseTransaction} />)
+
+    await user.click(screen.getByRole('button', { name: 'Add label' }))
+    await user.type(screen.getByPlaceholderText('label...'), 'Travel')
+    await user.keyboard('{Enter}')
+
+    await waitFor(() => {
+      expect(state.getCreateLabelColor()).toBe(LABEL_SWATCH_COLORS[2])
+    })
   })
 })

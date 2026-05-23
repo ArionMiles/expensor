@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS transactions (
     category VARCHAR(100),
     bucket VARCHAR(50),
     source VARCHAR(100) NOT NULL,
+    source_type TEXT NOT NULL DEFAULT '',
+    source_label TEXT NOT NULL DEFAULT '',
+    bank TEXT NOT NULL DEFAULT '',
     description TEXT,
     metadata JSONB DEFAULT '{}',
     muted BOOLEAN NOT NULL DEFAULT false,
@@ -29,7 +32,10 @@ CREATE TABLE IF NOT EXISTS transactions (
 ALTER TABLE transactions
     ADD COLUMN IF NOT EXISTS muted BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN IF NOT EXISTS muted_by_merchant BOOLEAN NOT NULL DEFAULT false,
-    ADD COLUMN IF NOT EXISTS mute_reason TEXT;
+    ADD COLUMN IF NOT EXISTS mute_reason TEXT,
+    ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS source_label TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS bank TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS transaction_labels (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -90,11 +96,15 @@ CREATE TABLE IF NOT EXISTS rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     sender_email TEXT NOT NULL DEFAULT '',
+    sender_emails TEXT[] NOT NULL DEFAULT '{}',
     subject_contains TEXT NOT NULL DEFAULT '',
     amount_regex TEXT NOT NULL,
     merchant_regex TEXT NOT NULL,
     currency_regex TEXT NOT NULL DEFAULT '',
     transaction_source TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT '',
+    source_label TEXT NOT NULL DEFAULT '',
+    bank TEXT NOT NULL DEFAULT '',
     predefined BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -102,7 +112,23 @@ CREATE TABLE IF NOT EXISTS rules (
 
 ALTER TABLE rules
     ADD COLUMN IF NOT EXISTS transaction_source TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS sender_emails TEXT[] NOT NULL DEFAULT '{}',
+    ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS source_label TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS bank TEXT NOT NULL DEFAULT '',
     ADD COLUMN IF NOT EXISTS predefined BOOLEAN NOT NULL DEFAULT false;
+
+UPDATE transactions
+SET source_label = COALESCE(NULLIF(source_label, ''), source)
+WHERE COALESCE(source_label, '') = '';
+
+UPDATE rules
+SET sender_emails = ARRAY[sender_email]
+WHERE cardinality(sender_emails) = 0 AND sender_email <> '';
+
+UPDATE rules
+SET source_label = transaction_source
+WHERE source_label = '' AND transaction_source <> '';
 
 DO $$ BEGIN
     IF NOT EXISTS (

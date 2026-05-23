@@ -49,10 +49,8 @@ function formatDate(value?: string | null) {
 
 function fixRulePath(diagnostic: ExtractionDiagnostic) {
   const diagnosticParam = encodeURIComponent(diagnostic.id)
-  if (diagnostic.rule_id) {
-    return `/rules/${encodeURIComponent(diagnostic.rule_id)}?diagnostic=${diagnosticParam}`
-  }
-  return `/rules/new?diagnostic=${diagnosticParam}`
+  if (!diagnostic.rule_id) return `/rules/new?diagnostic=${diagnosticParam}`
+  return `/rules/${encodeURIComponent(diagnostic.rule_id)}?diagnostic=${diagnosticParam}`
 }
 
 function reasonLabel(reason: string) {

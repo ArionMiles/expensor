@@ -133,11 +133,11 @@ func TestRule_MatchesEmail(t *testing.T) {
 			want:    false,
 		},
 		{
-			name:    "hdfc domain .net and strict subject match",
+			name:    "hdfc domain fragment does not match exact sender rule",
 			rule:    api.Rule{SenderEmail: "@hdfcbank.net", SubjectContains: "debited via Credit Card"},
 			from:    "HDFC Alerts <alerts@hdfcbank.net>",
 			subject: "Rs.868.00 debited via Credit Card **1234",
-			want:    true,
+			want:    false,
 		},
 		{
 			name:    "empty rule matches everything",
@@ -203,7 +203,7 @@ func TestRuleDiagnosticSnapshot(t *testing.T) {
 		Amount:          regexp.MustCompile(`Amount: ([\d.]+)`),
 		MerchantInfo:    regexp.MustCompile(`at (.+)`),
 		Currency:        regexp.MustCompile(`Currency: ([A-Z]{3})`),
-		Source:          "Credit Card",
+		Source:          api.Source{Type: "Credit Card"},
 		SenderEmail:     "alerts@example.com",
 		SubjectContains: "spent",
 	}

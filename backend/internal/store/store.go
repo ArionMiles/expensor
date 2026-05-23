@@ -26,25 +26,25 @@ import (
 
 // Transaction represents a single expense transaction as returned by the API.
 type Transaction struct {
-	ID               string    `json:"id"`
-	MessageID        string    `json:"message_id"`
-	Amount           float64   `json:"amount"`
-	Currency         string    `json:"currency"`
-	OriginalAmount   *float64  `json:"original_amount,omitempty"`
-	OriginalCurrency *string   `json:"original_currency,omitempty"`
-	ExchangeRate     *float64  `json:"exchange_rate,omitempty"`
-	Timestamp        time.Time `json:"timestamp"`
-	MerchantInfo     string    `json:"merchant_info"`
-	Category         string    `json:"category"`
-	Bucket           string    `json:"bucket"`
-	Source           string    `json:"source"`
-	Description      string    `json:"description"`
-	Labels           []string  `json:"labels"`
-	Muted            bool      `json:"muted"`
-	MutedByMerchant  bool      `json:"muted_by_merchant"`
-	MuteReason       string    `json:"mute_reason,omitempty"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID               string     `json:"id"`
+	MessageID        string     `json:"message_id"`
+	Amount           float64    `json:"amount"`
+	Currency         string     `json:"currency"`
+	OriginalAmount   *float64   `json:"original_amount,omitempty"`
+	OriginalCurrency *string    `json:"original_currency,omitempty"`
+	ExchangeRate     *float64   `json:"exchange_rate,omitempty"`
+	Timestamp        time.Time  `json:"timestamp"`
+	MerchantInfo     string     `json:"merchant_info"`
+	Category         string     `json:"category"`
+	Bucket           string     `json:"bucket"`
+	Source           api.Source `json:"source"`
+	Description      string     `json:"description"`
+	Labels           []string   `json:"labels"`
+	Muted            bool       `json:"muted"`
+	MutedByMerchant  bool       `json:"muted_by_merchant"`
+	MuteReason       string     `json:"mute_reason,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 // MutedMerchant holds a merchant pattern that auto-mutes matching transactions at write time.
@@ -91,7 +91,16 @@ type ChartData struct {
 	ByBucket          map[string]float64              `json:"by_bucket"`
 	ByLabel           map[string]float64              `json:"by_label"`
 	BySource          map[string]float64              `json:"by_source"`
+	BySourceType      map[string]float64              `json:"by_source_type"`
+	ByBank            map[string]float64              `json:"by_bank"`
 	ByCategoryMonthly map[string]CategoryMonthlyEntry `json:"by_category_monthly"`
+}
+
+type chartLoadRequest struct {
+	Target *map[string]float64
+	Label  string
+	Query  string
+	Args   []any
 }
 
 // DashboardSection is one dashboard slice with a label, summary stats, and charts.
@@ -200,11 +209,15 @@ type RuleRow struct {
 	ID                string    `json:"id"`
 	Name              string    `json:"name"`
 	SenderEmail       string    `json:"sender_email"`
+	SenderEmails      []string  `json:"sender_emails"`
 	SubjectContains   string    `json:"subject_contains"`
 	AmountRegex       string    `json:"amount_regex"`
 	MerchantRegex     string    `json:"merchant_regex"`
 	CurrencyRegex     string    `json:"currency_regex"`
 	TransactionSource string    `json:"transaction_source"`
+	SourceType        string    `json:"source_type"`
+	SourceLabel       string    `json:"source_label"`
+	Bank              string    `json:"bank"`
 	Predefined        bool      `json:"predefined"` // true = seeded from embedded rules.json; editable but not deletable
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
@@ -263,32 +276,36 @@ type TransactionListResult struct {
 
 // ListFilter controls pagination and filtering for ListTransactions.
 type ListFilter struct {
-	Page              int    // 1-based
-	PageSize          int    // max rows per page
-	Category          string // partial match (ILIKE), empty = all
-	CategoryMissing   bool   // true = category is NULL or empty
-	ExcludeCategories []string
-	Currency          string // partial match (ILIKE), empty = all
-	Source            string // partial match (ILIKE), empty = all
-	ExcludeSources    []string
-	Bucket            string // partial match, empty = all
-	BucketMissing     bool   // true = bucket is NULL or empty
-	ExcludeBuckets    []string
-	Label             string // filter by label, empty = all
-	LabelMissing      bool   // true = no labels assigned
-	ExcludeLabels     []string
-	Merchant          string // partial match (ILIKE) on merchant_info, empty = all
-	ShowMuted         bool   // when true, muted transactions are included; default hides them
-	MutedOnly         bool   // when true, only muted=true (for click-through from Muted page)
-	IndividualOnly    bool   // when true, only muted=true AND muted_by_merchant=false (per-tx mutes)
-	Weekday           *int   // nil = all weekdays; uses configured timezone and PostgreSQL DOW convention
-	HourFrom          *int   // nil = all hours; non-nil filters EXTRACT(HOUR FROM timestamp) >= *HourFrom
-	HourTo            *int   // nil = all hours; non-nil filters EXTRACT(HOUR FROM timestamp) <= *HourTo
-	Timezone          string // IANA timezone for hour extraction; defaults to UTC when empty
-	From              *time.Time
-	To                *time.Time
-	SortBy            string // "timestamp" (only supported value for now); default = "timestamp"
-	SortDir           string // "asc" | "desc"; default = "desc"
+	Page               int    // 1-based
+	PageSize           int    // max rows per page
+	Category           string // partial match (ILIKE), empty = all
+	CategoryMissing    bool   // true = category is NULL or empty
+	ExcludeCategories  []string
+	Currency           string // partial match (ILIKE), empty = all
+	Source             string // partial match (ILIKE), empty = all
+	ExcludeSources     []string
+	SourceType         string
+	ExcludeSourceTypes []string
+	Bank               string
+	ExcludeBanks       []string
+	Bucket             string // partial match, empty = all
+	BucketMissing      bool   // true = bucket is NULL or empty
+	ExcludeBuckets     []string
+	Label              string // filter by label, empty = all
+	LabelMissing       bool   // true = no labels assigned
+	ExcludeLabels      []string
+	Merchant           string // partial match (ILIKE) on merchant_info, empty = all
+	ShowMuted          bool   // when true, muted transactions are included; default hides them
+	MutedOnly          bool   // when true, only muted=true (for click-through from Muted page)
+	IndividualOnly     bool   // when true, only muted=true AND muted_by_merchant=false (per-tx mutes)
+	Weekday            *int   // nil = all weekdays; uses configured timezone and PostgreSQL DOW convention
+	HourFrom           *int   // nil = all hours; non-nil filters EXTRACT(HOUR FROM timestamp) >= *HourFrom
+	HourTo             *int   // nil = all hours; non-nil filters EXTRACT(HOUR FROM timestamp) <= *HourTo
+	Timezone           string // IANA timezone for hour extraction; defaults to UTC when empty
+	From               *time.Time
+	To                 *time.Time
+	SortBy             string // "timestamp" (only supported value for now); default = "timestamp"
+	SortDir            string // "asc" | "desc"; default = "desc"
 }
 
 // Store wraps a pgxpool.Pool and provides query operations for the API layer.
@@ -489,7 +506,7 @@ func (r *pgReadModelRepository) statsReadModel(ctx context.Context, baseCurrency
 }
 
 // GetChartData returns time-series and breakdown data for dashboard charts.
-// All 7 queries run concurrently.
+// All chart queries run concurrently.
 func (s *Store) GetChartData(ctx context.Context) (*ChartData, error) {
 	return s.readModel.GetChartData(ctx)
 }
@@ -506,6 +523,8 @@ func (r *pgReadModelRepository) getChartDataAt(ctx context.Context, now time.Tim
 		ByBucket:          make(map[string]float64),
 		ByLabel:           make(map[string]float64),
 		BySource:          make(map[string]float64),
+		BySourceType:      make(map[string]float64),
+		ByBank:            make(map[string]float64),
 		ByCategoryMonthly: make(map[string]CategoryMonthlyEntry),
 	}
 
@@ -523,7 +542,7 @@ func (r *pgReadModelRepository) getChartDataAt(ctx context.Context, now time.Tim
 	tz := r.appTimezone(ctx)
 
 	var wg sync.WaitGroup
-	wg.Add(7)
+	wg.Add(9)
 
 	go func() {
 		defer wg.Done()
@@ -565,46 +584,23 @@ func (r *pgReadModelRepository) getChartDataAt(ctx context.Context, now time.Tim
 		mu.Unlock()
 	}()
 
-	go func() {
-		defer wg.Done()
-		m := make(map[string]float64)
-		if err := r.queryStringFloat(ctx, `
+	r.loadStringFloatChart(ctx, &wg, &mu, recordErr, chartLoadRequest{Target: &cd.ByCategory, Label: "category", Query: `
 			SELECT COALESCE(NULLIF(category, ''), 'Uncategorized'), COALESCE(SUM(amount), 0)
 			FROM transactions
 			WHERE muted = false
 			GROUP BY COALESCE(NULLIF(category, ''), 'Uncategorized')
 			ORDER BY SUM(amount) DESC
-		`, m); err != nil {
-			recordErr(fmt.Errorf("fetching category chart data: %w", err))
-			return
-		}
-		mu.Lock()
-		cd.ByCategory = m
-		mu.Unlock()
-	}()
+		`})
 
-	go func() {
-		defer wg.Done()
-		m := make(map[string]float64)
-		if err := r.queryStringFloat(ctx, `
+	r.loadStringFloatChart(ctx, &wg, &mu, recordErr, chartLoadRequest{Target: &cd.ByBucket, Label: "bucket", Query: `
 			SELECT COALESCE(NULLIF(bucket, ''), 'Uncategorized'), COALESCE(SUM(amount), 0)
 			FROM transactions
 			WHERE muted = false
 			GROUP BY COALESCE(NULLIF(bucket, ''), 'Uncategorized')
 			ORDER BY SUM(amount) DESC
-		`, m); err != nil {
-			recordErr(fmt.Errorf("fetching bucket chart data: %w", err))
-			return
-		}
-		mu.Lock()
-		cd.ByBucket = m
-		mu.Unlock()
-	}()
+		`})
 
-	go func() {
-		defer wg.Done()
-		m := make(map[string]float64)
-		if err := r.queryStringFloat(ctx, `
+	r.loadStringFloatChart(ctx, &wg, &mu, recordErr, chartLoadRequest{Target: &cd.ByLabel, Label: "label", Query: `
 			SELECT COALESCE(tl.label, 'Uncategorized'), COALESCE(SUM(t.amount), 0)
 			FROM transactions t
 			LEFT JOIN transaction_labels tl ON tl.transaction_id = t.id
@@ -612,32 +608,31 @@ func (r *pgReadModelRepository) getChartDataAt(ctx context.Context, now time.Tim
 			GROUP BY COALESCE(tl.label, 'Uncategorized')
 			ORDER BY SUM(t.amount) DESC
 			LIMIT 20
-		`, m); err != nil {
-			recordErr(fmt.Errorf("fetching label chart data: %w", err))
-			return
-		}
-		mu.Lock()
-		cd.ByLabel = m
-		mu.Unlock()
-	}()
+		`})
 
-	go func() {
-		defer wg.Done()
-		m := make(map[string]float64)
-		if err := r.queryStringFloat(ctx, `
+	r.loadStringFloatChart(ctx, &wg, &mu, recordErr, chartLoadRequest{Target: &cd.BySource, Label: "source", Query: `
 			SELECT COALESCE(source, ''), COALESCE(SUM(amount), 0)
 			FROM transactions
 			WHERE muted = false AND source IS NOT NULL AND source != ''
 			GROUP BY source
 			ORDER BY SUM(amount) DESC
-		`, m); err != nil {
-			recordErr(fmt.Errorf("fetching source chart data: %w", err))
-			return
-		}
-		mu.Lock()
-		cd.BySource = m
-		mu.Unlock()
-	}()
+		`})
+
+	r.loadStringFloatChart(ctx, &wg, &mu, recordErr, chartLoadRequest{Target: &cd.BySourceType, Label: "source type", Query: `
+			SELECT COALESCE(source_type, ''), COALESCE(SUM(amount), 0)
+			FROM transactions
+			WHERE muted = false AND source_type IS NOT NULL AND source_type != ''
+			GROUP BY source_type
+			ORDER BY SUM(amount) DESC
+		`})
+
+	r.loadStringFloatChart(ctx, &wg, &mu, recordErr, chartLoadRequest{Target: &cd.ByBank, Label: "bank", Query: `
+			SELECT COALESCE(bank, ''), COALESCE(SUM(amount), 0)
+			FROM transactions
+			WHERE muted = false AND bank IS NOT NULL AND bank != ''
+			GROUP BY bank
+			ORDER BY SUM(amount) DESC
+		`})
 
 	go func() {
 		defer wg.Done()
@@ -756,6 +751,8 @@ func (r *pgReadModelRepository) getChartDataBetween(ctx context.Context, loc *ti
 		ByBucket:          make(map[string]float64),
 		ByLabel:           make(map[string]float64),
 		BySource:          make(map[string]float64),
+		BySourceType:      make(map[string]float64),
+		ByBank:            make(map[string]float64),
 		ByCategoryMonthly: make(map[string]CategoryMonthlyEntry),
 	}
 
@@ -827,6 +824,28 @@ func (r *pgReadModelRepository) getChartDataBetween(ctx context.Context, loc *ti
 		ORDER BY SUM(amount) DESC
 	`, cd.BySource, startUTC, endUTC); err != nil {
 		return nil, fmt.Errorf("fetching range source chart data: %w", err)
+	}
+
+	if err := r.queryStringFloat(ctx, `
+		SELECT COALESCE(source_type, ''), COALESCE(SUM(amount), 0)
+		FROM transactions
+		WHERE muted = false AND timestamp >= $1 AND timestamp < $2
+		  AND source_type IS NOT NULL AND source_type != ''
+		GROUP BY source_type
+		ORDER BY SUM(amount) DESC
+	`, cd.BySourceType, startUTC, endUTC); err != nil {
+		return nil, fmt.Errorf("fetching range source type chart data: %w", err)
+	}
+
+	if err := r.queryStringFloat(ctx, `
+		SELECT COALESCE(bank, ''), COALESCE(SUM(amount), 0)
+		FROM transactions
+		WHERE muted = false AND timestamp >= $1 AND timestamp < $2
+		  AND bank IS NOT NULL AND bank != ''
+		GROUP BY bank
+		ORDER BY SUM(amount) DESC
+	`, cd.ByBank, startUTC, endUTC); err != nil {
+		return nil, fmt.Errorf("fetching range bank chart data: %w", err)
 	}
 
 	if cd.ByCategoryMonthly, err = r.queryCategoryMonthlyBetween(ctx, loc, startUTC, endUTC); err != nil {
@@ -1018,6 +1037,8 @@ func buildHeatmapWhere(from, to *time.Time) (string, []any) {
 // Facets holds distinct filter values for the transactions UI dropdowns.
 type Facets struct {
 	Sources        []string       `json:"sources"`
+	SourceTypes    []string       `json:"source_types"`
+	Banks          []string       `json:"banks"`
 	Categories     []string       `json:"categories"`
 	CategoryCounts map[string]int `json:"category_counts"`
 	Currencies     []string       `json:"currencies"`
@@ -1068,6 +1089,26 @@ func (r *pgReadModelRepository) queryStringFloat(ctx context.Context, q string, 
 		dest[k] = v
 	}
 	return rows.Err()
+}
+
+func (r *pgReadModelRepository) loadStringFloatChart(
+	ctx context.Context,
+	wg *sync.WaitGroup,
+	mu *sync.Mutex,
+	recordErr func(error),
+	request chartLoadRequest,
+) {
+	go func() {
+		defer wg.Done()
+		values := make(map[string]float64)
+		if err := r.queryStringFloat(ctx, request.Query, values, request.Args...); err != nil {
+			recordErr(fmt.Errorf("fetching %s chart data: %w", request.Label, err))
+			return
+		}
+		mu.Lock()
+		*request.Target = values
+		mu.Unlock()
+	}()
 }
 
 // initAppConfig creates the app_config table and seeds operational defaults.
@@ -1419,6 +1460,9 @@ func (s *Store) UpdateTransaction(ctx context.Context, id string, u TransactionU
 // ErrNotFound is returned when an operation targets a row that does not exist.
 var ErrNotFound = errors.New("not found")
 
+// ErrRuleNameConflict is returned when a rule name is already in use.
+var ErrRuleNameConflict = errors.New("rule name conflict")
+
 // ErrDiagnosticConflict is returned when reopening a diagnostic would duplicate an existing open diagnostic.
 var ErrDiagnosticConflict = errors.New("diagnostic conflict")
 
@@ -1440,6 +1484,11 @@ func nullableString(value string) any {
 func isDiagnosticOpenConflict(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "extraction_diagnostics_open_unique"
+}
+
+func isRuleNameConflict(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "rules_name_key"
 }
 
 func diagnosticFailureReasons(reasons []string) []string {
@@ -1551,6 +1600,20 @@ func buildListWhere(f ListFilter) (string, []any) {
 	if len(f.ExcludeSources) > 0 {
 		conds = append(conds, "COALESCE(t.source, '') != ''")
 		conds = append(conds, fmt.Sprintf("NOT (t.source = ANY(%s))", next(f.ExcludeSources)))
+	}
+	if f.SourceType != "" {
+		conds = append(conds, fmt.Sprintf("t.source_type ILIKE %s", next("%"+f.SourceType+"%")))
+	}
+	if len(f.ExcludeSourceTypes) > 0 {
+		conds = append(conds, "COALESCE(t.source_type, '') != ''")
+		conds = append(conds, fmt.Sprintf("NOT (t.source_type = ANY(%s))", next(f.ExcludeSourceTypes)))
+	}
+	if f.Bank != "" {
+		conds = append(conds, fmt.Sprintf("t.bank ILIKE %s", next("%"+f.Bank+"%")))
+	}
+	if len(f.ExcludeBanks) > 0 {
+		conds = append(conds, "COALESCE(t.bank, '') != ''")
+		conds = append(conds, fmt.Sprintf("NOT (t.bank = ANY(%s))", next(f.ExcludeBanks)))
 	}
 	if f.From != nil {
 		conds = append(conds, fmt.Sprintf("t.timestamp >= %s", next(*f.From)))
@@ -1713,14 +1776,20 @@ func scanTransactions(rows pgx.Rows) ([]Transaction, error) {
 	var txns []Transaction
 	for rows.Next() {
 		var t Transaction
+		var legacySource, sourceType, sourceLabel, bank string
 		if err := rows.Scan(
 			&t.ID, &t.MessageID, &t.Amount, &t.Currency,
 			&t.OriginalAmount, &t.OriginalCurrency, &t.ExchangeRate,
 			&t.Timestamp, &t.MerchantInfo, &t.Category, &t.Bucket,
-			&t.Source, &t.Description, &t.Muted, &t.MutedByMerchant, &t.MuteReason, &t.CreatedAt, &t.UpdatedAt,
+			&legacySource, &sourceType, &sourceLabel, &bank,
+			&t.Description, &t.Muted, &t.MutedByMerchant, &t.MuteReason, &t.CreatedAt, &t.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scanning transaction row: %w", err)
 		}
+		if sourceLabel == "" {
+			sourceLabel = legacySource
+		}
+		t.Source = api.Source{Type: sourceType, Label: sourceLabel, Bank: bank}
 		t.Labels = []string{}
 		txns = append(txns, t)
 	}
@@ -1732,17 +1801,17 @@ func scanTransactions(rows pgx.Rows) ([]Transaction, error) {
 
 // --- Rules ---
 
-const ruleColumns = `id, name, sender_email, subject_contains, amount_regex, merchant_regex,
-	currency_regex, transaction_source, predefined, created_at, updated_at`
+const ruleColumns = `id, name, sender_email, sender_emails, subject_contains, amount_regex, merchant_regex,
+	currency_regex, transaction_source, source_type, source_label, bank, predefined, created_at, updated_at`
 
 func scanRuleRows(rows pgx.Rows) ([]RuleRow, error) {
 	var result []RuleRow
 	for rows.Next() {
 		var r RuleRow
 		if err := rows.Scan(
-			&r.ID, &r.Name, &r.SenderEmail, &r.SubjectContains,
+			&r.ID, &r.Name, &r.SenderEmail, &r.SenderEmails, &r.SubjectContains,
 			&r.AmountRegex, &r.MerchantRegex, &r.CurrencyRegex,
-			&r.TransactionSource, &r.Predefined,
+			&r.TransactionSource, &r.SourceType, &r.SourceLabel, &r.Bank, &r.Predefined,
 			&r.CreatedAt, &r.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scanning rule row: %w", err)

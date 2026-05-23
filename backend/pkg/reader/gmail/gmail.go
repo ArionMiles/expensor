@@ -234,27 +234,29 @@ func (r *Reader) evaluateRules(ctx context.Context, out chan<- *api.TransactionD
 
 func (r *Reader) processRule(ctx context.Context, rule api.Rule, out chan<- *api.TransactionDetails) error {
 	logger := r.logger.With("rule", rule.Name, "source", rule.Source)
-	query := r.buildRuleQuery(rule, logger)
+	queries := r.buildRuleQueries(rule, logger)
 
 	// Paginate through all matching messages.
-	var pageToken string
 	totalFound := 0
 	var messageErrs []error
-	for {
-		resp, err := r.listMessagesPage(ctx, query, pageToken)
-		if err != nil {
-			return handleListMessagesError(ctx, logger, rule.Name, err)
-		}
-		pageProcessed, pageErrs, err := r.processRuleMessages(ctx, rule, out, logger, resp.Messages)
-		totalFound += pageProcessed
-		messageErrs = append(messageErrs, pageErrs...)
+	for _, query := range queries {
+		var pageToken string
+		for {
+			resp, err := r.listMessagesPage(ctx, query, pageToken)
+			if err != nil {
+				return handleListMessagesError(ctx, logger, rule.Name, err)
+			}
+			pageProcessed, pageErrs, err := r.processRuleMessages(ctx, rule, out, logger, resp.Messages)
+			totalFound += pageProcessed
+			messageErrs = append(messageErrs, pageErrs...)
 
-		if err != nil {
-			return err
-		}
-		pageToken = resp.NextPageToken
-		if pageToken == "" {
-			break
+			if err != nil {
+				return err
+			}
+			pageToken = resp.NextPageToken
+			if pageToken == "" {
+				break
+			}
 		}
 	}
 
@@ -263,14 +265,26 @@ func (r *Reader) processRule(ctx context.Context, rule api.Rule, out chan<- *api
 }
 
 func (r *Reader) buildRuleQuery(rule api.Rule, logger *slog.Logger) string {
-	query := rule.BuildGmailQuery()
+	queries := r.buildRuleQueries(rule, logger)
+	if len(queries) == 0 {
+		return ""
+	}
+	return queries[0]
+}
+
+func (r *Reader) buildRuleQueries(rule api.Rule, logger *slog.Logger) []string {
+	queries := rule.BuildGmailQueries()
 	since := r.effectiveSince()
 	logger.Debug("executing gmail query", "since", since.Format("2006/01/02"),
 		"checkpoint", r.lastScanAt != nil && !r.forceFullScan)
-	if query != "" {
-		query += " "
+	out := make([]string, 0, len(queries))
+	for _, query := range queries {
+		if query != "" {
+			query += " "
+		}
+		out = append(out, query+fmt.Sprintf("after:%s", since.Format("2006/01/02")))
 	}
-	return query + fmt.Sprintf("after:%s", since.Format("2006/01/02"))
+	return out
 }
 
 func (r *Reader) listMessagesPage(ctx context.Context, query, pageToken string) (*gmail.ListMessagesResponse, error) {
@@ -454,7 +468,7 @@ func gmailExtractionDiagnostic(ctx gmailDiagnosticContext) api.ExtractionDiagnos
 	return api.ExtractionDiagnostic{
 		Reader:         "gmail",
 		MessageID:      ctx.messageID,
-		Source:         ctx.rule.Source,
+		Source:         ctx.rule.Source.Display(),
 		Sender:         sender,
 		SenderEmail:    senderEmail(sender),
 		Subject:        ctx.headers["subject"],

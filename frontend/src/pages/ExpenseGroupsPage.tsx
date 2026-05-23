@@ -21,7 +21,7 @@ import {
   useUpdateLabel,
 } from '@/api/queries'
 import { useI18n } from '@/i18n/I18nProvider'
-import { cn } from '@/lib/utils'
+import { LABEL_SWATCH_COLORS, cn } from '@/lib/utils'
 import {
   ArrowDown,
   ArrowUp,
@@ -86,6 +86,8 @@ type ColorPickerState =
 
 type MerchantSuggestState = { rect: DOMRect; value: string } | null
 
+const DEFAULT_LABEL_COLOR = LABEL_SWATCH_COLORS[LABEL_SWATCH_COLORS.length - 1]
+
 const TABS: TabMeta[] = [
   {
     id: 'categories',
@@ -114,17 +116,6 @@ const TABS: TabMeta[] = [
     exportUrl: '/api/config/labels/export',
     exportName: 'expensor-labels.json',
   },
-]
-
-const PRESET_COLORS = [
-  '#f59e0b',
-  '#3b82f6',
-  '#8b5cf6',
-  '#06b6d4',
-  '#10b981',
-  '#ec4899',
-  '#f97316',
-  '#6366f1',
 ]
 
 function isTab(value: string | null): value is GroupTab {
@@ -240,7 +231,7 @@ export default function ExpenseGroupsPage() {
   const removeLabel = useRemoveLabelByMerchant()
 
   const [newName, setNewName] = useState('')
-  const [newColor, setNewColor] = useState('#6366f1')
+  const [newColor, setNewColor] = useState(DEFAULT_LABEL_COLOR)
   const [search, setSearch] = useState('')
   const [selectedNames, setSelectedNames] = useState<Record<GroupTab, string | null>>({
     categories: null,
@@ -383,7 +374,7 @@ export default function ExpenseGroupsPage() {
     if (tab === 'labels') createLabel.mutate({ name: trimmed, color: newColor })
     setSelectedNames((current) => ({ ...current, [tab]: trimmed }))
     setNewName('')
-    setNewColor('#6366f1')
+    setNewColor(DEFAULT_LABEL_COLOR)
   }
 
   const applyMerchant = (pattern = merchantPattern) => {
@@ -416,7 +407,9 @@ export default function ExpenseGroupsPage() {
       if (!match) {
         if (tab === 'categories') createCategory.mutate({ name: row.name })
         if (tab === 'buckets') createBucket.mutate({ name: row.name })
-        if (tab === 'labels') createLabel.mutate({ name: row.name, color: row.color ?? '#6366f1' })
+        if (tab === 'labels') {
+          createLabel.mutate({ name: row.name, color: row.color ?? DEFAULT_LABEL_COLOR })
+        }
       } else if (tab === 'labels' && row.color) {
         updateLabel.mutate({ name: match.name, color: row.color })
       }
@@ -871,7 +864,7 @@ export default function ExpenseGroupsPage() {
               top: colorPicker.rect.bottom + 6,
             }}
           >
-            {PRESET_COLORS.map((color) => {
+            {LABEL_SWATCH_COLORS.map((color) => {
               const selected =
                 colorPicker.kind === 'new'
                   ? newColor === color

@@ -18,6 +18,9 @@ type InsertParams struct {
 	Category     string
 	Bucket       string // empty → NULL in DB
 	Source       string // empty → "test"
+	SourceType   string
+	SourceLabel  string
+	Bank         string
 	Description  string
 	Timestamp    time.Time
 }
@@ -35,16 +38,19 @@ func (s *Store) InsertForTest(ctx context.Context, p InsertParams) (string, erro
 	if p.Source == "" {
 		p.Source = "test"
 	}
+	if p.SourceLabel == "" {
+		p.SourceLabel = p.Source
+	}
 
 	var id string
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO transactions
-			(message_id, amount, currency, timestamp, merchant_info, category, source, bucket, description)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9)
+			(message_id, amount, currency, timestamp, merchant_info, category, source, source_type, source_label, bank, bucket, description)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULLIF($11, ''), $12)
 		RETURNING id
 	`,
 		p.MessageID, p.Amount, p.Currency, p.Timestamp,
-		p.MerchantInfo, p.Category, p.Source, p.Bucket, p.Description,
+		p.MerchantInfo, p.Category, p.Source, p.SourceType, p.SourceLabel, p.Bank, p.Bucket, p.Description,
 	).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("InsertForTest: %w", err)

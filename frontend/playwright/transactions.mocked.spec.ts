@@ -73,12 +73,12 @@ test('transaction filter controls close and select options by keyboard @mocked',
 
   await page.getByRole('button', { name: 'Filters', exact: true }).click()
 
-  const sourceFilter = page.getByRole('combobox', { name: 'Filter by source' })
-  await sourceFilter.focus()
-  await expect(page.getByRole('listbox', { name: 'Filter by source options' })).toBeVisible()
+  const sourceTypeFilter = page.getByRole('combobox', { name: 'Filter by source type' })
+  await sourceTypeFilter.focus()
+  await expect(page.getByRole('listbox', { name: 'Filter by source type options' })).toBeVisible()
 
   await page.keyboard.press('Tab')
-  await expect(page.getByRole('listbox', { name: 'Filter by source options' })).toHaveCount(0)
+  await expect(page.getByRole('listbox', { name: 'Filter by source type options' })).toHaveCount(0)
 
   const addFilter = page.getByRole('button', { name: 'Add filter' })
   await addFilter.focus()

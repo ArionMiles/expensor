@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rules List Prototype</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0d12;
+        --panel: #11141b;
+        --panel-soft: #151a23;
+        --panel-strong: #1b2230;
+        --border: #252b37;
+        --border-strong: #384154;
+        --muted: #8d98aa;
+        --text: #eef2f7;
+        --text-soft: #c7d0dd;
+        --accent: #8b5cf6;
+        --accent-strong: #a78bfa;
+        --green: #22c55e;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 20% 0%, rgba(139, 92, 246, 0.08), transparent 28rem),
+          var(--bg);
+        color: var(--text);
+      }
+
+      button,
+      input,
+      a {
+        font: inherit;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .shell {
+        margin: 0 auto;
+        max-width: 1440px;
+        padding: 18px;
+      }
+
+      .topbar {
+        align-items: flex-start;
+        display: flex;
+        gap: 16px;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+
+      .crumb {
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+
+      h1 {
+        font-size: 22px;
+        line-height: 1.15;
+        margin: 0;
+      }
+
+      .subtitle {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 8px 0 0;
+      }
+
+      .actions {
+        align-items: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+
+      .button {
+        align-items: center;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+        display: inline-flex;
+        font-size: 13px;
+        font-weight: 600;
+        justify-content: center;
+        min-height: 36px;
+        padding: 0 13px;
+      }
+
+      .button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: white;
+      }
+
+      .button.secondary {
+        background: transparent;
+        color: var(--text-soft);
+      }
+
+      .toolbar {
+        align-items: center;
+        background: rgba(17, 20, 27, 0.94);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: minmax(16rem, 1fr) 180px 160px 130px;
+        margin-bottom: 12px;
+        padding: 10px;
+      }
+
+      input,
+      .filter {
+        background: #0d1118;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        min-height: 38px;
+        outline: none;
+        padding: 8px 10px;
+        width: 100%;
+      }
+
+      .filter {
+        align-items: center;
+        display: flex;
+        justify-content: space-between;
+      }
+
+      .filter span {
+        color: var(--text-soft);
+      }
+
+      .chevron {
+        border-bottom: 2px solid var(--text-soft);
+        border-right: 2px solid var(--text-soft);
+        display: inline-block;
+        height: 8px;
+        margin-left: 12px;
+        opacity: 0.9;
+        transform: rotate(45deg) translateY(-2px);
+        width: 8px;
+      }
+
+      .panel {
+        background: rgba(17, 20, 27, 0.94);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      table {
+        border-collapse: collapse;
+        table-layout: fixed;
+        width: 100%;
+      }
+
+      th {
+        background: rgba(21, 26, 35, 0.72);
+        border-bottom: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        padding: 10px 12px;
+        text-align: left;
+        text-transform: uppercase;
+      }
+
+      td {
+        border-bottom: 1px solid rgba(37, 43, 55, 0.75);
+        color: var(--text-soft);
+        font-size: 13px;
+        padding: 10px 12px;
+        vertical-align: middle;
+      }
+
+      tr:hover td {
+        background: rgba(139, 92, 246, 0.08);
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .name {
+        color: var(--text);
+        display: inline-block;
+        font-weight: 650;
+        max-width: 100%;
+        overflow: hidden;
+        padding: 4px 5px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .name:hover {
+        background: rgba(139, 92, 246, 0.14);
+        border-radius: 6px;
+      }
+
+      .badge {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        color: var(--text-soft);
+        display: inline-flex;
+        font-size: 12px;
+        line-height: 1;
+        min-height: 26px;
+        padding: 6px 9px;
+      }
+
+      .badge.predefined {
+        border-color: rgba(167, 139, 250, 0.36);
+        color: var(--accent-strong);
+      }
+
+      .badge.custom {
+        border-color: rgba(34, 197, 94, 0.35);
+        color: var(--green);
+      }
+
+      .senders {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+
+      .sender {
+        background: #151b27;
+        border: 1px solid var(--border-strong);
+        border-radius: 999px;
+        color: var(--text-soft);
+        display: inline-flex;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 11px;
+        padding: 5px 8px;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .summary {
+        align-items: center;
+        color: var(--muted);
+        display: flex;
+        font-size: 12px;
+        justify-content: space-between;
+        padding: 11px 12px;
+      }
+
+      @media (max-width: 980px) {
+        .topbar {
+          flex-direction: column;
+        }
+
+        .actions {
+          justify-content: flex-start;
+        }
+
+        .toolbar {
+          grid-template-columns: 1fr;
+        }
+
+        .panel {
+          overflow-x: auto;
+        }
+
+        table {
+          min-width: 960px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <div class="crumb">Rules</div>
+          <h1>Rules</h1>
+          <p class="subtitle">Manage extraction rules, source classification, and sender matching.</p>
+        </div>
+        <div class="actions">
+          <a class="button secondary" href="index.html">Open workbench</a>
+          <button class="button secondary" type="button">Import</button>
+          <button class="button secondary" type="button">Export selected</button>
+          <a class="button primary" href="index.html">+ New rule</a>
+        </div>
+      </header>
+
+      <section class="toolbar" aria-label="Rule filters">
+        <input aria-label="Search rules" placeholder="Search rules, senders, subjects..." value="" />
+        <button class="filter" type="button"><span>Type: All</span><i class="chevron" aria-hidden="true"></i></button>
+        <button class="filter" type="button"><span>Bank: All</span><i class="chevron" aria-hidden="true"></i></button>
+        <button class="filter" type="button"><span>Origin: All</span><i class="chevron" aria-hidden="true"></i></button>
+      </section>
+
+      <section class="panel">
+        <table aria-label="Rules">
+          <colgroup>
+            <col style="width: 10%" />
+            <col style="width: 22%" />
+            <col style="width: 24%" />
+            <col style="width: 28%" />
+            <col style="width: 10%" />
+            <col style="width: 16%" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Bank</th>
+              <th>Name</th>
+              <th>Subject</th>
+              <th>Senders</th>
+              <th>Type</th>
+              <th>Origin</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>HDFC</td>
+              <td><a class="name" href="index.html">HDFC Credit Card</a></td>
+              <td class="muted">Alert : Update on your HDFC Bank Credit Card</td>
+              <td>
+                <div class="senders">
+                  <span class="sender">alerts@hdfcbank.bank.in</span>
+                  <span class="sender">alerts@hdfcbank.net</span>
+                </div>
+              </td>
+              <td>Credit Card</td>
+              <td><span class="badge predefined">Predefined</span></td>
+            </tr>
+            <tr>
+              <td>HDFC</td>
+              <td><a class="name" href="index.html">HDFC UPI</a></td>
+              <td class="muted">UPI txn</td>
+              <td>
+                <div class="senders">
+                  <span class="sender">alerts@hdfcbank.net</span>
+                  <span class="sender">alerts@hdfcbank.bank.in</span>
+                </div>
+              </td>
+              <td>UPI</td>
+              <td><span class="badge predefined">Predefined</span></td>
+            </tr>
+            <tr>
+              <td>ICICI</td>
+              <td><a class="name" href="index.html">ICICI Credit Card</a></td>
+              <td class="muted">Transaction alert for your ICICI Bank Credit Card</td>
+              <td>
+                <div class="senders">
+                  <span class="sender">credit_cards@icicibank.com</span>
+                  <span class="sender">credit_cards@icici.bank.in</span>
+                </div>
+              </td>
+              <td>Credit Card</td>
+              <td><span class="badge predefined">Predefined</span></td>
+            </tr>
+            <tr>
+              <td>Axis</td>
+              <td><a class="name" href="index.html">Axis Credit Card</a></td>
+              <td class="muted">spent on credit card</td>
+              <td>
+                <div class="senders">
+                  <span class="sender">alerts@axis.bank.in</span>
+                </div>
+              </td>
+              <td>Credit Card</td>
+              <td><span class="badge predefined">Predefined</span></td>
+            </tr>
+            <tr>
+              <td>Monzo</td>
+              <td><a class="name" href="index.html">Monzo Card</a></td>
+              <td class="muted">Card transaction</td>
+              <td>
+                <div class="senders">
+                  <span class="sender">no-reply@monzo.com</span>
+                </div>
+              </td>
+              <td>Debit Card</td>
+              <td><span class="badge custom">Custom</span></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="summary">
+          <span>5 rules shown</span>
+          <span>Filters persist in the URL in production</span>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

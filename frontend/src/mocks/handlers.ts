@@ -9,10 +9,16 @@ import {
   seededTransactions,
 } from './fixtures/transactions'
 
+function sourceLabel(source: { label: string }) {
+  return source.label
+}
+
 function filterTransactions(url: URL) {
   const q = url.searchParams.get('q')?.toLowerCase() ?? ''
   const category = url.searchParams.get('category')
   const source = url.searchParams.get('source')
+  const sourceType = url.searchParams.get('source_type')
+  const bank = url.searchParams.get('bank')
   const label = url.searchParams.get('label')
 
   return seededTransactions.filter((transaction) => {
@@ -21,7 +27,9 @@ function filterTransactions(url: URL) {
         transaction.description,
         transaction.merchant_info,
         transaction.category,
-        transaction.source,
+        sourceLabel(transaction.source),
+        transaction.source.type,
+        transaction.source.bank,
         ...transaction.labels,
       ]
         .join(' ')
@@ -36,7 +44,15 @@ function filterTransactions(url: URL) {
       return false
     }
 
-    if (source && transaction.source !== source) {
+    if (source && sourceLabel(transaction.source) !== source) {
+      return false
+    }
+
+    if (sourceType && transaction.source.type !== sourceType) {
+      return false
+    }
+
+    if (bank && transaction.source.bank !== bank) {
       return false
     }
 

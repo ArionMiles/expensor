@@ -56,6 +56,8 @@ task test:be:contract # Backend OpenAPI contract tests via Schemathesis
 task test:fe          # Frontend unit and component tests (Vitest)
 task test:fe:e2e      # Frontend mocked Playwright E2E tests
 task test:fe:e2e:smoke # Full-stack Playwright smoke tests against backend + Postgres
+task screenshots:readme # Mocked README dashboard screenshot fixture
+task screenshots:live   # Live high-resolution dashboard + transactions screenshots
 
 # Security audit (aggregate runs both stacks)
 task audit            # Audit all (Go: govulncheck; npm: npm audit)
@@ -88,6 +90,23 @@ Unit tests in `internal/api/handlers_test.go` use `mockStore` (not a real DB). W
 ### Migrations
 SQL files in `backend/migrations/` are embedded into the binary and run automatically on startup. Name new files `NNN_description.sql` (next sequential number). Migrations use `IF NOT EXISTS` and `ON CONFLICT DO NOTHING` — they must be idempotent.
 
+### Rules and fixtures
+Bundled extraction rules live in `content/rules.json` as a versioned v2 document. Treat this as the source of truth for rule edits and contributions. The repository currently also has `backend/cmd/server/content/rules.json` because the Go binary embeds files from that package path; keep that mirror in sync until `content/` is the only definitive rule location. Rules use exact sender matching with `sender_emails`; add every supported sender address explicitly. Rule source is structured as `source.type`, `source.label`, and `source.bank`. When bundled rules introduce a new type or bank, update the matching `presets.source_types` or `presets.banks` entry too.
+
+Rule email tests live under `tests/data/rule-emails` as self-contained `.rule.fixture` files with YAML front matter plus the raw email body below the closing `---`. Use one email per file and name each file `<bank>_<source-type>_<case>.rule.fixture`, with lowercase slug segments such as `hdfc_credit-card_classic-spend.rule.fixture`. Fixtures must not include regexes or timestamps; the table-driven runner loads the named rule from `rules.json`, uses the fixture filename as the subtest name, and asserts sender/subject matching plus amount, merchant, and currency extraction.
+
+### Screenshot Workflow
+Use `task screenshots:live` for the real-page screenshots that are checked into `docs/screenshots/`. It captures both dashboard and transactions pages in light and dark themes using a high-resolution preset; keep the viewport and scale high enough that wide tables and charts do not get cramped. The README hero should point at `docs/screenshots/transactions-light.png`.
+
+Keep screenshot assets and their instructions together in `docs/screenshots/README.md`. If the README image or screenshot directory contents change, update that file in the same change so future agents can reproduce the assets without reverse-engineering the capture flow.
+
+### Recent Branch Lessons
+Preserve v2 rule data end-to-end. If you touch rule parsing, seeding, or imports, make sure `sender_emails`, `source.type`, `source.label`, and `source.bank` survive the round-trip through API, store, migrations, and seeded data. Component tests that exercise rules or transactions often need their fixtures updated in lockstep.
+
+When changing seeded demo data for screenshots, prefer realistic merchant names and balanced distributions across categories, buckets, labels, banks, and source types. The goal is to make the dashboard and transactions screenshots visually representative, not minimally populated.
+
+Do not create ad hoc screenshot commands in shell history. If capture settings matter, encode them in `Taskfile.yml` or a script under `frontend/scripts/` so they can be reused.
+
 ### Configuration
 All env config flows through `pkg/config/config.go` using koanf. Only four env prefixes are loaded: `EXPENSOR_`, `GMAIL_`, `THUNDERBIRD_`, `POSTGRES_`. Do not add config fields under other prefixes.
 
@@ -106,6 +125,8 @@ New frontend changes must be i18n-friendly by default. When touching existing fr
 - Native `title` attribute for tooltips — use CSS `group-hover` or `position:fixed` + mouse event state (see `Rules.tsx`)
 
 **Overflow clipping — tooltips and dropdowns (CRITICAL):** Any absolutely-positioned UI (tooltips, dropdowns, popovers) inside a container with `overflow-hidden`, `overflow-x-auto`, or `overflow-y-auto` WILL be clipped. This has caused multiple bugs. The rule without exception: use `position: fixed` + `getBoundingClientRect()` + `createPortal(…, document.body)` to escape the clipping ancestor. Never use `position: absolute` for floating UI inside sidebar, table rows, or any scrollable container. See `Sidebar.tsx` (toggle tooltip), `LabelCombobox.tsx`, and `InlineSelect.tsx` for the established pattern.
+
+**Dropdown surfaces:** Dropdowns, combobox menus, and listboxes must use an opaque semantic surface such as `bg-card text-card-foreground border border-border shadow-lg`. Do not use background utility classes that are not defined in `frontend/tailwind.config.js`; they compile away and create transparent menus.
 
 **Disabled elements and mouse events:** Disabled form elements (`<button disabled>`, `<input disabled>`) do not fire `mouseenter`/`mouseleave` in browsers. Wrap them in a `<span>` to handle hover events when needed.
 
@@ -127,7 +148,7 @@ The prod linter is strict. Common traps:
 - **gocognit**: max cognitive complexity 20 — extract helper functions if a function grows complex
 - **import-shadowing**: don't name local variables the same as imported packages (e.g. don't shadow `url`, `path`, `time`)
 
-Run `task lint:prod` before every commit. It must report `0 issues`.
+Run `task lint:be:prod` before every commit. It must report `0 issues`.
 
 ## Git Conventions
 

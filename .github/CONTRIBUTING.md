@@ -358,14 +358,11 @@ task test:be
 # With coverage
 task test:be:cover
 
-# Specific package
-go test ./pkg/reader/gmail/...
+# Backend tests
+task test:be
 
-# Verbose
-go test -v ./...
-
-# Race detector
-go test -race ./...
+# Frontend tests
+task test:fe
 ```
 
 ## Pull Request Process
@@ -433,27 +430,46 @@ Use the appropriate template:
 
 ## Adding Bank Support
 
-To add support for a new bank:
+Use the Rule editor to create or fix extraction rules. It gives you a live workbench for sample emails and exports the files needed for a contribution.
 
-1. Create an issue using the "Bank Support" template
-2. Provide a **redacted** sample email
-3. Fork and create a branch: `feature/bank-BANKNAME`
-4. Add regex patterns to `cmd/expensor/config/rules.json`
-5. Add tests with sample data
-6. Submit a pull request
+1. Create an issue using the "Bank Support" template.
+2. Provide a **redacted** sample email in the issue.
+3. In Expensor, open **Rules → New Rule**. If the email already appears in Diagnostics, use its fix action to open the Rule editor with the sample preloaded.
+4. Fill the rule details in the editor: exact sender email addresses, subject text, source type, bank, and extraction fields.
+5. Add at least one redacted sample email in the workbench and fill the expected amount, merchant, and currency.
+6. Click **Save Rule** and choose **Export & Continue** when the contribution prompt appears.
+7. Fork the repository, create a branch such as `feature/bank-BANKNAME`, add the exported files as described below, and submit a pull request.
 
-Example rule structure:
+`content/rules.json` is the source of truth for contributed bundled rules. The repository currently also contains
+`backend/cmd/server/content/rules.json` because the Go binary embeds files from that package path; maintainers keep that mirror in sync while we work toward
+making `content/` the single definitive location for rule edits.
 
-```json
-{
-  "name": "Bank Name Debit Card",
-  "query": "from:alerts@bank.com subject:transaction",
-  "patterns": {
-    "amount": "Rs\\. ([0-9,]+\\.[0-9]{2})",
-    "merchant": "at (.+?) on",
-    "date": "on (\\d{2}/\\d{2}/\\d{4})"
-  }
-}
+The export downloads one contribution zip file containing:
+
+- `<rule-name>.rule.json` contains the versioned rule document. Copy its rule entry into the `rules` array in `content/rules.json`. If it includes a new
+  source type or bank, copy that value into the matching `presets.source_types` or `presets.banks` list too.
+- One `<bank>_<source-type>_<case>.rule.fixture` file per populated workbench sample. Copy these files into `tests/data/rule-emails`.
+
+Rule email fixtures are self-contained `.rule.fixture` files with YAML front matter and the raw email body below the closing `---`. They must not
+duplicate regexes from `rules.json`. The test runner automatically discovers `*.rule.fixture` files under `tests/data/rule-emails`, uses the file
+basename as the table-driven subtest name, loads the named rule from the real rules document, and asserts sender/subject matching plus amount, merchant,
+and currency extraction.
+
+Use one email per fixture file. Fixture filenames must follow `<bank>_<source-type>_<case>.rule.fixture`, with lowercase slug segments such as
+`hdfc_credit-card_classic-spend.rule.fixture`. Keep fixture emails redacted but realistic enough for the exported rule to match.
+
+```yaml
+---
+rule: HDFC Credit Card
+sender: alerts@hdfcbank.net
+subject: "Alert : Update on your HDFC Bank Credit Card"
+expected:
+  amount: 999.00
+  merchant: SWIGGY
+  currency: INR
+---
+Dear Customer,
+Rs.999.00 spent at SWIGGY on your HDFC Credit Card on 12-Apr-2026.
 ```
 
 ## Getting Help

@@ -1,23 +1,33 @@
 import { cn } from '@/lib/utils'
-import { useEffect, useId } from 'react'
+import { useI18n } from '@/i18n/I18nProvider'
+import { type ReactNode, useEffect, useId } from 'react'
 
 interface ConfirmModalProps {
   title: string
-  message: string
+  message: ReactNode
   confirmLabel?: string
+  secondaryLabel?: string
   variant?: 'destructive' | 'default'
   onConfirm: () => void
+  onSecondary?: () => void
   onCancel: () => void
+  confirmDisabled?: boolean
+  secondaryDisabled?: boolean
 }
 
 export function ConfirmModal({
   title,
   message,
-  confirmLabel = 'Confirm',
+  confirmLabel,
+  secondaryLabel,
   variant = 'default',
   onConfirm,
+  onSecondary,
   onCancel,
+  confirmDisabled = false,
+  secondaryDisabled = false,
 }: ConfirmModalProps) {
+  const { t } = useI18n()
   const titleId = useId()
 
   // Close on Escape
@@ -40,29 +50,39 @@ export function ConfirmModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="w-full max-w-sm space-y-4 rounded-lg border border-border bg-card p-6 shadow-xl"
+        className="w-full max-w-lg space-y-4 rounded-lg border border-border bg-card p-6 shadow-xl"
       >
         <h2 id={titleId} className="text-sm font-semibold text-foreground">
           {title}
         </h2>
-        <p className="text-xs leading-relaxed text-muted-foreground">{message}</p>
-        <div className="flex justify-end gap-2 pt-1">
+        <div className="text-xs leading-relaxed text-muted-foreground">{message}</div>
+        <div className="flex flex-wrap justify-end gap-2 pt-1">
           <button
             onClick={onCancel}
             className="rounded-md px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
+          {secondaryLabel && onSecondary && (
+            <button
+              onClick={onSecondary}
+              disabled={secondaryDisabled}
+              className="rounded-md border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {secondaryLabel}
+            </button>
+          )}
           <button
             onClick={onConfirm}
+            disabled={confirmDisabled}
             className={cn(
-              'rounded-md px-4 py-2 text-sm transition-colors',
+              'rounded-md px-4 py-2 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50',
               variant === 'destructive'
                 ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
                 : 'bg-primary text-primary-foreground hover:bg-primary/90',
             )}
           >
-            {confirmLabel}
+            {confirmLabel ?? t('common.confirm')}
           </button>
         </div>
       </div>

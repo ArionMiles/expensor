@@ -228,8 +228,9 @@ func (w *Writer) writeBatch(ctx context.Context, transactions []*api.Transaction
 		batch.Queue(`
 			INSERT INTO transactions (
 				message_id, amount, currency, original_amount, original_currency,
-				exchange_rate, timestamp, merchant_info, category, bucket, source, description
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+				exchange_rate, timestamp, merchant_info, category, bucket, source,
+				source_type, source_label, bank, description
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 			ON CONFLICT (message_id) DO UPDATE SET
 				amount            = EXCLUDED.amount,
 				currency          = EXCLUDED.currency,
@@ -239,6 +240,9 @@ func (w *Writer) writeBatch(ctx context.Context, transactions []*api.Transaction
 				timestamp         = EXCLUDED.timestamp,
 				merchant_info     = EXCLUDED.merchant_info,
 				source            = EXCLUDED.source,
+				source_type       = EXCLUDED.source_type,
+				source_label      = EXCLUDED.source_label,
+				bank              = EXCLUDED.bank,
 				-- Preserve user edits: only fall back to extracted value when the
 				-- stored value is NULL or empty (user has not yet set it).
 				category = COALESCE(NULLIF(transactions.category, ''), EXCLUDED.category),
@@ -257,7 +261,10 @@ func (w *Writer) writeBatch(ctx context.Context, transactions []*api.Transaction
 			txn.MerchantInfo,
 			txn.Category,
 			txn.Bucket,
-			txn.Source,
+			txn.Source.Display(),
+			txn.Source.Type,
+			txn.Source.Label,
+			txn.Source.Bank,
 			txn.Description,
 		)
 	}

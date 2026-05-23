@@ -1,0 +1,14 @@
+---
+rule: HDFC Credit Card
+sender: alerts@hdfcbank.net
+subject: "Alert : Update on your HDFC Bank Credit Card"
+expected:
+  amount: 999.00
+  merchant: SWIGGY
+  currency: INR
+---
+Alert: Your HDFC Bank Credit Card ending 5678 has been used for Rs.999.00 at SWIGGY on 20-Jan-2024.
+
+Available Credit Limit: Rs.45,000.00
+
+If not done by you, call 1800-XXX-XXXX immediately.

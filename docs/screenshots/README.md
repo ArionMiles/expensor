@@ -1,19 +1,26 @@
-# Screenshot Fixtures
+# Screenshots
 
 Use this directory for screenshot assets and reusable anonymized seed data.
 
-Dashboard screenshot:
+Current screenshots:
 
-- Page: Dashboard
-- Theme: light
-- Sidebar: expanded
-- Data: `dashboard-seed.json`
-- Output: `dashboard-light.png`
+- `transactions-light.png` - Transactions page, light theme.
+- `transactions-dark.png` - Transactions page, dark theme.
+- `dashboard-light.png` - Dashboard, light theme.
+- `dashboard-dark.png` - Dashboard, dark theme.
 
-Regenerate:
+The README hero uses `transactions-light.png`.
+
+Legacy mocked dashboard fixture:
 
 ```bash
 task screenshots:readme
 ```
 
-Keep seed data deterministic so screenshots can be regenerated when the UI changes.
+Live high-resolution dashboard and transactions captures:
+
+```bash
+task screenshots:live
+```
+
+Keep screenshot data deterministic so screenshots can be regenerated when the UI changes.

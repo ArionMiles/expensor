@@ -337,6 +337,39 @@ function CategoryBucketCell({ tx }: { tx: Transaction }) {
   )
 }
 
+function SourceCell({ tx, banks }: { tx: Transaction; banks?: BankColor[] }) {
+  if (!tx.source.bank && !tx.source.type) {
+    return <span className="text-xs text-muted-foreground">—</span>
+  }
+
+  const bankColor = getSourceColor(tx.source.bank, banks)
+
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5 leading-tight">
+      {tx.source.bank && (
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span
+            className="h-2 w-2 flex-shrink-0 rounded-full shadow-[0_0_0_2px_hsl(var(--background))]"
+            style={{ backgroundColor: bankColor }}
+            aria-hidden="true"
+          />
+          <span className="truncate font-medium text-foreground">{tx.source.bank}</span>
+        </span>
+      )}
+      {tx.source.type && (
+        <span
+          className={cn(
+            'block truncate text-[11px] text-muted-foreground',
+            tx.source.bank && 'pl-3.5',
+          )}
+        >
+          {tx.source.type}
+        </span>
+      )}
+    </div>
+  )
+}
+
 function IgnoreButton({ tx }: { tx: Transaction }) {
   const { t } = useI18n()
   const { mutate: ignoreTransaction, isPending } = useIgnoreTransaction()
@@ -448,7 +481,7 @@ function TransactionRow({
         tx.muted && 'opacity-40',
       )}
     >
-      <td className="px-3 py-2.5">
+      <td className="px-0 py-2.5 text-center">
         <input
           type="checkbox"
           checked={selected}
@@ -467,14 +500,7 @@ function TransactionRow({
         </span>
       </td>
       <td className="overflow-hidden whitespace-nowrap px-3 py-2.5">
-        {tx.source && (
-          <span
-            className="inline-block max-w-full truncate rounded-sm border border-border py-0.5 pl-1.5 pr-2 font-mono text-[10px] text-muted-foreground"
-            style={{ borderLeftColor: getSourceColor(tx.source, banks), borderLeftWidth: '2px' }}
-          >
-            {tx.source}
-          </span>
-        )}
+        <SourceCell tx={tx} banks={banks} />
       </td>
       <td className="px-3 py-2.5">
         <AmountCell tx={tx} />
@@ -488,7 +514,7 @@ function TransactionRow({
       <td className="overflow-hidden px-3 py-2.5">
         <DescriptionCell tx={tx} searchQuery={searchQuery} />
       </td>
-      <td className="px-3 py-2.5">
+      <td className="sticky right-0 bg-card px-3 py-2.5 shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.6)]">
         <IgnoreButton tx={tx} />
       </td>
     </tr>
@@ -502,6 +528,8 @@ type FilterPanelProps = {
   facets:
     | {
         sources: string[]
+        source_types: string[]
+        banks: string[]
         categories: string[]
         currencies: string[]
         labels: string[]
@@ -533,6 +561,7 @@ function FilterPanel({
   updateFilter,
   updateParams,
 }: FilterPanelProps) {
+  const { t } = useI18n()
   const [addOpen, setAddOpen] = useState(false)
   const [addHighlighted, setAddHighlighted] = useState(-1)
   const addBtnRef = useRef<HTMLButtonElement>(null)
@@ -609,13 +638,22 @@ function FilterPanel({
         }
       />
 
-      {/* Always-visible: Source */}
+      {/* Always-visible: Source type */}
       <FilterCombobox
-        value={filters.source ?? ''}
-        onChange={(v) => updateFilter('source', v)}
-        options={facets?.sources ?? []}
-        placeholder="Source"
-        label="Filter by source"
+        value={filters.source_type ?? ''}
+        onChange={(v) => updateFilter('source_type', v)}
+        options={facets?.source_types ?? []}
+        placeholder={t('common.type')}
+        label={t('transactions.filter.sourceType')}
+      />
+
+      {/* Always-visible: Bank */}
+      <FilterCombobox
+        value={filters.bank ?? ''}
+        onChange={(v) => updateFilter('bank', v)}
+        options={facets?.banks ?? []}
+        placeholder={t('common.bank')}
+        label={t('transactions.filter.bank')}
       />
 
       {/* Always-visible: Label */}
@@ -806,6 +844,10 @@ export function Transactions() {
     currency: searchParams.get('currency') || undefined,
     source: searchParams.get('source') || undefined,
     exclude_sources: parseCSVParam('exclude_sources'),
+    source_type: searchParams.get('source_type') || undefined,
+    exclude_source_types: parseCSVParam('exclude_source_types'),
+    bank: searchParams.get('bank') || undefined,
+    exclude_banks: parseCSVParam('exclude_banks'),
     bucket: searchParams.get('bucket') || undefined,
     bucket_missing: searchParams.get('bucket_missing') === '1' || undefined,
     exclude_buckets: parseCSVParam('exclude_buckets'),
@@ -831,6 +873,8 @@ export function Transactions() {
       Boolean(searchParams.get('category_missing')) ||
       Boolean(searchParams.get('currency')) ||
       Boolean(searchParams.get('source')) ||
+      Boolean(searchParams.get('source_type')) ||
+      Boolean(searchParams.get('bank')) ||
       Boolean(searchParams.get('bucket')) ||
       Boolean(searchParams.get('bucket_missing')) ||
       Boolean(searchParams.get('label')) ||
@@ -992,6 +1036,8 @@ export function Transactions() {
     filters.category_missing ||
     filters.currency ||
     filters.source ||
+    filters.source_type ||
+    filters.bank ||
     filters.bucket ||
     filters.bucket_missing ||
     filters.label ||
@@ -1172,23 +1218,23 @@ export function Transactions() {
       <div className="flex-1 overflow-x-auto rounded-lg border border-border bg-card shadow-sm">
         <table
           aria-label="Transactions"
-          className="min-w-[96rem] table-fixed"
+          className="min-w-[78rem] table-fixed"
           style={{ borderCollapse: 'collapse' }}
         >
           <colgroup>
             <col className="w-10" />
-            <col className="w-52" />
-            <col className="w-72" />
-            <col className="w-48" />
+            <col className="w-40" />
+            <col className="w-60" />
+            <col className="w-28" />
             <col className="w-32" />
-            <col className="w-56" />
             <col className="w-44" />
-            <col className="w-64" />
+            <col className="w-48" />
+            <col className="w-52" />
             <col className="w-10" />
           </colgroup>
           <thead>
             <tr className="border-b border-border bg-secondary/50">
-              <th scope="col" className="w-10 px-3 py-2.5">
+              <th scope="col" className="w-10 px-0 py-2.5 text-center">
                 <input
                   type="checkbox"
                   checked={allSelected}
@@ -1219,7 +1265,7 @@ export function Transactions() {
                 scope="col"
                 className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
               >
-                Source
+                {t('transactions.columns.bankType')}
               </th>
               <th
                 scope="col"
@@ -1245,14 +1291,14 @@ export function Transactions() {
               >
                 Description
               </th>
-              <th scope="col" className="px-3 py-2.5" />
+              <th scope="col" className="sticky right-0 bg-secondary/50 px-3 py-2.5" />
             </tr>
           </thead>
           <tbody className="[&_td]:py-1 [&_td]:text-xs">
             {isLoading
               ? Array.from({ length: 10 }).map((_, i) => (
                   <tr key={i} className="animate-pulse border-b border-border">
-                    {Array.from({ length: 8 }).map((_, j) => (
+                    {Array.from({ length: 9 }).map((_, j) => (
                       <td key={j} className="px-3 py-3">
                         <div className="h-3 rounded-sm bg-secondary" />
                       </td>
@@ -1273,8 +1319,8 @@ export function Transactions() {
               <tr>
                 <td colSpan={9} className="px-3 py-12 text-center text-xs text-muted-foreground">
                   {hasActiveFilters
-                    ? 'No transactions match the current filters'
-                    : 'No transactions found'}
+                    ? t('transactions.empty.filtered')
+                    : t('transactions.empty.none')}
                 </td>
               </tr>
             )}

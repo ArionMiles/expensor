@@ -75,6 +75,7 @@ type mockStore struct {
 	rulesErr              error
 	ruleResult            *store.RuleRow
 	ruleErr               error
+	importedRules         []store.RuleRow
 	importErr             error
 	heatmapData           *store.HeatmapData
 	heatmapErr            error
@@ -290,6 +291,8 @@ func (m *mockStore) GetFacets(_ context.Context) (*store.Facets, error) {
 	}
 	return &store.Facets{
 		Sources:     []string{},
+		SourceTypes: []string{},
+		Banks:       []string{},
 		Categories:  []string{},
 		Currencies:  []string{},
 		Merchants:   []string{},
@@ -464,7 +467,8 @@ func (m *mockStore) SeedPredefinedRules(_ context.Context, _ []store.RuleRow) er
 	return nil
 }
 
-func (m *mockStore) ImportUserRules(_ context.Context, _ []store.RuleRow) error {
+func (m *mockStore) ImportUserRules(_ context.Context, rows []store.RuleRow) error {
+	m.importedRules = rows
 	return m.importErr
 }
 
@@ -2499,6 +2503,14 @@ func TestHandleGetAnnualHeatmap_NoStore_Returns503(t *testing.T) {
 
 // --- rules ---
 
+const validRuleBody = `{
+	"name":"New Rule",
+	"sender_emails":["alerts@example.com"],
+	"amount_regex":"Rs\\.([\\d.]+)",
+	"merchant_regex":"at (.*?) on",
+	"source":{"type":"Credit Card","label":"Example Credit Card","bank":"Example Bank"}
+}`
+
 func TestHandleListRules_Success(t *testing.T) {
 	ms := &mockStore{rules: []store.RuleRow{{ID: "1", Name: "test", AmountRegex: `\d+`, MerchantRegex: `.+`}}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
@@ -2515,6 +2527,44 @@ func TestHandleListRules_Success(t *testing.T) {
 	}
 }
 
+func TestHandleListRules_ReturnsSourceObjectAndSenderEmails(t *testing.T) {
+	ms := &mockStore{rules: []store.RuleRow{{
+		ID:              "1",
+		Name:            "HDFC Credit Card",
+		SenderEmails:    []string{"alerts@hdfcbank.net", "alerts@hdfcbank.bank.in"},
+		SubjectContains: "HDFC Credit Card",
+		AmountRegex:     `Rs\.([\d.]+)`,
+		MerchantRegex:   `at (.*?) on`,
+		SourceType:      "Credit Card",
+		SourceLabel:     "HDFC Credit Card",
+		Bank:            "HDFC",
+	}}}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/rules", nil)
+	rr := httptest.NewRecorder()
+
+	h.HandleListRules(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp []struct {
+		Name         string        `json:"name"`
+		SenderEmails []string      `json:"sender_emails"`
+		Source       pkgapi.Source `json:"source"`
+	}
+	decodeJSON(t, rr.Body.String(), &resp)
+	if len(resp) != 1 {
+		t.Fatalf("expected 1 rule, got %d", len(resp))
+	}
+	if want := []string{"alerts@hdfcbank.net", "alerts@hdfcbank.bank.in"}; !reflect.DeepEqual(want, resp[0].SenderEmails) {
+		t.Fatalf("sender_emails = %#v, want %#v", resp[0].SenderEmails, want)
+	}
+	if want := (pkgapi.Source{Type: "Credit Card", Label: "HDFC Credit Card", Bank: "HDFC"}); resp[0].Source != want {
+		t.Fatalf("source = %#v, want %#v", resp[0].Source, want)
+	}
+}
+
 func TestHandleListRules_NilStore_Returns503(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/rules", nil)
@@ -2527,12 +2577,59 @@ func TestHandleListRules_NilStore_Returns503(t *testing.T) {
 
 func TestHandleCreateRule_Success(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	body := `{"name":"test","amount_regex":"\\d+","merchant_regex":".+"}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(validRuleBody))
 	rr := httptest.NewRecorder()
 	h.HandleCreateRule(rr, req)
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleCreateRule_AcceptsSourceObjectAndSenderEmails(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	body := `{
+		"name":"HDFC Credit Card",
+		"sender_emails":["alerts@hdfcbank.net","alerts@hdfcbank.bank.in"],
+		"subject_contains":"HDFC Credit Card",
+		"amount_regex":"Rs\\.([\\d.]+)",
+		"merchant_regex":"at (.*?) on",
+		"source":{"type":"Credit Card","label":"HDFC Credit Card","bank":"HDFC"}
+	}`
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+
+	h.HandleCreateRule(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		SenderEmails []string      `json:"sender_emails"`
+		Source       pkgapi.Source `json:"source"`
+	}
+	decodeJSON(t, rr.Body.String(), &resp)
+	if want := []string{"alerts@hdfcbank.net", "alerts@hdfcbank.bank.in"}; !reflect.DeepEqual(want, resp.SenderEmails) {
+		t.Fatalf("sender_emails = %#v, want %#v", resp.SenderEmails, want)
+	}
+	if want := (pkgapi.Source{Type: "Credit Card", Label: "HDFC Credit Card", Bank: "HDFC"}); resp.Source != want {
+		t.Fatalf("source = %#v, want %#v", resp.Source, want)
+	}
+}
+
+func TestHandleCreateRule_DuplicateNameReturns409(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{ruleErr: store.ErrRuleNameConflict}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(validRuleBody))
+	rr := httptest.NewRecorder()
+
+	h.HandleCreateRule(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp map[string]string
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp["error"] != "rule name already exists" {
+		t.Fatalf("error = %q, want rule name already exists", resp["error"])
 	}
 }
 
@@ -2546,8 +2643,7 @@ func TestHandleCreateRule_ClearsActiveReaderCheckpoint(t *testing.T) {
 	restarted := ""
 	h.restartFn = func(reader string) { restarted = reader }
 
-	body := `{"name":"New Rule","amount_regex":"Rs\\.([\\d.]+)","merchant_regex":"at (.*?) on"}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(validRuleBody))
 	rr := httptest.NewRecorder()
 
 	h.HandleCreateRule(rr, req)
@@ -2573,8 +2669,7 @@ func TestHandleCreateRule_RestartsRunningDaemonAfterCheckpointClear(t *testing.T
 	restarted := ""
 	h.restartFn = func(reader string) { restarted = reader }
 
-	body := `{"name":"New Rule","amount_regex":"Rs\\.([\\d.]+)","merchant_regex":"at (.*?) on"}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(validRuleBody))
 	rr := httptest.NewRecorder()
 
 	h.HandleCreateRule(rr, req)
@@ -2589,7 +2684,12 @@ func TestHandleCreateRule_RestartsRunningDaemonAfterCheckpointClear(t *testing.T
 
 func TestHandleCreateRule_MissingAmountRegex_Returns422(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	body := `{"name":"test","merchant_regex":".+"}`
+	body := `{
+		"name":"test",
+		"sender_emails":["alerts@example.com"],
+		"merchant_regex":".+",
+		"source":{"type":"Credit Card","label":"Example Credit Card","bank":"Example Bank"}
+	}`
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(body))
 	rr := httptest.NewRecorder()
 	h.HandleCreateRule(rr, req)
@@ -2600,7 +2700,13 @@ func TestHandleCreateRule_MissingAmountRegex_Returns422(t *testing.T) {
 
 func TestHandleCreateRule_InvalidAmountRegex_Returns422(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	body := `{"name":"test","amount_regex":"[invalid","merchant_regex":".+"}`
+	body := `{
+		"name":"test",
+		"sender_emails":["alerts@example.com"],
+		"amount_regex":"[invalid",
+		"merchant_regex":".+",
+		"source":{"type":"Credit Card","label":"Example Credit Card","bank":"Example Bank"}
+	}`
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(body))
 	rr := httptest.NewRecorder()
 	h.HandleCreateRule(rr, req)
@@ -2612,13 +2718,45 @@ func TestHandleCreateRule_InvalidAmountRegex_Returns422(t *testing.T) {
 func TestHandleUpdateRule_AnyRule_FullUpdate(t *testing.T) {
 	ms := &mockStore{ruleResult: &store.RuleRow{ID: "1", Predefined: true}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	body := `{"name":"updated","amount_regex":"\\d+","merchant_regex":".+"}`
+	body := `{
+		"name":"updated",
+		"sender_emails":["alerts@example.com"],
+		"amount_regex":"\\d+",
+		"merchant_regex":".+",
+		"source":{"type":"Credit Card","label":"Example Credit Card","bank":"Example Bank"}
+	}`
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/rules/1", strings.NewReader(body))
 	req.SetPathValue("id", "1")
 	rr := httptest.NewRecorder()
 	h.HandleUpdateRule(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleUpdateRule_DuplicateNameReturns409(t *testing.T) {
+	ms := &mockStore{ruleErr: store.ErrRuleNameConflict}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	body := `{
+		"name":"duplicate",
+		"sender_emails":["alerts@example.com"],
+		"amount_regex":"\\d+",
+		"merchant_regex":".+",
+		"source":{"type":"Credit Card","label":"Example Credit Card","bank":"Example Bank"}
+	}`
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/rules/1", strings.NewReader(body))
+	req.SetPathValue("id", "1")
+	rr := httptest.NewRecorder()
+
+	h.HandleUpdateRule(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp map[string]string
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp["error"] != "rule name already exists" {
+		t.Fatalf("error = %q, want rule name already exists", resp["error"])
 	}
 }
 
@@ -2658,13 +2796,99 @@ func TestHandleExportRules_OnlyNonPredefinedRules(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	var exported []map[string]any
-	decodeJSON(t, rr.Body.String(), &exported)
-	if len(exported) != 1 {
-		t.Errorf("expected 1 exported rule (user only), got %d", len(exported))
+	var exported struct {
+		Rules []struct {
+			Name string `json:"name"`
+		} `json:"rules"`
 	}
-	if exported[0]["name"] != "usr" {
-		t.Errorf("expected exported name=usr, got %v", exported[0]["name"])
+	decodeJSON(t, rr.Body.String(), &exported)
+	if len(exported.Rules) != 1 {
+		t.Errorf("expected 1 exported rule (user only), got %d", len(exported.Rules))
+	}
+	if exported.Rules[0].Name != "usr" {
+		t.Errorf("expected exported name=usr, got %v", exported.Rules[0].Name)
+	}
+}
+
+func TestHandleExportRules_UsesVersionedDocument(t *testing.T) {
+	ms := &mockStore{rules: []store.RuleRow{
+		{ID: "1", Name: "predefined", Predefined: true, AmountRegex: `\d+`, MerchantRegex: `.+`},
+		{
+			ID:              "2",
+			Name:            "HDFC Credit Card",
+			SenderEmails:    []string{"alerts@hdfcbank.net", "alerts@hdfcbank.bank.in"},
+			SubjectContains: "HDFC Credit Card",
+			AmountRegex:     `Rs\.([\d.]+)`,
+			MerchantRegex:   `at (.*?) on`,
+			SourceType:      "Credit Card",
+			SourceLabel:     "HDFC Credit Card",
+			Bank:            "HDFC",
+		},
+	}}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/rules/export", nil)
+	rr := httptest.NewRecorder()
+
+	h.HandleExportRules(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var exported struct {
+		Version int `json:"version"`
+		Rules   []struct {
+			Name         string        `json:"name"`
+			SenderEmails []string      `json:"sender_emails"`
+			Source       pkgapi.Source `json:"source"`
+		} `json:"rules"`
+	}
+	decodeJSON(t, rr.Body.String(), &exported)
+	if exported.Version != 2 {
+		t.Fatalf("version = %d, want 2", exported.Version)
+	}
+	if len(exported.Rules) != 1 {
+		t.Fatalf("expected 1 exported user rule, got %d", len(exported.Rules))
+	}
+	if exported.Rules[0].Name != "HDFC Credit Card" {
+		t.Fatalf("exported rule name = %q", exported.Rules[0].Name)
+	}
+	if want := []string{"alerts@hdfcbank.net", "alerts@hdfcbank.bank.in"}; !reflect.DeepEqual(want, exported.Rules[0].SenderEmails) {
+		t.Fatalf("sender_emails = %#v, want %#v", exported.Rules[0].SenderEmails, want)
+	}
+}
+
+func TestHandleImportRules_AcceptsVersionedDocument(t *testing.T) {
+	ms := &mockStore{}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	body := `{
+		"version":2,
+		"presets":{"source_types":[{"value":"Credit Card","origin":"predefined"}],"banks":[{"value":"HDFC","origin":"custom"}]},
+		"rules":[{
+			"name":"HDFC Credit Card",
+			"sender_emails":["alerts@hdfcbank.net","alerts@hdfcbank.bank.in"],
+			"subject_contains":"HDFC Credit Card",
+			"amount_regex":"Rs\\.([\\d.]+)",
+			"merchant_regex":"at (.*?) on",
+			"source":{"type":"Credit Card","label":"HDFC Credit Card","bank":"HDFC"}
+		}]
+	}`
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules/import", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+
+	h.HandleImportRules(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	if len(ms.importedRules) != 1 {
+		t.Fatalf("imported rules = %d, want 1", len(ms.importedRules))
+	}
+	got := ms.importedRules[0]
+	if want := []string{"alerts@hdfcbank.net", "alerts@hdfcbank.bank.in"}; !reflect.DeepEqual(want, got.SenderEmails) {
+		t.Fatalf("sender_emails = %#v, want %#v", got.SenderEmails, want)
+	}
+	if got.SourceType != "Credit Card" || got.SourceLabel != "HDFC Credit Card" || got.Bank != "HDFC" {
+		t.Fatalf("source fields = (%q, %q, %q)", got.SourceType, got.SourceLabel, got.Bank)
 	}
 }
 
@@ -3027,6 +3251,32 @@ func TestHandleListTransactions_ExcludeParams(t *testing.T) {
 	}
 	if want := []string{"HDFC", "Amex"}; !reflect.DeepEqual(want, st.listFilter.ExcludeSources) {
 		t.Fatalf("expected exclude_sources %v, got %v", want, st.listFilter.ExcludeSources)
+	}
+}
+
+func TestHandleListTransactions_StructuredSourceParams(t *testing.T) {
+	st := &mockStore{transactions: []store.Transaction{}, listResult: store.TransactionListResult{Total: 0}}
+	h := newTestHandlers(t, st, &mockDaemon{})
+
+	rr := get(
+		h.HandleListTransactions,
+		"/api/transactions?source_type=Credit%20Card&bank=HDFC&exclude_source_types=UPI,NetBanking&exclude_banks=ICICI,SBI",
+	)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if st.listFilter.SourceType != "Credit Card" {
+		t.Fatalf("source_type = %q, want Credit Card", st.listFilter.SourceType)
+	}
+	if st.listFilter.Bank != "HDFC" {
+		t.Fatalf("bank = %q, want HDFC", st.listFilter.Bank)
+	}
+	if want := []string{"UPI", "NetBanking"}; !reflect.DeepEqual(want, st.listFilter.ExcludeSourceTypes) {
+		t.Fatalf("exclude_source_types = %#v, want %#v", st.listFilter.ExcludeSourceTypes, want)
+	}
+	if want := []string{"ICICI", "SBI"}; !reflect.DeepEqual(want, st.listFilter.ExcludeBanks) {
+		t.Fatalf("exclude_banks = %#v, want %#v", st.listFilter.ExcludeBanks, want)
 	}
 }
 

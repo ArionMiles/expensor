@@ -17,7 +17,7 @@ export const seededTransactions: Transaction[] = [
     merchant_info: 'Corner Coffee',
     category: 'Food',
     bucket: 'Needs',
-    source: 'gmail',
+    source: { type: 'Credit Card', label: 'HDFC Credit Card', bank: 'HDFC' },
     description: 'Coffee beans',
     labels: ['Groceries'],
     muted: false,
@@ -34,7 +34,7 @@ export const seededTransactions: Transaction[] = [
     merchant_info: 'City Apartments',
     category: 'Housing',
     bucket: 'Needs',
-    source: 'thunderbird',
+    source: { type: 'UPI', label: 'ICICI UPI', bank: 'ICICI' },
     description: 'April rent',
     labels: ['Rent'],
     muted: false,
@@ -45,7 +45,9 @@ export const seededTransactions: Transaction[] = [
 ]
 
 export const seededFacets = {
-  sources: ['gmail', 'thunderbird'],
+  sources: ['HDFC Credit Card', 'ICICI UPI'],
+  source_types: ['Credit Card', 'UPI'],
+  banks: ['HDFC', 'ICICI'],
   categories: ['Food', 'Housing'],
   category_counts: {
     Food: 1,
@@ -85,8 +87,16 @@ const sharedCharts: ChartData = {
     Rent: 240000,
   },
   by_source: {
-    gmail: 1250,
-    thunderbird: 240000,
+    'HDFC Credit Card': 1250,
+    'ICICI UPI': 240000,
+  },
+  by_source_type: {
+    'Credit Card': 1250,
+    UPI: 240000,
+  },
+  by_bank: {
+    HDFC: 1250,
+    ICICI: 240000,
   },
   by_category_monthly: {
     Food: { current: 1250, prior: 950 },
