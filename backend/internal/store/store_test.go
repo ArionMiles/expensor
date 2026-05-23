@@ -1619,6 +1619,69 @@ func TestPredefinedRulesV2CleanupMigrationRemovesStaleRowsAfterOriginal003Applie
 	}
 }
 
+func TestTransactionSourceBackfillMigrationFillsLegacyRowsAfterOriginal002Applied(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+
+	_, err := ts.PoolForTest().Exec(ctx, `
+		INSERT INTO transactions
+			(message_id, amount, currency, timestamp, merchant_info, source, source_label, source_type, bank)
+		VALUES
+			('legacy-hdfc-card', 100, 'INR', NOW(), 'Swiggy', 'Credit Card - HDFC', 'Credit Card - HDFC', '', ''),
+			('legacy-icici-imobile', 200, 'INR', NOW(), 'Rent', 'iMobile - ICICI', 'iMobile - ICICI', '', ''),
+			('already-structured', 300, 'INR', NOW(), 'Cafe', 'Manual', 'Manual Source', 'UPI', 'SBI')
+	`)
+	if err != nil {
+		t.Fatalf("seed legacy transactions: %v", err)
+	}
+
+	migrationSQL, err := fs.ReadFile(migrations.FS, "005_backfill_transaction_source_v2.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	if _, err = ts.PoolForTest().Exec(ctx, string(migrationSQL)); err != nil {
+		t.Fatalf("run transaction source backfill migration: %v", err)
+	}
+
+	type sourceFields struct {
+		sourceLabel string
+		sourceType  string
+		bank        string
+	}
+	rows, err := ts.PoolForTest().Query(ctx, `
+		SELECT message_id, source_label, source_type, bank
+		FROM transactions
+		WHERE message_id IN ('legacy-hdfc-card', 'legacy-icici-imobile', 'already-structured')
+	`)
+	if err != nil {
+		t.Fatalf("query transactions: %v", err)
+	}
+	defer rows.Close()
+
+	got := map[string]sourceFields{}
+	for rows.Next() {
+		var messageID string
+		var fields sourceFields
+		if err = rows.Scan(&messageID, &fields.sourceLabel, &fields.sourceType, &fields.bank); err != nil {
+			t.Fatalf("scan transaction: %v", err)
+		}
+		got[messageID] = fields
+	}
+	if err = rows.Err(); err != nil {
+		t.Fatalf("iterate transactions: %v", err)
+	}
+
+	want := map[string]sourceFields{
+		"legacy-hdfc-card":     {sourceLabel: "HDFC Credit Card", sourceType: "Credit Card", bank: "HDFC"},
+		"legacy-icici-imobile": {sourceLabel: "ICICI iMobile", sourceType: "Mobile App", bank: "ICICI"},
+		"already-structured":   {sourceLabel: "Manual Source", sourceType: "UPI", bank: "SBI"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("source fields = %#v, want %#v", got, want)
+	}
+}
+
 func TestListTransactions_FilterByBucket(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test")
