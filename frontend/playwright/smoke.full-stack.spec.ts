@@ -7,6 +7,6 @@ test('real stack smoke renders seeded dashboard and transactions @smoke', async 
   await expect(page.getByRole('heading', { name: 'Dashboard Summary' })).toBeVisible()
 
   await nav.getByRole('link', { name: 'Transactions', exact: true }).click()
-  await expect(page.getByText('Swiggy')).toBeVisible()
-  await expect(page.getByText('BLINKIT')).toBeVisible()
+  await expect(page.locator('tbody tr', { hasText: 'Swiggy' }).first()).toBeVisible()
+  await expect(page.locator('tbody tr', { hasText: 'BLINKIT' }).first()).toBeVisible()
 })
