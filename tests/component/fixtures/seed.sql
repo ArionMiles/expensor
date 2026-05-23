@@ -4,18 +4,39 @@ INSERT INTO app_config (key, value) VALUES
   ('lookback_days', '365'),
   ('app.timezone', 'Asia/Kolkata'),
   ('app.time_format', 'HH:mm'),
-  ('reader.gmail.last_scan_at', '2026-04-10T00:00:00Z')
+  ('active_reader', 'thunderbird'),
+  ('reader.gmail.last_scan_at', '2026-05-23T06:00:00Z')
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 
+INSERT INTO reader_runtime (reader, config) VALUES
+  ('thunderbird', '{"config":{"profilePath":"/workspace/tests/component/fixtures/thunderbird-profile","mailboxes":"Inbox"}}'::jsonb)
+ON CONFLICT (reader) DO UPDATE SET config = EXCLUDED.config, updated_at = NOW();
+
 INSERT INTO labels (name, color) VALUES
+  ('10min Delivery', '#8b5cf6'),
+  ('Recurring', '#6366f1'),
+  ('Weekend', '#f59e0b'),
+  ('Family', '#ec4899'),
+  ('Office', '#14b8a6'),
+  ('Shared', '#22c55e'),
+  ('High Value', '#ef4444'),
   ('Reimbursable', '#10b981'),
-  ('Subscription', '#6366f1')
+  ('Late Night', '#64748b'),
+  ('Online', '#3b82f6')
 ON CONFLICT (name) DO UPDATE SET color = EXCLUDED.color;
 
 INSERT INTO categories (name, description, is_default) VALUES
   ('Food & Dining', 'Seeded dining category', true),
+  ('Groceries', 'Seeded groceries category', true),
   ('Utilities', 'Seeded utilities category', true),
-  ('Travel', 'Seeded travel category', true)
+  ('Entertainment', 'Seeded entertainment category', true),
+  ('Travel', 'Seeded travel category', true),
+  ('Healthcare', 'Seeded healthcare category', true),
+  ('Transport', 'Seeded transport category', true),
+  ('Shopping', 'Seeded shopping category', true),
+  ('Subscriptions', 'Seeded subscriptions category', true),
+  ('Personal Care', 'Seeded personal care category', true),
+  ('Investments', 'Seeded investments category', true)
 ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description;
 
 INSERT INTO buckets (name, description, is_default) VALUES
@@ -24,6 +45,109 @@ INSERT INTO buckets (name, description, is_default) VALUES
   ('Investments', 'Seeded investments bucket', true)
 ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description;
 
+DELETE FROM transaction_label_sources
+WHERE transaction_id IN (SELECT id FROM transactions WHERE message_id LIKE 'seed-msg-%');
+
+DELETE FROM transaction_labels
+WHERE transaction_id IN (SELECT id FROM transactions WHERE message_id LIKE 'seed-msg-%');
+
+DELETE FROM transactions
+WHERE message_id LIKE 'seed-msg-%';
+
+WITH merchant_seed AS (
+  SELECT *
+  FROM (
+    VALUES
+      (1, 'Swiggy', 277.00, 'Food & Dining', 'Wants', 'Credit Card', 'ICICI Credit Card', 'ICICI', 'Food delivery'),
+      (2, 'Swiggy Limited', 593.00, 'Food & Dining', 'Wants', 'Credit Card', 'ICICI Credit Card', 'ICICI', 'Food delivery'),
+      (3, 'PYU*Swiggy Food', 576.00, 'Food & Dining', 'Wants', 'Credit Card', 'HDFC Credit Card', 'HDFC', 'Food delivery'),
+      (4, 'ZOMATO', 575.84, 'Food & Dining', 'Wants', 'Credit Card', 'ICICI Credit Card', 'ICICI', 'Dinner order'),
+      (5, 'RAZ*Swiggy', 410.00, 'Food & Dining', 'Wants', 'Credit Card', 'HDFC Credit Card', 'HDFC', 'Food delivery'),
+      (6, 'BLINKIT', 485.00, 'Groceries', 'Needs', 'Credit Card', 'HDFC Credit Card', 'HDFC', 'Grocery order'),
+      (7, 'SWIGGY INSTAMART', 955.00, 'Groceries', 'Needs', 'UPI', 'HDFC UPI', 'HDFC', 'Grocery order'),
+      (8, 'RSP*INSTAMART', 585.00, 'Groceries', 'Wants', 'Credit Card', 'HDFC Credit Card', 'HDFC', 'Quick commerce'),
+      (9, 'RSP*BLINK COMMERCE PVT', 909.00, 'Groceries', 'Needs', 'Credit Card', 'HDFC Credit Card', 'HDFC', 'Grocery order'),
+      (10, '1MG HEALTHCARE SOLU', 620.30, 'Healthcare', 'Needs', 'Credit Card', 'ICICI Credit Card', 'ICICI', 'Pharmacy'),
+      (11, 'BUNDL TECHNOLOGIES', 2135.00, 'Utilities', 'Needs', 'Credit Card', 'HDFC Credit Card', 'HDFC', 'Home services'),
+      (12, 'SURESH BALU SHENDGE', 1900.00, 'Utilities', 'Needs', 'UPI', 'HDFC UPI', 'HDFC', 'Maintenance'),
+      (13, 'MSEDCL BILLDESK', 1540.00, 'Utilities', 'Needs', 'NetBanking', 'ICICI NetBanking', 'ICICI', 'Electricity bill'),
+      (14, 'OPENAI *CHATGPT SUBSCR', 1999.00, 'Subscriptions', 'Wants', 'Credit Card', 'ICICI Credit Card', 'ICICI', 'Monthly subscription'),
+      (15, 'NETFLIX.COM', 649.00, 'Entertainment', 'Wants', 'Credit Card', 'HDFC Credit Card', 'HDFC', 'Streaming'),
+      (16, 'PVR INOX Limited', 850.00, 'Entertainment', 'Wants', 'UPI', 'HDFC UPI', 'HDFC', 'Movie tickets'),
+      (17, 'PLAYSTATION', 849.00, 'Entertainment', 'Wants', 'Credit Card', 'ICICI Credit Card', 'ICICI', 'Game purchase'),
+      (18, 'BookMyShow', 1260.00, 'Entertainment', 'Wants', 'UPI', 'Axis UPI', 'Axis', 'Event tickets'),
+      (19, 'DREAM ENTERPRISES', 1500.00, 'Personal Care', 'Needs', 'UPI', 'HDFC UPI', 'HDFC', 'Haircut and spa'),
+      (20, 'Apollo Pharmacy', 780.00, 'Healthcare', 'Needs', 'Credit Card', 'HDFC Credit Card', 'HDFC', 'Medicines'),
+      (21, 'Uber India', 324.00, 'Transport', 'Needs', 'UPI', 'HDFC UPI', 'HDFC', 'Cab ride'),
+      (22, 'Rapido', 146.00, 'Transport', 'Needs', 'UPI', 'HDFC UPI', 'HDFC', 'Bike taxi'),
+      (23, 'IRCTC', 2450.00, 'Travel', 'Wants', 'Debit Card', 'ICICI Debit Card', 'ICICI', 'Train booking'),
+      (24, 'INDIGO', 6990.00, 'Travel', 'Wants', 'Credit Card', 'ICICI Credit Card', 'ICICI', 'Flight booking'),
+      (25, 'Airbnb', 4800.00, 'Travel', 'Wants', 'Credit Card', 'Axis Credit Card', 'Axis', 'Stay booking'),
+      (26, 'AMAZON PAY', 2350.00, 'Shopping', 'Wants', 'Credit Card', 'ICICI Credit Card', 'ICICI', 'Online order'),
+      (27, 'Myntra', 1890.00, 'Shopping', 'Wants', 'Credit Card', 'Axis Credit Card', 'Axis', 'Clothing order'),
+      (28, 'GROWW MUTUAL FUND', 5000.00, 'Investments', 'Investments', 'Mobile App', 'ICICI iMobile', 'ICICI', 'Monthly SIP'),
+      (29, 'ZERODHA BROKING', 3500.00, 'Investments', 'Investments', 'NetBanking', 'HDFC NetBanking', 'HDFC', 'Broker transfer'),
+      (30, 'NPS CONTRIBUTION', 2500.00, 'Investments', 'Investments', 'Debit Card', 'SBI Debit Card', 'SBI', 'Retirement contribution'),
+      (31, 'RENTOMOJO', 1200.00, 'Subscriptions', 'Needs', 'Credit Card', 'HDFC Credit Card', 'HDFC', 'Rental subscription'),
+      (32, 'TATA CLiQ', 2100.00, 'Shopping', 'Wants', 'Credit Card', 'HDFC Credit Card', 'HDFC', 'Online order')
+  ) AS seed(idx, merchant_info, base_amount, category, bucket, source_type, source_label, bank, description)
+),
+current_month_rows AS (
+  SELECT seq
+  FROM generate_series(1, 75) AS seq
+),
+history_rows AS (
+  SELECT seq
+  FROM generate_series(76, 240) AS seq
+),
+seed_rows AS (
+  SELECT
+    seq,
+    make_timestamptz(
+      2026,
+      5,
+      31 - ((seq - 1) % 30),
+      7 + (seq % 15),
+      (seq * 7) % 60,
+      0,
+      'Asia/Kolkata'
+    ) AS spent_at
+  FROM current_month_rows
+  UNION ALL
+  SELECT
+    seq,
+    make_timestamptz(
+      EXTRACT(YEAR FROM (DATE '2025-06-01' + (((seq - 76) / 15) * INTERVAL '1 month')))::int,
+      EXTRACT(MONTH FROM (DATE '2025-06-01' + (((seq - 76) / 15) * INTERVAL '1 month')))::int,
+      ((seq - 76) % 27) + 1,
+      7 + (seq % 15),
+      (seq * 11) % 60,
+      0,
+      'Asia/Kolkata'
+    ) AS spent_at
+  FROM history_rows
+),
+transactions_to_insert AS (
+  SELECT
+    lpad(to_hex(seed_rows.seq), 32, '0')::uuid AS id,
+    'seed-msg-' || seed_rows.seq AS message_id,
+    (merchant_seed.base_amount + ((seed_rows.seq * 37) % 260))::numeric(19, 4) AS amount,
+    'INR' AS currency,
+    seed_rows.spent_at AS timestamp,
+    merchant_seed.merchant_info,
+    merchant_seed.category,
+    merchant_seed.bucket,
+    merchant_seed.source_type || ' - ' || merchant_seed.bank AS source,
+    merchant_seed.source_type,
+    merchant_seed.source_label,
+    merchant_seed.bank,
+    merchant_seed.description,
+    false AS muted,
+    false AS muted_by_merchant,
+    NULL::text AS mute_reason
+  FROM seed_rows
+  JOIN merchant_seed ON merchant_seed.idx = ((seed_rows.seq - 1) % 32) + 1
+)
 INSERT INTO transactions (
   id,
   message_id,
@@ -34,79 +158,109 @@ INSERT INTO transactions (
   category,
   bucket,
   source,
+  source_type,
+  source_label,
+  bank,
   description,
   muted,
   muted_by_merchant,
   mute_reason
-) VALUES
-  (
-    '11111111-1111-1111-1111-111111111111',
-    'seed-msg-1',
-    1007.0000,
-    'INR',
-    '2026-04-16T04:58:45Z',
-    'Food Merchant A',
-    'Food & Dining',
-    'Wants',
-    'Credit Card - HDFC',
-    'Seeded meal purchase',
-    false,
-    false,
-    NULL
-  ),
-  (
-    '22222222-2222-2222-2222-222222222222',
-    'seed-msg-2',
-    1295.6400,
-    'INR',
-    '2026-04-14T16:07:49Z',
-    'Utility Merchant B',
-    'Utilities',
-    'Needs',
-    'Credit Card - ICICI',
-    'Seeded utility bill',
-    false,
-    false,
-    NULL
-  ),
-  (
-    '33333333-3333-3333-3333-333333333333',
-    'seed-msg-3',
-    15054.0000,
-    'INR',
-    '2026-04-12T19:04:01Z',
-    'Travel Merchant C',
-    'Travel',
-    'Wants',
-    'Credit Card - ICICI',
-    'Seeded travel booking',
-    false,
-    false,
-    NULL
-  ),
-  (
-    '44444444-4444-4444-4444-444444444444',
-    'seed-msg-4',
-    518.0000,
-    'INR',
-    '2026-04-13T07:17:29Z',
-    'Food Merchant D',
-    'Food & Dining',
-    'Wants',
-    'Credit Card - HDFC',
-    'Seeded recurring food order',
-    true,
-    false,
-    'seeded muted case'
-  )
+)
+SELECT
+  id,
+  message_id,
+  amount,
+  currency,
+  timestamp,
+  merchant_info,
+  category,
+  bucket,
+  source,
+  source_type,
+  source_label,
+  bank,
+  description,
+  muted,
+  muted_by_merchant,
+  mute_reason
+FROM transactions_to_insert
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO transaction_labels (transaction_id, label) VALUES
-  ('11111111-1111-1111-1111-111111111111', 'Reimbursable'),
-  ('44444444-4444-4444-4444-444444444444', 'Subscription')
+WITH labeled AS (
+  SELECT id, label, source_type, merchant_pattern
+  FROM (
+    SELECT id, '10min Delivery' AS label, 'merchant' AS source_type, merchant_info AS merchant_pattern
+    FROM transactions
+    WHERE message_id LIKE 'seed-msg-%'
+      AND (merchant_info ILIKE '%BLINK%' OR merchant_info ILIKE '%INSTAMART%')
+    UNION
+    SELECT id, 'Recurring', 'merchant', merchant_info
+    FROM transactions
+    WHERE message_id LIKE 'seed-msg-%'
+      AND merchant_info IN ('OPENAI *CHATGPT SUBSCR', 'NETFLIX.COM', 'RENTOMOJO', 'NPS CONTRIBUTION')
+    UNION
+    SELECT id, 'Weekend', 'manual', ''
+    FROM transactions
+    WHERE message_id LIKE 'seed-msg-%'
+      AND EXTRACT(ISODOW FROM timestamp AT TIME ZONE 'Asia/Kolkata') IN (6, 7)
+    UNION
+    SELECT id, 'Family', 'manual', ''
+    FROM transactions
+    WHERE message_id LIKE 'seed-msg-%'
+      AND regexp_replace(message_id, 'seed-msg-', '')::int % 11 = 0
+    UNION
+    SELECT id, 'Office', 'manual', ''
+    FROM transactions
+    WHERE message_id LIKE 'seed-msg-%'
+      AND regexp_replace(message_id, 'seed-msg-', '')::int % 13 = 0
+    UNION
+    SELECT id, 'Shared', 'manual', ''
+    FROM transactions
+    WHERE message_id LIKE 'seed-msg-%'
+      AND regexp_replace(message_id, 'seed-msg-', '')::int % 7 = 0
+    UNION
+    SELECT id, 'High Value', 'manual', ''
+    FROM transactions
+    WHERE message_id LIKE 'seed-msg-%'
+      AND amount >= 3500
+    UNION
+    SELECT id, 'Reimbursable', 'manual', ''
+    FROM transactions
+    WHERE message_id LIKE 'seed-msg-%'
+      AND amount >= 1800
+      AND regexp_replace(message_id, 'seed-msg-', '')::int % 4 = 0
+    UNION
+    SELECT id, 'Late Night', 'manual', ''
+    FROM transactions
+    WHERE message_id LIKE 'seed-msg-%'
+      AND EXTRACT(HOUR FROM timestamp AT TIME ZONE 'Asia/Kolkata') >= 21
+    UNION
+    SELECT id, 'Online', 'manual', ''
+    FROM transactions
+    WHERE message_id LIKE 'seed-msg-%'
+      AND source_type = 'Credit Card'
+      AND regexp_replace(message_id, 'seed-msg-', '')::int % 5 = 0
+  ) AS labels_for_transactions
+)
+INSERT INTO transaction_labels (transaction_id, label)
+SELECT id, label
+FROM labeled
 ON CONFLICT (transaction_id, label) DO NOTHING;
 
-INSERT INTO transaction_label_sources (transaction_id, label, source_type, merchant_pattern) VALUES
-  ('11111111-1111-1111-1111-111111111111', 'Reimbursable', 'manual', ''),
-  ('44444444-4444-4444-4444-444444444444', 'Subscription', 'manual', '')
+INSERT INTO transaction_label_sources (transaction_id, label, source_type, merchant_pattern)
+SELECT
+  transaction_id,
+  label,
+  CASE
+    WHEN label IN ('10min Delivery', 'Recurring') THEN 'merchant'
+    ELSE 'manual'
+  END,
+  CASE
+    WHEN label IN ('10min Delivery', 'Recurring') THEN (
+      SELECT merchant_info FROM transactions WHERE transactions.id = transaction_labels.transaction_id
+    )
+    ELSE ''
+  END
+FROM transaction_labels
+WHERE transaction_id IN (SELECT id FROM transactions WHERE message_id LIKE 'seed-msg-%')
 ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING;

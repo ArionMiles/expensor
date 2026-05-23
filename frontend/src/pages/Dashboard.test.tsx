@@ -1,8 +1,10 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import type { ChartData, Stats } from '@/api/types'
 import { I18nProvider } from '@/i18n/I18nProvider'
+import { renderWithProviders } from '@/test/render'
 import {
   BreakdownTimeline,
   DEFAULT_SPEND_BREAKDOWN_MODE,
@@ -14,6 +16,7 @@ import {
   displayBucketLabel,
   topBreakdownSlices,
 } from './Dashboard'
+import Dashboard from './Dashboard'
 
 const chartData: ChartData = {
   monthly_spend: [],
@@ -37,6 +40,19 @@ const stats: Stats = {
   total_by_category: { Food: 1200, Travel: 500 },
   total_category_count: { Food: 2, Travel: 1 },
   top_merchants: [],
+}
+
+function installLocalStorage() {
+  const values = new Map<string, string>()
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+      clear: () => values.clear(),
+    },
+  })
 }
 
 function renderSummarySection(
@@ -142,7 +158,7 @@ describe('MetricToggle', () => {
 
 describe('SummarySection', () => {
   it('removes the duplicate bucket donut and combines bank/type into one donut', () => {
-    renderSummarySection('current_month')
+    const { container } = renderSummarySection('current_month')
 
     expect(screen.queryByText('By bucket')).not.toBeInTheDocument()
     expect(screen.queryByText('By source type')).not.toBeInTheDocument()
@@ -151,6 +167,55 @@ describe('SummarySection', () => {
     expect(screen.queryByText(/Bank:\s*\d+/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Type:\s*\d+/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Total:/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Total')).not.toBeInTheDocument()
+    expect(container.querySelector('[data-testid="summary-static-charts-separator"]')).toBeTruthy()
+  })
+
+  it('animates donut arcs when summary chart data changes', () => {
+    const { container } = renderSummarySection('current_month')
+
+    const arcs = container.querySelectorAll('circle[stroke-dasharray]')
+    expect(arcs.length).toBeGreaterThan(0)
+    arcs.forEach((arc) => {
+      expect(arc).toHaveClass('transition-all', 'duration-500', 'ease-out')
+    })
+  })
+
+  it('keeps uncategorized visually distinct from needs in the bucket donut', () => {
+    const { container } = renderSummarySection('all_time', {
+      ...chartData,
+      by_bucket: { Uncategorized: 1400, Needs: 1000 },
+    })
+
+    const uncategorized = container.querySelector('circle[aria-label^="Uncategorized,"]')
+    const needs = container.querySelector('circle[aria-label^="Needs,"]')
+
+    expect(uncategorized).toBeTruthy()
+    expect(needs).toBeTruthy()
+    expect(uncategorized?.getAttribute('stroke')).not.toBe(needs?.getAttribute('stroke'))
+  })
+
+  it('uses the neutral uncategorized color across breakdown donuts', () => {
+    const slices = topBreakdownSlices({ Uncategorized: 100, Food: 90 })
+
+    expect(slices.find((slice) => slice.label === 'Uncategorized')?.color).toBe('#64748b')
+    expect(slices.find((slice) => slice.label === 'Food')?.color).not.toBe('#64748b')
+  })
+
+  it('shows and hides uncategorized in the label donut and remembers the choice', async () => {
+    installLocalStorage()
+    const user = userEvent.setup()
+    const { container } = renderSummarySection('current_month', {
+      ...chartData,
+      by_label: { Online: 100, '': 50 },
+    })
+
+    expect(container.querySelector('circle[aria-label^="Uncategorized,"]')).toBeTruthy()
+
+    await user.click(screen.getByRole('switch', { name: 'Show uncategorized labels' }))
+
+    expect(container.querySelector('circle[aria-label^="Uncategorized,"]')).toBeNull()
+    expect(window.localStorage.getItem('expensor.dashboard.showUncategorizedLabels')).toBe('false')
   })
 
   it('shows the category monthly chart for all time without prior comparison copy', () => {
@@ -162,7 +227,7 @@ describe('SummarySection', () => {
   })
 
   it('keeps uncategorized category spend visible even outside the top five', () => {
-    renderSummarySection('current_month', {
+    const { container } = renderSummarySection('current_month', {
       ...chartData,
       by_category_monthly: {
         Food: { current: 600, prior: 500 },
@@ -174,8 +239,90 @@ describe('SummarySection', () => {
       },
     })
 
-    expect(screen.getByText('Uncategorized')).toBeInTheDocument()
+    expect(
+      Array.from(container.querySelectorAll('span')).some(
+        (element) => element.textContent === 'Uncategorized',
+      ),
+    ).toBe(true)
     expect(screen.queryByText('Healthcare')).not.toBeInTheDocument()
+  })
+
+  it('hides uncategorized from month comparison when the current month has no uncategorized spend', () => {
+    const { container } = renderSummarySection('current_month', {
+      ...chartData,
+      by_category_monthly: {
+        Food: { current: 600, prior: 500 },
+        Travel: { current: 500, prior: 400 },
+        Uncategorized: { current: 0, prior: 300 },
+      },
+    })
+
+    expect(
+      Array.from(container.querySelectorAll('span.truncate')).some(
+        (element) => element.textContent === 'Uncategorized',
+      ),
+    ).toBe(false)
+  })
+
+  it('uses all-time category totals for the all-time category chart', () => {
+    const { container } = renderSummarySection('all_time', {
+      ...chartData,
+      by_category: {
+        Food: 600,
+        Travel: 500,
+        Shopping: 400,
+        Utilities: 300,
+        Healthcare: 200,
+        Uncategorized: 50,
+      },
+      by_category_monthly: {
+        Food: { current: 600, prior: 500 },
+        Travel: { current: 500, prior: 400 },
+      },
+    })
+
+    expect(
+      Array.from(container.querySelectorAll('span.truncate')).some(
+        (element) => element.textContent === 'Uncategorized',
+      ),
+    ).toBe(true)
+    expect(screen.queryByText('Healthcare')).not.toBeInTheDocument()
+  })
+})
+
+describe('Dashboard preferences', () => {
+  it('uses local storage as the default summary tab when the URL does not specify one', async () => {
+    installLocalStorage()
+    window.localStorage.setItem('expensor.dashboard.summaryMode', 'all_time')
+
+    renderWithProviders(<Dashboard />, { route: '/dashboard' })
+
+    const allTime = await screen.findByRole('button', { name: 'All Time' })
+    expect(allTime).toHaveClass('bg-primary')
+  })
+
+  it('uses local storage as the default spend breakdown mode when the URL does not specify one', async () => {
+    installLocalStorage()
+    window.localStorage.setItem('expensor.dashboard.spendBreakdownMode', 'labels')
+
+    renderWithProviders(<Dashboard />, { route: '/dashboard' })
+
+    await screen.findByText('Spend breakdown (12 months)')
+    expect(screen.getByRole('button', { name: 'Labels' })).toHaveClass('bg-primary')
+  })
+
+  it('uses local storage defaults for spending pattern controls', async () => {
+    installLocalStorage()
+    window.localStorage.setItem('expensor.dashboard.heatmapMetric', 'amount')
+    window.localStorage.setItem('expensor.dashboard.weekdayHeatmapMonth', '2026-03')
+    window.localStorage.setItem('expensor.dashboard.annualHeatmapYear', '2025')
+
+    renderWithProviders(<Dashboard />, { route: '/dashboard' })
+
+    await screen.findByText('Spending Patterns')
+    expect(screen.getByRole('button', { name: 'Amount' })).toHaveClass('bg-primary')
+    expect(screen.getByText('Mar 2026')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('2025')).toBeInTheDocument())
   })
 })
 

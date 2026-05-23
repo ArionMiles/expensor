@@ -14,6 +14,7 @@
     "test:e2e": "PLAYWRIGHT_ARTIFACT_PREFIX=mocked playwright test --project=mocked",
     "test:e2e:smoke": "PLAYWRIGHT_ARTIFACT_PREFIX=smoke playwright test --project=smoke",
     "screenshot:readme": "PLAYWRIGHT_ARTIFACT_PREFIX=screenshots playwright test --project=screenshots",
+    "screenshot:live": "node scripts/capture-live-screenshots.mjs",
     "format": "prettier --write src/",
     "format:check": "prettier --check src/"
   },

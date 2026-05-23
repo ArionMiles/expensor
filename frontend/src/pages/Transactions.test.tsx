@@ -227,6 +227,8 @@ describe('Transactions', () => {
     expect(table.querySelector('colgroup col:nth-child(7)')).toHaveClass('w-48')
     expect(table.querySelector('colgroup col:nth-child(8)')).toHaveClass('w-52')
     expect(table.querySelector('thead th:last-child')).toHaveClass('sticky', 'right-0')
+    expect(table.querySelector('thead th:first-child')).toHaveClass('px-0', 'text-center')
+    expect(table.querySelector('tbody td:first-child')).toHaveClass('px-0', 'text-center')
   })
 
   it('round-trips search and source type/bank filter state through URL query params', async () => {

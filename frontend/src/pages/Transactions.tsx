@@ -481,7 +481,7 @@ function TransactionRow({
         tx.muted && 'opacity-40',
       )}
     >
-      <td className="px-3 py-2.5">
+      <td className="px-0 py-2.5 text-center">
         <input
           type="checkbox"
           checked={selected}
@@ -1234,7 +1234,7 @@ export function Transactions() {
           </colgroup>
           <thead>
             <tr className="border-b border-border bg-secondary/50">
-              <th scope="col" className="w-10 px-3 py-2.5">
+              <th scope="col" className="w-10 px-0 py-2.5 text-center">
                 <input
                   type="checkbox"
                   checked={allSelected}

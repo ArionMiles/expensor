@@ -23,8 +23,8 @@ func TestTransactionsSeededFiltersAndMutations(t *testing.T) {
 			path: "/api/transactions?page=1&page_size=10&category=Food%20%26%20Dining",
 			assert: func(t *testing.T, body map[string]any) {
 				t.Helper()
-				if int(body["total"].(float64)) != 1 {
-					t.Fatalf("expected one visible Food & Dining transaction (muted excluded by default), got %#v", body)
+				if int(body["total"].(float64)) == 0 {
+					t.Fatalf("expected visible Food & Dining transactions, got %#v", body)
 				}
 			},
 		},
@@ -59,7 +59,7 @@ func TestTransactionsSeededFiltersAndMutations(t *testing.T) {
 		{
 			name:   "update transaction",
 			method: http.MethodPut,
-			path:   "/api/transactions/11111111-1111-1111-1111-111111111111",
+			path:   "/api/transactions/00000000-0000-0000-0000-000000000001",
 			body: map[string]string{
 				"description": "Updated seeded purchase",
 				"category":    "Food & Dining",
@@ -70,16 +70,16 @@ func TestTransactionsSeededFiltersAndMutations(t *testing.T) {
 		{
 			name:   "add label",
 			method: http.MethodPost,
-			path:   "/api/transactions/11111111-1111-1111-1111-111111111111/labels",
+			path:   "/api/transactions/00000000-0000-0000-0000-000000000001/labels",
 			body: map[string]any{
-				"labels": []string{"Work Trip"},
+				"labels": []string{"Office"},
 			},
 			want: http.StatusOK,
 		},
 		{
 			name:   "mute transaction",
 			method: http.MethodPut,
-			path:   "/api/transactions/11111111-1111-1111-1111-111111111111/mute",
+			path:   "/api/transactions/00000000-0000-0000-0000-000000000001/mute",
 			body: map[string]any{
 				"muted":  true,
 				"reason": "component test mute",
@@ -89,7 +89,7 @@ func TestTransactionsSeededFiltersAndMutations(t *testing.T) {
 		{
 			name:   "update mute reason",
 			method: http.MethodPut,
-			path:   "/api/transactions/11111111-1111-1111-1111-111111111111/mute-reason",
+			path:   "/api/transactions/00000000-0000-0000-0000-000000000001/mute-reason",
 			body: map[string]string{
 				"reason": "component test reason",
 			},

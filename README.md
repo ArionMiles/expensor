@@ -11,8 +11,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/dashboard-light.png" alt="Expensor dashboard in light mode" width="100%">
+  <img src="docs/screenshots/transactions-light.png" alt="Expensor transactions page in light mode" width="100%">
 </p>
+
+More screenshots are available in [`docs/screenshots`](docs/screenshots/).
 
 Expensor reads expense-related emails from Gmail or Thunderbird, extracts transaction details with configurable rules, and stores them in PostgreSQL. It ships with a web UI for onboarding, dashboard analytics, transaction review, labels, settings, and daemon control.
 

@@ -204,6 +204,17 @@ tasks:
     deps: [frontend:install]
     cmd: npm run screenshot:readme
 
+  screenshots:live:
+    summary: Capture live high-resolution dashboard and transactions screenshots.
+    desc: >-
+      Starts from the current local app state and captures rounded, high-DPI
+      dashboard and transactions screenshots in both light and dark themes.
+      Preserves the capture preset used for the README screenshot updates.
+    dir: frontend
+    deps: [frontend:install]
+    cmds:
+      - VITE_API_PROXY_TARGET=http://127.0.0.1:18080 npm run screenshot:live
+
   test:
     summary: Run all backend and frontend unit/component tests.
     desc: >-

@@ -38,12 +38,12 @@ func TestHealthVersionAndActiveReader(t *testing.T) {
 			},
 		},
 		{
-			name: "active reader empty",
+			name: "active reader persisted",
 			path: "/api/config/active-reader",
 			assert: func(t *testing.T, body map[string]string) {
 				t.Helper()
-				if body["reader"] != "" {
-					t.Fatalf("expected no active reader, got %#v", body)
+				if body["reader"] != "thunderbird" {
+					t.Fatalf("expected thunderbird active reader, got %#v", body)
 				}
 			},
 		},

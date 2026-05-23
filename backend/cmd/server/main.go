@@ -518,6 +518,7 @@ func buildSystemRuleRows(raw []api.Rule) []store.RuleRow {
 			Name: r.Name, SenderEmail: sender, SubjectContains: r.SubjectContains,
 			AmountRegex: regexString(r.Amount), MerchantRegex: regexString(r.MerchantInfo),
 			CurrencyRegex: regexString(r.Currency), TransactionSource: r.Source.Display(),
+			SenderEmails: r.SenderEmails, SourceType: r.Source.Type, SourceLabel: r.Source.Label, Bank: r.Source.Bank,
 		})
 	}
 	return rows
@@ -576,7 +577,8 @@ func compileRule(row store.RuleRow) (api.Rule, error) {
 	return api.Rule{
 		ID: row.ID, Name: row.Name, SenderEmail: row.SenderEmail, SubjectContains: row.SubjectContains,
 		Amount: amount, MerchantInfo: merchant, Currency: currency,
-		Source: api.Source{Label: row.TransactionSource},
+		SenderEmails: row.SenderEmails,
+		Source:       api.Source{Type: row.SourceType, Label: row.SourceLabel, Bank: row.Bank},
 	}, nil
 }
 
