@@ -1,0 +1,17 @@
+---
+rule: Axis Bank Credit Card
+sender: alerts@axis.bank.in
+subject: "INR 4999 spent on credit card"
+expected:
+  amount: 4999.00
+  merchant: ACME STORE
+  currency: INR
+---
+<div>
+  <div>Transaction Amount:</div>
+  <div>INR&nbsp;4999</div>
+</div>
+<div>
+  <div>Merchant Name:</div>
+  <div>ACME STORE<br></div>
+</div>

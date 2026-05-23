@@ -179,11 +179,17 @@ func (r *pgRulesRepository) CreateRule(ctx context.Context, rule RuleRow) (*Rule
 			ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
 		)
 		if err != nil {
+			if isRuleNameConflict(err) {
+				return ErrRuleNameConflict
+			}
 			return fmt.Errorf("creating rule: %w", err)
 		}
 		defer rows.Close()
 		result, err := scanRuleRows(rows)
 		if err != nil {
+			if isRuleNameConflict(err) {
+				return ErrRuleNameConflict
+			}
 			return fmt.Errorf("creating rule: %w", err)
 		}
 		if len(result) == 0 {
@@ -213,11 +219,17 @@ func (r *pgRulesRepository) UpdateRule(ctx context.Context, id string, rule Rule
 			ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
 		)
 		if err != nil {
+			if isRuleNameConflict(err) {
+				return ErrRuleNameConflict
+			}
 			return fmt.Errorf("updating rule: %w", err)
 		}
 		defer rows.Close()
 		result, err := scanRuleRows(rows)
 		if err != nil {
+			if isRuleNameConflict(err) {
+				return ErrRuleNameConflict
+			}
 			return fmt.Errorf("updating rule: %w", err)
 		}
 		if len(result) == 0 {

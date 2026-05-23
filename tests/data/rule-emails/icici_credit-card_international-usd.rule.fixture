@@ -1,0 +1,12 @@
+---
+rule: ICICI Credit Card
+sender: credit_cards@icicibank.com
+subject: "Transaction alert for your ICICI Bank Credit Card"
+expected:
+  amount: 5.90
+  merchant: ANTHROPIC
+  currency: USD
+---
+Dear Customer,
+
+Your ICICI Bank Credit Card XX1234 has been used for a transaction of USD 5.90 on Apr 02, 2026 at 10:45:06. Info: ANTHROPIC.

@@ -2785,6 +2785,10 @@ func (h *Handlers) HandleCreateRule(w http.ResponseWriter, r *http.Request) {
 	}
 	created, err := h.store.CreateRule(r.Context(), row)
 	if err != nil {
+		if errors.Is(err, store.ErrRuleNameConflict) {
+			writeError(w, http.StatusConflict, "rule name already exists")
+			return
+		}
 		h.logger.Error("create rule", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create rule")
 		return
@@ -2837,6 +2841,10 @@ func (h *Handlers) HandleUpdateRule(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "rule not found")
+			return
+		}
+		if errors.Is(err, store.ErrRuleNameConflict) {
+			writeError(w, http.StatusConflict, "rule name already exists")
 			return
 		}
 		h.logger.Error("update rule", "error", err)

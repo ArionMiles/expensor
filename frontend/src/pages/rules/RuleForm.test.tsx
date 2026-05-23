@@ -288,6 +288,29 @@ describe('RuleForm diagnostics', () => {
     expect(queryMocks.createRule).not.toHaveBeenCalled()
   })
 
+  it('shows duplicate rule name save failures beside the rule name', async () => {
+    const user = userEvent.setup()
+    queryMocks.createRule.mockImplementation((_body, options) =>
+      options?.onError?.(new Error('rule name already exists')),
+    )
+
+    renderRuleForm('/rules/new', '/rules/new')
+
+    const title = screen.getByRole('textbox', { name: 'Rule name' })
+    await user.type(title, 'Existing rule name')
+    await user.type(screen.getByLabelText('Subject contains'), 'Credit Card')
+    await user.type(screen.getByLabelText('Add sender'), 'alerts@hdfcbank.net{Enter}')
+    fireEvent.change(screen.getByLabelText('Amount regex'), {
+      target: { value: 'Amount: ([0-9.]+)' },
+    })
+    fireEvent.change(screen.getByLabelText('Merchant regex'), { target: { value: 'at (.*)' } })
+    await user.click(screen.getByRole('button', { name: 'Save Rule' }))
+
+    expect(screen.getByText('Rule name already exists.')).toBeInTheDocument()
+    expect(title).toHaveClass('border-destructive')
+    expect(screen.queryByText('rule name already exists')).not.toBeInTheDocument()
+  })
+
   it('asks how to save existing rules and can start a retroactive scan', async () => {
     const user = userEvent.setup()
     queryMocks.updateRule.mockImplementation((_variables, options) => options?.onSuccess?.())
@@ -318,9 +341,27 @@ describe('RuleForm diagnostics', () => {
   it('offers fixture and rule export before saving when samples contain data', async () => {
     const user = userEvent.setup()
     const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const realBlob = Blob
+    const textDecoder = new TextDecoder()
+    const createdBlobs: Array<{ text: string; type: string }> = []
+    class TestBlob {
+      readonly type: string
+
+      constructor(parts: BlobPart[], options?: BlobPropertyBag) {
+        this.type = options?.type ?? ''
+        createdBlobs.push({
+          text: parts
+            .map((part) => (part instanceof Uint8Array ? textDecoder.decode(part) : String(part)))
+            .join(''),
+          type: this.type,
+        })
+      }
+    }
+    const createObjectURL = vi.fn((_blob: Blob) => 'blob:test')
+    vi.stubGlobal('Blob', TestBlob)
     Object.defineProperty(URL, 'createObjectURL', {
       configurable: true,
-      value: vi.fn(() => 'blob:test'),
+      value: createObjectURL,
     })
     Object.defineProperty(URL, 'revokeObjectURL', {
       configurable: true,
@@ -344,12 +385,20 @@ describe('RuleForm diagnostics', () => {
 
     await user.click(screen.getByRole('button', { name: 'Export & Continue' }))
 
-    expect(anchorClick).toHaveBeenCalledTimes(2)
+    expect(anchorClick).toHaveBeenCalledTimes(1)
+    const archiveBlob = createdBlobs.find((blob) => blob.type === 'application/zip')
+    const archiveText = archiveBlob?.text ?? ''
+    expect(archiveText).toContain('existing-rule-name.rule.json')
+    expect(archiveText).toContain('hdfc_credit-card_diagnostic-sample.rule.fixture')
+    expect(archiveText).toContain('rule: "Existing rule name"')
+    expect(archiveText).toContain('Amount: 0 paid at')
+    expect(archiveText).not.toContain('body: |')
     expect(screen.getByRole('dialog', { name: 'Save rule changes?' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Save & Exit' }))
     expect(queryMocks.updateRule).toHaveBeenCalledTimes(1)
 
+    vi.stubGlobal('Blob', realBlob)
     anchorClick.mockRestore()
   })
 

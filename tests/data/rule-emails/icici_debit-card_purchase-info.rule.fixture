@@ -1,0 +1,29 @@
+---
+rule: ICICI Debit Card
+sender: alert@icicibank.com
+subject: "Transaction alert for your ICICI Bank debit card"
+expected:
+  amount: 92215.00
+  merchant: VPS*SHREE DHOLI
+  currency: INR
+---
+Dear Customer,
+
+Greetings from ICICI Bank.
+
+A purchase of Rs. 92,215.00 has been made using your Debit Card linked to ICICI Bank Account XX123 on 08-Apr-26. Info: VPS*SHREE DHOLI.
+
+The Available Balance in your account is Rs. 10,00,000.00.
+
+In case you have not done this transaction, please call on 18002662 or SMS BLOCK 752 to 9215676766  from your registered mobile number.
+
+NEVER SHARE your Card number, CVV, PIN, OTP, Internet Banking User ID, Password or URN with anyone, even if the caller claims to be a bank employee. Sharing these details can lead to unauthorised access to your account.
+
+Looking forward to more opportunities to be of service to you.
+
+Sincerely,
+
+Customer Service Team
+ICICI Bank Limited
+
+This is a system-generated e-mail. Please do not reply to this e-mail.

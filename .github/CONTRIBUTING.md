@@ -444,31 +444,32 @@ Use the Rule editor to create or fix extraction rules. It gives you a live workb
 `backend/cmd/server/content/rules.json` because the Go binary embeds files from that package path; maintainers keep that mirror in sync while we work toward
 making `content/` the single definitive location for rule edits.
 
-The export downloads two files:
+The export downloads one contribution zip file containing:
 
 - `<rule-name>.rule.json` contains the versioned rule document. Copy its rule entry into the `rules` array in `content/rules.json`. If it includes a new
   source type or bank, copy that value into the matching `presets.source_types` or `presets.banks` list too.
-- `<rule-name>.fixtures.yaml` contains the workbench samples. For each sample in this file, create one fixture YAML file under `tests/data/rule-emails` using
-  the exported `file` value as the filename.
+- One `<bank>_<source-type>_<case>.rule.fixture` file per populated workbench sample. Copy these files into `tests/data/rule-emails`.
 
-Rule email fixtures are self-contained YAML files, but they must not duplicate regexes from `rules.json`. The test runner automatically discovers
-`*.yaml` and `*.yml` files under `tests/data/rule-emails`, uses the file basename as the table-driven subtest name, loads the named rule from the real
-rules document, and asserts sender/subject matching plus amount, merchant, and currency extraction.
+Rule email fixtures are self-contained `.rule.fixture` files with YAML front matter and the raw email body below the closing `---`. They must not
+duplicate regexes from `rules.json`. The test runner automatically discovers `*.rule.fixture` files under `tests/data/rule-emails`, uses the file
+basename as the table-driven subtest name, loads the named rule from the real rules document, and asserts sender/subject matching plus amount, merchant,
+and currency extraction.
 
-Use one email per fixture file. Fixture filenames must follow `<bank>_<source-type>_<case>.yaml`, with lowercase slug segments such as
-`hdfc_credit-card_classic-spend.yaml`. Keep fixture emails redacted but realistic enough for the exported rule to match.
+Use one email per fixture file. Fixture filenames must follow `<bank>_<source-type>_<case>.rule.fixture`, with lowercase slug segments such as
+`hdfc_credit-card_classic-spend.rule.fixture`. Keep fixture emails redacted but realistic enough for the exported rule to match.
 
 ```yaml
+---
 rule: HDFC Credit Card
 sender: alerts@hdfcbank.net
 subject: "Alert : Update on your HDFC Bank Credit Card"
-body: |
-  Dear Customer,
-  Rs.999.00 spent at SWIGGY on your HDFC Credit Card on 12-Apr-2026.
 expected:
   amount: 999.00
   merchant: SWIGGY
   currency: INR
+---
+Dear Customer,
+Rs.999.00 spent at SWIGGY on your HDFC Credit Card on 12-Apr-2026.
 ```
 
 ## Getting Help

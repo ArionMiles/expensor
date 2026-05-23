@@ -131,16 +131,13 @@ function slug(value: string) {
   )
 }
 
-function indentBlock(value: string, prefix = '  ') {
-  return value
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .map((line) => `${prefix}${line}`)
-    .join('\n')
-}
-
 function yamlScalar(value: string) {
   return JSON.stringify(value)
+}
+
+function yamlNumberOrScalar(value: string) {
+  const trimmed = value.trim()
+  return /^-?\d+(?:\.\d+)?$/.test(trimmed) ? trimmed : yamlScalar(trimmed)
 }
 
 function isValidEmail(value: string) {
@@ -169,14 +166,110 @@ function inputClasses(hasError = false, extra = '') {
     .join(' ')
 }
 
-function downloadText(filename: string, text: string, type: string) {
-  const blob = new Blob([text], { type })
+type ZipEntry = {
+  filename: string
+  content: string
+}
+
+const textEncoder = new TextEncoder()
+let crcTable: Uint32Array | null = null
+
+function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = filename
   anchor.click()
   URL.revokeObjectURL(url)
+}
+
+function crc32(bytes: Uint8Array) {
+  if (!crcTable) {
+    crcTable = new Uint32Array(256)
+    for (let n = 0; n < 256; n += 1) {
+      let value = n
+      for (let k = 0; k < 8; k += 1) {
+        value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1
+      }
+      crcTable[n] = value >>> 0
+    }
+  }
+
+  let crc = 0xffffffff
+  for (const byte of bytes) {
+    crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8)
+  }
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+function writeUint16(bytes: number[], value: number) {
+  bytes.push(value & 0xff, (value >>> 8) & 0xff)
+}
+
+function writeUint32(bytes: number[], value: number) {
+  bytes.push(value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff)
+}
+
+function writeBytes(bytes: number[], value: Uint8Array) {
+  for (const byte of value) bytes.push(byte)
+}
+
+function buildStoredZip(entries: ZipEntry[]) {
+  const output: number[] = []
+  const centralDirectory: number[] = []
+
+  for (const entry of entries) {
+    const filename = textEncoder.encode(entry.filename)
+    const content = textEncoder.encode(entry.content)
+    const checksum = crc32(content)
+    const localHeaderOffset = output.length
+
+    writeUint32(output, 0x04034b50)
+    writeUint16(output, 20)
+    writeUint16(output, 0)
+    writeUint16(output, 0)
+    writeUint16(output, 0)
+    writeUint16(output, 0)
+    writeUint32(output, checksum)
+    writeUint32(output, content.length)
+    writeUint32(output, content.length)
+    writeUint16(output, filename.length)
+    writeUint16(output, 0)
+    writeBytes(output, filename)
+    writeBytes(output, content)
+
+    writeUint32(centralDirectory, 0x02014b50)
+    writeUint16(centralDirectory, 20)
+    writeUint16(centralDirectory, 20)
+    writeUint16(centralDirectory, 0)
+    writeUint16(centralDirectory, 0)
+    writeUint16(centralDirectory, 0)
+    writeUint16(centralDirectory, 0)
+    writeUint32(centralDirectory, checksum)
+    writeUint32(centralDirectory, content.length)
+    writeUint32(centralDirectory, content.length)
+    writeUint16(centralDirectory, filename.length)
+    writeUint16(centralDirectory, 0)
+    writeUint16(centralDirectory, 0)
+    writeUint16(centralDirectory, 0)
+    writeUint16(centralDirectory, 0)
+    writeUint32(centralDirectory, 0)
+    writeUint32(centralDirectory, localHeaderOffset)
+    writeBytes(centralDirectory, filename)
+  }
+
+  const centralDirectoryOffset = output.length
+  writeBytes(output, new Uint8Array(centralDirectory))
+  writeUint32(output, 0x06054b50)
+  writeUint16(output, 0)
+  writeUint16(output, 0)
+  writeUint16(output, entries.length)
+  writeUint16(output, entries.length)
+  writeUint32(output, centralDirectory.length)
+  writeUint32(output, centralDirectoryOffset)
+  writeUint16(output, 0)
+
+  return new Blob([new Uint8Array(output)], { type: 'application/zip' })
 }
 
 type ComboboxProps = {
@@ -480,29 +573,30 @@ export function RuleForm() {
     },
   })
 
-  const buildFixtureBundle = () => {
+  const buildFixtureFile = (sample: SampleState) => `---
+rule: ${yamlScalar(form.name || t('rules.editor.newRuleName'))}
+sender: ${yamlScalar(sample.sender)}
+subject: ${yamlScalar(sample.subject)}
+expected:
+  amount: ${yamlNumberOrScalar(sample.expected.amount || '')}
+  merchant: ${yamlScalar(sample.expected.merchant || '')}
+  currency: ${yamlScalar(sample.expected.currency || '')}
+---
+${sample.body.replace(/\r\n/g, '\n')}`
+
+  const buildFixtureEntries = () => {
     const bankSlug = slug(form.bank || 'bank')
     const typeSlug = slug(form.sourceType || 'source-type')
     const populatedSamples = samples.filter(sampleHasValidationData)
-    const entries = populatedSamples.map((sample) => {
+    const seen = new Map<string, number>()
+    return populatedSamples.map((sample) => {
       const caseSlug = slug(sample.name || form.name || 'sample')
-      return `  - file: ${yamlScalar(`${bankSlug}_${typeSlug}_${caseSlug}.yaml`)}
-    name: ${yamlScalar(sample.name)}
-    sender: ${yamlScalar(sample.sender)}
-    subject: ${yamlScalar(sample.subject)}
-    body: |
-${indentBlock(sample.body || '', '      ')}
-    expected:
-      amount: ${yamlScalar(sample.expected.amount || '')}
-      merchant: ${yamlScalar(sample.expected.merchant || '')}
-      currency: ${yamlScalar(sample.expected.currency || '')}`
+      const baseName = `${bankSlug}_${typeSlug}_${caseSlug}`
+      const count = seen.get(baseName) ?? 0
+      seen.set(baseName, count + 1)
+      const filename = `${baseName}${count === 0 ? '' : `-${count + 1}`}.rule.fixture`
+      return { filename, content: buildFixtureFile(sample) }
     })
-
-    return `version: 1
-rule: ${yamlScalar(form.name || t('rules.editor.newRuleName'))}
-samples:
-${entries.join('\n')}
-`
   }
 
   const exportRuleAndFixtures = () => {
@@ -524,12 +618,16 @@ ${entries.join('\n')}
       rules: [rulePayload],
     }
 
-    downloadText(
-      `${slug(form.name || 'rule')}.rule.json`,
-      JSON.stringify(ruleFile, null, 2),
-      'application/json',
-    )
-    downloadText(`${slug(form.name || 'rule')}.fixtures.yaml`, buildFixtureBundle(), 'text/yaml')
+    const baseName = slug(form.name || 'rule')
+    const entries = [
+      {
+        filename: `${baseName}.rule.json`,
+        content: JSON.stringify(ruleFile, null, 2),
+      },
+      ...buildFixtureEntries(),
+    ]
+
+    downloadBlob(`${baseName}.contribution.zip`, buildStoredZip(entries))
   }
 
   const selectedSample = samples[activeSample] ?? samples[0]
@@ -595,13 +693,25 @@ ${entries.join('\n')}
     return { valid: Object.keys(errors).length === 0, name }
   }
 
+  const handleSaveError = (error: Error) => {
+    if (error.message === 'rule name already exists') {
+      setFormError('')
+      setFieldErrors((current) => ({
+        ...current,
+        name: t('rules.editor.ruleNameExists'),
+      }))
+      return
+    }
+    setFormError(error.message)
+  }
+
   const saveRule = (shouldRescan: boolean) => {
     const body = buildRulePayload()
 
     if (isCreate) {
       createRule(body, {
         onSuccess: () => navigate('/rules'),
-        onError: (error) => setFormError(error.message),
+        onError: handleSaveError,
       })
       return
     }
@@ -626,7 +736,7 @@ ${entries.join('\n')}
             onError: () => navigate('/rules'),
           })
         },
-        onError: (error) => setFormError(error.message),
+        onError: handleSaveError,
       },
     )
   }
@@ -689,7 +799,12 @@ ${entries.join('\n')}
           <input
             aria-label={t('rules.editor.ruleName')}
             value={form.name}
-            onChange={(event) => updateForm({ name: event.target.value })}
+            onChange={(event) => {
+              updateForm({ name: event.target.value })
+              if (fieldErrors.name === t('rules.editor.ruleNameExists')) {
+                setFieldErrors((current) => ({ ...current, name: undefined }))
+              }
+            }}
             onBlur={() => {
               if (form.name.trim() === '') updateForm({ name: lastSavedName })
             }}

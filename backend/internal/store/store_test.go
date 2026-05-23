@@ -1488,6 +1488,56 @@ func TestCreateAndGetRule(t *testing.T) {
 	}
 }
 
+func TestCreateRuleDuplicateNameReturnsConflict(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+	row := store.RuleRow{
+		Name:          "duplicate rule",
+		AmountRegex:   `(\d+)`,
+		MerchantRegex: `(.+)`,
+	}
+	if _, err := ts.CreateRule(ctx, row); err != nil {
+		t.Fatalf("CreateRule first insert: %v", err)
+	}
+
+	_, err := ts.CreateRule(ctx, row)
+	if !errors.Is(err, store.ErrRuleNameConflict) {
+		t.Fatalf("CreateRule duplicate error = %v, want ErrRuleNameConflict", err)
+	}
+}
+
+func TestUpdateRuleDuplicateNameReturnsConflict(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+	first, err := ts.CreateRule(ctx, store.RuleRow{
+		Name:          "first rule",
+		AmountRegex:   `(\d+)`,
+		MerchantRegex: `(.+)`,
+	})
+	if err != nil {
+		t.Fatalf("CreateRule first: %v", err)
+	}
+	second, err := ts.CreateRule(ctx, store.RuleRow{
+		Name:          "second rule",
+		AmountRegex:   `(\d+)`,
+		MerchantRegex: `(.+)`,
+	})
+	if err != nil {
+		t.Fatalf("CreateRule second: %v", err)
+	}
+
+	_, err = ts.UpdateRule(ctx, second.ID, store.RuleRow{
+		Name:          first.Name,
+		AmountRegex:   `(\d+)`,
+		MerchantRegex: `(.+)`,
+	})
+	if !errors.Is(err, store.ErrRuleNameConflict) {
+		t.Fatalf("UpdateRule duplicate error = %v, want ErrRuleNameConflict", err)
+	}
+}
+
 func TestDeleteRule_PredefinedRuleNotDeleted(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()

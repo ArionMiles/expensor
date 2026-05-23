@@ -269,6 +269,7 @@ export const messages = {
     'rules.editor.removeSample': 'Remove sample {name}',
     'rules.editor.removeSender': 'Remove {sender}',
     'rules.editor.ruleName': 'Rule name',
+    'rules.editor.ruleNameExists': 'Rule name already exists.',
     'rules.editor.ruleNameRequired': 'Rule name is required.',
     'rules.editor.ruleNotFound': 'Rule not found.',
     'rules.editor.ruleSettings': 'Rule settings',

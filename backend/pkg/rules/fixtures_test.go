@@ -42,6 +42,52 @@ func TestRuleEmailFixtures(t *testing.T) {
 	}
 }
 
+func TestRuleEmailFixturesCoverBundledRules(t *testing.T) {
+	doc := loadRulesDocument(t, "../../../content/rules.json")
+	fixtures := loadFixtures(t, "../../../tests/data/rule-emails")
+	coveredRules := make(map[string]bool, len(fixtures))
+	for _, fixture := range fixtures {
+		coveredRules[fixture.Rule] = true
+	}
+
+	for _, rule := range doc.Rules {
+		if !coveredRules[rule.Name] {
+			t.Fatalf("rule %q has no email fixture", rule.Name)
+		}
+	}
+}
+
+func TestLoadEmailFixturesParsesFrontMatterBody(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hdfc_credit-card_classic-spend.rule.fixture")
+	data := []byte(`---
+rule: HDFC Credit Card
+sender: alerts@hdfcbank.net
+subject: "Alert : Update on your HDFC Bank Credit Card"
+expected:
+  amount: 999.00
+  merchant: SWIGGY
+  currency: INR
+---
+Dear Customer,
+Rs.999.00 spent at SWIGGY on your HDFC Credit Card on 12-Apr-2026.
+`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	fixtures, err := rules.LoadEmailFixtures(dir)
+	if err != nil {
+		t.Fatalf("load fixtures: %v", err)
+	}
+	if len(fixtures) != 1 {
+		t.Fatalf("len(fixtures) = %d, want 1", len(fixtures))
+	}
+	if got, want := fixtures[0].Body, "Dear Customer,\nRs.999.00 spent at SWIGGY on your HDFC Credit Card on 12-Apr-2026.\n"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
 func loadRulesDocument(t *testing.T, path string) *rules.Document {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Clean(path))

@@ -2616,6 +2616,23 @@ func TestHandleCreateRule_AcceptsSourceObjectAndSenderEmails(t *testing.T) {
 	}
 }
 
+func TestHandleCreateRule_DuplicateNameReturns409(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{ruleErr: store.ErrRuleNameConflict}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(validRuleBody))
+	rr := httptest.NewRecorder()
+
+	h.HandleCreateRule(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp map[string]string
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp["error"] != "rule name already exists" {
+		t.Fatalf("error = %q, want rule name already exists", resp["error"])
+	}
+}
+
 func TestHandleCreateRule_ClearsActiveReaderCheckpoint(t *testing.T) {
 	ms := &mockStore{
 		activeReader: "gmail",
@@ -2714,6 +2731,32 @@ func TestHandleUpdateRule_AnyRule_FullUpdate(t *testing.T) {
 	h.HandleUpdateRule(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleUpdateRule_DuplicateNameReturns409(t *testing.T) {
+	ms := &mockStore{ruleErr: store.ErrRuleNameConflict}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	body := `{
+		"name":"duplicate",
+		"sender_emails":["alerts@example.com"],
+		"amount_regex":"\\d+",
+		"merchant_regex":".+",
+		"source":{"type":"Credit Card","label":"Example Credit Card","bank":"Example Bank"}
+	}`
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/rules/1", strings.NewReader(body))
+	req.SetPathValue("id", "1")
+	rr := httptest.NewRecorder()
+
+	h.HandleUpdateRule(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp map[string]string
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp["error"] != "rule name already exists" {
+		t.Fatalf("error = %q, want rule name already exists", resp["error"])
 	}
 }
 
