@@ -1513,7 +1513,7 @@ func TestDeleteRule_PredefinedRuleNotDeleted(t *testing.T) {
 	}
 }
 
-func TestPredefinedRulesV2MigrationRemovesStaleV1Rules(t *testing.T) {
+func TestV2MigrationBackfillsRulesAndTransactions(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
 	ctx := context.Background()
@@ -1530,12 +1530,24 @@ func TestPredefinedRulesV2MigrationRemovesStaleV1Rules(t *testing.T) {
 		t.Fatalf("seed legacy rules: %v", err)
 	}
 
+	_, err = ts.PoolForTest().Exec(ctx, `
+		INSERT INTO transactions
+			(message_id, amount, currency, timestamp, merchant_info, source, source_label, source_type, bank)
+		VALUES
+			('legacy-hdfc-card', 100, 'INR', NOW(), 'Swiggy', 'Credit Card - HDFC', 'Credit Card - HDFC', '', ''),
+			('legacy-icici-imobile', 200, 'INR', NOW(), 'Rent', 'iMobile - ICICI', 'iMobile - ICICI', '', ''),
+			('already-structured', 300, 'INR', NOW(), 'Cafe', 'Manual', 'Manual Source', 'UPI', 'SBI')
+	`)
+	if err != nil {
+		t.Fatalf("seed legacy transactions: %v", err)
+	}
+
 	migrationSQL, err := fs.ReadFile(migrations.FS, "003_predefined_rules_v2.sql")
 	if err != nil {
 		t.Fatalf("read migration: %v", err)
 	}
 	if _, err = ts.PoolForTest().Exec(ctx, string(migrationSQL)); err != nil {
-		t.Fatalf("run migration: %v", err)
+		t.Fatalf("run v2 migration: %v", err)
 	}
 
 	var exists bool
@@ -1572,76 +1584,6 @@ func TestPredefinedRulesV2MigrationRemovesStaleV1Rules(t *testing.T) {
 	}
 	if sourceType != "Credit Card" || sourceLabel != "HDFC Credit Card" || bank != "HDFC" {
 		t.Fatalf("source fields = (%q, %q, %q), want (Credit Card, HDFC Credit Card, HDFC)", sourceType, sourceLabel, bank)
-	}
-}
-
-func TestPredefinedRulesV2CleanupMigrationRemovesStaleRowsAfterOriginal003Applied(t *testing.T) {
-	ts := newTestStore(t)
-	defer ts.cleanup()
-	ctx := context.Background()
-
-	_, err := ts.PoolForTest().Exec(ctx, `
-		INSERT INTO rules
-			(name, sender_email, subject_contains, amount_regex, merchant_regex, transaction_source, predefined)
-		VALUES
-			('HDFC Credit Card (debit alert)', '@hdfcbank', 'debited via Credit Card', '(\d+)', '(.+)', 'Credit Card - HDFC', true),
-			('Custom Legacy Rule', '@legacy', 'legacy subject', '(\d+)', '(.+)', 'Legacy Source', false)
-	`)
-	if err != nil {
-		t.Fatalf("seed legacy rules after original 003: %v", err)
-	}
-
-	migrationSQL, err := fs.ReadFile(migrations.FS, "004_remove_stale_predefined_v1_rules.sql")
-	if err != nil {
-		t.Fatalf("read migration: %v", err)
-	}
-	if _, err = ts.PoolForTest().Exec(ctx, string(migrationSQL)); err != nil {
-		t.Fatalf("run cleanup migration: %v", err)
-	}
-
-	var exists bool
-	if err = ts.PoolForTest().QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM rules WHERE name = 'HDFC Credit Card (debit alert)' AND predefined = true)`,
-	).Scan(&exists); err != nil {
-		t.Fatalf("check stale predefined rule: %v", err)
-	}
-	if exists {
-		t.Fatal("expected stale v1 predefined rule to be removed")
-	}
-
-	if err = ts.PoolForTest().QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM rules WHERE name = 'Custom Legacy Rule' AND predefined = false)`,
-	).Scan(&exists); err != nil {
-		t.Fatalf("check custom legacy rule: %v", err)
-	}
-	if !exists {
-		t.Fatal("expected custom legacy rule to remain")
-	}
-}
-
-func TestTransactionSourceBackfillMigrationFillsLegacyRowsAfterOriginal002Applied(t *testing.T) {
-	ts := newTestStore(t)
-	defer ts.cleanup()
-	ctx := context.Background()
-
-	_, err := ts.PoolForTest().Exec(ctx, `
-		INSERT INTO transactions
-			(message_id, amount, currency, timestamp, merchant_info, source, source_label, source_type, bank)
-		VALUES
-			('legacy-hdfc-card', 100, 'INR', NOW(), 'Swiggy', 'Credit Card - HDFC', 'Credit Card - HDFC', '', ''),
-			('legacy-icici-imobile', 200, 'INR', NOW(), 'Rent', 'iMobile - ICICI', 'iMobile - ICICI', '', ''),
-			('already-structured', 300, 'INR', NOW(), 'Cafe', 'Manual', 'Manual Source', 'UPI', 'SBI')
-	`)
-	if err != nil {
-		t.Fatalf("seed legacy transactions: %v", err)
-	}
-
-	migrationSQL, err := fs.ReadFile(migrations.FS, "005_backfill_transaction_source_v2.sql")
-	if err != nil {
-		t.Fatalf("read migration: %v", err)
-	}
-	if _, err = ts.PoolForTest().Exec(ctx, string(migrationSQL)); err != nil {
-		t.Fatalf("run transaction source backfill migration: %v", err)
 	}
 
 	type sourceFields struct {
