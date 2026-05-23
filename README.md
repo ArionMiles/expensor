@@ -195,10 +195,6 @@ Frontend strings that have been extracted for translation live in `frontend/src/
 
 See [docs/i18n/adding-translations.md](docs/i18n/adding-translations.md) and [docs/i18n/string-extraction.md](docs/i18n/string-extraction.md).
 
-## Screenshots
-
-Dashboard screenshots should use anonymized data only. Keep reusable screenshot seed data under `docs/screenshots/` so screenshots can be regenerated as the UI changes.
-
 ## Third-Party Notices
 
 The Gmail and Thunderbird icons used in this project are trademarks of their respective owners, Google LLC and MZLA Technologies Corporation. They are used solely to identify the services Expensor integrates with. See [NOTICE](NOTICE) for full attribution.
