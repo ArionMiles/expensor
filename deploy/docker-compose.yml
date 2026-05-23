@@ -49,6 +49,11 @@ services:
       #                                  # expose on a different port (e.g. 8081:8080 -> http://localhost:8081)
       #                                  # or behind a domain/reverse proxy. Must match the redirect URI
       #                                  # registered in your Google Cloud Console OAuth client.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/health >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
     # Thunderbird only: uncomment the block below and set path to your profile.
     # volumes:
     #   - /path/to/Thunderbird/Profiles/your.profile:/thunderbird-profile:ro
