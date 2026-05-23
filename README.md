@@ -78,12 +78,6 @@ services:
 
 The onboarding wizard can then discover the mounted profile and save the selected profile/mailboxes in PostgreSQL.
 
-### Upgrading Older File-Backed Installs
-
-Current versions store runtime details in PostgreSQL. Older installs may still have files such as `client_secret_*.json`, `token_*.json`, `config_*.json`, `active_reader`, or `state.json` under `/app/data`.
-
-On upgrade, Expensor imports those legacy files into PostgreSQL if `/app/data` is mounted. After a successful upgrade, the old application data volume is stale and can be removed at your discretion. Keep `postgres_data`; that is where current runtime state lives.
-
 ## Features
 
 - Gmail API and Thunderbird MBOX readers
@@ -140,10 +134,6 @@ Most setup happens in the web UI. Environment variables are only needed for depl
 |----------|-----|
 | `BASE_URL` | Public URL used for OAuth redirects. Set this if Expensor is not reached at `http://localhost:8080`. |
 | `FRONTEND_URL` | Post-auth redirect target. Usually leave unset unless running the Vite dev server separately. |
-| `EXPENSOR_BASE_CURRENCY` | Default aggregate currency. Can also be managed from settings. |
-| `EXPENSOR_SCAN_INTERVAL` | Reader polling interval in seconds. |
-| `EXPENSOR_LOOKBACK_DAYS` | How far back readers search on first run. |
-| `THUNDERBIRD_DATA_DIR` | Optional profile-discovery hint for Docker-mounted Thunderbird profiles. |
 | `POSTGRES_HOST` | PostgreSQL host. Required outside the bundled Compose setup. |
 | `POSTGRES_DB` | PostgreSQL database name. |
 | `POSTGRES_USER` | PostgreSQL user. |
@@ -152,8 +142,6 @@ Most setup happens in the web UI. Environment variables are only needed for depl
 | `POSTGRES_SSLMODE` | PostgreSQL SSL mode. Defaults to `disable`. |
 | `LOG_LEVEL` | `DEBUG`, `INFO`, `WARN`, or `ERROR`. |
 | `LOG_JSON` | Set to `true` for structured JSON logs. |
-
-`EXPENSOR_DATA_DIR` is retained only for importing legacy file-backed runtime data during upgrades. New installs do not need an application data volume.
 
 ## Releases
 
