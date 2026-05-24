@@ -3,9 +3,11 @@ package observability_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ArionMiles/expensor/backend/pkg/observability"
 )
@@ -90,4 +92,57 @@ func TestSetupInstallsSlogLogger(t *testing.T) {
 	if !strings.Contains(got, "from default") || !strings.Contains(got, "component=slog") {
 		t.Fatalf("log output = %q, want default slog logger message and component", got)
 	}
+}
+
+func TestSetupSupportsDisabledTelemetry(t *testing.T) {
+	shutdown, logger, err := observability.Setup(context.Background(), observability.Config{
+		LogLevel: slog.LevelInfo,
+		Output:   &bytes.Buffer{},
+		Exporter: observability.ExporterNone,
+	})
+	if err != nil {
+		t.Fatalf("Setup() error = %v", err)
+	}
+	if logger == nil {
+		t.Fatal("logger is nil")
+	}
+	if err := shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+}
+
+func TestOperationRecorderAcceptsSuccessAndError(t *testing.T) {
+	shutdown, logger, err := observability.Setup(context.Background(), observability.Config{
+		LogLevel:       slog.LevelDebug,
+		Output:         &bytes.Buffer{},
+		Enabled:        true,
+		Exporter:       observability.ExporterNone,
+		TracesEnabled:  true,
+		MetricsEnabled: true,
+	})
+	if err != nil {
+		t.Fatalf("Setup() error = %v", err)
+	}
+	defer func() {
+		if err := shutdown(context.Background()); err != nil {
+			t.Fatalf("shutdown: %v", err)
+		}
+	}()
+
+	scope := observability.NewScope(logger, "test")
+	ctx, span := scope.Start(context.Background(), "store.test.success")
+	scope.RecordOperation(ctx, observability.Operation{
+		Namespace: "store",
+		Name:      "test.success",
+		Duration:  time.Millisecond,
+		Err:       nil,
+	})
+	span.End()
+
+	scope.RecordOperation(context.Background(), observability.Operation{
+		Namespace: "store",
+		Name:      "test.error",
+		Duration:  time.Millisecond,
+		Err:       errors.New("boom"),
+	})
 }
