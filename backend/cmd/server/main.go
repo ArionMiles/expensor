@@ -430,7 +430,7 @@ func run() int {
 
 	if err := server.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("HTTP server error", "error", err)
-		return 0 // allow deferred cleanup (pgStore.Close) to run
+		return 1 // allow deferred cleanup (pgStore.Close) to run
 	}
 	logger.Info("shutdown complete")
 	return 0
