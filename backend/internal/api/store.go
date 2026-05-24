@@ -98,4 +98,7 @@ type Storer interface {
 }
 
 // compile-time check: *store.Store must satisfy Storer.
-var _ Storer = (*store.Store)(nil)
+var (
+	_ Storer = (*store.Store)(nil)
+	_ Storer = (*store.InstrumentedStore)(nil)
+)
