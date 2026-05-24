@@ -324,11 +324,11 @@ tasks:
   # ── DATABASE ─────────────────────────────────────────────────────────────────
 
   db:start:
-    summary: Start the local development PostgreSQL container.
+    summary: Start the local development containers.
     desc: >-
-      Starts the postgres:16-alpine container defined in tests/docker-compose.local.yml.
-      Idempotent — safe to run when the container is already running.
-      Pass RECREATE=1 to destroy the volume and recreate from scratch.
+      Starts the local development containers defined in tests/docker-compose.local.yml.
+      Idempotent — safe to run when the containers are already running.
+      Pass RECREATE=1 to destroy the postgres volume and recreate from scratch.
     dir: tests
     cmd: |
       if [ "${RECREATE:-0}" = "1" ]; then
@@ -375,18 +375,20 @@ tasks:
     cmd: npm run dev
 
   dev:
-    summary: Start postgres, backend, and frontend for local development.
+    summary: Start local dev containers, backend, and frontend.
     desc: >-
-      Ensures the dev postgres container is running (idempotent), waits for it
-      to be healthy, starts the backend (loading tests/.env), waits for
-      /api/health, then starts the Vite dev server. Kills the backend when the
-      frontend exits. Pass RECREATE=1 to wipe and recreate the postgres volume.
+      Ensures the local dev containers are running (idempotent), waits for
+      postgres to be healthy, starts the backend (loading tests/.env), waits
+      for /api/health, then starts the Vite dev server. Observability UIs are
+      available at Jaeger traces: http://localhost:16686 and Prometheus metrics:
+      http://localhost:9090. Kills the backend when the frontend exits. Pass
+      RECREATE=1 to wipe and recreate the postgres volume.
     cmd: |
       set -a
       [ -f tests/.env ] && . tests/.env
       set +a
 
-      # Start postgres (idempotent)
+      # Start local dev containers (idempotent)
       RECREATE=${RECREATE:-0} task db:start
 
       # Compute version string (same logic as build:binary)
@@ -405,6 +407,8 @@ tasks:
       until curl -sf http://localhost:8080/api/health > /dev/null 2>&1; do
         sleep 0.5
       done
+      echo "Jaeger traces: http://localhost:16686"
+      echo "Prometheus metrics: http://localhost:9090"
       echo "Backend is up — starting frontend"
 
       [ -d frontend/node_modules ] || (cd frontend && npm install)
