@@ -18,8 +18,8 @@
 - User input is never interpolated into SQL.
 - Templates may only vary trusted structural clauses such as allowlisted sort columns, allowlisted JSON columns, or fixed optional joins.
 - Every repository method wraps errors with operation context.
-- Instrumentation wraps repository operations using stable names such as `labels.list` or `transactions.search`.
-- Repository constructors accept dependencies explicitly: connection pool, logger/instrumentation, and clock only when needed.
+- Instrumentation wraps store/repository interfaces from the outside using stable names such as `labels.list` or `transactions.search`.
+- Repository constructors accept dependencies explicitly: connection pool, logger, and clock only when needed. Repositories should not accept or call observability instrumentation helpers directly.
 
 ## Migration Order
 

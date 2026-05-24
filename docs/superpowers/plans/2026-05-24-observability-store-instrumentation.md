@@ -2,6 +2,21 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Complete in branch `pr/backend-observability-code-health`.
+
+**Completion notes:**
+
+- Implemented `backend/pkg/observability` with `slog` setup, OTLP-only OpenTelemetry trace/metric provider setup, no-op defaults, and shutdown handling.
+- Kept logs on `slog`; OpenTelemetry log export and stdout telemetry exporters were intentionally not added.
+- Added local OpenTelemetry Collector, Jaeger, and Prometheus wiring for `task dev`.
+- Moved store instrumentation out of concrete repositories and into `store.InstrumentedStore`.
+- Adjusted the original decorator design after review: each instrumented store method starts/ends its span inline and calls `s.next` directly. There are no generic callback wrappers like `observe1`/`observe2`.
+- Removed explicit duration timing from store operation recording. Spans convey elapsed time; store metrics currently emit a low-cardinality operation counter tagged by namespace, operation, and status.
+- Deleted the old repository-level `QueryInstrumentation` implementation and tests.
+- Wired the instrumented store into `cmd/server` for API, daemon store calls, and diagnostic persistence while retaining raw `*store.Store` for startup seeding and closing.
+- Added AGENTS/CLAUDE backend guidance for observability, store instrumentation, and PR-template usage.
+- Verified with `task fmt:be`, `task lint:be:prod`, `task test:be`, and `task openapi:check`.
+
 **Goal:** Replace the current logging-only store instrumentation with an observability package that keeps `slog` for logs and uses OpenTelemetry for traces and metrics, then move store operation instrumentation into interface decorators.
 
 **Architecture:** `backend/pkg/observability` owns logger setup, OTel tracer/meter setup, trace-aware log helpers, and low-cardinality operation recording. `backend/internal/store` exposes capability interfaces and instrumentation decorators that wrap concrete store implementations instead of calling instrumentation helpers inside repository methods. `cmd/server` wires an observed store into API/daemon dependencies while preserving default no-op telemetry unless explicitly enabled.
@@ -31,8 +46,8 @@ Create:
 
 - `backend/pkg/observability/observability.go`: public setup API, logger setup, OTLP OTel providers, shutdown function.
 - `backend/pkg/observability/config.go`: env/default config parsing.
-- `backend/pkg/observability/logging.go`: slog trace/span enrichment helpers.
-- `backend/pkg/observability/store.go`: operation span/metric helper used by store decorators.
+- Trace/span-aware store operation logs are implemented in `backend/pkg/observability/store.go`; no separate `logging.go` file was needed.
+- `backend/pkg/observability/store.go`: operation result helper used by store decorators.
 - `backend/pkg/observability/observability_test.go`: config/default/log enrichment tests.
 - `tests/otel-collector.local.yml`: local OpenTelemetry Collector config for `task dev`.
 - `tests/prometheus.local.yml`: local Prometheus config for `task dev`.
@@ -67,7 +82,7 @@ Modify:
 - Delete: `backend/pkg/logging/logging_test.go`
 - Modify: `backend/cmd/server/main.go`
 
-- [ ] **Step 1: Write failing observability config tests**
+- [x] **Step 1: Write failing observability config tests**
 
 Create `backend/pkg/observability/observability_test.go` with:
 
@@ -139,7 +154,7 @@ func TestSetupInstallsSlogLogger(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run:
 
@@ -149,7 +164,7 @@ task test:be -- ./pkg/observability
 
 Expected: FAIL because `backend/pkg/observability` does not exist.
 
-- [ ] **Step 3: Implement minimal observability package with disabled telemetry path**
+- [x] **Step 3: Implement minimal observability package with disabled telemetry path**
 
 Create `backend/pkg/observability/config.go`:
 
@@ -270,7 +285,7 @@ func discardLogger() *slog.Logger {
 }
 ```
 
-- [ ] **Step 4: Migrate imports and delete old logging package**
+- [x] **Step 4: Migrate imports and delete old logging package**
 
 In `backend/cmd/server/main.go`, change:
 
@@ -314,7 +329,7 @@ backend/pkg/logging/logging.go
 backend/pkg/logging/logging_test.go
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run:
 
@@ -324,7 +339,7 @@ task test:be -- ./pkg/observability ./cmd/server
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/pkg/observability backend/cmd/server/main.go backend/pkg/logging
@@ -342,7 +357,7 @@ git commit --no-gpg-sign -m "Introduce backend observability package"
 - Create: `backend/pkg/observability/store.go`
 - Modify: `backend/pkg/observability/observability_test.go`
 
-- [ ] **Step 1: Write failing tests for no-op telemetry and operation recording**
+- [x] **Step 1: Write failing tests for no-op telemetry and operation recording**
 
 Append to `backend/pkg/observability/observability_test.go`:
 
@@ -387,7 +402,6 @@ func TestOperationRecorderAcceptsSuccessAndError(t *testing.T) {
 	scope.RecordOperation(ctx, observability.Operation{
 		Namespace: "store",
 		Name:      "test.success",
-		Duration:  time.Millisecond,
 		Err:       nil,
 	})
 	span.End()
@@ -395,7 +409,6 @@ func TestOperationRecorderAcceptsSuccessAndError(t *testing.T) {
 	scope.RecordOperation(context.Background(), observability.Operation{
 		Namespace: "store",
 		Name:      "test.error",
-		Duration:  time.Millisecond,
 		Err:       errors.New("boom"),
 	})
 }
@@ -406,11 +419,10 @@ Add imports:
 ```go
 import (
 	"errors"
-	"time"
 )
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run:
 
@@ -420,7 +432,7 @@ task test:be -- ./pkg/observability
 
 Expected: FAIL because `NewScope`, `Operation`, and `RecordOperation` do not exist.
 
-- [ ] **Step 3: Add OTel dependencies**
+- [x] **Step 3: Add OTel dependencies**
 
 Run:
 
@@ -430,7 +442,9 @@ go get go.opentelemetry.io/otel@latest go.opentelemetry.io/otel/sdk@latest go.op
 
 If this fails due to network restrictions, rerun with escalation approval.
 
-- [ ] **Step 4: Implement OTel setup and operation scope**
+- [x] **Step 4: Implement OTel setup and operation scope**
+
+Implementation note: the final implementation supports only `none` and `otlp` exporters. The earlier plan text referencing stdout telemetry exporters was superseded by review feedback: stdout is for logs only.
 
 Replace `backend/pkg/observability/observability.go` with:
 
@@ -589,7 +603,6 @@ package observability
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -600,7 +613,6 @@ import (
 type Operation struct {
 	Namespace string
 	Name      string
-	Duration  time.Duration
 	Err       error
 }
 
@@ -618,9 +630,6 @@ func (s *Scope) RecordOperation(ctx context.Context, op Operation) {
 	counter, _ := s.meter.Int64Counter(op.Namespace + ".operations")
 	counter.Add(ctx, 1, metric.WithAttributes(attrs...))
 
-	duration, _ := s.meter.Float64Histogram(op.Namespace + ".operation.duration_ms")
-	duration.Record(ctx, float64(op.Duration.Milliseconds()), metric.WithAttributes(attrs...))
-
 	span := trace.SpanFromContext(ctx)
 	if op.Err != nil {
 		span.RecordError(op.Err)
@@ -628,7 +637,6 @@ func (s *Scope) RecordOperation(ctx context.Context, op Operation) {
 		s.logger.ErrorContext(ctx, "operation failed",
 			"namespace", op.Namespace,
 			"operation", op.Name,
-			"duration_ms", op.Duration.Milliseconds(),
 			"trace_id", span.SpanContext().TraceID().String(),
 			"span_id", span.SpanContext().SpanID().String(),
 			"error", op.Err,
@@ -638,14 +646,13 @@ func (s *Scope) RecordOperation(ctx context.Context, op Operation) {
 	s.logger.DebugContext(ctx, "operation completed",
 		"namespace", op.Namespace,
 		"operation", op.Name,
-		"duration_ms", op.Duration.Milliseconds(),
 		"trace_id", span.SpanContext().TraceID().String(),
 		"span_id", span.SpanContext().SpanID().String(),
 	)
 }
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run:
 
@@ -655,7 +662,7 @@ task test:be -- ./pkg/observability
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/go.mod backend/go.sum backend/pkg/observability
@@ -673,7 +680,7 @@ git commit --no-gpg-sign -m "Add traces and metrics setup"
 - Create: `tests/otel-collector.local.yml`
 - Create: `tests/prometheus.local.yml`
 
-- [ ] **Step 1: Add local collector and metrics config**
+- [x] **Step 1: Add local collector and metrics config**
 
 Create `tests/otel-collector.local.yml`:
 
@@ -721,7 +728,7 @@ scrape_configs:
       - targets: ["otel-collector:8889"]
 ```
 
-- [ ] **Step 2: Add local compose services**
+- [x] **Step 2: Add local compose services**
 
 In `tests/docker-compose.local.yml`, add services:
 
@@ -731,7 +738,7 @@ In `tests/docker-compose.local.yml`, add services:
 
 Keep the existing `postgres` service behavior unchanged.
 
-- [ ] **Step 3: Enable OTLP telemetry in local env**
+- [x] **Step 3: Enable OTLP telemetry in local env**
 
 Append to `tests/.env`:
 
@@ -743,7 +750,7 @@ EXPENSOR_OBSERVABILITY_OTLP_ENDPOINT=localhost:4317
 EXPENSOR_OBSERVABILITY_OTLP_INSECURE=true
 ```
 
-- [ ] **Step 4: Make `task dev` start observability services**
+- [x] **Step 4: Make `task dev` start observability services**
 
 Update the `dev` task description to mention local observability services and URLs:
 
@@ -759,7 +766,7 @@ echo "Prometheus metrics: http://localhost:9090"
 
 Update the `db:start` task summary/description from "PostgreSQL container" to "local development containers" because it now starts PostgreSQL plus observability services.
 
-- [ ] **Step 5: Verify compose config**
+- [x] **Step 5: Verify compose config**
 
 Run:
 
@@ -769,7 +776,7 @@ cd tests && docker compose -f docker-compose.local.yml --env-file .env config >/
 
 Expected: exit 0.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Taskfile.yml tests/docker-compose.local.yml tests/.env tests/otel-collector.local.yml tests/prometheus.local.yml
@@ -785,7 +792,7 @@ git commit --no-gpg-sign -m "Add local observability dev stack"
 - Create: `backend/internal/store/instrumented.go`
 - Create: `backend/internal/store/instrumented_test.go`
 
-- [ ] **Step 1: Write failing decorator tests**
+- [x] **Step 1: Write failing decorator tests**
 
 Create `backend/internal/store/instrumented_test.go`:
 
@@ -798,7 +805,6 @@ import (
 	"io"
 	"log/slog"
 	"testing"
-	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/observability"
@@ -861,7 +867,7 @@ func TestObservedStoreUsesProvidedClock(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run:
 
@@ -871,7 +877,7 @@ task test:be -- ./internal/store -run 'TestInstrumentedTransactionStore|TestObse
 
 Expected: FAIL because interfaces/decorator do not exist.
 
-- [ ] **Step 3: Create minimal capability interface**
+- [x] **Step 3: Create minimal capability interface**
 
 Create `backend/internal/store/interfaces.go`:
 
@@ -887,7 +893,7 @@ type TransactionStore interface {
 var _ TransactionStore = (*Store)(nil)
 ```
 
-- [ ] **Step 4: Implement instrumented transaction decorator**
+- [x] **Step 4: Implement instrumented transaction decorator**
 
 Create `backend/internal/store/instrumented.go`:
 
@@ -897,16 +903,13 @@ package store
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	"github.com/ArionMiles/expensor/backend/pkg/observability"
 )
 
 type InstrumentedTransactionStore struct {
-	next   TransactionStore
-	scope  *observability.Scope
-	logger *slog.Logger
-	now    func() time.Time
+	next  TransactionStore
+	scope *observability.Scope
 }
 
 func NewInstrumentedTransactionStore(next TransactionStore, scope *observability.Scope, logger *slog.Logger) *InstrumentedTransactionStore {
@@ -917,16 +920,8 @@ func NewInstrumentedTransactionStore(next TransactionStore, scope *observability
 		scope = observability.NewScope(logger, "store")
 	}
 	return &InstrumentedTransactionStore{
-		next:   next,
-		scope:  scope,
-		logger: logger,
-		now:    time.Now,
-	}
-}
-
-func (s *InstrumentedTransactionStore) SetNowForTest(now func() time.Time) {
-	if now != nil {
-		s.now = now
+		next:  next,
+		scope: scope,
 	}
 }
 
@@ -934,19 +929,17 @@ func (s *InstrumentedTransactionStore) ListTransactions(ctx context.Context, f L
 	ctx, span := s.scope.Start(ctx, "store.transactions.list")
 	defer span.End()
 
-	start := s.now()
 	rows, result, err := s.next.ListTransactions(ctx, f)
 	s.scope.RecordOperation(ctx, observability.Operation{
 		Namespace: "store",
 		Name:      "transactions.list",
-		Duration:  time.Since(start),
 		Err:       err,
 	})
 	return rows, result, err
 }
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run:
 
@@ -956,7 +949,7 @@ task test:be -- ./internal/store -run 'TestInstrumentedTransactionStore|TestObse
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/internal/store/interfaces.go backend/internal/store/instrumented.go backend/internal/store/instrumented_test.go
@@ -973,7 +966,7 @@ git commit --no-gpg-sign -m "Add store instrumentation decorators"
 - Modify: `backend/internal/store/instrumented_test.go`
 - Modify: `backend/internal/api/store.go`
 
-- [ ] **Step 1: Write compile-time assertions**
+- [x] **Step 1: Write compile-time assertions**
 
 Append to `backend/internal/store/instrumented_test.go`:
 
@@ -989,7 +982,7 @@ Modify `backend/internal/api/store.go` by adding an assertion near the existing 
 var _ Storer = (*store.InstrumentedStore)(nil)
 ```
 
-- [ ] **Step 2: Run compile test to verify it fails**
+- [x] **Step 2: Run compile test to verify it fails**
 
 Run:
 
@@ -999,7 +992,9 @@ task test:be -- ./internal/api ./internal/store
 
 Expected: FAIL because `store.InstrumentedStore` does not exist or does not implement `api.Storer`.
 
-- [ ] **Step 3: Implement full facade decorator by delegation**
+- [x] **Step 3: Implement full facade decorator by delegation**
+
+Implementation note: the final implementation uses explicit inline spans in each `InstrumentedStore` method. It deliberately avoids callback-based helpers for the delegated store call path.
 
 In `backend/internal/store/interfaces.go`, add:
 
@@ -1099,10 +1094,8 @@ In `backend/internal/store/instrumented.go`, create:
 
 ```go
 type InstrumentedStore struct {
-	next   FullStore
-	scope  *observability.Scope
-	logger *slog.Logger
-	now    func() time.Time
+	next  FullStore
+	scope *observability.Scope
 }
 
 func NewInstrumentedStore(next FullStore, scope *observability.Scope, logger *slog.Logger) *InstrumentedStore {
@@ -1112,21 +1105,20 @@ func NewInstrumentedStore(next FullStore, scope *observability.Scope, logger *sl
 	if scope == nil {
 		scope = observability.NewScope(logger, "store")
 	}
-	return &InstrumentedStore{next: next, scope: scope, logger: logger, now: time.Now}
+	return &InstrumentedStore{next: next, scope: scope}
 }
 
-func (s *InstrumentedStore) observe(ctx context.Context, name string, fn func(context.Context) error) error {
-	ctx, span := s.scope.Start(ctx, "store."+name)
+func (s *InstrumentedStore) ListTransactions(ctx context.Context, f ListFilter) ([]Transaction, TransactionListResult, error) {
+	ctx, span := s.scope.Start(ctx, "store.transactions.list")
 	defer span.End()
-	start := s.now()
-	err := fn(ctx)
+
+	rows, result, err := s.next.ListTransactions(ctx, f)
 	s.scope.RecordOperation(ctx, observability.Operation{
 		Namespace: "store",
-		Name:      name,
-		Duration:  time.Since(start),
+		Name:      "transactions.list",
 		Err:       err,
 	})
-	return err
+	return rows, result, err
 }
 ```
 
@@ -1157,7 +1149,7 @@ func (s *InstrumentedStore) GetTransaction(ctx context.Context, id string) (*Tra
 
 For methods returning multiple values, assign to locals inside `observe` and return locals plus `err`.
 
-- [ ] **Step 4: Run compile test**
+- [x] **Step 4: Run compile test**
 
 Run:
 
@@ -1167,7 +1159,7 @@ task test:be -- ./internal/api ./internal/store
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/internal/store/interfaces.go backend/internal/store/instrumented.go backend/internal/store/instrumented_test.go backend/internal/api/store.go
@@ -1192,7 +1184,7 @@ git commit --no-gpg-sign -m "Wrap store operations with observability"
 - Delete: `backend/internal/store/instrumentation_test.go`
 - Modify: `backend/internal/store/store_repositories_test.go`
 
-- [ ] **Step 1: Run existing repository instrumentation test to establish current behavior**
+- [x] **Step 1: Run existing repository instrumentation test to establish current behavior**
 
 Run:
 
@@ -1202,7 +1194,7 @@ task test:be -- ./internal/store -run TestStoreRepositoriesEmitDebugInstrumentat
 
 Expected: PASS before changes.
 
-- [ ] **Step 2: Update repository instrumentation tests to decorator expectations**
+- [x] **Step 2: Update repository instrumentation tests to decorator expectations**
 
 In `backend/internal/store/store_repositories_test.go`, replace tests that assert operations like `runtime.get_reader_token` are logged by repository internals with tests that assert `InstrumentedStore` logs operation names.
 
@@ -1236,7 +1228,7 @@ import (
 )
 ```
 
-- [ ] **Step 3: Run test to verify it fails before cleanup**
+- [x] **Step 3: Run test to verify it fails before cleanup**
 
 Run:
 
@@ -1246,7 +1238,9 @@ task test:be -- ./internal/store -run TestInstrumentedStoreEmitsDebugOperationLo
 
 Expected: FAIL if `InstrumentedStore` is incomplete or if test helpers need adjustment.
 
-- [ ] **Step 4: Remove `QueryInstrumentation` from repositories**
+- [x] **Step 4: Remove `QueryInstrumentation` from repositories**
+
+Implementation note: this removed the old `backend/internal/store/instrumentation.go` and `instrumentation_test.go` files entirely. Repository methods now contain database behavior only.
 
 Make these exact structural removals:
 
@@ -1283,7 +1277,7 @@ backend/internal/store/instrumentation.go
 backend/internal/store/instrumentation_test.go
 ```
 
-- [ ] **Step 5: Run store tests**
+- [x] **Step 5: Run store tests**
 
 Run:
 
@@ -1293,7 +1287,7 @@ task test:be -- ./internal/store
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/internal/store
@@ -1308,7 +1302,7 @@ git commit --no-gpg-sign -m "Move store instrumentation to decorators"
 - Modify: `backend/cmd/server/main.go`
 - Modify: `backend/internal/store/instrumented.go`
 
-- [ ] **Step 1: Add compile-oriented wiring test if existing main tests cover startup helpers**
+- [x] **Step 1: Add compile-oriented wiring test if existing main tests cover startup helpers**
 
 Run:
 
@@ -1318,7 +1312,7 @@ task test:be -- ./cmd/server
 
 Expected: PASS before wiring.
 
-- [ ] **Step 2: Wire `InstrumentedStore` into API and daemon coordinator**
+- [x] **Step 2: Wire `InstrumentedStore` into API and daemon coordinator**
 
 In `backend/cmd/server/main.go`, after `pgStore` is initialized and before assigning `st`, create a scope and observed store:
 
@@ -1330,7 +1324,7 @@ var st httpapi.Storer = observedStore
 
 Keep direct `pgStore` for methods not exposed through `httpapi.Storer`, such as `Close()` and startup seeding if seeding should not be instrumented yet.
 
-- [ ] **Step 3: Run backend compile tests**
+- [x] **Step 3: Run backend compile tests**
 
 Run:
 
@@ -1340,7 +1334,7 @@ task test:be -- ./cmd/server ./internal/api ./internal/store
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add backend/cmd/server/main.go backend/internal/store/instrumented.go
@@ -1354,7 +1348,7 @@ git commit --no-gpg-sign -m "Wire instrumented store into server"
 **Files:**
 - Modify: `AGENTS.md`
 
-- [ ] **Step 1: Add backend architecture guidance**
+- [x] **Step 1: Add backend architecture guidance**
 
 In `AGENTS.md`, under `## Architecture Patterns`, add:
 
@@ -1382,7 +1376,7 @@ Keep `slog` as the application logging API. Use OpenTelemetry for traces and met
 Do not put high-cardinality or sensitive values in metrics or trace attributes, including email bodies, snippets, sender addresses, message IDs, transaction IDs, merchant names, and raw SQL.
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add AGENTS.md
@@ -1396,7 +1390,7 @@ git commit --no-gpg-sign -m "Document backend architecture guardrails"
 **Files:**
 - No code changes expected.
 
-- [ ] **Step 1: Format backend**
+- [x] **Step 1: Format backend**
 
 Run:
 
@@ -1406,7 +1400,7 @@ task fmt:be
 
 Expected: completes successfully.
 
-- [ ] **Step 2: Run backend tests**
+- [x] **Step 2: Run backend tests**
 
 Run:
 
@@ -1416,7 +1410,7 @@ task test:be
 
 Expected: PASS.
 
-- [ ] **Step 3: Run strict backend lint**
+- [x] **Step 3: Run strict backend lint**
 
 Run:
 
@@ -1426,7 +1420,7 @@ task lint:be:prod
 
 Expected: `0 issues`.
 
-- [ ] **Step 4: Check OpenAPI if handler/store public API changed**
+- [x] **Step 4: Check OpenAPI if handler/store public API changed**
 
 Run:
 
@@ -1436,7 +1430,7 @@ task openapi:check
 
 Expected: PASS or no generated diff.
 
-- [ ] **Step 5: Inspect final diff**
+- [x] **Step 5: Inspect final diff**
 
 Run:
 

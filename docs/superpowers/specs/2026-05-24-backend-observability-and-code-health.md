@@ -1,7 +1,7 @@
 # Backend Observability and Code Health — Design Spec
 
 **Date:** 2026-05-24
-**Status:** Pending review
+**Status:** Observability/store instrumentation slice complete; broader backend code-health work remains.
 
 ---
 
@@ -13,6 +13,17 @@ The work has two equal outcomes:
 
 1. Better backend code health: smaller ownership boundaries, clearer interfaces, less inline instrumentation noise, and safer extension points.
 2. Updated `AGENTS.md` guidance so future agentic sessions do not repeat the same architectural mistakes.
+
+## Program Status
+
+| Slice | Status | Notes |
+|-------|--------|-------|
+| Observability package and store instrumentation | Complete | Implemented in `pr/backend-observability-code-health`; see `docs/superpowers/plans/2026-05-24-observability-store-instrumentation.md`. |
+| Plugin registry cleanup | Pending | Requires a separate implementation plan. |
+| API handler decomposition | Pending | Requires a separate implementation plan. |
+| Store package ownership cleanup beyond instrumentation | Pending | Remaining work includes read-model ownership and `store.go` model/helper split. |
+| Processed-message state context cleanup | Pending | Requires a separate implementation plan. |
+| Provider-specific domain cleanup | Pending | Includes moving Gmail query construction out of `pkg/api`. |
 
 ---
 
@@ -67,7 +78,7 @@ Rename `backend/pkg/logging` to `backend/pkg/observability`.
 - `slog` setup and default logger installation.
 - OpenTelemetry tracer provider setup.
 - OpenTelemetry meter provider setup.
-- Optional stdout/OTLP exporters for traces and metrics.
+- Optional OTLP exporter for traces and metrics.
 - Shutdown flushing.
 - Helpers for attaching trace/span IDs to logs.
 - Shared low-cardinality attribute conventions.
@@ -84,7 +95,7 @@ Configuration:
 
 - Preserve `LOG_LEVEL` compatibility.
 - Add `EXPENSOR_OBSERVABILITY_ENABLED`.
-- Add `EXPENSOR_OBSERVABILITY_EXPORTER` with values `none`, `stdout`, and `otlp`.
+- Add `EXPENSOR_OBSERVABILITY_EXPORTER` with values `none` and `otlp`.
 - Add `EXPENSOR_OBSERVABILITY_OTLP_ENDPOINT`.
 - Add signal toggles only if needed for clarity: `EXPENSOR_TRACES_ENABLED`, `EXPENSOR_METRICS_ENABLED`.
 - Standard `OTEL_*` environment variables may be honored where the OTel SDK already supports them, but Expensor's own config must remain explicit and documented.
@@ -118,9 +129,12 @@ func (i *InstrumentedTransactions) ListTransactions(ctx context.Context, f ListF
     ctx, span := i.obs.Start(ctx, "store.transactions.list")
     defer span.End()
 
-    start := time.Now()
     txns, result, err := i.next.ListTransactions(ctx, f)
-    i.obs.RecordStoreOperation(ctx, "transactions", "list", time.Since(start), err)
+    i.obs.RecordOperation(ctx, observability.Operation{
+        Namespace: "store",
+        Name:      "transactions.list",
+        Err:       err,
+    })
     return txns, result, err
 }
 ```
@@ -128,9 +142,10 @@ func (i *InstrumentedTransactions) ListTransactions(ctx context.Context, f ListF
 Instrumentation records:
 
 - A span per store operation.
-- A duration histogram.
 - An operation counter tagged with status.
 - Error logging through `slog`, using trace/span IDs when present.
+
+Implementation note from the completed observability slice: store decorators should start spans inline in the instrumented method, call `next` directly, and then record the operation result. Do not hide the delegated call inside callback helpers like `observe1` or `observe2`. Store operation duration is represented by the span; do not add separate `time.Now()` timing unless a future metrics requirement explicitly needs a histogram.
 
 Use low-cardinality metrics attributes only:
 
@@ -258,7 +273,7 @@ Implement traces and metrics for these boundaries:
 | Area | Trace | Metrics |
 |------|-------|---------|
 | HTTP middleware | request span with method, route, status | request count and duration |
-| Store decorators | one span per operation | operation count and duration |
+| Store decorators | one span per operation | operation count |
 | Daemon runner | run lifecycle span | daemon starts/stops/errors |
 | Gmail reader | scan iteration, list/get message spans | messages found, skipped, extraction failures |
 | Thunderbird reader | mailbox scan spans | mailboxes scanned, messages scanned/skipped |
@@ -295,10 +310,10 @@ Run component or contract tests only for slices that touch store behavior, daemo
 
 ## Implementation Order
 
-1. Introduce `pkg/observability` and migrate existing logging tests/imports.
-2. Add OTel trace/metric setup and no-op/default behavior.
-3. Replace store inline `QueryInstrumentation` with interface decorators.
-4. Split store capability interfaces and clean up `store.go` ownership.
+1. Introduce `pkg/observability` and migrate existing logging tests/imports. **Complete.**
+2. Add OTel trace/metric setup and no-op/default behavior. **Complete.**
+3. Replace store inline `QueryInstrumentation` with interface decorators. **Complete.**
+4. Split store capability interfaces and clean up `store.go` ownership. **Partially complete for instrumentation boundaries; remaining ownership cleanup is deferred.**
 5. Refactor plugin metadata and construction boundary.
 6. Split `internal/api/handlers.go` by resource without behavior changes.
 7. Make processed-message state context-aware.
