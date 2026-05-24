@@ -41,24 +41,17 @@ type RuntimeRepository interface {
 }
 
 type pgRuntimeRepository struct {
-	pool    *pgxpool.Pool
-	metrics *QueryInstrumentation
+	pool *pgxpool.Pool
 }
 
 func NewRuntimeRepository(deps repositoryDependencies) RuntimeRepository {
-	metrics := deps.metrics
-	if metrics == nil {
-		metrics = NewQueryInstrumentation(deps.logger)
-	}
 	return &pgRuntimeRepository{
-		pool:    deps.pool,
-		metrics: metrics,
+		pool: deps.pool,
 	}
 }
 
 func (r *pgRuntimeRepository) InitAppConfig(ctx context.Context) error {
-	err := r.metrics.Observe(ctx, "runtime.init_app_config", func(ctx context.Context) error {
-		_, err := r.pool.Exec(ctx, `
+	_, err := r.pool.Exec(ctx, `
 			CREATE TABLE IF NOT EXISTS app_config (
 			    key   TEXT PRIMARY KEY,
 			    value TEXT NOT NULL
@@ -68,126 +61,95 @@ func (r *pgRuntimeRepository) InitAppConfig(ctx context.Context) error {
 			    ('lookback_days', '180')
 			ON CONFLICT (key) DO NOTHING;
 		`)
-		if err != nil {
-			return fmt.Errorf("executing app config initialization: %w", err)
-		}
-		return nil
-	})
 	if err != nil {
-		return fmt.Errorf("initializing app config: %w", err)
+		return fmt.Errorf("initializing app config: executing app config initialization: %w", err)
 	}
 	return nil
 }
 
 func (r *pgRuntimeRepository) GetAppConfig(ctx context.Context, key string) (string, error) {
 	var value string
-	err := r.metrics.Observe(ctx, "runtime.get_app_config", func(ctx context.Context) error {
-		if err := r.pool.QueryRow(ctx, `SELECT value FROM app_config WHERE key = $1`, key).Scan(&value); err != nil {
-			return fmt.Errorf("getting app config %q: %w", key, err)
-		}
-		return nil
-	})
-	if err != nil {
-		return "", err
+	if err := r.pool.QueryRow(ctx, `SELECT value FROM app_config WHERE key = $1`, key).Scan(&value); err != nil {
+		return "", fmt.Errorf("getting app config %q: %w", key, err)
 	}
 	return value, nil
 }
 
 func (r *pgRuntimeRepository) SetAppConfig(ctx context.Context, key, value string) error {
-	err := r.metrics.Observe(ctx, "runtime.set_app_config", func(ctx context.Context) error {
-		_, err := r.pool.Exec(ctx,
-			`INSERT INTO app_config (key, value) VALUES ($1, $2)
+	_, err := r.pool.Exec(ctx,
+		`INSERT INTO app_config (key, value) VALUES ($1, $2)
 			 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-			key, value,
-		)
-		if err != nil {
-			return fmt.Errorf("setting app config %q: %w", key, err)
-		}
-		return nil
-	})
-	return err
+		key, value,
+	)
+	if err != nil {
+		return fmt.Errorf("setting app config %q: %w", key, err)
+	}
+	return nil
 }
 
 func (r *pgRuntimeRepository) SetActiveReader(ctx context.Context, reader string) error {
-	err := r.metrics.Observe(ctx, "runtime.set_active_reader", func(ctx context.Context) error {
-		if strings.TrimSpace(reader) == "" {
-			return errors.New("active reader cannot be blank")
-		}
-		return r.writeAppConfig(ctx, "active_reader", reader)
-	})
-	return err
+	if strings.TrimSpace(reader) == "" {
+		return errors.New("active reader cannot be blank")
+	}
+	return r.writeAppConfig(ctx, "active_reader", reader)
 }
 
 func (r *pgRuntimeRepository) GetActiveReader(ctx context.Context) (string, error) {
-	var reader string
-	err := r.metrics.Observe(ctx, "runtime.get_active_reader", func(ctx context.Context) error {
-		value, err := r.readAppConfig(ctx, "active_reader")
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil
-			}
-			return err
-		}
-		reader = value
-		return nil
-	})
+	value, err := r.readAppConfig(ctx, "active_reader")
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
 		return "", err
 	}
-	return reader, nil
+	return value, nil
 }
 
 func (r *pgRuntimeRepository) SetReaderSecret(ctx context.Context, reader string, secret []byte) error {
-	return r.setReaderJSON(ctx, "runtime.set_reader_secret", reader, readerRuntimeClientSecret, secret)
+	return r.setReaderJSON(ctx, reader, readerRuntimeClientSecret, secret)
 }
 
 func (r *pgRuntimeRepository) GetReaderSecret(ctx context.Context, reader string) (secret []byte, found bool, err error) {
-	return r.getReaderJSON(ctx, "runtime.get_reader_secret", reader, readerRuntimeClientSecret)
+	return r.getReaderJSON(ctx, reader, readerRuntimeClientSecret)
 }
 
 func (r *pgRuntimeRepository) SetReaderToken(ctx context.Context, reader string, token []byte) error {
-	return r.setReaderJSON(ctx, "runtime.set_reader_token", reader, readerRuntimeOAuthToken, token)
+	return r.setReaderJSON(ctx, reader, readerRuntimeOAuthToken, token)
 }
 
 func (r *pgRuntimeRepository) GetReaderToken(ctx context.Context, reader string) (token []byte, found bool, err error) {
-	return r.getReaderJSON(ctx, "runtime.get_reader_token", reader, readerRuntimeOAuthToken)
+	return r.getReaderJSON(ctx, reader, readerRuntimeOAuthToken)
 }
 
 func (r *pgRuntimeRepository) DeleteReaderToken(ctx context.Context, reader string) error {
-	err := r.metrics.Observe(ctx, "runtime.delete_reader_token", func(ctx context.Context) error {
-		if strings.TrimSpace(reader) == "" {
-			return errors.New("reader cannot be blank")
-		}
-		_, err := r.pool.Exec(ctx, `UPDATE reader_runtime SET oauth_token = NULL, updated_at = NOW() WHERE reader = $1`, reader)
-		if err != nil {
-			return fmt.Errorf("deleting reader token for %q: %w", reader, err)
-		}
-		return nil
-	})
-	return err
+	if strings.TrimSpace(reader) == "" {
+		return errors.New("reader cannot be blank")
+	}
+	_, err := r.pool.Exec(ctx, `UPDATE reader_runtime SET oauth_token = NULL, updated_at = NOW() WHERE reader = $1`, reader)
+	if err != nil {
+		return fmt.Errorf("deleting reader token for %q: %w", reader, err)
+	}
+	return nil
 }
 
 func (r *pgRuntimeRepository) SetReaderConfig(ctx context.Context, reader string, readerConfig json.RawMessage) error {
-	return r.setReaderJSON(ctx, "runtime.set_reader_config", reader, readerRuntimeConfig, readerConfig)
+	return r.setReaderJSON(ctx, reader, readerRuntimeConfig, readerConfig)
 }
 
 func (r *pgRuntimeRepository) GetReaderConfig(ctx context.Context, reader string) (json.RawMessage, bool, error) {
-	value, ok, err := r.getReaderJSON(ctx, "runtime.get_reader_config", reader, readerRuntimeConfig)
+	value, ok, err := r.getReaderJSON(ctx, reader, readerRuntimeConfig)
 	return json.RawMessage(value), ok, err
 }
 
 func (r *pgRuntimeRepository) DeleteReaderRuntime(ctx context.Context, reader string) error {
-	err := r.metrics.Observe(ctx, "runtime.delete_reader_runtime", func(ctx context.Context) error {
-		if strings.TrimSpace(reader) == "" {
-			return errors.New("reader cannot be blank")
-		}
-		_, err := r.pool.Exec(ctx, `DELETE FROM reader_runtime WHERE reader = $1`, reader)
-		if err != nil {
-			return fmt.Errorf("deleting reader runtime for %q: %w", reader, err)
-		}
-		return nil
-	})
-	return err
+	if strings.TrimSpace(reader) == "" {
+		return errors.New("reader cannot be blank")
+	}
+	_, err := r.pool.Exec(ctx, `DELETE FROM reader_runtime WHERE reader = $1`, reader)
+	if err != nil {
+		return fmt.Errorf("deleting reader runtime for %q: %w", reader, err)
+	}
+	return nil
 }
 
 func (r *pgRuntimeRepository) IsMessageProcessed(ctx context.Context, key string) (bool, error) {
@@ -195,75 +157,49 @@ func (r *pgRuntimeRepository) IsMessageProcessed(ctx context.Context, key string
 		return false, nil
 	}
 	var exists bool
-	err := r.metrics.Observe(ctx, "runtime.is_message_processed", func(ctx context.Context) error {
-		if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM processed_messages WHERE message_key = $1)`, key).Scan(&exists); err != nil {
-			return fmt.Errorf("checking processed message %q: %w", key, err)
-		}
-		return nil
-	})
-	if err != nil {
-		return false, err
+	if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM processed_messages WHERE message_key = $1)`, key).Scan(&exists); err != nil {
+		return false, fmt.Errorf("checking processed message %q: %w", key, err)
 	}
 	return exists, nil
 }
 
 func (r *pgRuntimeRepository) MarkMessageProcessed(ctx context.Context, key string, at time.Time) error {
-	err := r.metrics.Observe(ctx, "runtime.mark_message_processed", func(ctx context.Context) error {
-		if strings.TrimSpace(key) == "" {
-			return errors.New("message key cannot be blank")
-		}
-		_, err := r.pool.Exec(ctx,
-			`INSERT INTO processed_messages (message_key, processed_at) VALUES ($1, $2)
+	if strings.TrimSpace(key) == "" {
+		return errors.New("message key cannot be blank")
+	}
+	_, err := r.pool.Exec(ctx,
+		`INSERT INTO processed_messages (message_key, processed_at) VALUES ($1, $2)
 			 ON CONFLICT (message_key) DO UPDATE SET processed_at = EXCLUDED.processed_at`,
-			key, at,
-		)
-		if err != nil {
-			return fmt.Errorf("marking processed message %q: %w", key, err)
-		}
-		return nil
-	})
-	return err
+		key, at,
+	)
+	if err != nil {
+		return fmt.Errorf("marking processed message %q: %w", key, err)
+	}
+	return nil
 }
 
 func (r *pgRuntimeRepository) GetSyncStatus(ctx context.Context) (SyncStatus, error) {
 	var status SyncStatus
-	err := r.metrics.Observe(ctx, "runtime.get_sync_status", func(ctx context.Context) error {
-		val, err := r.readAppConfig(ctx, "content_sync_status")
-		if err != nil {
-			return nil //nolint:nilerr // key-not-found on first run is expected; zero value means "never synced"
-		}
-		if err := json.Unmarshal([]byte(val), &status); err != nil {
-			return fmt.Errorf("parsing sync status: %w", err)
-		}
-		return nil
-	})
+	val, err := r.readAppConfig(ctx, "content_sync_status")
 	if err != nil {
-		return SyncStatus{}, err
+		return status, nil //nolint:nilerr // key-not-found on first run is expected; zero value means "never synced"
+	}
+	if err := json.Unmarshal([]byte(val), &status); err != nil {
+		return SyncStatus{}, fmt.Errorf("parsing sync status: %w", err)
 	}
 	return status, nil
 }
 
 func (r *pgRuntimeRepository) SetSyncStatus(ctx context.Context, status SyncStatus) error {
-	err := r.metrics.Observe(ctx, "runtime.set_sync_status", func(ctx context.Context) error {
-		b, err := json.Marshal(status)
-		if err != nil {
-			return fmt.Errorf("marshaling sync status: %w", err)
-		}
-		return r.writeAppConfig(ctx, "content_sync_status", string(b))
-	})
-	return err
+	b, err := json.Marshal(status)
+	if err != nil {
+		return fmt.Errorf("marshaling sync status: %w", err)
+	}
+	return r.writeAppConfig(ctx, "content_sync_status", string(b))
 }
 
 func (r *pgRuntimeRepository) GetCommunityURL(ctx context.Context) (string, error) {
-	var url string
-	err := r.metrics.Observe(ctx, "runtime.get_community_url", func(ctx context.Context) error {
-		value, err := r.readAppConfig(ctx, "community_content_url")
-		if err != nil {
-			return err
-		}
-		url = value
-		return nil
-	})
+	url, err := r.readAppConfig(ctx, "community_content_url")
 	if err != nil {
 		return "", err
 	}
@@ -271,56 +207,44 @@ func (r *pgRuntimeRepository) GetCommunityURL(ctx context.Context) (string, erro
 }
 
 func (r *pgRuntimeRepository) SetCommunityURL(ctx context.Context, url string) error {
-	err := r.metrics.Observe(ctx, "runtime.set_community_url", func(ctx context.Context) error {
-		return r.writeAppConfig(ctx, "community_content_url", url)
-	})
-	return err
+	return r.writeAppConfig(ctx, "community_content_url", url)
 }
 
-func (r *pgRuntimeRepository) setReaderJSON(ctx context.Context, operation, reader, column string, value []byte) error {
-	err := r.metrics.Observe(ctx, operation, func(ctx context.Context) error {
-		if strings.TrimSpace(reader) == "" {
-			return errors.New("reader cannot be blank")
-		}
-		if !json.Valid(value) {
-			return fmt.Errorf("%s for reader %q must be valid JSON", column, reader)
-		}
-		query, err := runtimeSetReaderJSONQuery(column)
-		if err != nil {
-			return err
-		}
-		if _, err := r.pool.Exec(ctx, query, reader, value); err != nil {
-			return fmt.Errorf("setting %s for reader %q: %w", column, reader, err)
-		}
-		return nil
-	})
-	return err
+func (r *pgRuntimeRepository) setReaderJSON(ctx context.Context, reader, column string, value []byte) error {
+	if strings.TrimSpace(reader) == "" {
+		return errors.New("reader cannot be blank")
+	}
+	if !json.Valid(value) {
+		return fmt.Errorf("%s for reader %q must be valid JSON", column, reader)
+	}
+	query, err := runtimeSetReaderJSONQuery(column)
+	if err != nil {
+		return err
+	}
+	if _, err := r.pool.Exec(ctx, query, reader, value); err != nil {
+		return fmt.Errorf("setting %s for reader %q: %w", column, reader, err)
+	}
+	return nil
 }
 
-func (r *pgRuntimeRepository) getReaderJSON(ctx context.Context, operation, reader, column string) ([]byte, bool, error) {
+func (r *pgRuntimeRepository) getReaderJSON(ctx context.Context, reader, column string) ([]byte, bool, error) {
 	var value []byte
 	found := false
-	err := r.metrics.Observe(ctx, operation, func(ctx context.Context) error {
-		if strings.TrimSpace(reader) == "" {
-			return errors.New("reader cannot be blank")
-		}
-		query, err := runtimeGetReaderJSONQuery(column)
-		if err != nil {
-			return err
-		}
-		err = r.pool.QueryRow(ctx, query, reader).Scan(&value)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil
-			}
-			return fmt.Errorf("getting %s for reader %q: %w", column, reader, err)
-		}
-		found = true
-		return nil
-	})
+	if strings.TrimSpace(reader) == "" {
+		return nil, false, errors.New("reader cannot be blank")
+	}
+	query, err := runtimeGetReaderJSONQuery(column)
 	if err != nil {
 		return nil, false, err
 	}
+	err = r.pool.QueryRow(ctx, query, reader).Scan(&value)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("getting %s for reader %q: %w", column, reader, err)
+	}
+	found = true
 	return value, found, nil
 }
 

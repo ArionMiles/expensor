@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/observability"
 )
 
 func TestStoreRepositoriesEmitDebugInstrumentation(t *testing.T) {
@@ -386,7 +388,8 @@ func TestStoreReadModelRepositoryEmitsDebugInstrumentation(t *testing.T) {
 }
 
 type instrumentedTestStore struct {
-	*testStore
+	*store.InstrumentedStore
+	base *testStore
 	logs *bytes.Buffer
 }
 
@@ -394,7 +397,21 @@ func newInstrumentedTestStore(t *testing.T) *instrumentedTestStore {
 	t.Helper()
 	logs := new(bytes.Buffer)
 	ts := newTestStoreWithLogger(t, logs)
-	return &instrumentedTestStore{testStore: ts, logs: logs}
+	logger := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	scope := observability.NewScope(logger, "test.store")
+	return &instrumentedTestStore{
+		InstrumentedStore: store.NewInstrumentedStore(ts.Store, scope, logger),
+		base:              ts,
+		logs:              logs,
+	}
+}
+
+func (ts *instrumentedTestStore) cleanup() {
+	ts.base.cleanup()
+}
+
+func (ts *instrumentedTestStore) InsertForTest(ctx context.Context, params store.InsertParams) (string, error) {
+	return ts.base.InsertForTest(ctx, params)
 }
 
 func (ts *instrumentedTestStore) requireOperation(t *testing.T, operation string) {

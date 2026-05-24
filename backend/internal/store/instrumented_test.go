@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"testing"
-	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/observability"
@@ -54,16 +53,5 @@ func TestInstrumentedTransactionStoreDelegatesError(t *testing.T) {
 	}
 	if !next.called {
 		t.Fatal("next ListTransactions was not called")
-	}
-}
-
-func TestObservedStoreUsesProvidedClock(t *testing.T) {
-	next := &fakeTransactionStore{}
-	scope := observability.NewScope(slog.New(slog.NewTextHandler(io.Discard, nil)), "test")
-	observed := store.NewInstrumentedTransactionStore(next, scope, slog.Default())
-	observed.SetNowForTest(func() time.Time { return time.Unix(10, 0) })
-
-	if _, _, err := observed.ListTransactions(context.Background(), store.ListFilter{}); err != nil {
-		t.Fatalf("ListTransactions() error = %v", err)
 	}
 }

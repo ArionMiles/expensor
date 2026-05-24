@@ -3,7 +3,6 @@ package observability
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -15,7 +14,6 @@ import (
 type Operation struct {
 	Namespace string
 	Name      string
-	Duration  time.Duration
 	Err       error
 }
 
@@ -35,14 +33,10 @@ func (s *Scope) RecordOperation(ctx context.Context, op Operation) {
 	counter, _ := s.meter.Int64Counter(op.Namespace + ".operations")
 	counter.Add(ctx, 1, metric.WithAttributes(attrs...))
 
-	duration, _ := s.meter.Float64Histogram(op.Namespace + ".operation.duration_ms")
-	duration.Record(ctx, float64(op.Duration.Milliseconds()), metric.WithAttributes(attrs...))
-
 	span := trace.SpanFromContext(ctx)
 	logAttrs := []slog.Attr{
 		slog.String("namespace", op.Namespace),
 		slog.String("operation", op.Name),
-		slog.Int64("duration_ms", op.Duration.Milliseconds()),
 	}
 	if spanContext := span.SpanContext(); spanContext.IsValid() {
 		logAttrs = append(logAttrs,

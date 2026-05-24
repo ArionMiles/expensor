@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ArionMiles/expensor/backend/pkg/observability"
 )
@@ -112,9 +111,10 @@ func TestSetupSupportsDisabledTelemetry(t *testing.T) {
 }
 
 func TestOperationRecorderAcceptsSuccessAndError(t *testing.T) {
+	logs := &bytes.Buffer{}
 	shutdown, logger, err := observability.Setup(context.Background(), observability.Config{
 		LogLevel:       slog.LevelDebug,
-		Output:         &bytes.Buffer{},
+		Output:         logs,
 		Enabled:        true,
 		Exporter:       observability.ExporterNone,
 		TracesEnabled:  true,
@@ -134,7 +134,6 @@ func TestOperationRecorderAcceptsSuccessAndError(t *testing.T) {
 	scope.RecordOperation(ctx, observability.Operation{
 		Namespace: "store",
 		Name:      "test.success",
-		Duration:  time.Millisecond,
 		Err:       nil,
 	})
 	span.End()
@@ -142,7 +141,9 @@ func TestOperationRecorderAcceptsSuccessAndError(t *testing.T) {
 	scope.RecordOperation(context.Background(), observability.Operation{
 		Namespace: "store",
 		Name:      "test.error",
-		Duration:  time.Millisecond,
 		Err:       errors.New("boom"),
 	})
+	if strings.Contains(logs.String(), "duration_ms") {
+		t.Fatalf("operation logs should not include duration_ms, got %q", logs.String())
+	}
 }

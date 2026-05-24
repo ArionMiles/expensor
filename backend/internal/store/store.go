@@ -383,10 +383,9 @@ func New(cfg config.PostgresConfig, logger *slog.Logger) (*Store, error) {
 
 func (s *Store) initRepositories() {
 	deps := repositoryDependencies{
-		pool:    s.pool,
-		logger:  s.logger,
-		metrics: NewQueryInstrumentation(s.logger),
-		now:     s.now,
+		pool:   s.pool,
+		logger: s.logger,
+		now:    s.now,
 	}
 	s.community = NewCommunityRepository(deps)
 	s.diag = NewDiagnosticsRepository(deps)

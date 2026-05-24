@@ -43,6 +43,8 @@ type FullStore interface {
 	SetReaderConfig(ctx context.Context, reader string, config json.RawMessage) error
 	GetReaderConfig(ctx context.Context, reader string) (json.RawMessage, bool, error)
 	DeleteReaderRuntime(ctx context.Context, reader string) error
+	GetCommunityURL(ctx context.Context) (string, error)
+	SetCommunityURL(ctx context.Context, url string) error
 	GetFacets(ctx context.Context) (*Facets, error)
 	ListLabels(ctx context.Context) ([]Label, error)
 	CreateLabel(ctx context.Context, name, color string) error

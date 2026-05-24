@@ -373,7 +373,6 @@ func run() int {
 		logger.Error("failed to connect store", "error", storeErr)
 		return 1
 	}
-	var st httpapi.Storer = pgStore
 
 	if result, err := compat.NewRuntimeImporter(cfg.DataDir, pgStore, logger.With("component", "runtime_importer")).Import(ctx); err != nil {
 		logger.Warn("legacy runtime import failed", "error", err)
@@ -391,6 +390,11 @@ func run() int {
 	}
 	defer pgStore.Close()
 
+	storeLogger := logger.With("component", "store")
+	storeScope := observability.NewScope(storeLogger, "github.com/ArionMiles/expensor/backend/internal/store")
+	instrumentedStore := store.NewInstrumentedStore(pgStore, storeScope, storeLogger)
+	var st httpapi.Storer = instrumentedStore
+
 	// dm is started on demand via POST /api/daemon/start.
 	dm := &daemonManager{}
 
@@ -398,7 +402,7 @@ func run() int {
 	dc := &daemonCoordinator{
 		ctx: ctx, registry: registry, cfg: cfg,
 		systemRules: content.rules, resolver: resolver,
-		st: st, diagnostics: pgStore, dm: dm, logger: logger,
+		st: st, diagnostics: instrumentedStore, dm: dm, logger: logger,
 	}
 
 	// Auto-start daemon if a previous reader selection was persisted.

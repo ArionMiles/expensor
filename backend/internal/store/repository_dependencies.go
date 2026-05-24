@@ -8,8 +8,7 @@ import (
 )
 
 type repositoryDependencies struct {
-	pool    *pgxpool.Pool
-	logger  *slog.Logger
-	metrics *QueryInstrumentation
-	now     func() time.Time
+	pool   *pgxpool.Pool
+	logger *slog.Logger
+	now    func() time.Time
 }
