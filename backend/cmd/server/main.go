@@ -32,7 +32,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/client"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
-	"github.com/ArionMiles/expensor/backend/pkg/logging"
+	"github.com/ArionMiles/expensor/backend/pkg/observability"
 	gmailplugin "github.com/ArionMiles/expensor/backend/pkg/plugins/readers/gmail"
 	thunderbirdplugin "github.com/ArionMiles/expensor/backend/pkg/plugins/readers/thunderbird"
 	postgresplugin "github.com/ArionMiles/expensor/backend/pkg/plugins/writers/postgres"
@@ -300,12 +300,27 @@ func (c *daemonCoordinator) refreshResolver(ctx context.Context) {
 }
 
 func main() {
-	logger := logging.Setup(logging.DefaultConfig())
+	os.Exit(run())
+}
+
+func run() int {
+	shutdownObservability, logger, err := observability.Setup(context.Background(), observability.DefaultConfig())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize observability: %v\n", err)
+		return 1
+	}
+	defer func() {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		if err := shutdownObservability(shutdownCtx); err != nil {
+			logger.Warn("failed to shutdown observability", "error", err)
+		}
+	}()
 
 	registry := plugins.NewRegistry()
 	if err := registerPlugins(registry, readersFS, logger); err != nil {
 		logger.Error("failed to register plugins", "error", err)
-		os.Exit(1)
+		return 1
 	}
 	logger.Info("plugins registered",
 		"readers", len(registry.ListReaders()),
@@ -315,24 +330,24 @@ func main() {
 	cfg, err := loadAppConfig()
 	if err != nil {
 		logger.Error("failed to load config", "error", err)
-		os.Exit(1)
+		return 1
 	}
 	cfg.ApplyDefaults()
 
 	// Validate and wait for postgres connectivity — fatal if unavailable after timeout.
 	if err := cfg.ValidatePostgres(); err != nil {
 		logger.Error("postgres configuration incomplete", "error", err)
-		os.Exit(1)
+		return 1
 	}
 	if err := waitForPostgres(cfg.Postgres, logger); err != nil {
 		logger.Error("postgres not reachable at startup", "error", err)
-		os.Exit(1)
+		return 1
 	}
 
 	content, err := parseEmbedded(rulesInput, mccInput, categoriesInput)
 	if err != nil {
 		logger.Error("failed to parse embedded content", "error", err)
-		os.Exit(1)
+		return 1
 	}
 	logger.Info("loaded embedded content", "rules", len(content.rules), "mcc_codes", len(content.mccEntries), "merchant_categories", len(content.catEntries))
 
@@ -349,14 +364,14 @@ func main() {
 	// Run schema migrations before opening the store connection.
 	if err := runMigrations(cfg.Postgres, logger); err != nil {
 		logger.Error("failed to run migrations", "error", err)
-		os.Exit(1)
+		return 1
 	}
 
 	// Connect store (API query layer).
 	pgStore, storeErr := store.New(cfg.Postgres, logger.With("component", "store"))
 	if storeErr != nil {
 		logger.Error("failed to connect store", "error", storeErr)
-		os.Exit(1)
+		return 1
 	}
 	var st httpapi.Storer = pgStore
 
@@ -366,13 +381,13 @@ func main() {
 		logger.Info("legacy runtime files imported", "files", result.ImportedFiles)
 	}
 
-	// Seed embedded content and build the CategoryResolver — all fatal exits happen
-	// before the defer so Close is not bypassed by os.Exit.
+	// Seed embedded content and build the CategoryResolver. Close is deferred only
+	// after seeding succeeds, so the failure path closes the store explicitly.
 	resolver, err := seedStartupData(ctx, pgStore, content, logger)
 	if err != nil {
 		pgStore.Close()
 		logger.Error("startup seeding failed", "error", err)
-		os.Exit(1)
+		return 1
 	}
 	defer pgStore.Close()
 
@@ -415,9 +430,10 @@ func main() {
 
 	if err := server.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("HTTP server error", "error", err)
-		return // allow deferred cleanup (pgStore.Close) to run
+		return 0 // allow deferred cleanup (pgStore.Close) to run
 	}
 	logger.Info("shutdown complete")
+	return 0
 }
 
 // runDaemon builds the OAuth client and daemon runner, then blocks until ctx is done.
