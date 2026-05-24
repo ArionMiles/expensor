@@ -75,6 +75,28 @@ When fixing GitHub-reported vulnerabilities, read the GitHub Security Advisory o
 
 ## Architecture Patterns
 
+### Backend code health
+
+Do not add optional plugin interfaces for required metadata. If every reader must provide it, put it in the main metadata struct.
+
+Avoid long constructor signatures. Use a small input/deps struct once a constructor exceeds 4-5 parameters.
+
+`internal/plugins.Registry` is a catalog, not an application assembler. Daemon/runtime wiring belongs outside the registry.
+
+Define Go interfaces at consumer boundaries. Do not create package-local interfaces beside a single implementation unless a decorator or test boundary needs it.
+
+Do not call instrumentation helpers from inside repository implementations. Wrap store/repository interfaces with decorators that own logging, metrics, and tracing, then delegate to the concrete implementation.
+
+Keep concrete Postgres repositories focused on database behavior. New store behavior must live in the owning repository file, not in `internal/store/store.go`.
+
+Do not add provider-specific helpers to `pkg/api`; Gmail/Thunderbird-specific behavior belongs in that reader package.
+
+Do not use `context.Background()` inside request or daemon paths when a caller context is available.
+
+Keep `slog` as the application logging API. Use OpenTelemetry for traces and metrics, not log export.
+
+Do not put high-cardinality or sensitive values in metrics or trace attributes, including email bodies, snippets, sender addresses, message IDs, transaction IDs, merchant names, and raw SQL.
+
 ### Plugin system
 Reader and writer plugins implement interfaces in `pkg/api`. Plugins are registered in `cmd/server/main.go` and selected at runtime via the web UI (not env vars). Adding a new reader means implementing `plugins.ReaderPlugin` and registering it in the registry.
 
