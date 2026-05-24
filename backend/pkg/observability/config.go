@@ -11,9 +11,8 @@ import (
 type Exporter string
 
 const (
-	ExporterNone   Exporter = "none"
-	ExporterStdout Exporter = "stdout"
-	ExporterOTLP   Exporter = "otlp"
+	ExporterNone Exporter = "none"
+	ExporterOTLP Exporter = "otlp"
 )
 
 // Config holds logging and telemetry configuration.
