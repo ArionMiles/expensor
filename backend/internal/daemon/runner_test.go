@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,7 +15,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
-	"github.com/ArionMiles/expensor/backend/pkg/state"
 )
 
 // mockReader implements api.Reader for testing.
@@ -58,18 +58,22 @@ type mockReaderPlugin struct {
 	name        string
 	reader      api.Reader
 	createError error
+	input       plugins.ReaderInput
 }
 
-func (m *mockReaderPlugin) Name() string                        { return m.name }
-func (m *mockReaderPlugin) Description() string                 { return "mock reader" }
-func (m *mockReaderPlugin) RequiredScopes() []string            { return []string{"scope1"} }
-func (m *mockReaderPlugin) AuthType() plugins.AuthType          { return plugins.AuthTypeOAuth }
-func (m *mockReaderPlugin) RequiresCredentialsUpload() bool     { return false }
-func (m *mockReaderPlugin) ConfigSchema() []plugins.ConfigField { return nil }
-func (m *mockReaderPlugin) NewReader( //nolint:revive // interface method; argument count dictated by ReaderPlugin
-	httpClient *http.Client, cfg *config.Config, rules []api.Rule,
-	resolver api.CategoryResolver, stateManager *state.Manager, diagnosticSink api.DiagnosticSink, logger *slog.Logger,
-) (api.Reader, error) {
+func (m *mockReaderPlugin) Metadata() plugins.ReaderMetadata {
+	return plugins.ReaderMetadata{
+		Name:        m.name,
+		Description: "mock reader",
+		Auth: plugins.AuthSpec{
+			Type:           plugins.AuthTypeOAuth,
+			RequiredScopes: []string{"scope1"},
+		},
+	}
+}
+
+func (m *mockReaderPlugin) NewReader(input plugins.ReaderInput) (api.Reader, error) {
+	m.input = input
 	if m.createError != nil {
 		return nil, m.createError
 	}
@@ -81,16 +85,33 @@ type mockWriterPlugin struct {
 	name        string
 	writer      api.Writer
 	createError error
+	input       plugins.WriterInput
 }
 
-func (m *mockWriterPlugin) Name() string             { return m.name }
-func (m *mockWriterPlugin) Description() string      { return "mock writer" }
-func (m *mockWriterPlugin) RequiredScopes() []string { return []string{"scope2"} }
-func (m *mockWriterPlugin) NewWriter(httpClient *http.Client, cfg *config.Config, logger *slog.Logger) (api.Writer, error) {
+func (m *mockWriterPlugin) Metadata() plugins.WriterMetadata {
+	return plugins.WriterMetadata{
+		Name:           m.name,
+		Description:    "mock writer",
+		RequiredScopes: []string{"scope2"},
+	}
+}
+
+func (m *mockWriterPlugin) NewWriter(input plugins.WriterInput) (api.Writer, error) {
+	m.input = input
 	if m.createError != nil {
 		return nil, m.createError
 	}
 	return m.writer, nil
+}
+
+type mockRuntimeStore struct {
+	readerConfig json.RawMessage
+	hasConfig    bool
+	err          error
+}
+
+func (m *mockRuntimeStore) GetReaderConfig(ctx context.Context, reader string) (json.RawMessage, bool, error) {
+	return m.readerConfig, m.hasConfig, m.err
 }
 
 func TestNew(t *testing.T) {
@@ -321,6 +342,46 @@ func TestRun_WriterError(t *testing.T) {
 	err := runner.Run(ctx, runCfg)
 	if err != nil {
 		t.Errorf("Run should not return error, got: %v", err)
+	}
+}
+
+func TestRun_PassesPersistedReaderConfigToPlugin(t *testing.T) {
+	reader := &mockReader{
+		readFunc: func(ctx context.Context, out chan<- *api.TransactionDetails, ackChan <-chan string) error {
+			close(out)
+			return nil
+		},
+	}
+	writer := &mockWriter{}
+	readerPlugin := &mockReaderPlugin{name: "test-reader", reader: reader}
+	writerPlugin := &mockWriterPlugin{name: "test-writer", writer: writer}
+	registry := plugins.NewRegistry()
+	if err := registry.RegisterReader(readerPlugin); err != nil {
+		t.Fatalf("RegisterReader() error = %v", err)
+	}
+	if err := registry.RegisterWriter(writerPlugin); err != nil {
+		t.Fatalf("RegisterWriter() error = %v", err)
+	}
+
+	runtimeStore := &mockRuntimeStore{
+		readerConfig: json.RawMessage(`{"config":{"profilePath":"/tmp/profile","mailboxes":"Inbox"}}`),
+		hasConfig:    true,
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	runner := New(registry, &http.Client{}, logger)
+
+	err := runner.Run(context.Background(), RunConfig{
+		ReaderName:   "test-reader",
+		WriterName:   "test-writer",
+		Config:       &config.Config{},
+		RuntimeStore: runtimeStore,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if string(readerPlugin.input.ReaderConfig) != string(runtimeStore.readerConfig) {
+		t.Fatalf("ReaderConfig = %s, want %s", readerPlugin.input.ReaderConfig, runtimeStore.readerConfig)
 	}
 }
 

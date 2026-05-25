@@ -71,37 +71,33 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 		"writer", runCfg.WriterName,
 	)
 
-	// Overlay persisted web-UI config onto cfg for readers that use ConfigApplier.
-	applyPersistedReaderConfig(ctx, persistedReaderConfigInput{
-		registry:   r.registry,
-		readerName: runCfg.ReaderName,
-		config:     runCfg.Config,
-		store:      runCfg.RuntimeStore,
-		logger:     r.logger,
+	readerPlugin, err := r.registry.GetReader(runCfg.ReaderName)
+	if err != nil {
+		return fmt.Errorf("creating reader: %w", err)
+	}
+	reader, err := readerPlugin.NewReader(plugins.ReaderInput{
+		HTTPClient:     r.httpClient,
+		AppConfig:      cfg,
+		ReaderConfig:   r.loadReaderConfig(ctx, runCfg.ReaderName, runCfg.RuntimeStore),
+		Rules:          runCfg.Rules,
+		Resolver:       runCfg.Resolver,
+		StateManager:   runCfg.StateManager,
+		DiagnosticSink: runCfg.DiagnosticSink,
+		Logger:         r.logger.With("component", "reader", "plugin", runCfg.ReaderName),
 	})
-
-	// Create reader from plugin
-	reader, err := r.registry.CreateReader(
-		runCfg.ReaderName,
-		r.httpClient,
-		cfg,
-		runCfg.Rules,
-		runCfg.Resolver,
-		runCfg.StateManager,
-		runCfg.DiagnosticSink,
-		r.logger.With("component", "reader", "plugin", runCfg.ReaderName),
-	)
 	if err != nil {
 		return fmt.Errorf("creating reader: %w", err)
 	}
 
-	// Create writer from plugin
-	writer, err := r.registry.CreateWriter(
-		runCfg.WriterName,
-		r.httpClient,
-		cfg,
-		r.logger.With("component", "writer", "plugin", runCfg.WriterName),
-	)
+	writerPlugin, err := r.registry.GetWriter(runCfg.WriterName)
+	if err != nil {
+		return fmt.Errorf("creating writer: %w", err)
+	}
+	writer, err := writerPlugin.NewWriter(plugins.WriterInput{
+		HTTPClient: r.httpClient,
+		AppConfig:  cfg,
+		Logger:     r.logger.With("component", "writer", "plugin", runCfg.WriterName),
+	})
 	if err != nil {
 		return fmt.Errorf("creating writer: %w", err)
 	}
@@ -135,42 +131,17 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 	return nil
 }
 
-type persistedReaderConfigInput struct {
-	registry   *plugins.Registry
-	readerName string
-	config     *config.Config
-	store      ReaderRuntimeStore
-	logger     *slog.Logger
-}
-
-// applyPersistedReaderConfig loads DB-backed reader config and, if the plugin
-// implements ConfigApplier, overlays its values onto cfg. Errors are non-fatal:
-// if config is absent the reader falls back to env vars.
-func applyPersistedReaderConfig(ctx context.Context, input persistedReaderConfigInput) {
-	plugin, err := input.registry.GetReader(input.readerName)
+func (r *Runner) loadReaderConfig(ctx context.Context, readerName string, store ReaderRuntimeStore) json.RawMessage {
+	if store == nil {
+		return nil
+	}
+	data, ok, err := store.GetReaderConfig(ctx, readerName)
 	if err != nil {
-		return
-	}
-	applier, ok := plugin.(plugins.ConfigApplier)
-	if !ok {
-		return
-	}
-	if input.store == nil {
-		return
-	}
-	data, ok, err := input.store.GetReaderConfig(ctx, input.readerName)
-	if err != nil {
-		input.logger.Warn("failed to read persisted reader config", "reader", input.readerName, "error", err)
-		return
+		r.logger.Warn("failed to read persisted reader config", "reader", readerName, "error", err)
+		return nil
 	}
 	if !ok {
-		return
+		return nil
 	}
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		input.logger.Warn("failed to parse persisted reader config", "reader", input.readerName, "error", err)
-		return
-	}
-	applier.ApplyConfig(input.config, raw)
-	input.logger.Debug("applied persisted reader config", "reader", input.readerName)
+	return data
 }
