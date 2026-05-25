@@ -19,7 +19,7 @@ The work has two equal outcomes:
 | Slice | Status | Notes |
 |-------|--------|-------|
 | Observability package and store instrumentation | Complete | Implemented in `pr/backend-observability-code-health`; see `docs/superpowers/plans/2026-05-24-observability-store-instrumentation.md`. |
-| Plugin registry cleanup | Pending | Requires a separate implementation plan. |
+| Plugin registry cleanup | Complete | Registry is now catalog-only; reader/writer metadata is explicit; daemon wiring owns construction. |
 | API handler decomposition | Pending | Requires a separate implementation plan. |
 | Store package ownership cleanup beyond instrumentation | Pending | Remaining work includes read-model ownership and `store.go` model/helper split. |
 | Processed-message state context cleanup | Pending | Requires a separate implementation plan. |
@@ -41,7 +41,7 @@ The work has two equal outcomes:
 
 ### Plugin Registry Drift
 
-`backend/internal/plugins/registry.go` is both a plugin catalog and an application factory. `ReaderPlugin.NewReader` has a long flattened argument list with HTTP client, global config, rules, category resolver, processed-message state, diagnostic sink, and logger. `GuideProvider` and `ConfigApplier` were added as optional interfaces even though setup guides are required metadata and persisted config decoding is a core reader concern.
+`backend/internal/plugins/registry.go` previously mixed catalog lookup with application assembly. Reader construction passed HTTP client, global config, rules, category resolver, processed-message state, diagnostic sink, and logger as a flattened dependency list. Setup-guide and reader-config behavior were also scattered instead of living in explicit plugin metadata and construction inputs.
 
 This makes adding a new reader or search capability harder because every new concern is likely to become another optional interface or constructor argument.
 
@@ -171,7 +171,7 @@ Composition should happen at wiring boundaries. Concrete repositories should not
 
 ### Plugin Registry Cleanup
 
-Keep the registry as a catalog. It should register and return plugins by name; it should not hide application assembly behind `CreateReader` or `CreateWriter`.
+Keep the registry as a catalog. It should register and return plugins by name, while daemon/runtime wiring owns application assembly.
 
 Replace scattered metadata methods with explicit metadata structs:
 
@@ -191,7 +191,7 @@ type ReaderMetadata struct {
 }
 ```
 
-Reader plugins expose required metadata directly. `GuideProvider` should be removed because setup guides are required. `ConfigApplier` should be removed because reader-specific config should be decoded by the reader/plugin construction path instead of mutating global `config.Config`.
+Reader plugins expose required metadata directly. Setup guides are part of `ReaderMetadata`, and reader-specific config is decoded by the reader/plugin construction path instead of mutating global `config.Config`.
 
 Reader construction should use one input struct if kept on plugin types:
 
@@ -317,7 +317,7 @@ Run component or contract tests only for slices that touch store behavior, daemo
 2. Add OTel trace/metric setup and no-op/default behavior. **Complete.**
 3. Replace store inline `QueryInstrumentation` with interface decorators. **Complete.**
 4. Split store capability interfaces and clean up `store.go` ownership. **Partially complete for instrumentation boundaries; remaining ownership cleanup is deferred.**
-5. Refactor plugin metadata and construction boundary.
+5. Refactor plugin metadata and construction boundary. **Complete.**
 6. Split `internal/api/handlers.go` by resource without behavior changes.
 7. Make processed-message state context-aware.
 8. Move Gmail-specific rule query construction out of `pkg/api`.

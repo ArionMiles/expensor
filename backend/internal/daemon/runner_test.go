@@ -457,7 +457,7 @@ func TestRun_ContextCancellation(t *testing.T) {
 	}
 }
 
-func TestRun_CreateReaderError(t *testing.T) {
+func TestRun_NewReaderError(t *testing.T) {
 	registry := plugins.NewRegistry()
 	if err := registry.RegisterReader(&mockReaderPlugin{
 		name:        "test-reader",
@@ -494,7 +494,7 @@ func TestRun_CreateReaderError(t *testing.T) {
 	}
 }
 
-func TestRun_CreateWriterError(t *testing.T) {
+func TestRun_NewWriterError(t *testing.T) {
 	reader := &mockReader{
 		readFunc: func(ctx context.Context, out chan<- *api.TransactionDetails, ackChan <-chan string) error {
 			close(out)

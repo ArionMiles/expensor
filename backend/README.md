@@ -17,7 +17,7 @@ backend/
 ├── internal/
 │   ├── daemon/              # Reader → writer pipeline
 │   │   └── runner.go
-│   └── plugins/             # Plugin registry & factory
+│   └── plugins/             # Plugin catalog/registry
 │       └── registry.go
 ├── migrations/              # SQL migrations (run on startup)
 └── pkg/
@@ -48,11 +48,8 @@ Readers and writers are registered at startup via the plugin registry. Adding a 
 
 ```go
 type ReaderPlugin interface {
-    Name() string
-    Description() string
-    RequiredScopes() []string
-    NewReader(httpClient *http.Client, cfg *config.Config, rules []api.Rule,
-              labels api.Labels, stateManager *state.Manager, logger *slog.Logger) (api.Reader, error)
+    Metadata() ReaderMetadata
+    NewReader(input ReaderInput) (api.Reader, error)
 }
 ```
 
@@ -62,10 +59,8 @@ type ReaderPlugin interface {
 
 ```go
 type WriterPlugin interface {
-    Name() string
-    Description() string
-    RequiredScopes() []string
-    NewWriter(httpClient *http.Client, cfg *config.Config, logger *slog.Logger) (api.Writer, error)
+    Metadata() WriterMetadata
+    NewWriter(input WriterInput) (api.Writer, error)
 }
 ```
 
