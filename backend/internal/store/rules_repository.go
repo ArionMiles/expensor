@@ -19,18 +19,12 @@ type RulesRepository interface {
 }
 
 type pgRulesRepository struct {
-	pool    *pgxpool.Pool
-	metrics *QueryInstrumentation
+	pool *pgxpool.Pool
 }
 
 func NewRulesRepository(deps repositoryDependencies) RulesRepository {
-	metrics := deps.metrics
-	if metrics == nil {
-		metrics = NewQueryInstrumentation(deps.logger)
-	}
 	return &pgRulesRepository{
-		pool:    deps.pool,
-		metrics: metrics,
+		pool: deps.pool,
 	}
 }
 
@@ -62,8 +56,7 @@ func ruleSourceLabel(rule RuleRow) string {
 }
 
 func (r *pgRulesRepository) InitRules(ctx context.Context) error {
-	err := r.metrics.Observe(ctx, "rules.init", func(ctx context.Context) error {
-		_, err := r.pool.Exec(ctx, `
+	_, err := r.pool.Exec(ctx, `
 			-- Fresh-install path: create the table with the correct final schema.
 			CREATE TABLE IF NOT EXISTS rules (
 				id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -105,192 +98,149 @@ func (r *pgRulesRepository) InitRules(ctx context.Context) error {
 				END IF;
 			END $$;
 		`)
-		if err != nil {
-			return fmt.Errorf("executing rules initialization: %w", err)
-		}
-		return nil
-	})
 	if err != nil {
-		return fmt.Errorf("initializing rules: %w", err)
+		return fmt.Errorf("initializing rules: executing rules initialization: %w", err)
 	}
 	return nil
 }
 
 func (r *pgRulesRepository) ListRules(ctx context.Context) ([]RuleRow, error) {
-	var result []RuleRow
-	err := r.metrics.Observe(ctx, "rules.list", func(ctx context.Context) error {
-		rows, err := r.pool.Query(ctx,
-			`SELECT `+ruleColumns+`
+	rows, err := r.pool.Query(ctx,
+		`SELECT `+ruleColumns+`
 			 FROM rules
 			 ORDER BY predefined, name`)
-		if err != nil {
-			return fmt.Errorf("listing rules: %w", err)
-		}
-		defer rows.Close()
-		result, err = scanRuleRows(rows)
-		if err != nil {
-			return fmt.Errorf("listing rules: %w", err)
-		}
-		return nil
-	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("listing rules: %w", err)
+	}
+	defer rows.Close()
+	result, err := scanRuleRows(rows)
+	if err != nil {
+		return nil, fmt.Errorf("listing rules: %w", err)
 	}
 	return result, nil
 }
 
 func (r *pgRulesRepository) GetRule(ctx context.Context, id string) (*RuleRow, error) {
-	var rule *RuleRow
-	err := r.metrics.Observe(ctx, "rules.get", func(ctx context.Context) error {
-		rows, err := r.pool.Query(ctx,
-			`SELECT `+ruleColumns+` FROM rules WHERE id = $1`, id)
-		if err != nil {
-			return fmt.Errorf("fetching rule: %w", err)
-		}
-		defer rows.Close()
-		result, err := scanRuleRows(rows)
-		if err != nil {
-			return err
-		}
-		if len(result) == 0 {
-			return ErrNotFound
-		}
-		rule = &result[0]
-		return nil
-	})
+	rows, err := r.pool.Query(ctx,
+		`SELECT `+ruleColumns+` FROM rules WHERE id = $1`, id)
+	if err != nil {
+		return nil, fmt.Errorf("fetching rule: %w", err)
+	}
+	defer rows.Close()
+	result, err := scanRuleRows(rows)
 	if err != nil {
 		return nil, err
 	}
-	return rule, nil
+	if len(result) == 0 {
+		return nil, ErrNotFound
+	}
+	return &result[0], nil
 }
 
 func (r *pgRulesRepository) CreateRule(ctx context.Context, rule RuleRow) (*RuleRow, error) {
-	var created *RuleRow
-	err := r.metrics.Observe(ctx, "rules.create", func(ctx context.Context) error {
-		rows, err := r.pool.Query(ctx,
-			`INSERT INTO rules (
+	rows, err := r.pool.Query(ctx,
+		`INSERT INTO rules (
 				name, sender_email, sender_emails, subject_contains, amount_regex, merchant_regex,
 				currency_regex, transaction_source, source_type, source_label, bank
 			)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 			 RETURNING `+ruleColumns,
-			rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
-			rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
-			ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
-		)
-		if err != nil {
-			if isRuleNameConflict(err) {
-				return ErrRuleNameConflict
-			}
-			return fmt.Errorf("creating rule: %w", err)
-		}
-		defer rows.Close()
-		result, err := scanRuleRows(rows)
-		if err != nil {
-			if isRuleNameConflict(err) {
-				return ErrRuleNameConflict
-			}
-			return fmt.Errorf("creating rule: %w", err)
-		}
-		if len(result) == 0 {
-			return fmt.Errorf("creating rule: no row returned")
-		}
-		created = &result[0]
-		return nil
-	})
+		rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
+		rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
+		ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
+	)
 	if err != nil {
-		return nil, err
+		if isRuleNameConflict(err) {
+			return nil, ErrRuleNameConflict
+		}
+		return nil, fmt.Errorf("creating rule: %w", err)
 	}
-	return created, nil
+	defer rows.Close()
+	result, err := scanRuleRows(rows)
+	if err != nil {
+		if isRuleNameConflict(err) {
+			return nil, ErrRuleNameConflict
+		}
+		return nil, fmt.Errorf("creating rule: %w", err)
+	}
+	if len(result) == 0 {
+		return nil, fmt.Errorf("creating rule: no row returned")
+	}
+	return &result[0], nil
 }
 
 func (r *pgRulesRepository) UpdateRule(ctx context.Context, id string, rule RuleRow) (*RuleRow, error) {
-	var updated *RuleRow
-	err := r.metrics.Observe(ctx, "rules.update", func(ctx context.Context) error {
-		rows, err := r.pool.Query(ctx,
-			`UPDATE rules
+	rows, err := r.pool.Query(ctx,
+		`UPDATE rules
 			 SET name=$2, sender_email=$3, sender_emails=$4, subject_contains=$5,
 			     amount_regex=$6, merchant_regex=$7, currency_regex=$8,
 			     transaction_source=$9, source_type=$10, source_label=$11, bank=$12, updated_at=NOW()
 			 WHERE id=$1
 			 RETURNING `+ruleColumns,
-			id, rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
-			rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
-			ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
-		)
-		if err != nil {
-			if isRuleNameConflict(err) {
-				return ErrRuleNameConflict
-			}
-			return fmt.Errorf("updating rule: %w", err)
-		}
-		defer rows.Close()
-		result, err := scanRuleRows(rows)
-		if err != nil {
-			if isRuleNameConflict(err) {
-				return ErrRuleNameConflict
-			}
-			return fmt.Errorf("updating rule: %w", err)
-		}
-		if len(result) == 0 {
-			return ErrNotFound
-		}
-		updated = &result[0]
-		return nil
-	})
+		id, rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
+		rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
+		ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
+	)
 	if err != nil {
-		return nil, err
+		if isRuleNameConflict(err) {
+			return nil, ErrRuleNameConflict
+		}
+		return nil, fmt.Errorf("updating rule: %w", err)
 	}
-	return updated, nil
+	defer rows.Close()
+	result, err := scanRuleRows(rows)
+	if err != nil {
+		if isRuleNameConflict(err) {
+			return nil, ErrRuleNameConflict
+		}
+		return nil, fmt.Errorf("updating rule: %w", err)
+	}
+	if len(result) == 0 {
+		return nil, ErrNotFound
+	}
+	return &result[0], nil
 }
 
 func (r *pgRulesRepository) DeleteRule(ctx context.Context, id string) error {
-	err := r.metrics.Observe(ctx, "rules.delete", func(ctx context.Context) error {
-		tag, err := r.pool.Exec(ctx,
-			`DELETE FROM rules WHERE id=$1 AND predefined = false`, id)
-		if err != nil {
-			return fmt.Errorf("deleting rule: %w", err)
-		}
-		if tag.RowsAffected() == 0 {
-			return ErrNotFound
-		}
-		return nil
-	})
-	return err
+	tag, err := r.pool.Exec(ctx,
+		`DELETE FROM rules WHERE id=$1 AND predefined = false`, id)
+	if err != nil {
+		return fmt.Errorf("deleting rule: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r *pgRulesRepository) SeedPredefinedRules(ctx context.Context, rules []RuleRow) error {
-	err := r.metrics.Observe(ctx, "rules.seed_predefined", func(ctx context.Context) error {
-		for _, rule := range rules {
-			_, err := r.pool.Exec(ctx, `
+	for _, rule := range rules {
+		_, err := r.pool.Exec(ctx, `
 				INSERT INTO rules
 				  (name, sender_email, sender_emails, subject_contains, amount_regex, merchant_regex,
 				   currency_regex, transaction_source, source_type, source_label, bank, predefined)
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
 				ON CONFLICT (name) DO NOTHING`,
-				rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
-				rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
-				ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
-			)
-			if err != nil {
-				return fmt.Errorf("seeding predefined rule %q: %w", rule.Name, err)
-			}
+			rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
+			rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
+			ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
+		)
+		if err != nil {
+			return fmt.Errorf("seeding predefined rule %q: %w", rule.Name, err)
 		}
-		return nil
-	})
-	return err
+	}
+	return nil
 }
 
 func (r *pgRulesRepository) ImportUserRules(ctx context.Context, rules []RuleRow) error {
-	err := r.metrics.Observe(ctx, "rules.import_user", func(ctx context.Context) error {
-		tx, err := r.pool.Begin(ctx)
-		if err != nil {
-			return fmt.Errorf("beginning import transaction: %w", err)
-		}
-		defer func() { _ = tx.Rollback(ctx) }()
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("beginning import transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
 
-		for _, rule := range rules {
-			_, err := tx.Exec(ctx, `
+	for _, rule := range rules {
+		_, err := tx.Exec(ctx, `
 				INSERT INTO rules
 				  (name, sender_email, sender_emails, subject_contains, amount_regex, merchant_regex,
 				   currency_regex, transaction_source, source_type, source_label, bank)
@@ -307,15 +257,13 @@ func (r *pgRulesRepository) ImportUserRules(ctx context.Context, rules []RuleRow
 					source_label       = EXCLUDED.source_label,
 					bank               = EXCLUDED.bank,
 					updated_at         = NOW()`,
-				rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
-				rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
-				ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
-			)
-			if err != nil {
-				return fmt.Errorf("importing rule %q: %w", rule.Name, err)
-			}
+			rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
+			rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
+			ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
+		)
+		if err != nil {
+			return fmt.Errorf("importing rule %q: %w", rule.Name, err)
 		}
-		return tx.Commit(ctx)
-	})
-	return err
+	}
+	return tx.Commit(ctx)
 }

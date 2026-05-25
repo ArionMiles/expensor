@@ -25,7 +25,7 @@ backend/
     ├── client/              # OAuth2 HTTP client helper
     ├── config/              # Environment-based configuration
     ├── extractor/           # Regex amount & merchant extraction
-    ├── logging/             # Structured logging setup
+    ├── observability/       # slog setup plus OpenTelemetry traces/metrics
     ├── state/               # SHA-256 keyed dedup state (prevents reprocessing)
     ├── reader/
     │   ├── gmail/           # Gmail API reader

@@ -326,21 +326,33 @@ tasks:
   db:start:
     summary: Start the local development PostgreSQL container.
     desc: >-
-      Starts the postgres:16-alpine container defined in tests/docker-compose.local.yml.
-      Idempotent — safe to run when the container is already running.
-      Pass RECREATE=1 to destroy the volume and recreate from scratch.
+      Starts the local development PostgreSQL container defined in tests/docker-compose.local.yml.
+      Idempotent — safe to run when the containers are already running.
+      Pass RECREATE=1 to destroy the postgres volume and recreate from scratch.
     dir: tests
     cmd: |
       if [ "${RECREATE:-0}" = "1" ]; then
         echo "Recreating dev postgres (RECREATE=1)..."
         docker compose -f docker-compose.local.yml --env-file .env down -v
       fi
-      docker compose -f docker-compose.local.yml --env-file .env up -d
+      docker compose -f docker-compose.local.yml --env-file .env up -d postgres
       echo "Waiting for postgres to be healthy..."
       until docker inspect --format '{{.State.Health.Status}}' expensor-dev-postgres 2>/dev/null | grep -q "healthy"; do
         sleep 1
       done
       echo "Postgres is healthy."
+
+  observability:start:
+    summary: Start local observability collectors and visualizers.
+    desc: >-
+      Starts the local OpenTelemetry Collector, Jaeger, and Prometheus services.
+      This is used by task dev and kept separate from db:start so database-only
+      workflows do not require observability ports to be available.
+    dir: tests
+    cmd: |
+      docker compose -f docker-compose.local.yml --env-file .env --profile observability up -d jaeger otel-collector prometheus
+      echo "Jaeger traces: http://localhost:16686"
+      echo "Prometheus metrics: http://localhost:9090"
 
   db:stop:
     summary: Stop the local development PostgreSQL container.
@@ -375,19 +387,22 @@ tasks:
     cmd: npm run dev
 
   dev:
-    summary: Start postgres, backend, and frontend for local development.
+    summary: Start local dev containers, backend, and frontend.
     desc: >-
-      Ensures the dev postgres container is running (idempotent), waits for it
-      to be healthy, starts the backend (loading tests/.env), waits for
-      /api/health, then starts the Vite dev server. Kills the backend when the
-      frontend exits. Pass RECREATE=1 to wipe and recreate the postgres volume.
+      Ensures the local dev containers are running (idempotent), waits for
+      postgres to be healthy, starts the backend (loading tests/.env), waits
+      for /api/health, then starts the Vite dev server. Observability UIs are
+      available at Jaeger traces: http://localhost:16686 and Prometheus metrics:
+      http://localhost:9090. Kills the backend when the frontend exits. Pass
+      RECREATE=1 to wipe and recreate the postgres volume.
     cmd: |
       set -a
       [ -f tests/.env ] && . tests/.env
       set +a
 
-      # Start postgres (idempotent)
+      # Start local dev containers (idempotent)
       RECREATE=${RECREATE:-0} task db:start
+      task observability:start
 
       # Compute version string (same logic as build:binary)
       RAW=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")

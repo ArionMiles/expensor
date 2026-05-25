@@ -38,8 +38,7 @@ type TaxonomyRepository interface {
 type LabelRepository = TaxonomyRepository
 
 type pgTaxonomyRepository struct {
-	pool    *pgxpool.Pool
-	metrics *QueryInstrumentation
+	pool *pgxpool.Pool
 }
 
 type taxonomyItem struct {
@@ -50,21 +49,16 @@ type taxonomyItem struct {
 
 // NewTaxonomyRepository returns a PostgreSQL-backed taxonomy repository.
 func NewTaxonomyRepository(deps repositoryDependencies) TaxonomyRepository {
-	metrics := deps.metrics
-	if metrics == nil {
-		metrics = NewQueryInstrumentation(deps.logger)
-	}
 	return &pgTaxonomyRepository{
-		pool:    deps.pool,
-		metrics: metrics,
+		pool: deps.pool,
 	}
 }
 
 // NewLabelRepository returns a PostgreSQL-backed label repository.
 func NewLabelRepository(pool *pgxpool.Pool, logger *slog.Logger) LabelRepository {
+	_ = logger
 	return &pgTaxonomyRepository{
-		pool:    pool,
-		metrics: NewQueryInstrumentation(logger),
+		pool: pool,
 	}
 }
 
@@ -85,8 +79,7 @@ func (r *pgTaxonomyRepository) Delete(ctx context.Context, name string) error {
 }
 
 func (r *pgTaxonomyRepository) InitLabels(ctx context.Context) error {
-	err := r.metrics.Observe(ctx, "taxonomy.init_labels", func(ctx context.Context) error {
-		_, err := r.pool.Exec(ctx, `
+	_, err := r.pool.Exec(ctx, `
 			CREATE TABLE IF NOT EXISTS labels (
 				name        TEXT PRIMARY KEY,
 				color       TEXT NOT NULL DEFAULT '#6366f1',
@@ -110,20 +103,14 @@ func (r *pgTaxonomyRepository) InitLabels(ctx context.Context) error {
 				UNIQUE(transaction_id, label, source_type, merchant_pattern)
 			);
 		`)
-		if err != nil {
-			return fmt.Errorf("executing labels initialization: %w", err)
-		}
-		return nil
-	})
 	if err != nil {
-		return fmt.Errorf("initializing labels: %w", err)
+		return fmt.Errorf("initializing labels: executing labels initialization: %w", err)
 	}
 	return nil
 }
 
 func (r *pgTaxonomyRepository) InitCategoriesBuckets(ctx context.Context) error {
-	err := r.metrics.Observe(ctx, "taxonomy.init_categories_buckets", func(ctx context.Context) error {
-		_, err := r.pool.Exec(ctx, `
+	_, err := r.pool.Exec(ctx, `
 			CREATE TABLE IF NOT EXISTS categories (
 				name        TEXT PRIMARY KEY,
 				description TEXT,
@@ -145,206 +132,162 @@ func (r *pgTaxonomyRepository) InitCategoriesBuckets(ctx context.Context) error 
 				('Needs', true),('Wants', true),('Investments', true),('Income', true)
 			ON CONFLICT (name) DO NOTHING;
 		`)
-		if err != nil {
-			return fmt.Errorf("executing categories and buckets initialization: %w", err)
-		}
-		return nil
-	})
 	if err != nil {
-		return fmt.Errorf("initializing categories and buckets: %w", err)
+		return fmt.Errorf("initializing categories and buckets: executing categories and buckets initialization: %w", err)
 	}
 	return nil
 }
 
 func (r *pgTaxonomyRepository) ListLabels(ctx context.Context) ([]Label, error) {
 	labels := []Label{}
-	err := r.metrics.Observe(ctx, "taxonomy.list_labels", func(ctx context.Context) error {
-		rows, err := r.pool.Query(ctx, `SELECT name, color, created_at FROM labels ORDER BY name`)
-		if err != nil {
-			return fmt.Errorf("querying labels: %w", err)
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var label Label
-			if err := rows.Scan(&label.Name, &label.Color, &label.CreatedAt); err != nil {
-				return fmt.Errorf("scanning label: %w", err)
-			}
-			labels = append(labels, label)
-		}
-		if err := rows.Err(); err != nil {
-			return fmt.Errorf("iterating labels: %w", err)
-		}
-		return nil
-	})
+	rows, err := r.pool.Query(ctx, `SELECT name, color, created_at FROM labels ORDER BY name`)
 	if err != nil {
-		return nil, fmt.Errorf("listing labels: %w", err)
+		return nil, fmt.Errorf("listing labels: querying labels: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var label Label
+		if err := rows.Scan(&label.Name, &label.Color, &label.CreatedAt); err != nil {
+			return nil, fmt.Errorf("listing labels: scanning label: %w", err)
+		}
+		labels = append(labels, label)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("listing labels: iterating labels: %w", err)
 	}
 	return labels, nil
 }
 
 func (r *pgTaxonomyRepository) CreateLabel(ctx context.Context, name, color string) error {
-	err := r.metrics.Observe(ctx, "taxonomy.create_label", func(ctx context.Context) error {
-		_, err := r.pool.Exec(ctx,
-			`INSERT INTO labels (name, color) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING`,
-			name, color,
-		)
-		if err != nil {
-			return fmt.Errorf("executing label insert: %w", err)
-		}
-		return nil
-	})
+	_, err := r.pool.Exec(ctx,
+		`INSERT INTO labels (name, color) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING`,
+		name, color,
+	)
 	if err != nil {
-		return fmt.Errorf("creating label: %w", err)
+		return fmt.Errorf("creating label: executing label insert: %w", err)
 	}
 	return nil
 }
 
 func (r *pgTaxonomyRepository) UpdateLabel(ctx context.Context, name, color string) error {
-	err := r.metrics.Observe(ctx, "taxonomy.update_label", func(ctx context.Context) error {
-		tag, err := r.pool.Exec(ctx, `UPDATE labels SET color = $1 WHERE name = $2`, color, name)
-		if err != nil {
-			return fmt.Errorf("executing label update: %w", err)
-		}
-		if tag.RowsAffected() == 0 {
-			return ErrNotFound
-		}
-		return nil
-	})
+	tag, err := r.pool.Exec(ctx, `UPDATE labels SET color = $1 WHERE name = $2`, color, name)
 	if err != nil {
-		return fmt.Errorf("updating label: %w", err)
+		return fmt.Errorf("updating label: executing label update: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("updating label: %w", ErrNotFound)
 	}
 	return nil
 }
 
 func (r *pgTaxonomyRepository) DeleteLabel(ctx context.Context, name string, removeFromTransactions bool) error {
-	err := r.metrics.Observe(ctx, "taxonomy.delete_label", func(ctx context.Context) error {
-		tx, err := r.pool.Begin(ctx)
-		if err != nil {
-			return fmt.Errorf("beginning delete-label transaction: %w", err)
-		}
-		defer func() { _ = tx.Rollback(ctx) }()
-
-		if removeFromTransactions {
-			if _, err := tx.Exec(ctx, `DELETE FROM transaction_label_sources WHERE label = $1`, name); err != nil {
-				return fmt.Errorf("deleting label sources: %w", err)
-			}
-			if _, err := tx.Exec(ctx, `DELETE FROM transaction_labels WHERE label = $1`, name); err != nil {
-				return fmt.Errorf("deleting transaction labels: %w", err)
-			}
-		}
-
-		if _, err := tx.Exec(ctx, `DELETE FROM labels WHERE name = $1`, name); err != nil {
-			return fmt.Errorf("executing label delete: %w", err)
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return fmt.Errorf("committing delete-label transaction: %w", err)
-		}
-		return nil
-	})
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("deleting label: %w", err)
+		return fmt.Errorf("deleting label: beginning delete-label transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if removeFromTransactions {
+		if _, err := tx.Exec(ctx, `DELETE FROM transaction_label_sources WHERE label = $1`, name); err != nil {
+			return fmt.Errorf("deleting label: deleting label sources: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM transaction_labels WHERE label = $1`, name); err != nil {
+			return fmt.Errorf("deleting label: deleting transaction labels: %w", err)
+		}
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM labels WHERE name = $1`, name); err != nil {
+		return fmt.Errorf("deleting label: executing label delete: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("deleting label: committing delete-label transaction: %w", err)
 	}
 	return nil
 }
 
 func (r *pgTaxonomyRepository) ApplyLabelByMerchant(ctx context.Context, label, pattern string) (int64, error) {
-	var affected int64
-	err := r.metrics.Observe(ctx, "taxonomy.apply_label_by_merchant", func(ctx context.Context) error {
-		tx, err := r.pool.Begin(ctx)
-		if err != nil {
-			return fmt.Errorf("beginning apply-label-by-merchant transaction: %w", err)
-		}
-		defer func() { _ = tx.Rollback(ctx) }()
-
-		_, err = tx.Exec(ctx,
-			`INSERT INTO label_merchants (label, merchant_pattern)
-			 VALUES ($1, $2)
-			 ON CONFLICT (label, merchant_pattern) DO NOTHING`,
-			label, pattern,
-		)
-		if err != nil {
-			return fmt.Errorf("storing label merchant mapping: %w", err)
-		}
-
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO transaction_label_sources (transaction_id, label, source_type, merchant_pattern)
-			 SELECT id, $1, 'merchant', $2
-			 FROM transactions
-			 WHERE merchant_info ILIKE '%' || $2 || '%'
-			 ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING`,
-			label, pattern,
-		); err != nil {
-			return fmt.Errorf("storing merchant label sources: %w", err)
-		}
-
-		tag, err := tx.Exec(ctx,
-			`INSERT INTO transaction_labels (transaction_id, label)
-			 SELECT id, $1 FROM transactions
-			 WHERE merchant_info ILIKE '%' || $2 || '%'
-			 ON CONFLICT (transaction_id, label) DO NOTHING`,
-			label, pattern,
-		)
-		if err != nil {
-			return fmt.Errorf("applying label by merchant: %w", err)
-		}
-
-		if err := tx.Commit(ctx); err != nil {
-			return fmt.Errorf("committing apply-label-by-merchant transaction: %w", err)
-		}
-		affected = tag.RowsAffected()
-		return nil
-	})
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("beginning apply-label-by-merchant transaction: %w", err)
 	}
-	return affected, nil
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	_, err = tx.Exec(ctx,
+		`INSERT INTO label_merchants (label, merchant_pattern)
+		 VALUES ($1, $2)
+		 ON CONFLICT (label, merchant_pattern) DO NOTHING`,
+		label, pattern,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("storing label merchant mapping: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO transaction_label_sources (transaction_id, label, source_type, merchant_pattern)
+		 SELECT id, $1, 'merchant', $2
+		 FROM transactions
+		 WHERE merchant_info ILIKE '%' || $2 || '%'
+		 ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING`,
+		label, pattern,
+	); err != nil {
+		return 0, fmt.Errorf("storing merchant label sources: %w", err)
+	}
+
+	tag, err := tx.Exec(ctx,
+		`INSERT INTO transaction_labels (transaction_id, label)
+		 SELECT id, $1 FROM transactions
+		 WHERE merchant_info ILIKE '%' || $2 || '%'
+		 ON CONFLICT (transaction_id, label) DO NOTHING`,
+		label, pattern,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("applying label by merchant: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("committing apply-label-by-merchant transaction: %w", err)
+	}
+	return tag.RowsAffected(), nil
 }
 
 func (r *pgTaxonomyRepository) RemoveLabelByMerchant(ctx context.Context, label, pattern string) (int64, error) {
-	var removed int64
-	err := r.metrics.Observe(ctx, "taxonomy.remove_label_by_merchant", func(ctx context.Context) error {
-		tx, err := r.pool.Begin(ctx)
-		if err != nil {
-			return fmt.Errorf("beginning remove-label-by-merchant transaction: %w", err)
-		}
-		defer func() { _ = tx.Rollback(ctx) }()
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("beginning remove-label-by-merchant transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
 
-		if _, err := tx.Exec(ctx,
-			`DELETE FROM label_merchants
-			 WHERE label = $1 AND merchant_pattern = $2`,
-			label, pattern,
-		); err != nil {
-			return fmt.Errorf("removing merchant label mapping: %w", err)
-		}
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM label_merchants
+		 WHERE label = $1 AND merchant_pattern = $2`,
+		label, pattern,
+	); err != nil {
+		return 0, fmt.Errorf("removing merchant label mapping: %w", err)
+	}
 
-		affectedTxnIDs, err := loadMerchantLabelTransactionIDs(ctx, tx, label, pattern)
-		if err != nil {
-			return err
-		}
-
-		if _, err := tx.Exec(ctx,
-			`DELETE FROM transaction_label_sources
-			 WHERE label = $1
-			   AND source_type = 'merchant'
-			   AND merchant_pattern = $2`,
-			label, pattern,
-		); err != nil {
-			return fmt.Errorf("removing merchant label sources: %w", err)
-		}
-
-		removed, err = removeOrphanedTransactionLabels(ctx, tx, affectedTxnIDs, label)
-		if err != nil {
-			return err
-		}
-
-		if err := tx.Commit(ctx); err != nil {
-			return fmt.Errorf("committing remove-label-by-merchant transaction: %w", err)
-		}
-		return nil
-	})
+	affectedTxnIDs, err := loadMerchantLabelTransactionIDs(ctx, tx, label, pattern)
 	if err != nil {
 		return 0, err
+	}
+
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM transaction_label_sources
+		 WHERE label = $1
+		   AND source_type = 'merchant'
+		   AND merchant_pattern = $2`,
+		label, pattern,
+	); err != nil {
+		return 0, fmt.Errorf("removing merchant label sources: %w", err)
+	}
+
+	removed, err := removeOrphanedTransactionLabels(ctx, tx, affectedTxnIDs, label)
+	if err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("committing remove-label-by-merchant transaction: %w", err)
 	}
 	return removed, nil
 }
@@ -415,60 +358,47 @@ func transactionLabelHasSources(ctx context.Context, tx pgx.Tx, transactionID, l
 
 func (r *pgTaxonomyRepository) GetLabelMappings(ctx context.Context) (map[string][]string, error) {
 	result := make(map[string][]string)
-	err := r.metrics.Observe(ctx, "taxonomy.get_label_mappings", func(ctx context.Context) error {
-		rows, err := r.pool.Query(ctx, `
+	rows, err := r.pool.Query(ctx, `
 			SELECT label, merchant_pattern
 			FROM label_merchants
 			ORDER BY label, merchant_pattern
 		`)
-		if err != nil {
-			return fmt.Errorf("fetching label mappings: %w", err)
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var label, merchantPattern string
-			if err := rows.Scan(&label, &merchantPattern); err != nil {
-				return fmt.Errorf("scanning label mapping: %w", err)
-			}
-			result[label] = append(result[label], merchantPattern)
-		}
-		return rows.Err()
-	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetching label mappings: %w", err)
 	}
-	return result, nil
+	defer rows.Close()
+
+	for rows.Next() {
+		var label, merchantPattern string
+		if err := rows.Scan(&label, &merchantPattern); err != nil {
+			return nil, fmt.Errorf("scanning label mapping: %w", err)
+		}
+		result[label] = append(result[label], merchantPattern)
+	}
+	return result, rows.Err()
 }
 
-func (r *pgTaxonomyRepository) listTaxonomyItems(ctx context.Context, operation, query, itemName string) ([]taxonomyItem, error) {
+func (r *pgTaxonomyRepository) listTaxonomyItems(ctx context.Context, query, itemName string) ([]taxonomyItem, error) {
 	items := []taxonomyItem{}
-	err := r.metrics.Observe(ctx, operation, func(ctx context.Context) error {
-		rows, err := r.pool.Query(ctx, query)
-		if err != nil {
-			return fmt.Errorf("listing %ss: %w", itemName, err)
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var item taxonomyItem
-			if err := rows.Scan(&item.Name, &item.Description, &item.IsDefault); err != nil {
-				return fmt.Errorf("scanning %s: %w", itemName, err)
-			}
-			items = append(items, item)
-		}
-		return rows.Err()
-	})
+	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("listing %ss: %w", itemName, err)
 	}
-	return items, nil
+	defer rows.Close()
+
+	for rows.Next() {
+		var item taxonomyItem
+		if err := rows.Scan(&item.Name, &item.Description, &item.IsDefault); err != nil {
+			return nil, fmt.Errorf("scanning %s: %w", itemName, err)
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 func (r *pgTaxonomyRepository) ListCategories(ctx context.Context) ([]Category, error) {
 	items, err := r.listTaxonomyItems(
 		ctx,
-		"taxonomy.list_categories",
 		`SELECT name, COALESCE(description,''), is_default FROM categories ORDER BY name`,
 		"category",
 	)
@@ -483,38 +413,31 @@ func (r *pgTaxonomyRepository) ListCategories(ctx context.Context) ([]Category, 
 }
 
 func (r *pgTaxonomyRepository) CreateCategory(ctx context.Context, name, description string) error {
-	err := r.metrics.Observe(ctx, "taxonomy.create_category", func(ctx context.Context) error {
-		_, err := r.pool.Exec(ctx,
-			`INSERT INTO categories (name, description) VALUES ($1, NULLIF($2,''))
-			 ON CONFLICT (name) DO NOTHING`,
-			name, description,
-		)
-		if err != nil {
-			return fmt.Errorf("creating category: %w", err)
-		}
-		return nil
-	})
-	return err
+	_, err := r.pool.Exec(ctx,
+		`INSERT INTO categories (name, description) VALUES ($1, NULLIF($2,''))
+		 ON CONFLICT (name) DO NOTHING`,
+		name, description,
+	)
+	if err != nil {
+		return fmt.Errorf("creating category: %w", err)
+	}
+	return nil
 }
 
 func (r *pgTaxonomyRepository) DeleteCategory(ctx context.Context, name string, removeFromTransactions bool) error {
-	err := r.metrics.Observe(ctx, "taxonomy.delete_category", func(ctx context.Context) error {
-		return r.deleteNamedTaxonomy(ctx, name, removeFromTransactions, taxonomyDeleteSpec{
-			kind:                   "category",
-			selectDefaultSQL:       `SELECT is_default FROM categories WHERE name = $1`,
-			deleteEmptyMappingsSQL: `DELETE FROM merchant_categories WHERE category = $1 AND bucket IS NULL AND mcc_code IS NULL`,
-			clearMappingsSQL:       `UPDATE merchant_categories SET category = NULL, updated_at = NOW() WHERE category = $1`,
-			clearTransactionsSQL:   `UPDATE transactions SET category = '', updated_at = NOW() WHERE category = $1`,
-			deleteSQL:              `DELETE FROM categories WHERE name = $1`,
-		})
+	return r.deleteNamedTaxonomy(ctx, name, removeFromTransactions, taxonomyDeleteSpec{
+		kind:                   "category",
+		selectDefaultSQL:       `SELECT is_default FROM categories WHERE name = $1`,
+		deleteEmptyMappingsSQL: `DELETE FROM merchant_categories WHERE category = $1 AND bucket IS NULL AND mcc_code IS NULL`,
+		clearMappingsSQL:       `UPDATE merchant_categories SET category = NULL, updated_at = NOW() WHERE category = $1`,
+		clearTransactionsSQL:   `UPDATE transactions SET category = '', updated_at = NOW() WHERE category = $1`,
+		deleteSQL:              `DELETE FROM categories WHERE name = $1`,
 	})
-	return err
 }
 
 func (r *pgTaxonomyRepository) ListBuckets(ctx context.Context) ([]Bucket, error) {
 	items, err := r.listTaxonomyItems(
 		ctx,
-		"taxonomy.list_buckets",
 		`SELECT name, COALESCE(description,''), is_default FROM buckets ORDER BY name`,
 		"bucket",
 	)
@@ -529,32 +452,26 @@ func (r *pgTaxonomyRepository) ListBuckets(ctx context.Context) ([]Bucket, error
 }
 
 func (r *pgTaxonomyRepository) CreateBucket(ctx context.Context, name, description string) error {
-	err := r.metrics.Observe(ctx, "taxonomy.create_bucket", func(ctx context.Context) error {
-		_, err := r.pool.Exec(ctx,
-			`INSERT INTO buckets (name, description) VALUES ($1, NULLIF($2,''))
-			 ON CONFLICT (name) DO NOTHING`,
-			name, description,
-		)
-		if err != nil {
-			return fmt.Errorf("creating bucket: %w", err)
-		}
-		return nil
-	})
-	return err
+	_, err := r.pool.Exec(ctx,
+		`INSERT INTO buckets (name, description) VALUES ($1, NULLIF($2,''))
+		 ON CONFLICT (name) DO NOTHING`,
+		name, description,
+	)
+	if err != nil {
+		return fmt.Errorf("creating bucket: %w", err)
+	}
+	return nil
 }
 
 func (r *pgTaxonomyRepository) DeleteBucket(ctx context.Context, name string, removeFromTransactions bool) error {
-	err := r.metrics.Observe(ctx, "taxonomy.delete_bucket", func(ctx context.Context) error {
-		return r.deleteNamedTaxonomy(ctx, name, removeFromTransactions, taxonomyDeleteSpec{
-			kind:                   "bucket",
-			selectDefaultSQL:       `SELECT is_default FROM buckets WHERE name = $1`,
-			deleteEmptyMappingsSQL: `DELETE FROM merchant_categories WHERE bucket = $1 AND category IS NULL AND mcc_code IS NULL`,
-			clearMappingsSQL:       `UPDATE merchant_categories SET bucket = NULL, updated_at = NOW() WHERE bucket = $1`,
-			clearTransactionsSQL:   `UPDATE transactions SET bucket = '', updated_at = NOW() WHERE bucket = $1`,
-			deleteSQL:              `DELETE FROM buckets WHERE name = $1`,
-		})
+	return r.deleteNamedTaxonomy(ctx, name, removeFromTransactions, taxonomyDeleteSpec{
+		kind:                   "bucket",
+		selectDefaultSQL:       `SELECT is_default FROM buckets WHERE name = $1`,
+		deleteEmptyMappingsSQL: `DELETE FROM merchant_categories WHERE bucket = $1 AND category IS NULL AND mcc_code IS NULL`,
+		clearMappingsSQL:       `UPDATE merchant_categories SET bucket = NULL, updated_at = NOW() WHERE bucket = $1`,
+		clearTransactionsSQL:   `UPDATE transactions SET bucket = '', updated_at = NOW() WHERE bucket = $1`,
+		deleteSQL:              `DELETE FROM buckets WHERE name = $1`,
 	})
-	return err
 }
 
 type taxonomyDeleteSpec struct {

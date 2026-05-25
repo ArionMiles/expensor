@@ -16,6 +16,40 @@ services:
       timeout: 3s
       retries: 10
 
+  jaeger:
+    image: jaegertracing/jaeger:2.11.0
+    container_name: expensor-dev-jaeger
+    profiles: ["observability"]
+    ports:
+      - "16686:16686"
+      - "4319:4317"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.140.0
+    container_name: expensor-dev-otel-collector
+    profiles: ["observability"]
+    command: ["--config=/etc/otelcol-contrib/config.yml"]
+    volumes:
+      - ./otel-collector.local.yml:/etc/otelcol-contrib/config.yml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "8889:8889"
+    depends_on:
+      - jaeger
+
+  prometheus:
+    image: prom/prometheus:v3.7.3
+    container_name: expensor-dev-prometheus
+    profiles: ["observability"]
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./prometheus.local.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - otel-collector
+
 volumes:
   expensor_dev_postgres:
     driver: local
