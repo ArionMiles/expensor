@@ -733,11 +733,12 @@ func registerPlugins(registry *plugins.Registry, fs embed.FS, logger *slog.Logge
 
 	for _, p := range []plugins.ReaderPlugin{gmailPlugin, tbPlugin} {
 		if err := registry.RegisterReader(p); err != nil {
-			return fmt.Errorf("registering reader %s: %w", p.Name(), err)
+			return fmt.Errorf("registering reader %s: %w", p.Metadata().Name, err)
 		}
 	}
-	if err := registry.RegisterWriter(&postgresplugin.Plugin{}); err != nil {
-		return fmt.Errorf("registering postgres writer: %w", err)
+	postgresPlugin := &postgresplugin.Plugin{}
+	if err := registry.RegisterWriter(postgresPlugin); err != nil {
+		return fmt.Errorf("registering writer %s: %w", postgresPlugin.Metadata().Name, err)
 	}
 	return nil
 }

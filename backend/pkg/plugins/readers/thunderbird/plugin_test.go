@@ -8,31 +8,34 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 	"github.com/ArionMiles/expensor/backend/pkg/state"
 )
 
-func TestPlugin_Name(t *testing.T) {
+func TestPlugin_Metadata(t *testing.T) {
 	plugin := &Plugin{}
-	if got := plugin.Name(); got != "thunderbird" {
-		t.Errorf("Name() = %q, want %q", got, "thunderbird")
-	}
-}
+	plugin.SetGuideData([]byte(`{"sections":[]}`))
 
-func TestPlugin_Description(t *testing.T) {
-	plugin := &Plugin{}
-	desc := plugin.Description()
-	if desc == "" {
-		t.Error("Description() should not be empty")
+	metadata := plugin.Metadata()
+	if metadata.Name != "thunderbird" {
+		t.Errorf("Name = %q, want %q", metadata.Name, "thunderbird")
 	}
-}
-
-func TestPlugin_RequiredScopes(t *testing.T) {
-	plugin := &Plugin{}
-	scopes := plugin.RequiredScopes()
-	if len(scopes) != 0 {
-		t.Errorf("RequiredScopes() should be empty for Thunderbird, got %v", scopes)
+	if metadata.Description == "" {
+		t.Error("Description should not be empty")
+	}
+	if metadata.Auth.Type != plugins.AuthTypeConfig {
+		t.Errorf("Auth.Type = %q, want %q", metadata.Auth.Type, plugins.AuthTypeConfig)
+	}
+	if metadata.Auth.RequiresCredentialsUpload {
+		t.Error("RequiresCredentialsUpload = true, want false")
+	}
+	if len(metadata.ConfigSchema) == 0 {
+		t.Error("ConfigSchema should not be empty")
+	}
+	if len(metadata.SetupGuide) == 0 {
+		t.Error("SetupGuide should not be empty after SetGuideData")
 	}
 }
 
@@ -82,7 +85,12 @@ func TestPlugin_NewReader(t *testing.T) {
 	plugin := &Plugin{}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	reader, err := plugin.NewReader(nil, cfg, rules, nil, stateManager, nil, logger)
+	reader, err := plugin.NewReader(plugins.ReaderInput{
+		AppConfig:    cfg,
+		Rules:        rules,
+		StateManager: stateManager,
+		Logger:       logger,
+	})
 	if err != nil {
 		t.Fatalf("NewReader() failed: %v", err)
 	}
@@ -114,7 +122,12 @@ func TestPlugin_NewReader_MissingMailbox(t *testing.T) {
 	plugin := &Plugin{}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	_, err = plugin.NewReader(nil, cfg, []api.Rule{}, nil, stateManager, nil, logger)
+	_, err = plugin.NewReader(plugins.ReaderInput{
+		AppConfig:    cfg,
+		Rules:        []api.Rule{},
+		StateManager: stateManager,
+		Logger:       logger,
+	})
 	if err == nil {
 		t.Error("expected error for missing mailbox, got nil")
 	}
@@ -152,11 +165,49 @@ func TestPlugin_NewReader_DefaultInterval(t *testing.T) {
 	plugin := &Plugin{}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	reader, err := plugin.NewReader(nil, cfg, []api.Rule{}, nil, stateManager, nil, logger)
+	reader, err := plugin.NewReader(plugins.ReaderInput{
+		AppConfig:    cfg,
+		Rules:        []api.Rule{},
+		StateManager: stateManager,
+		Logger:       logger,
+	})
 	if err != nil {
 		t.Fatalf("NewReader() failed: %v", err)
 	}
 
+	if reader == nil {
+		t.Error("NewReader() returned nil reader")
+	}
+}
+
+func TestPlugin_NewReader_UsesPersistedReaderConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	mailDir := filepath.Join(tmpDir, "Mail", "Local Folders")
+	if err := os.MkdirAll(mailDir, 0o755); err != nil {
+		t.Fatalf("failed to create mail dir: %v", err)
+	}
+	for _, mailbox := range []string{"Inbox", "Sent"} {
+		if err := os.WriteFile(filepath.Join(mailDir, mailbox), []byte(""), 0o600); err != nil {
+			t.Fatalf("failed to create %s: %v", mailbox, err)
+		}
+	}
+
+	stateFile := filepath.Join(tmpDir, "state.json")
+	stateManager, err := state.New(stateFile, slog.Default())
+	if err != nil {
+		t.Fatalf("failed to create state manager: %v", err)
+	}
+
+	plugin := &Plugin{}
+	reader, err := plugin.NewReader(plugins.ReaderInput{
+		AppConfig:    &config.Config{},
+		ReaderConfig: []byte(`{"config":{"profilePath":"` + tmpDir + `","mailboxes":"Inbox,Sent"}}`),
+		StateManager: stateManager,
+		Logger:       slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
+	})
+	if err != nil {
+		t.Fatalf("NewReader() failed: %v", err)
+	}
 	if reader == nil {
 		t.Error("NewReader() returned nil reader")
 	}

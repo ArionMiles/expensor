@@ -2,9 +2,12 @@
 package plugins
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"reflect"
+	"strings"
 
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
@@ -31,16 +34,46 @@ type ConfigField struct {
 	DependsOn string `json:"depends_on,omitempty"`
 }
 
-// GuideProvider is an optional interface for reader plugins that provide setup guides.
-type GuideProvider interface {
-	SetupGuide() []byte
+// AuthSpec describes how a reader plugin authenticates.
+type AuthSpec struct {
+	Type                      AuthType `json:"type"`
+	RequiredScopes            []string `json:"required_scopes"`
+	RequiresCredentialsUpload bool     `json:"requires_credentials_upload"`
 }
 
-// ConfigApplier is an optional interface for reader plugins whose settings are
-// persisted via the web UI (POST /api/readers/{name}/config) rather than env vars.
-// Implement this to map the raw JSON config map onto config.Config before the daemon starts.
-type ConfigApplier interface {
-	ApplyConfig(cfg *config.Config, raw map[string]any)
+// ReaderMetadata describes a reader plugin for catalog display and selection.
+type ReaderMetadata struct {
+	Name         string          `json:"name"`
+	Description  string          `json:"description"`
+	Auth         AuthSpec        `json:"auth"`
+	ConfigSchema []ConfigField   `json:"config_schema"`
+	SetupGuide   json.RawMessage `json:"setup_guide,omitempty"`
+}
+
+// WriterMetadata describes a writer plugin for catalog display and selection.
+type WriterMetadata struct {
+	Name           string   `json:"name"`
+	Description    string   `json:"description"`
+	RequiredScopes []string `json:"required_scopes"`
+}
+
+// ReaderInput contains dependencies required to create a reader instance.
+type ReaderInput struct {
+	HTTPClient     *http.Client
+	AppConfig      *config.Config
+	ReaderConfig   json.RawMessage
+	Rules          []api.Rule
+	Resolver       api.CategoryResolver
+	StateManager   *state.Manager
+	DiagnosticSink api.DiagnosticSink
+	Logger         *slog.Logger
+}
+
+// WriterInput contains dependencies required to create a writer instance.
+type WriterInput struct {
+	HTTPClient *http.Client
+	AppConfig  *config.Config
+	Logger     *slog.Logger
 }
 
 // ReaderGuide is the structured setup guide for a reader plugin.
@@ -77,38 +110,14 @@ type GuideNote struct {
 
 // ReaderPlugin defines the interface for transaction reader plugins.
 type ReaderPlugin interface {
-	// Name returns the plugin name (e.g., "gmail", "thunderbird").
-	Name() string
-	// Description returns a human-readable description.
-	Description() string
-	// RequiredScopes returns the OAuth scopes needed by this plugin.
-	RequiredScopes() []string
-	// AuthType returns how this reader authenticates.
-	AuthType() AuthType
-	// RequiresCredentialsUpload reports whether the user must upload an OAuth
-	// client credentials file (e.g. client_secret.json for Gmail).
-	RequiresCredentialsUpload() bool
-	// ConfigSchema returns the configuration fields the user must provide.
-	// For OAuth readers this is typically empty; for config-only readers
-	// (e.g. Thunderbird) it describes the required fields.
-	ConfigSchema() []ConfigField
-	// NewReader creates a new reader instance with the given config.
-	NewReader(
-		httpClient *http.Client, cfg *config.Config, rules []api.Rule,
-		resolver api.CategoryResolver, stateManager *state.Manager, diagnosticSink api.DiagnosticSink, logger *slog.Logger,
-	) (api.Reader, error)
+	Metadata() ReaderMetadata
+	NewReader(input ReaderInput) (api.Reader, error)
 }
 
 // WriterPlugin defines the interface for transaction writer plugins.
 type WriterPlugin interface {
-	// Name returns the plugin name (e.g., "sheets", "postgres").
-	Name() string
-	// Description returns a human-readable description.
-	Description() string
-	// RequiredScopes returns the OAuth scopes needed by this plugin.
-	RequiredScopes() []string
-	// NewWriter creates a new writer instance with the given config.
-	NewWriter(httpClient *http.Client, cfg *config.Config, logger *slog.Logger) (api.Writer, error)
+	Metadata() WriterMetadata
+	NewWriter(input WriterInput) (api.Writer, error)
 }
 
 // Registry manages available reader and writer plugins.
@@ -127,7 +136,18 @@ func NewRegistry() *Registry {
 
 // RegisterReader registers a reader plugin.
 func (r *Registry) RegisterReader(plugin ReaderPlugin) error {
-	name := plugin.Name()
+	if isNilPlugin(plugin) {
+		return fmt.Errorf("reader plugin is nil")
+	}
+
+	metadata := plugin.Metadata()
+	name := metadata.Name
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("reader plugin name is required")
+	}
+	if len(metadata.SetupGuide) > 0 && !json.Valid(metadata.SetupGuide) {
+		return fmt.Errorf("reader plugin %q setup guide must be valid JSON", name)
+	}
 	if _, exists := r.readers[name]; exists {
 		return fmt.Errorf("reader plugin %q already registered", name)
 	}
@@ -137,7 +157,14 @@ func (r *Registry) RegisterReader(plugin ReaderPlugin) error {
 
 // RegisterWriter registers a writer plugin.
 func (r *Registry) RegisterWriter(plugin WriterPlugin) error {
-	name := plugin.Name()
+	if isNilPlugin(plugin) {
+		return fmt.Errorf("writer plugin is nil")
+	}
+
+	name := plugin.Metadata().Name
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("writer plugin name is required")
+	}
 	if _, exists := r.writers[name]; exists {
 		return fmt.Errorf("writer plugin %q already registered", name)
 	}
@@ -195,10 +222,10 @@ func (r *Registry) GetAllScopes(readerName, writerName string) ([]string, error)
 
 	// Combine and deduplicate scopes
 	scopeSet := make(map[string]struct{})
-	for _, scope := range reader.RequiredScopes() {
+	for _, scope := range reader.Metadata().Auth.RequiredScopes {
 		scopeSet[scope] = struct{}{}
 	}
-	for _, scope := range writer.RequiredScopes() {
+	for _, scope := range writer.Metadata().RequiredScopes {
 		scopeSet[scope] = struct{}{}
 	}
 
@@ -210,23 +237,16 @@ func (r *Registry) GetAllScopes(readerName, writerName string) ([]string, error)
 	return scopes, nil
 }
 
-// CreateReader creates a reader instance from a plugin.
-func (r *Registry) CreateReader( //nolint:revive // argument count mirrors the ReaderPlugin interface
-	name string, httpClient *http.Client, cfg *config.Config, rules []api.Rule,
-	resolver api.CategoryResolver, stateManager *state.Manager, diagnosticSink api.DiagnosticSink, logger *slog.Logger,
-) (api.Reader, error) {
-	plugin, err := r.GetReader(name)
-	if err != nil {
-		return nil, err
+func isNilPlugin(plugin any) bool {
+	if plugin == nil {
+		return true
 	}
-	return plugin.NewReader(httpClient, cfg, rules, resolver, stateManager, diagnosticSink, logger)
-}
 
-// CreateWriter creates a writer instance from a plugin.
-func (r *Registry) CreateWriter(name string, httpClient *http.Client, cfg *config.Config, logger *slog.Logger) (api.Writer, error) {
-	plugin, err := r.GetWriter(name)
-	if err != nil {
-		return nil, err
+	value := reflect.ValueOf(plugin)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
 	}
-	return plugin.NewWriter(httpClient, cfg, logger)
 }

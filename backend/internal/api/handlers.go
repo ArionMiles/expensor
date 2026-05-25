@@ -539,12 +539,17 @@ func (h *Handlers) HandleListReaders(w http.ResponseWriter, _ *http.Request) {
 	rps := h.registry.ListReaders()
 	infos := make([]ReaderInfo, 0, len(rps))
 	for _, p := range rps {
+		meta := p.Metadata()
+		configSchema := meta.ConfigSchema
+		if configSchema == nil {
+			configSchema = []plugins.ConfigField{}
+		}
 		infos = append(infos, ReaderInfo{
-			Name:                      p.Name(),
-			Description:               p.Description(),
-			AuthType:                  p.AuthType(),
-			RequiresCredentialsUpload: p.RequiresCredentialsUpload(),
-			ConfigSchema:              p.ConfigSchema(),
+			Name:                      meta.Name,
+			Description:               meta.Description,
+			AuthType:                  meta.Auth.Type,
+			RequiresCredentialsUpload: meta.Auth.RequiresCredentialsUpload,
+			ConfigSchema:              configSchema,
 		})
 	}
 	writeJSON(w, http.StatusOK, infos)
@@ -555,9 +560,10 @@ func (h *Handlers) HandleListWriters(w http.ResponseWriter, _ *http.Request) {
 	wps := h.registry.ListWriters()
 	infos := make([]WriterInfo, 0, len(wps))
 	for _, p := range wps {
+		meta := p.Metadata()
 		infos = append(infos, WriterInfo{
-			Name:        p.Name(),
-			Description: p.Description(),
+			Name:        meta.Name,
+			Description: meta.Description,
 		})
 	}
 	writeJSON(w, http.StatusOK, infos)
@@ -574,7 +580,7 @@ func (h *Handlers) HandleUploadCredentials(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
 		return
 	}
-	if !plugin.RequiresCredentialsUpload() {
+	if !plugin.Metadata().Auth.RequiresCredentialsUpload {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("reader %q does not require credentials upload", name))
 		return
 	}
@@ -649,7 +655,7 @@ func (h *Handlers) HandleAuthStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
 		return
 	}
-	if plugin.AuthType() != plugins.AuthTypeOAuth {
+	if plugin.Metadata().Auth.Type != plugins.AuthTypeOAuth {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("reader %q does not use OAuth", name))
 		return
 	}
@@ -671,8 +677,9 @@ func (h *Handlers) HandleAuthStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
-	h.logger.Debug("building OAuth config", "reader", name, "redirect_url", redirectURL, "scopes", plugin.RequiredScopes())
-	oauthCfg, err := client.GetOAuthConfig(secretJSON, redirectURL, plugin.RequiredScopes()...)
+	scopes := plugin.Metadata().Auth.RequiredScopes
+	h.logger.Debug("building OAuth config", "reader", name, "redirect_url", redirectURL, "scopes", scopes)
+	oauthCfg, err := client.GetOAuthConfig(secretJSON, redirectURL, scopes...)
 	if err != nil {
 		h.logger.Error("failed to parse credentials", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to parse credentials: "+err.Error())
@@ -730,7 +737,7 @@ func (h *Handlers) exchangeAndSaveToken(name, code, redirectURL string) error {
 		return errCredentialsMissing
 	}
 
-	oauthCfg, err := client.GetOAuthConfig(secretJSON, redirectURL, plugin.RequiredScopes()...)
+	oauthCfg, err := client.GetOAuthConfig(secretJSON, redirectURL, plugin.Metadata().Auth.RequiredScopes...)
 	if err != nil {
 		return fmt.Errorf("failed to parse credentials: %w", err)
 	}
@@ -860,7 +867,7 @@ func (h *Handlers) HandleAuthStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
 		return
 	}
-	if plugin.AuthType() != plugins.AuthTypeOAuth {
+	if plugin.Metadata().Auth.Type != plugins.AuthTypeOAuth {
 		// Config-only readers are always "authenticated" once configured.
 		writeJSON(w, http.StatusOK, map[string]any{"authenticated": true, "auth_type": plugins.AuthTypeConfig})
 		return
@@ -1030,9 +1037,10 @@ func (h *Handlers) HandleReaderStatus(w http.ResponseWriter, r *http.Request) {
 		Ready               bool             `json:"ready"`
 	}
 
-	st := readerStatus{AuthType: plugin.AuthType()}
+	meta := plugin.Metadata()
+	st := readerStatus{AuthType: meta.Auth.Type}
 
-	if plugin.RequiresCredentialsUpload() {
+	if meta.Auth.RequiresCredentialsUpload {
 		if h.store != nil {
 			_, ok, err := h.store.GetReaderSecret(r.Context(), name)
 			st.CredentialsUploaded = err == nil && ok
@@ -1041,7 +1049,7 @@ func (h *Handlers) HandleReaderStatus(w http.ResponseWriter, r *http.Request) {
 		st.CredentialsUploaded = true
 	}
 
-	if plugin.AuthType() == plugins.AuthTypeOAuth {
+	if meta.Auth.Type == plugins.AuthTypeOAuth {
 		if h.store != nil {
 			tokenJSON, ok, err := h.store.GetReaderToken(r.Context(), name)
 			if err == nil && ok {
@@ -1053,7 +1061,7 @@ func (h *Handlers) HandleReaderStatus(w http.ResponseWriter, r *http.Request) {
 		st.Authenticated = true
 	}
 
-	if len(plugin.ConfigSchema()) == 0 {
+	if len(meta.ConfigSchema) == 0 {
 		st.ConfigPresent = true
 	} else if h.store != nil {
 		_, ok, err := h.store.GetReaderConfig(r.Context(), name)
@@ -3033,7 +3041,7 @@ func (h *Handlers) HandleDiscoverMailboxes(w http.ResponseWriter, r *http.Reques
 }
 
 // HandleGetReaderGuide handles GET /api/readers/{name}/guide.
-// Returns the structured setup guide for a reader if it implements plugins.GuideProvider.
+// Returns the structured setup guide for a reader when metadata includes one.
 func (h *Handlers) HandleGetReaderGuide(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	plugin, err := h.registry.GetReader(name)
@@ -3041,13 +3049,13 @@ func (h *Handlers) HandleGetReaderGuide(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
 		return
 	}
-	gp, ok := plugin.(plugins.GuideProvider)
-	if !ok || gp.SetupGuide() == nil {
+	guideData := plugin.Metadata().SetupGuide
+	if len(guideData) == 0 {
 		writeError(w, http.StatusNotFound, "no setup guide available for this reader")
 		return
 	}
 	var guide plugins.ReaderGuide
-	if err := json.Unmarshal(gp.SetupGuide(), &guide); err != nil {
+	if err := json.Unmarshal(guideData, &guide); err != nil {
 		h.logger.Error("parsing reader guide", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to parse reader guide")
 		return

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -19,8 +20,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	pkgapi "github.com/ArionMiles/expensor/backend/pkg/api"
-	"github.com/ArionMiles/expensor/backend/pkg/config"
-	pkgstate "github.com/ArionMiles/expensor/backend/pkg/state"
 )
 
 // --- mocks ---
@@ -576,37 +575,48 @@ func newTestHandlers(t *testing.T, st Storer, dm DaemonStatusProvider, banksData
 // --- minimal plugin stubs ---
 
 type testReaderPlugin struct {
-	name          string
-	authType      plugins.AuthType
-	requiresCreds bool
-	schema        []plugins.ConfigField
+	name              string
+	authType          plugins.AuthType
+	requiresCreds     bool
+	scopes            []string
+	schema            []plugins.ConfigField
+	preserveNilSchema bool
+	guide             json.RawMessage
 }
 
-func (p *testReaderPlugin) Name() string                    { return p.name }
-func (p *testReaderPlugin) Description() string             { return p.name + " reader" }
-func (p *testReaderPlugin) RequiredScopes() []string        { return []string{} }
-func (p *testReaderPlugin) AuthType() plugins.AuthType      { return p.authType }
-func (p *testReaderPlugin) RequiresCredentialsUpload() bool { return p.requiresCreds }
-func (p *testReaderPlugin) ConfigSchema() []plugins.ConfigField {
-	if p.schema == nil {
-		return []plugins.ConfigField{}
+func (p *testReaderPlugin) Metadata() plugins.ReaderMetadata {
+	schema := p.schema
+	if schema == nil && !p.preserveNilSchema {
+		schema = []plugins.ConfigField{}
 	}
-	return p.schema
+	return plugins.ReaderMetadata{
+		Name:        p.name,
+		Description: p.name + " reader",
+		Auth: plugins.AuthSpec{
+			Type:                      p.authType,
+			RequiredScopes:            p.scopes,
+			RequiresCredentialsUpload: p.requiresCreds,
+		},
+		ConfigSchema: schema,
+		SetupGuide:   p.guide,
+	}
 }
 
-func (p *testReaderPlugin) NewReader( //nolint:revive
-	_ *http.Client, _ *config.Config, _ []pkgapi.Rule,
-	_ pkgapi.CategoryResolver, _ *pkgstate.Manager, _ pkgapi.DiagnosticSink, _ *slog.Logger,
-) (pkgapi.Reader, error) {
+func (p *testReaderPlugin) NewReader(_ plugins.ReaderInput) (pkgapi.Reader, error) {
 	return nil, errors.New("not implemented in test stub")
 }
 
 type testWriterPlugin struct{ name string }
 
-func (p *testWriterPlugin) Name() string             { return p.name }
-func (p *testWriterPlugin) Description() string      { return p.name + " writer" }
-func (p *testWriterPlugin) RequiredScopes() []string { return []string{} }
-func (p *testWriterPlugin) NewWriter(_ *http.Client, _ *config.Config, _ *slog.Logger) (pkgapi.Writer, error) {
+func (p *testWriterPlugin) Metadata() plugins.WriterMetadata {
+	return plugins.WriterMetadata{
+		Name:           p.name,
+		Description:    p.name + " writer",
+		RequiredScopes: []string{},
+	}
+}
+
+func (p *testWriterPlugin) NewWriter(_ plugins.WriterInput) (pkgapi.Writer, error) {
 	return nil, errors.New("not implemented in test stub")
 }
 
@@ -703,6 +713,36 @@ func TestHandleListReaders(t *testing.T) {
 	}
 }
 
+func TestHandleListReaders_NormalizesNilConfigSchema(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+	registry := plugins.NewRegistry()
+	if err := registry.RegisterReader(&testReaderPlugin{
+		name:              "nil-schema",
+		authType:          plugins.AuthTypeConfig,
+		preserveNilSchema: true,
+	}); err != nil {
+		t.Fatalf("RegisterReader() error = %v", err)
+	}
+	h.registry = registry
+
+	rr := get(h.HandleListReaders, "/api/plugins/readers")
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var readers []ReaderInfo
+	decodeJSON(t, rr.Body.String(), &readers)
+	if len(readers) != 1 {
+		t.Fatalf("expected 1 reader, got %d", len(readers))
+	}
+	if readers[0].ConfigSchema == nil {
+		t.Fatalf("config_schema = nil, want non-nil empty slice; body = %s", rr.Body.String())
+	}
+	if len(readers[0].ConfigSchema) != 0 {
+		t.Fatalf("config_schema len = %d, want 0", len(readers[0].ConfigSchema))
+	}
+}
+
 func TestHandleListWriters(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	rr := get(h.HandleListWriters, "/api/plugins/writers")
@@ -789,6 +829,50 @@ func TestHandleUploadCredentials_SavesToStore(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(h.dataDir, "client_secret_gmail.json")); !os.IsNotExist(err) {
 		t.Fatalf("credentials should not be written to disk, stat err=%v", err)
+	}
+}
+
+func TestHandleAuthStart_UsesMetadataScopes(t *testing.T) {
+	const expectedScope = "https://www.googleapis.com/auth/gmail.readonly"
+	secretJSON := `{
+		"installed": {
+			"client_id": "test-client-id.apps.googleusercontent.com",
+			"client_secret": "test-client-secret",
+			"auth_uri": "https://accounts.google.com/o/oauth2/auth",
+			"token_uri": "https://oauth2.googleapis.com/token",
+			"redirect_uris": ["http://localhost:8080/api/auth/callback"]
+		}
+	}`
+	st := &mockStore{readerSecrets: map[string][]byte{"scoped": []byte(secretJSON)}}
+	h := newTestHandlers(t, st, &mockDaemon{})
+	registry := plugins.NewRegistry()
+	if err := registry.RegisterReader(&testReaderPlugin{
+		name:          "scoped",
+		authType:      plugins.AuthTypeOAuth,
+		requiresCreds: true,
+		scopes:        []string{expectedScope},
+	}); err != nil {
+		t.Fatalf("RegisterReader() error = %v", err)
+	}
+	h.registry = registry
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/readers/scoped/auth/start", nil)
+	req.SetPathValue("name", "scoped")
+	rr := httptest.NewRecorder()
+
+	h.HandleAuthStart(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp map[string]string
+	decodeJSON(t, rr.Body.String(), &resp)
+	authURL, err := url.Parse(resp["url"])
+	if err != nil {
+		t.Fatalf("parse auth URL: %v", err)
+	}
+	if got := authURL.Query().Get("scope"); got != expectedScope {
+		t.Fatalf("scope = %q, want %q (url: %s)", got, expectedScope, resp["url"])
 	}
 }
 
@@ -2948,15 +3032,44 @@ func TestHandleDiscoverMailboxes_NonexistentProfile_Returns404(t *testing.T) {
 }
 
 func TestHandleGetReaderGuide_NoGuide_Returns404(t *testing.T) {
-	// testReaderPlugin (used by newTestHandlers) does not implement GuideProvider.
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/gmail/guide", nil)
-	req.SetPathValue("name", "gmail")
+	registry := plugins.NewRegistry()
+	if err := registry.RegisterReader(&testReaderPlugin{name: "noguide", authType: plugins.AuthTypeConfig}); err != nil {
+		t.Fatalf("RegisterReader() error = %v", err)
+	}
+	h.registry = registry
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/noguide/guide", nil)
+	req.SetPathValue("name", "noguide")
 	rr := httptest.NewRecorder()
+
 	h.HandleGetReaderGuide(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleGetReaderGuide_ReturnsMetadataGuide(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+	registry := plugins.NewRegistry()
+	guide := json.RawMessage(`{"sections":[{"title":"Setup","steps":[{"text":"Do the setup"}]}]}`)
+	if err := registry.RegisterReader(&testReaderPlugin{name: "guided", authType: plugins.AuthTypeConfig, guide: guide}); err != nil {
+		t.Fatalf("RegisterReader() error = %v", err)
+	}
+	h.registry = registry
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/guided/guide", nil)
+	req.SetPathValue("name", "guided")
+	rr := httptest.NewRecorder()
+
+	h.HandleGetReaderGuide(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "Do the setup") {
+		t.Fatalf("body = %s, want setup guide", rr.Body.String())
 	}
 }
 

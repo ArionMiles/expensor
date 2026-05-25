@@ -2,15 +2,9 @@ package plugins
 
 import (
 	"context"
-	"errors"
-	"log/slog"
-	"net/http"
-	"os"
 	"testing"
 
 	"github.com/ArionMiles/expensor/backend/pkg/api"
-	"github.com/ArionMiles/expensor/backend/pkg/config"
-	"github.com/ArionMiles/expensor/backend/pkg/state"
 )
 
 // mockReader implements api.Reader for testing.
@@ -32,23 +26,32 @@ type mockReaderPlugin struct {
 	name        string
 	description string
 	scopes      []string
-	createError error
+	guide       []byte
+	reader      api.Reader
+	err         error
+	input       ReaderInput
 }
 
-func (m *mockReaderPlugin) Name() string                    { return m.name }
-func (m *mockReaderPlugin) Description() string             { return m.description }
-func (m *mockReaderPlugin) RequiredScopes() []string        { return m.scopes }
-func (m *mockReaderPlugin) AuthType() AuthType              { return AuthTypeOAuth }
-func (m *mockReaderPlugin) RequiresCredentialsUpload() bool { return false }
-func (m *mockReaderPlugin) ConfigSchema() []ConfigField     { return nil }
-func (m *mockReaderPlugin) NewReader( //nolint:revive // interface method; argument count dictated by ReaderPlugin
-	httpClient *http.Client, cfg *config.Config, rules []api.Rule,
-	resolver api.CategoryResolver, stateManager *state.Manager, diagnosticSink api.DiagnosticSink, logger *slog.Logger,
-) (api.Reader, error) {
-	if m.createError != nil {
-		return nil, m.createError
+func (m *mockReaderPlugin) Metadata() ReaderMetadata {
+	return ReaderMetadata{
+		Name:        m.name,
+		Description: m.description,
+		Auth: AuthSpec{
+			Type:                      AuthTypeOAuth,
+			RequiredScopes:            m.scopes,
+			RequiresCredentialsUpload: false,
+		},
+		ConfigSchema: nil,
+		SetupGuide:   m.guide,
 	}
-	return &mockReader{}, nil
+}
+
+func (m *mockReaderPlugin) NewReader(input ReaderInput) (api.Reader, error) {
+	m.input = input
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.reader, nil
 }
 
 // mockWriterPlugin implements WriterPlugin for testing.
@@ -56,17 +59,21 @@ type mockWriterPlugin struct {
 	name        string
 	description string
 	scopes      []string
-	createError error
+	writer      api.Writer
+	err         error
+	input       WriterInput
 }
 
-func (m *mockWriterPlugin) Name() string             { return m.name }
-func (m *mockWriterPlugin) Description() string      { return m.description }
-func (m *mockWriterPlugin) RequiredScopes() []string { return m.scopes }
-func (m *mockWriterPlugin) NewWriter(httpClient *http.Client, cfg *config.Config, logger *slog.Logger) (api.Writer, error) {
-	if m.createError != nil {
-		return nil, m.createError
+func (m *mockWriterPlugin) Metadata() WriterMetadata {
+	return WriterMetadata{Name: m.name, Description: m.description, RequiredScopes: m.scopes}
+}
+
+func (m *mockWriterPlugin) NewWriter(input WriterInput) (api.Writer, error) {
+	m.input = input
+	if m.err != nil {
+		return nil, m.err
 	}
-	return &mockWriter{}, nil
+	return m.writer, nil
 }
 
 func TestNewRegistry(t *testing.T) {
@@ -116,12 +123,12 @@ func TestRegisterReader(t *testing.T) {
 			}
 
 			if !tt.wantErr {
-				plugin, err := registry.GetReader(tt.plugin.Name())
+				plugin, err := registry.GetReader(tt.plugin.Metadata().Name)
 				if err != nil {
 					t.Errorf("failed to get registered reader: %v", err)
 				}
-				if plugin.Name() != tt.plugin.Name() {
-					t.Errorf("expected plugin name %q, got %q", tt.plugin.Name(), plugin.Name())
+				if plugin.Metadata().Name != tt.plugin.Metadata().Name {
+					t.Errorf("expected plugin name %q, got %q", tt.plugin.Metadata().Name, plugin.Metadata().Name)
 				}
 			}
 		})
@@ -146,6 +153,57 @@ func TestRegisterReader_Duplicate(t *testing.T) {
 	expectedErr := `reader plugin "test-reader" already registered`
 	if err.Error() != expectedErr {
 		t.Errorf("expected error %q, got %q", expectedErr, err.Error())
+	}
+}
+
+func TestRegisterReader_RejectsNilPlugin(t *testing.T) {
+	registry := NewRegistry()
+
+	assertNotPanics(t, func() {
+		err := registry.RegisterReader(nil)
+		if err == nil {
+			t.Fatal("expected error for nil reader plugin, got nil")
+		}
+	})
+}
+
+func TestRegisterReader_RejectsTypedNilPlugin(t *testing.T) {
+	registry := NewRegistry()
+	var plugin *mockReaderPlugin
+
+	assertNotPanics(t, func() {
+		err := registry.RegisterReader(plugin)
+		if err == nil {
+			t.Fatal("expected error for typed nil reader plugin, got nil")
+		}
+	})
+}
+
+func TestRegisterReader_RejectsBlankName(t *testing.T) {
+	tests := []struct {
+		name       string
+		readerName string
+	}{
+		{name: "empty", readerName: ""},
+		{name: "whitespace", readerName: " \t\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			registry := NewRegistry()
+			err := registry.RegisterReader(&mockReaderPlugin{name: tt.readerName})
+			if err == nil {
+				t.Fatal("expected error for blank reader name, got nil")
+			}
+		})
+	}
+}
+
+func TestRegisterReader_RejectsInvalidSetupGuideJSON(t *testing.T) {
+	registry := NewRegistry()
+	err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", guide: []byte("{invalid")})
+	if err == nil {
+		t.Fatal("expected error for invalid setup guide JSON, got nil")
 	}
 }
 
@@ -176,12 +234,12 @@ func TestRegisterWriter(t *testing.T) {
 			}
 
 			if !tt.wantErr {
-				plugin, err := registry.GetWriter(tt.plugin.Name())
+				plugin, err := registry.GetWriter(tt.plugin.Metadata().Name)
 				if err != nil {
 					t.Errorf("failed to get registered writer: %v", err)
 				}
-				if plugin.Name() != tt.plugin.Name() {
-					t.Errorf("expected plugin name %q, got %q", tt.plugin.Name(), plugin.Name())
+				if plugin.Metadata().Name != tt.plugin.Metadata().Name {
+					t.Errorf("expected plugin name %q, got %q", tt.plugin.Metadata().Name, plugin.Metadata().Name)
 				}
 			}
 		})
@@ -206,6 +264,49 @@ func TestRegisterWriter_Duplicate(t *testing.T) {
 	expectedErr := `writer plugin "test-writer" already registered`
 	if err.Error() != expectedErr {
 		t.Errorf("expected error %q, got %q", expectedErr, err.Error())
+	}
+}
+
+func TestRegisterWriter_RejectsNilPlugin(t *testing.T) {
+	registry := NewRegistry()
+
+	assertNotPanics(t, func() {
+		err := registry.RegisterWriter(nil)
+		if err == nil {
+			t.Fatal("expected error for nil writer plugin, got nil")
+		}
+	})
+}
+
+func TestRegisterWriter_RejectsTypedNilPlugin(t *testing.T) {
+	registry := NewRegistry()
+	var plugin *mockWriterPlugin
+
+	assertNotPanics(t, func() {
+		err := registry.RegisterWriter(plugin)
+		if err == nil {
+			t.Fatal("expected error for typed nil writer plugin, got nil")
+		}
+	})
+}
+
+func TestRegisterWriter_RejectsBlankName(t *testing.T) {
+	tests := []struct {
+		name       string
+		writerName string
+	}{
+		{name: "empty", writerName: ""},
+		{name: "whitespace", writerName: " \t\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			registry := NewRegistry()
+			err := registry.RegisterWriter(&mockWriterPlugin{name: tt.writerName})
+			if err == nil {
+				t.Fatal("expected error for blank writer name, got nil")
+			}
+		})
 	}
 }
 
@@ -253,8 +354,8 @@ func TestGetReader(t *testing.T) {
 			if !tt.wantErr && got == nil {
 				t.Error("expected plugin, got nil")
 			}
-			if !tt.wantErr && got != nil && got.Name() != tt.pluginName {
-				t.Errorf("expected plugin name %q, got %q", tt.pluginName, got.Name())
+			if !tt.wantErr && got != nil && got.Metadata().Name != tt.pluginName {
+				t.Errorf("expected plugin name %q, got %q", tt.pluginName, got.Metadata().Name)
 			}
 		})
 	}
@@ -304,8 +405,8 @@ func TestGetWriter(t *testing.T) {
 			if !tt.wantErr && got == nil {
 				t.Error("expected plugin, got nil")
 			}
-			if !tt.wantErr && got != nil && got.Name() != tt.pluginName {
-				t.Errorf("expected plugin name %q, got %q", tt.pluginName, got.Name())
+			if !tt.wantErr && got != nil && got.Metadata().Name != tt.pluginName {
+				t.Errorf("expected plugin name %q, got %q", tt.pluginName, got.Metadata().Name)
 			}
 		})
 	}
@@ -339,7 +440,7 @@ func TestListReaders(t *testing.T) {
 	// Verify both are present (order not guaranteed)
 	names := make(map[string]bool)
 	for _, r := range readers {
-		names[r.Name()] = true
+		names[r.Metadata().Name] = true
 	}
 	if !names["reader1"] {
 		t.Error("reader1 not found in list")
@@ -377,7 +478,7 @@ func TestListWriters(t *testing.T) {
 	// Verify both are present (order not guaranteed)
 	names := make(map[string]bool)
 	for _, w := range writers {
-		names[w.Name()] = true
+		names[w.Metadata().Name] = true
 	}
 	if !names["writer1"] {
 		t.Error("writer1 not found in list")
@@ -491,112 +592,41 @@ func TestGetAllScopes_WriterNotFound(t *testing.T) {
 	}
 }
 
-func TestCreateReader(t *testing.T) {
-	tests := []struct {
-		name        string
-		createError error
-		wantErr     bool
-	}{
-		{
-			name:        "successful creation",
-			createError: nil,
-			wantErr:     false,
-		},
-		{
-			name:        "creation error",
-			createError: errors.New("failed to create"),
-			wantErr:     true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			registry := NewRegistry()
-			plugin := &mockReaderPlugin{
-				name:        "test-reader",
-				createError: tt.createError,
-			}
-			if err := registry.RegisterReader(plugin); err != nil {
-				t.Fatalf("RegisterReader: %v", err)
-			}
-
-			logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-			cfg := &config.Config{}
-			reader, err := registry.CreateReader("test-reader", &http.Client{}, cfg, []api.Rule{}, nil, nil, nil, logger)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("CreateReader() error = %v, wantErr %v", err, tt.wantErr)
-			}
-
-			if !tt.wantErr && reader == nil {
-				t.Error("expected reader, got nil")
-			}
-		})
-	}
-}
-
-func TestCreateReader_NotFound(t *testing.T) {
+func TestRegistryIsCatalogOnly(t *testing.T) {
 	registry := NewRegistry()
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	cfg := &config.Config{}
+	reader := &mockReaderPlugin{name: "test-reader", reader: &mockReader{}}
+	writer := &mockWriterPlugin{name: "test-writer", writer: &mockWriter{}}
 
-	_, err := registry.CreateReader("unknown", &http.Client{}, cfg, []api.Rule{}, nil, nil, nil, logger)
-	if err == nil {
-		t.Fatal("expected error for unknown reader, got nil")
+	if err := registry.RegisterReader(reader); err != nil {
+		t.Fatalf("RegisterReader() error = %v", err)
+	}
+	if err := registry.RegisterWriter(writer); err != nil {
+		t.Fatalf("RegisterWriter() error = %v", err)
+	}
+
+	gotReader, err := registry.GetReader("test-reader")
+	if err != nil {
+		t.Fatalf("GetReader() error = %v", err)
+	}
+	if gotReader.Metadata().Name != "test-reader" {
+		t.Fatalf("reader name = %q, want test-reader", gotReader.Metadata().Name)
+	}
+
+	gotWriter, err := registry.GetWriter("test-writer")
+	if err != nil {
+		t.Fatalf("GetWriter() error = %v", err)
+	}
+	if gotWriter.Metadata().Name != "test-writer" {
+		t.Fatalf("writer name = %q, want test-writer", gotWriter.Metadata().Name)
 	}
 }
 
-func TestCreateWriter(t *testing.T) {
-	tests := []struct {
-		name        string
-		createError error
-		wantErr     bool
-	}{
-		{
-			name:        "successful creation",
-			createError: nil,
-			wantErr:     false,
-		},
-		{
-			name:        "creation error",
-			createError: errors.New("failed to create"),
-			wantErr:     true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			registry := NewRegistry()
-			plugin := &mockWriterPlugin{
-				name:        "test-writer",
-				createError: tt.createError,
-			}
-			if err := registry.RegisterWriter(plugin); err != nil {
-				t.Fatalf("RegisterWriter: %v", err)
-			}
-
-			logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-			cfg := &config.Config{}
-			writer, err := registry.CreateWriter("test-writer", &http.Client{}, cfg, logger)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("CreateWriter() error = %v, wantErr %v", err, tt.wantErr)
-			}
-
-			if !tt.wantErr && writer == nil {
-				t.Error("expected writer, got nil")
-			}
-		})
-	}
-}
-
-func TestCreateWriter_NotFound(t *testing.T) {
-	registry := NewRegistry()
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	cfg := &config.Config{}
-
-	_, err := registry.CreateWriter("unknown", &http.Client{}, cfg, logger)
-	if err == nil {
-		t.Fatal("expected error for unknown writer, got nil")
-	}
+func assertNotPanics(t *testing.T, fn func()) {
+	t.Helper()
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t.Fatalf("unexpected panic: %v", recovered)
+		}
+	}()
+	fn()
 }

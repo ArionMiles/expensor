@@ -3,9 +3,9 @@ package postgres
 
 import (
 	"log/slog"
-	"net/http"
 	"time"
 
+	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 	pgwriter "github.com/ArionMiles/expensor/backend/pkg/writer/postgres"
@@ -14,25 +14,25 @@ import (
 // Plugin implements the WriterPlugin interface for PostgreSQL.
 type Plugin struct{}
 
-// Name returns the plugin name.
-func (p *Plugin) Name() string {
-	return "postgres"
-}
-
-// Description returns a human-readable description.
-func (p *Plugin) Description() string {
-	return "Write expense transactions to PostgreSQL database with multi-currency support"
-}
-
-// RequiredScopes returns the OAuth scopes needed by this plugin.
-// PostgreSQL writer doesn't require OAuth scopes.
-func (p *Plugin) RequiredScopes() []string {
-	return []string{}
+// Metadata returns catalog metadata for the PostgreSQL writer plugin.
+func (p *Plugin) Metadata() plugins.WriterMetadata {
+	return plugins.WriterMetadata{
+		Name:           "postgres",
+		Description:    "Write expense transactions to PostgreSQL database with multi-currency support",
+		RequiredScopes: []string{},
+	}
 }
 
 // NewWriter creates a new PostgreSQL writer instance.
-// Note: httpClient is ignored as PostgreSQL doesn't need OAuth.
-func (p *Plugin) NewWriter(httpClient *http.Client, cfg *config.Config, logger *slog.Logger) (api.Writer, error) {
+func (p *Plugin) NewWriter(input plugins.WriterInput) (api.Writer, error) {
+	cfg := input.AppConfig
+	if cfg == nil {
+		cfg = &config.Config{}
+	}
+	logger := input.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
 	logger.Debug("postgres writer config",
 		"host", cfg.Postgres.Host,
 		"port", cfg.Postgres.Port,
