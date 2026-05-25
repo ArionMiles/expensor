@@ -37,8 +37,8 @@ type WriterInfo struct {
 	Description string `json:"description"`
 }
 
-// HandleListReaders handles GET /api/plugins/readers.
-func (h *Handlers) HandleListReaders(w http.ResponseWriter, _ *http.Request) {
+// ListReaders handles GET /api/plugins/readers.
+func (h *Handlers) ListReaders(w http.ResponseWriter, _ *http.Request) {
 	rps := h.registry.ListReaders()
 	infos := make([]ReaderInfo, 0, len(rps))
 	for _, p := range rps {
@@ -58,8 +58,8 @@ func (h *Handlers) HandleListReaders(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, infos)
 }
 
-// HandleListWriters handles GET /api/plugins/writers.
-func (h *Handlers) HandleListWriters(w http.ResponseWriter, _ *http.Request) {
+// ListWriters handles GET /api/plugins/writers.
+func (h *Handlers) ListWriters(w http.ResponseWriter, _ *http.Request) {
 	wps := h.registry.ListWriters()
 	infos := make([]WriterInfo, 0, len(wps))
 	for _, p := range wps {
@@ -74,9 +74,9 @@ func (h *Handlers) HandleListWriters(w http.ResponseWriter, _ *http.Request) {
 
 // --- reader credentials upload ---
 
-// HandleUploadCredentials handles POST /api/readers/{name}/credentials.
+// UploadCredentials handles POST /api/readers/{name}/credentials.
 // Accepts a JSON file upload (e.g. Google client_secret.json) and saves it to the runtime store.
-func (h *Handlers) HandleUploadCredentials(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) UploadCredentials(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	plugin, err := h.registry.GetReader(name)
 	if err != nil {
@@ -126,8 +126,8 @@ func (h *Handlers) HandleUploadCredentials(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]string{"path": fmt.Sprintf("db://reader_runtime/%s/client_secret", name)})
 }
 
-// HandleCredentialsStatus handles GET /api/readers/{name}/credentials/status.
-func (h *Handlers) HandleCredentialsStatus(w http.ResponseWriter, r *http.Request) {
+// CredentialsStatus handles GET /api/readers/{name}/credentials/status.
+func (h *Handlers) CredentialsStatus(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.registry.GetReader(name); err != nil {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
@@ -149,9 +149,9 @@ func (h *Handlers) HandleCredentialsStatus(w http.ResponseWriter, r *http.Reques
 
 // --- OAuth flow ---
 
-// HandleAuthStart handles POST /api/readers/{name}/auth/start.
+// AuthStart handles POST /api/readers/{name}/auth/start.
 // Returns a Google OAuth consent URL for the given reader.
-func (h *Handlers) HandleAuthStart(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	plugin, err := h.registry.GetReader(name)
 	if err != nil {
@@ -267,9 +267,9 @@ func (h *Handlers) restartReaderDaemonAfterAuth(name string) {
 	}
 }
 
-// HandleAuthCallback handles GET /api/auth/callback.
+// AuthCallback handles GET /api/auth/callback.
 // This is the shared OAuth redirect target for all readers.
-func (h *Handlers) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) AuthCallback(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
 	code := r.URL.Query().Get("code")
 
@@ -302,11 +302,11 @@ func (h *Handlers) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, h.frontendURL+"/setup?auth=success&reader="+url.QueryEscape(name), http.StatusFound)
 }
 
-// HandleAuthExchange handles POST /api/readers/{name}/auth/exchange.
+// AuthExchange handles POST /api/readers/{name}/auth/exchange.
 // Accepts the full redirect URL (containing code and state params) pasted by
 // the user when the automatic redirect is unreachable (e.g. homeserver without
 // a public domain). Validates state, exchanges the code, and saves the token.
-func (h *Handlers) HandleAuthExchange(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 
 	var body struct {
@@ -362,8 +362,8 @@ func (h *Handlers) HandleAuthExchange(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "authorized"})
 }
 
-// HandleAuthStatus handles GET /api/readers/{name}/auth/status.
-func (h *Handlers) HandleAuthStatus(w http.ResponseWriter, r *http.Request) {
+// AuthStatus handles GET /api/readers/{name}/auth/status.
+func (h *Handlers) AuthStatus(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	plugin, err := h.registry.GetReader(name)
 	if err != nil {
@@ -403,9 +403,9 @@ func (h *Handlers) HandleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleDisconnectReader handles DELETE /api/readers/{name}.
+// DisconnectReader handles DELETE /api/readers/{name}.
 // Removes all stored credentials, token, and config files for the reader.
-func (h *Handlers) HandleDisconnectReader(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.registry.GetReader(name); err != nil {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
@@ -426,8 +426,8 @@ func (h *Handlers) HandleDisconnectReader(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]any{"status": "disconnected", "files_removed": []string{}})
 }
 
-// HandleRevokeToken handles DELETE /api/readers/{name}/auth/token.
-func (h *Handlers) HandleRevokeToken(w http.ResponseWriter, r *http.Request) {
+// RevokeToken handles DELETE /api/readers/{name}/auth/token.
+func (h *Handlers) RevokeToken(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.registry.GetReader(name); err != nil {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
@@ -458,8 +458,8 @@ func (h *Handlers) HandleRevokeToken(w http.ResponseWriter, r *http.Request) {
 
 // --- reader config (for config-only readers like Thunderbird) ---
 
-// HandleGetReaderConfig handles GET /api/readers/{name}/config.
-func (h *Handlers) HandleGetReaderConfig(w http.ResponseWriter, r *http.Request) {
+// GetReaderConfig handles GET /api/readers/{name}/config.
+func (h *Handlers) GetReaderConfig(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.registry.GetReader(name); err != nil {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
@@ -486,8 +486,8 @@ func (h *Handlers) HandleGetReaderConfig(w http.ResponseWriter, r *http.Request)
 	_, _ = w.Write(data) //nolint:gosec // data is JSON read from a known config file; Content-Type is already set to application/json
 }
 
-// HandleSaveReaderConfig handles POST /api/readers/{name}/config.
-func (h *Handlers) HandleSaveReaderConfig(w http.ResponseWriter, r *http.Request) {
+// SaveReaderConfig handles POST /api/readers/{name}/config.
+func (h *Handlers) SaveReaderConfig(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.registry.GetReader(name); err != nil {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
@@ -522,9 +522,9 @@ func (h *Handlers) HandleSaveReaderConfig(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
-// HandleReaderStatus handles GET /api/readers/{name}/status.
+// ReaderStatus handles GET /api/readers/{name}/status.
 // Returns overall readiness: credentials present, auth valid, config present.
-func (h *Handlers) HandleReaderStatus(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	plugin, err := h.registry.GetReader(name)
 	if err != nil {
@@ -575,10 +575,10 @@ func (h *Handlers) HandleReaderStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, st)
 }
 
-// HandleDiscoverProfiles handles GET /api/readers/thunderbird/discover/profiles.
+// DiscoverProfiles handles GET /api/readers/thunderbird/discover/profiles.
 // Returns discovered Thunderbird profile directories from platform paths,
 // the Docker mount /thunderbird-profile, and THUNDERBIRD_DATA_DIR env var.
-func (h *Handlers) HandleDiscoverProfiles(w http.ResponseWriter, _ *http.Request) {
+func (h *Handlers) DiscoverProfiles(w http.ResponseWriter, _ *http.Request) {
 	var paths []string
 	seen := make(map[string]struct{})
 
@@ -608,9 +608,9 @@ func (h *Handlers) HandleDiscoverProfiles(w http.ResponseWriter, _ *http.Request
 	writeJSON(w, http.StatusOK, map[string][]string{"profiles": paths})
 }
 
-// HandleDiscoverMailboxes handles GET /api/readers/thunderbird/discover/mailboxes?profile=<path>.
+// DiscoverMailboxes handles GET /api/readers/thunderbird/discover/mailboxes?profile=<path>.
 // Returns available MBOX mailbox names within the given Thunderbird profile directory.
-func (h *Handlers) HandleDiscoverMailboxes(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) DiscoverMailboxes(w http.ResponseWriter, r *http.Request) {
 	profile := r.URL.Query().Get("profile")
 	if profile == "" {
 		writeError(w, http.StatusBadRequest, "profile query parameter is required")
@@ -632,9 +632,9 @@ func (h *Handlers) HandleDiscoverMailboxes(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string][]string{"mailboxes": mailboxes})
 }
 
-// HandleGetReaderGuide handles GET /api/readers/{name}/guide.
+// GetReaderGuide handles GET /api/readers/{name}/guide.
 // Returns the structured setup guide for a reader when metadata includes one.
-func (h *Handlers) HandleGetReaderGuide(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) GetReaderGuide(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	plugin, err := h.registry.GetReader(name)
 	if err != nil {

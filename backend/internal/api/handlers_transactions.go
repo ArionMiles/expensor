@@ -16,7 +16,7 @@ import (
 
 // --- transactions ---
 
-// HandleListTransactions handles GET /api/transactions.
+// ListTransactions handles GET /api/transactions.
 // @Summary List transactions
 // @Tags Transactions
 // @Produce json
@@ -44,12 +44,12 @@ import (
 // @Param hour_to query int false "Maximum hour filter (0-23)"
 // @Param tz query string false "IANA timezone used for weekday/hour filters"
 // @Param sort_dir query string false "Sort direction" Enums(asc,desc)
-// @Success 200 {object} DocTransactionsListResponse
-// @Failure 400 {object} DocErrorResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Success 200 {object} TransactionsListResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /transactions [get]
-func (h *Handlers) HandleListTransactions(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -135,7 +135,7 @@ func (h *Handlers) HandleListTransactions(w http.ResponseWriter, r *http.Request
 		"transactions":  txns,
 		"total":         result.Total,
 		"total_amount":  result.TotalAmount,
-		"base_currency": h.getBaseCurrency(r.Context()),
+		"base_currency": h.currentBaseCurrency(r.Context()),
 		"page":          f.Page,
 		"page_size":     f.PageSize,
 	})
@@ -178,18 +178,18 @@ func containsControlChars(value string) bool {
 	return false
 }
 
-// HandleGetTransaction handles GET /api/transactions/{id}.
+// GetTransaction handles GET /api/transactions/{id}.
 // @Summary Get a transaction
 // @Tags Transactions
 // @Produce json
 // @Param id path string true "Transaction ID"
-// @Success 200 {object} DocTransactionResponse
-// @Failure 400 {object} DocErrorResponse
-// @Failure 404 {object} DocErrorResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Success 200 {object} TransactionResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /transactions/{id} [get]
-func (h *Handlers) HandleGetTransaction(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) GetTransaction(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -247,7 +247,7 @@ func (h *Handlers) validateBucket(w http.ResponseWriter, r *http.Request, name s
 	return false
 }
 
-// HandleUpdateTransaction handles PUT /api/transactions/{id}.
+// UpdateTransaction handles PUT /api/transactions/{id}.
 // Body: {"description": "...", "category": "...", "bucket": "..."}
 // All fields are optional; only non-nil fields are written.
 // @Summary Update a transaction
@@ -255,14 +255,14 @@ func (h *Handlers) validateBucket(w http.ResponseWriter, r *http.Request, name s
 // @Accept json
 // @Produce json
 // @Param id path string true "Transaction ID"
-// @Param request body DocTransactionUpdateRequest true "Transaction update payload"
-// @Success 200 {object} DocTransactionResponse
-// @Failure 404 {object} DocErrorResponse
-// @Failure 422 {object} DocErrorResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Param request body TransactionUpdateRequest true "Transaction update payload"
+// @Success 200 {object} TransactionResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /transactions/{id} [put]
-func (h *Handlers) HandleUpdateTransaction(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -310,21 +310,21 @@ func (h *Handlers) HandleUpdateTransaction(w http.ResponseWriter, r *http.Reques
 
 // --- muted transactions ---
 
-// HandleMuteTransaction handles PUT /api/transactions/{id}/mute.
+// MuteTransaction handles PUT /api/transactions/{id}/mute.
 // Body: {"muted": true|false}
 // @Summary Mute or unmute a transaction
 // @Tags Transactions
 // @Accept json
 // @Produce json
 // @Param id path string true "Transaction ID"
-// @Param request body DocMuteTransactionRequest true "Mute payload"
-// @Success 200 {object} DocMuteTransactionResponse
-// @Failure 400 {object} DocErrorResponse
-// @Failure 404 {object} DocErrorResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Param request body MuteTransactionRequest true "Mute payload"
+// @Success 200 {object} MuteTransactionResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /transactions/{id}/mute [put]
-func (h *Handlers) HandleMuteTransaction(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) MuteTransaction(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -350,7 +350,7 @@ func (h *Handlers) HandleMuteTransaction(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{"muted": body.Muted, "reason": body.Reason})
 }
 
-// HandleUpdateMuteReason handles PUT /api/transactions/{id}/mute-reason.
+// UpdateMuteReason handles PUT /api/transactions/{id}/mute-reason.
 // Body: {"reason": "optional text"}
 //
 // @Summary Update a transaction mute reason
@@ -358,16 +358,16 @@ func (h *Handlers) HandleMuteTransaction(w http.ResponseWriter, r *http.Request)
 // @Accept json
 // @Produce json
 // @Param id path string true "Transaction ID"
-// @Param request body DocUpdateMuteReasonRequest true "Mute reason payload"
-// @Success 200 {object} DocMuteReasonResponse
-// @Failure 400 {object} DocErrorResponse
-// @Failure 404 {object} DocErrorResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Param request body UpdateMuteReasonRequest true "Mute reason payload"
+// @Success 200 {object} MuteReasonResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /transactions/{id}/mute-reason [put]
 //
-//nolint:dupl // structurally similar to HandleUpdateMerchantReason but calls a different store method
-func (h *Handlers) HandleUpdateMuteReason(w http.ResponseWriter, r *http.Request) {
+//nolint:dupl // structurally similar to UpdateMerchantReason but calls a different store method
+func (h *Handlers) UpdateMuteReason(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -392,8 +392,8 @@ func (h *Handlers) HandleUpdateMuteReason(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]string{"reason": body.Reason})
 }
 
-// HandleListMutedMerchants handles GET /api/muted-merchants.
-func (h *Handlers) HandleListMutedMerchants(w http.ResponseWriter, r *http.Request) {
+// ListMutedMerchants handles GET /api/muted-merchants.
+func (h *Handlers) ListMutedMerchants(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -407,9 +407,9 @@ func (h *Handlers) HandleListMutedMerchants(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, merchants)
 }
 
-// HandleMuteByMerchant handles POST /api/muted-merchants.
+// MuteByMerchant handles POST /api/muted-merchants.
 // Body: {"pattern": "MERCHANT NAME", "reason": "optional"}
-func (h *Handlers) HandleMuteByMerchant(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) MuteByMerchant(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -430,11 +430,11 @@ func (h *Handlers) HandleMuteByMerchant(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusCreated, map[string]string{"pattern": body.Pattern})
 }
 
-// HandleUpdateMerchantReason handles PUT /api/muted-merchants/{id}/reason.
+// UpdateMerchantReason handles PUT /api/muted-merchants/{id}/reason.
 // Body: {"reason": "optional text"}
 //
-//nolint:dupl // structurally similar to HandleUpdateMuteReason but calls a different store method
-func (h *Handlers) HandleUpdateMerchantReason(w http.ResponseWriter, r *http.Request) {
+//nolint:dupl // structurally similar to UpdateMuteReason but calls a different store method
+func (h *Handlers) UpdateMerchantReason(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -459,10 +459,10 @@ func (h *Handlers) HandleUpdateMerchantReason(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, map[string]string{"reason": body.Reason})
 }
 
-// HandleDeleteMutedMerchant handles DELETE /api/muted-merchants/{id}.
+// DeleteMutedMerchant handles DELETE /api/muted-merchants/{id}.
 // Optional query param: ?unmute=true — atomically deletes the rule and
 // sets muted=false on all existing transactions that matched the pattern.
-func (h *Handlers) HandleDeleteMutedMerchant(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) DeleteMutedMerchant(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -489,10 +489,10 @@ func (h *Handlers) HandleDeleteMutedMerchant(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// HandleCategorizeMerchant handles POST /api/merchants/categorize.
+// CategorizeMerchant handles POST /api/merchants/categorize.
 // Body: {"merchant": "Name", "category": "Cat", "bucket": "Bucket"}
 // Response: {"updated": N}
-func (h *Handlers) HandleCategorizeMerchant(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) CategorizeMerchant(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -519,7 +519,7 @@ func (h *Handlers) HandleCategorizeMerchant(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]int{"updated": n})
 }
 
-// HandleSearchTransactions handles GET /api/transactions/search?q=...
+// SearchTransactions handles GET /api/transactions/search?q=...
 // @Summary Search transactions
 // @Tags Transactions
 // @Produce json
@@ -527,12 +527,12 @@ func (h *Handlers) HandleCategorizeMerchant(w http.ResponseWriter, r *http.Reque
 // @Param page query int false "1-based page number" default(1)
 // @Param page_size query int false "Page size" default(20)
 // @Param show_muted query int false "Include muted transactions when set to 1" Enums(1)
-// @Success 200 {object} DocTransactionsSearchResponse
-// @Failure 400 {object} DocErrorResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Success 200 {object} TransactionsSearchResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /transactions/search [get]
-func (h *Handlers) HandleSearchTransactions(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) SearchTransactions(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -565,24 +565,24 @@ func (h *Handlers) HandleSearchTransactions(w http.ResponseWriter, r *http.Reque
 		"transactions":  txns,
 		"total":         result.Total,
 		"total_amount":  result.TotalAmount,
-		"base_currency": h.getBaseCurrency(r.Context()),
+		"base_currency": h.currentBaseCurrency(r.Context()),
 		"page":          f.Page,
 		"page_size":     f.PageSize,
 		"query":         q,
 	})
 }
 
-// HandleGetFacets handles GET /api/transactions/facets.
+// GetFacets handles GET /api/transactions/facets.
 // Returns distinct values for source, category, currency, and label — used to
 // populate filter dropdowns in the UI.
 // @Summary Get transaction facets
 // @Tags Transactions
 // @Produce json
-// @Success 200 {object} DocFacetsResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Success 200 {object} FacetsResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /transactions/facets [get]
-func (h *Handlers) HandleGetFacets(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) GetFacets(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return

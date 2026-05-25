@@ -12,15 +12,15 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
-// HandleListLabels handles GET /api/config/labels.
+// ListLabels handles GET /api/config/labels.
 // @Summary List labels
 // @Tags Taxonomy
 // @Produce json
-// @Success 200 {array} DocLabelResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Success 200 {array} LabelResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /config/labels [get]
-func (h *Handlers) HandleListLabels(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) ListLabels(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -34,19 +34,19 @@ func (h *Handlers) HandleListLabels(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, labels)
 }
 
-// HandleCreateLabel handles POST /api/config/labels.
+// CreateLabel handles POST /api/config/labels.
 // Body: {"name": "food", "color": "#f59e0b"}
 // @Summary Create a label
 // @Tags Taxonomy
 // @Accept json
 // @Produce json
-// @Param request body DocCreateLabelRequest true "Label payload"
-// @Success 201 {object} DocLabelMutationResponse
-// @Failure 422 {object} DocErrorResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Param request body CreateLabelRequest true "Label payload"
+// @Success 201 {object} LabelMutationResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /config/labels [post]
-func (h *Handlers) HandleCreateLabel(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) CreateLabel(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -70,21 +70,21 @@ func (h *Handlers) HandleCreateLabel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{"name": body.Name, "color": body.Color})
 }
 
-// HandleUpdateLabel handles PUT /api/config/labels/{name}.
+// UpdateLabel handles PUT /api/config/labels/{name}.
 // Body: {"color": "#f59e0b"}
 // @Summary Update a label
 // @Tags Taxonomy
 // @Accept json
 // @Produce json
 // @Param name path string true "Label name"
-// @Param request body DocUpdateLabelRequest true "Label color payload"
-// @Success 200 {object} DocLabelMutationResponse
-// @Failure 404 {object} DocErrorResponse
-// @Failure 422 {object} DocErrorResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Param request body UpdateLabelRequest true "Label color payload"
+// @Success 200 {object} LabelMutationResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /config/labels/{name} [put]
-func (h *Handlers) HandleUpdateLabel(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) UpdateLabel(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -109,17 +109,17 @@ func (h *Handlers) HandleUpdateLabel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"name": name, "color": body.Color})
 }
 
-// HandleDeleteLabel handles DELETE /api/config/labels/{name}.
+// DeleteLabel handles DELETE /api/config/labels/{name}.
 // Body: {"remove_from_transactions": true}
 // @Summary Delete a label
 // @Tags Taxonomy
 // @Produce json
 // @Param name path string true "Label name"
 // @Success 204 "No Content"
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /config/labels/{name} [delete]
-func (h *Handlers) HandleDeleteLabel(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -137,20 +137,20 @@ func (h *Handlers) HandleDeleteLabel(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// HandleApplyLabel handles POST /api/config/labels/{name}/apply.
+// ApplyLabel handles POST /api/config/labels/{name}/apply.
 // Body: {"merchant_pattern": "swiggy"}
 // @Summary Apply a label by merchant pattern
 // @Tags Taxonomy
 // @Accept json
 // @Produce json
 // @Param name path string true "Label name"
-// @Param request body DocApplyLabelRequest true "Merchant pattern payload"
-// @Success 200 {object} DocAppliedCountResponse
-// @Failure 422 {object} DocErrorResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Param request body ApplyLabelRequest true "Merchant pattern payload"
+// @Success 200 {object} AppliedCountResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /config/labels/{name}/apply [post]
-func (h *Handlers) HandleApplyLabel(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) ApplyLabel(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -172,9 +172,9 @@ func (h *Handlers) HandleApplyLabel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"applied": affected})
 }
 
-// HandleRemoveLabelByMerchant handles DELETE /api/config/labels/{name}/merchant.
+// RemoveLabelByMerchant handles DELETE /api/config/labels/{name}/merchant.
 // Body: {"merchant_pattern": "swiggy"}
-func (h *Handlers) HandleRemoveLabelByMerchant(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) RemoveLabelByMerchant(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -196,12 +196,12 @@ func (h *Handlers) HandleRemoveLabelByMerchant(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, map[string]any{"removed": removed})
 }
 
-// HandleGetLabelMonthlySpend handles GET /api/stats/labels/monthly.
+// GetLabelMonthlySpend handles GET /api/stats/labels/monthly.
 // Query params:
 //   - dimension=labels|categories|buckets (default: labels)
 //
 // Response: {"labels":["Food","Travel"], "months":["2025-05","2025-06",...], "series":[{"label":"Food","data":[...]}]}
-func (h *Handlers) HandleGetLabelMonthlySpend(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) GetLabelMonthlySpend(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -227,16 +227,16 @@ func (h *Handlers) HandleGetLabelMonthlySpend(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, data)
 }
 
-// HandleGetLabelMappings handles GET /api/config/labels/mappings.
+// GetLabelMappings handles GET /api/config/labels/mappings.
 // Returns a map of label → persisted merchant patterns.
 // @Summary Get label mappings
 // @Tags Taxonomy
 // @Produce json
-// @Success 200 {object} DocLabelMappingsResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Success 200 {object} LabelMappingsResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /config/labels/mappings [get]
-func (h *Handlers) HandleGetLabelMappings(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) GetLabelMappings(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -250,9 +250,9 @@ func (h *Handlers) HandleGetLabelMappings(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, mappings)
 }
 
-// HandleExportLabels handles GET /api/config/labels/export.
+// ExportLabels handles GET /api/config/labels/export.
 // Returns labels with their persisted merchant mappings as a downloadable JSON file.
-func (h *Handlers) HandleExportLabels(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) ExportLabels(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -288,9 +288,9 @@ func (h *Handlers) HandleExportLabels(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(export)
 }
 
-// HandleExportCategories handles GET /api/config/categories/export.
+// ExportCategories handles GET /api/config/categories/export.
 // Returns categories with their persisted merchant mappings as a downloadable JSON file.
-func (h *Handlers) HandleExportCategories(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) ExportCategories(w http.ResponseWriter, r *http.Request) {
 	handleExportNamedTaxonomy(w, r, taxonomyExportConfig[store.Category]{
 		handlers:    h,
 		singular:    "category",
@@ -302,8 +302,8 @@ func (h *Handlers) HandleExportCategories(w http.ResponseWriter, r *http.Request
 	})
 }
 
-// HandleGetCategoryMappings handles GET /api/config/categories/mappings.
-func (h *Handlers) HandleGetCategoryMappings(w http.ResponseWriter, r *http.Request) {
+// GetCategoryMappings handles GET /api/config/categories/mappings.
+func (h *Handlers) GetCategoryMappings(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -317,15 +317,15 @@ func (h *Handlers) HandleGetCategoryMappings(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, mappings)
 }
 
-// HandleListCategories handles GET /api/config/categories.
+// ListCategories handles GET /api/config/categories.
 // @Summary List categories
 // @Tags Taxonomy
 // @Produce json
-// @Success 200 {array} DocCategoryResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Success 200 {array} CategoryResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /config/categories [get]
-func (h *Handlers) HandleListCategories(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) ListCategories(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -339,18 +339,18 @@ func (h *Handlers) HandleListCategories(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, cats)
 }
 
-// HandleCreateCategory handles POST /api/config/categories.
+// CreateCategory handles POST /api/config/categories.
 // @Summary Create a category
 // @Tags Taxonomy
 // @Accept json
 // @Produce json
-// @Param request body DocCreateCategoryRequest true "Category payload"
-// @Success 201 {object} DocNameResponse
-// @Failure 422 {object} DocErrorResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Param request body CreateCategoryRequest true "Category payload"
+// @Success 201 {object} NameResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /config/categories [post]
-func (h *Handlers) HandleCreateCategory(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) CreateCategory(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -371,17 +371,17 @@ func (h *Handlers) HandleCreateCategory(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusCreated, map[string]string{"name": body.Name})
 }
 
-// HandleDeleteCategory handles DELETE /api/config/categories/{name}.
+// DeleteCategory handles DELETE /api/config/categories/{name}.
 // @Summary Delete a category
 // @Tags Taxonomy
 // @Produce json
 // @Param name path string true "Category name"
 // @Success 204 "No Content"
-// @Failure 404 {object} DocErrorResponse
-// @Failure 409 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /config/categories/{name} [delete]
-func (h *Handlers) HandleDeleteCategory(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -403,25 +403,25 @@ func (h *Handlers) HandleDeleteCategory(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// HandleApplyCategoryByMerchant handles POST /api/config/categories/{name}/apply.
-func (h *Handlers) HandleApplyCategoryByMerchant(w http.ResponseWriter, r *http.Request) {
+// ApplyCategoryByMerchant handles POST /api/config/categories/{name}/apply.
+func (h *Handlers) ApplyCategoryByMerchant(w http.ResponseWriter, r *http.Request) {
 	h.handleApplyTaxonomyMerchant(w, r, "category", h.store.ApplyCategoryByMerchant)
 }
 
-// HandleRemoveCategoryByMerchant handles DELETE /api/config/categories/{name}/merchant.
-func (h *Handlers) HandleRemoveCategoryByMerchant(w http.ResponseWriter, r *http.Request) {
+// RemoveCategoryByMerchant handles DELETE /api/config/categories/{name}/merchant.
+func (h *Handlers) RemoveCategoryByMerchant(w http.ResponseWriter, r *http.Request) {
 	h.handleRemoveTaxonomyMerchant(w, r, "category", h.store.RemoveCategoryByMerchant)
 }
 
-// HandleListBuckets handles GET /api/config/buckets.
+// ListBuckets handles GET /api/config/buckets.
 // @Summary List buckets
 // @Tags Taxonomy
 // @Produce json
-// @Success 200 {array} DocBucketResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Success 200 {array} BucketResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /config/buckets [get]
-func (h *Handlers) HandleListBuckets(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) ListBuckets(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -435,18 +435,18 @@ func (h *Handlers) HandleListBuckets(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, bkts)
 }
 
-// HandleCreateBucket handles POST /api/config/buckets.
+// CreateBucket handles POST /api/config/buckets.
 // @Summary Create a bucket
 // @Tags Taxonomy
 // @Accept json
 // @Produce json
-// @Param request body DocCreateBucketRequest true "Bucket payload"
-// @Success 201 {object} DocNameResponse
-// @Failure 422 {object} DocErrorResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Param request body CreateBucketRequest true "Bucket payload"
+// @Success 201 {object} NameResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /config/buckets [post]
-func (h *Handlers) HandleCreateBucket(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) CreateBucket(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -467,17 +467,17 @@ func (h *Handlers) HandleCreateBucket(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{"name": body.Name})
 }
 
-// HandleDeleteBucket handles DELETE /api/config/buckets/{name}.
+// DeleteBucket handles DELETE /api/config/buckets/{name}.
 // @Summary Delete a bucket
 // @Tags Taxonomy
 // @Produce json
 // @Param name path string true "Bucket name"
 // @Success 204 "No Content"
-// @Failure 404 {object} DocErrorResponse
-// @Failure 409 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /config/buckets/{name} [delete]
-func (h *Handlers) HandleDeleteBucket(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) DeleteBucket(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -498,9 +498,9 @@ func (h *Handlers) HandleDeleteBucket(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// HandleExportBuckets handles GET /api/config/buckets/export.
+// ExportBuckets handles GET /api/config/buckets/export.
 // Returns buckets with their persisted merchant mappings as a downloadable JSON file.
-func (h *Handlers) HandleExportBuckets(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) ExportBuckets(w http.ResponseWriter, r *http.Request) {
 	handleExportNamedTaxonomy(w, r, taxonomyExportConfig[store.Bucket]{
 		handlers:    h,
 		singular:    "bucket",
@@ -512,8 +512,8 @@ func (h *Handlers) HandleExportBuckets(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleGetBucketMappings handles GET /api/config/buckets/mappings.
-func (h *Handlers) HandleGetBucketMappings(w http.ResponseWriter, r *http.Request) {
+// GetBucketMappings handles GET /api/config/buckets/mappings.
+func (h *Handlers) GetBucketMappings(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -527,13 +527,13 @@ func (h *Handlers) HandleGetBucketMappings(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, mappings)
 }
 
-// HandleApplyBucketByMerchant handles POST /api/config/buckets/{name}/apply.
-func (h *Handlers) HandleApplyBucketByMerchant(w http.ResponseWriter, r *http.Request) {
+// ApplyBucketByMerchant handles POST /api/config/buckets/{name}/apply.
+func (h *Handlers) ApplyBucketByMerchant(w http.ResponseWriter, r *http.Request) {
 	h.handleApplyTaxonomyMerchant(w, r, "bucket", h.store.ApplyBucketByMerchant)
 }
 
-// HandleRemoveBucketByMerchant handles DELETE /api/config/buckets/{name}/merchant.
-func (h *Handlers) HandleRemoveBucketByMerchant(w http.ResponseWriter, r *http.Request) {
+// RemoveBucketByMerchant handles DELETE /api/config/buckets/{name}/merchant.
+func (h *Handlers) RemoveBucketByMerchant(w http.ResponseWriter, r *http.Request) {
 	h.handleRemoveTaxonomyMerchant(w, r, "bucket", h.store.RemoveBucketByMerchant)
 }
 
@@ -660,20 +660,20 @@ func (h *Handlers) handleTaxonomyMerchant(
 	writeJSON(w, http.StatusOK, map[string]any{action.responseKey: count})
 }
 
-// HandleAddLabels handles POST /api/transactions/{id}/labels.
+// AddLabels handles POST /api/transactions/{id}/labels.
 // Body: {"labels": ["food", "recurring"]}
 // @Summary Add labels to a transaction
 // @Tags Transactions
 // @Accept json
 // @Produce json
 // @Param id path string true "Transaction ID"
-// @Param request body DocTransactionLabelsRequest true "Labels payload"
-// @Success 200 {object} DocStatusOnlyResponse
-// @Failure 422 {object} DocErrorResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Param request body TransactionLabelsRequest true "Labels payload"
+// @Success 200 {object} StatusOnlyResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /transactions/{id}/labels [post]
-func (h *Handlers) HandleAddLabels(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) AddLabels(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -697,18 +697,18 @@ func (h *Handlers) HandleAddLabels(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "added"})
 }
 
-// HandleRemoveLabel handles DELETE /api/transactions/{id}/labels/{label}.
+// RemoveLabel handles DELETE /api/transactions/{id}/labels/{label}.
 // @Summary Remove a label from a transaction
 // @Tags Transactions
 // @Produce json
 // @Param id path string true "Transaction ID"
 // @Param label path string true "Label name"
-// @Success 200 {object} DocStatusOnlyResponse
-// @Failure 404 {object} DocErrorResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Success 200 {object} StatusOnlyResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /transactions/{id}/labels/{label} [delete]
-func (h *Handlers) HandleRemoveLabel(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) RemoveLabel(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return

@@ -84,127 +84,127 @@ func spaHandler(dir string) http.HandlerFunc {
 // registerRoutes attaches all API routes to mux.
 func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	// Health, status & version
-	mux.HandleFunc("GET /api/health", h.HandleHealth)
-	mux.HandleFunc("GET /api/status", h.HandleStatus)
-	mux.HandleFunc("GET /api/version", h.HandleVersion)
-	mux.HandleFunc("POST /api/daemon/start", h.HandleStartDaemon)
-	mux.HandleFunc("POST /api/daemon/rescan", h.HandleRescan)
-	mux.HandleFunc("GET /api/config/active-reader", h.HandleGetActiveReader)
+	mux.HandleFunc("GET /api/health", h.Health)
+	mux.HandleFunc("GET /api/status", h.Status)
+	mux.HandleFunc("GET /api/version", h.Version)
+	mux.HandleFunc("POST /api/daemon/start", h.StartDaemon)
+	mux.HandleFunc("POST /api/daemon/rescan", h.Rescan)
+	mux.HandleFunc("GET /api/config/active-reader", h.GetActiveReader)
 
 	// Plugin listing
-	mux.HandleFunc("GET /api/plugins/readers", h.HandleListReaders)
-	mux.HandleFunc("GET /api/plugins/writers", h.HandleListWriters)
+	mux.HandleFunc("GET /api/plugins/readers", h.ListReaders)
+	mux.HandleFunc("GET /api/plugins/writers", h.ListWriters)
 
 	// Thunderbird profile/mailbox discovery (must precede wildcard /api/readers/{name}/... routes)
-	mux.HandleFunc("GET /api/readers/thunderbird/discover/profiles", h.HandleDiscoverProfiles)
-	mux.HandleFunc("GET /api/readers/thunderbird/discover/mailboxes", h.HandleDiscoverMailboxes)
+	mux.HandleFunc("GET /api/readers/thunderbird/discover/profiles", h.DiscoverProfiles)
+	mux.HandleFunc("GET /api/readers/thunderbird/discover/mailboxes", h.DiscoverMailboxes)
 
 	// Reader setup guide (must precede wildcard /api/readers/{name}/... routes)
-	mux.HandleFunc("GET /api/readers/{name}/guide", h.HandleGetReaderGuide)
+	mux.HandleFunc("GET /api/readers/{name}/guide", h.GetReaderGuide)
 
 	// Reader credentials (OAuth readers that need client_secret.json upload)
-	mux.HandleFunc("POST /api/readers/{name}/credentials", h.HandleUploadCredentials)
-	mux.HandleFunc("GET /api/readers/{name}/credentials/status", h.HandleCredentialsStatus)
+	mux.HandleFunc("POST /api/readers/{name}/credentials", h.UploadCredentials)
+	mux.HandleFunc("GET /api/readers/{name}/credentials/status", h.CredentialsStatus)
 
 	// OAuth flow
-	mux.HandleFunc("POST /api/readers/{name}/auth/start", h.HandleAuthStart)
-	mux.HandleFunc("GET /api/auth/callback", h.HandleAuthCallback)                 // shared redirect URI
-	mux.HandleFunc("POST /api/readers/{name}/auth/exchange", h.HandleAuthExchange) // manual paste flow for homeservers
-	mux.HandleFunc("GET /api/readers/{name}/auth/status", h.HandleAuthStatus)
-	mux.HandleFunc("DELETE /api/readers/{name}/auth/token", h.HandleRevokeToken)
+	mux.HandleFunc("POST /api/readers/{name}/auth/start", h.AuthStart)
+	mux.HandleFunc("GET /api/auth/callback", h.AuthCallback)                 // shared redirect URI
+	mux.HandleFunc("POST /api/readers/{name}/auth/exchange", h.AuthExchange) // manual paste flow for homeservers
+	mux.HandleFunc("GET /api/readers/{name}/auth/status", h.AuthStatus)
+	mux.HandleFunc("DELETE /api/readers/{name}/auth/token", h.RevokeToken)
 
 	// Reader config (config-only readers like Thunderbird, plus optional settings for OAuth readers)
-	mux.HandleFunc("GET /api/readers/{name}/config", h.HandleGetReaderConfig)
-	mux.HandleFunc("POST /api/readers/{name}/config", h.HandleSaveReaderConfig)
+	mux.HandleFunc("GET /api/readers/{name}/config", h.GetReaderConfig)
+	mux.HandleFunc("POST /api/readers/{name}/config", h.SaveReaderConfig)
 
 	// Reader overall readiness
-	mux.HandleFunc("GET /api/readers/{name}/status", h.HandleReaderStatus)
+	mux.HandleFunc("GET /api/readers/{name}/status", h.ReaderStatus)
 
 	// Full reader disconnect (removes all credentials/token/config files)
-	mux.HandleFunc("DELETE /api/readers/{name}", h.HandleDisconnectReader)
+	mux.HandleFunc("DELETE /api/readers/{name}", h.DisconnectReader)
 
 	// Chart data
-	mux.HandleFunc("GET /api/stats/dashboard", h.HandleGetDashboardData)
-	mux.HandleFunc("GET /api/stats/charts", h.HandleGetChartData)
-	mux.HandleFunc("GET /api/stats/labels/monthly", h.HandleGetLabelMonthlySpend)
-	mux.HandleFunc("GET /api/stats/heatmap", h.HandleGetHeatmap)
-	mux.HandleFunc("GET /api/stats/heatmap/annual", h.HandleGetAnnualHeatmap)
+	mux.HandleFunc("GET /api/stats/dashboard", h.GetDashboardData)
+	mux.HandleFunc("GET /api/stats/charts", h.GetChartData)
+	mux.HandleFunc("GET /api/stats/labels/monthly", h.GetLabelMonthlySpend)
+	mux.HandleFunc("GET /api/stats/heatmap", h.GetHeatmap)
+	mux.HandleFunc("GET /api/stats/heatmap/annual", h.GetAnnualHeatmap)
 
 	// App configuration
-	mux.HandleFunc("GET /api/config/banks", h.HandleListBanks)
-	mux.HandleFunc("GET /api/config/setup-status", h.HandleGetSetupStatus)
-	mux.HandleFunc("POST /api/config/sync", h.HandleTriggerSync)
-	mux.HandleFunc("GET /api/config/sync/status", h.HandleGetSyncStatus)
-	mux.HandleFunc("GET /api/config/base-currency", h.HandleGetBaseCurrency)
-	mux.HandleFunc("PUT /api/config/base-currency", h.HandleSetBaseCurrency)
-	mux.HandleFunc("GET /api/config/scan-interval", h.HandleGetScanInterval)
-	mux.HandleFunc("PUT /api/config/scan-interval", h.HandleSetScanInterval)
-	mux.HandleFunc("GET /api/config/lookback-days", h.HandleGetLookbackDays)
-	mux.HandleFunc("PUT /api/config/lookback-days", h.HandleSetLookbackDays)
-	mux.HandleFunc("GET /api/config/timezone", h.HandleGetTimezone)
-	mux.HandleFunc("PUT /api/config/timezone", h.HandleSetTimezone)
-	mux.HandleFunc("GET /api/config/time-format", h.HandleGetTimeFormat)
-	mux.HandleFunc("PUT /api/config/time-format", h.HandleSetTimeFormat)
-	mux.HandleFunc("GET /api/config/readers/{name}/checkpoint", h.HandleGetReaderCheckpoint)
-	mux.HandleFunc("DELETE /api/config/readers/{name}/checkpoint", h.HandleClearReaderCheckpoint)
+	mux.HandleFunc("GET /api/config/banks", h.ListBanks)
+	mux.HandleFunc("GET /api/config/setup-status", h.GetSetupStatus)
+	mux.HandleFunc("POST /api/config/sync", h.TriggerSync)
+	mux.HandleFunc("GET /api/config/sync/status", h.GetSyncStatus)
+	mux.HandleFunc("GET /api/config/base-currency", h.GetBaseCurrency)
+	mux.HandleFunc("PUT /api/config/base-currency", h.SetBaseCurrency)
+	mux.HandleFunc("GET /api/config/scan-interval", h.GetScanInterval)
+	mux.HandleFunc("PUT /api/config/scan-interval", h.SetScanInterval)
+	mux.HandleFunc("GET /api/config/lookback-days", h.GetLookbackDays)
+	mux.HandleFunc("PUT /api/config/lookback-days", h.SetLookbackDays)
+	mux.HandleFunc("GET /api/config/timezone", h.GetTimezone)
+	mux.HandleFunc("PUT /api/config/timezone", h.SetTimezone)
+	mux.HandleFunc("GET /api/config/time-format", h.GetTimeFormat)
+	mux.HandleFunc("PUT /api/config/time-format", h.SetTimeFormat)
+	mux.HandleFunc("GET /api/config/readers/{name}/checkpoint", h.GetReaderCheckpoint)
+	mux.HandleFunc("DELETE /api/config/readers/{name}/checkpoint", h.ClearReaderCheckpoint)
 
 	// Labels taxonomy
-	mux.HandleFunc("GET /api/config/labels/export", h.HandleExportLabels)       // must precede /{name}
-	mux.HandleFunc("GET /api/config/labels/mappings", h.HandleGetLabelMappings) // must precede /{name}
-	mux.HandleFunc("GET /api/config/labels", h.HandleListLabels)
-	mux.HandleFunc("POST /api/config/labels", h.HandleCreateLabel)
-	mux.HandleFunc("PUT /api/config/labels/{name}", h.HandleUpdateLabel)
-	mux.HandleFunc("DELETE /api/config/labels/{name}", h.HandleDeleteLabel)
-	mux.HandleFunc("POST /api/config/labels/{name}/apply", h.HandleApplyLabel)
-	mux.HandleFunc("DELETE /api/config/labels/{name}/merchant", h.HandleRemoveLabelByMerchant)
+	mux.HandleFunc("GET /api/config/labels/export", h.ExportLabels)       // must precede /{name}
+	mux.HandleFunc("GET /api/config/labels/mappings", h.GetLabelMappings) // must precede /{name}
+	mux.HandleFunc("GET /api/config/labels", h.ListLabels)
+	mux.HandleFunc("POST /api/config/labels", h.CreateLabel)
+	mux.HandleFunc("PUT /api/config/labels/{name}", h.UpdateLabel)
+	mux.HandleFunc("DELETE /api/config/labels/{name}", h.DeleteLabel)
+	mux.HandleFunc("POST /api/config/labels/{name}/apply", h.ApplyLabel)
+	mux.HandleFunc("DELETE /api/config/labels/{name}/merchant", h.RemoveLabelByMerchant)
 
 	// Categories and buckets
-	mux.HandleFunc("GET /api/config/categories/export", h.HandleExportCategories)      // must precede /{name}
-	mux.HandleFunc("GET /api/config/categories/mappings", h.HandleGetCategoryMappings) // must precede /{name}
-	mux.HandleFunc("GET /api/config/categories", h.HandleListCategories)
-	mux.HandleFunc("POST /api/config/categories", h.HandleCreateCategory)
-	mux.HandleFunc("DELETE /api/config/categories/{name}", h.HandleDeleteCategory)
-	mux.HandleFunc("POST /api/config/categories/{name}/apply", h.HandleApplyCategoryByMerchant)
-	mux.HandleFunc("DELETE /api/config/categories/{name}/merchant", h.HandleRemoveCategoryByMerchant)
-	mux.HandleFunc("GET /api/config/buckets/export", h.HandleExportBuckets)       // must precede /{name}
-	mux.HandleFunc("GET /api/config/buckets/mappings", h.HandleGetBucketMappings) // must precede /{name}
-	mux.HandleFunc("GET /api/config/buckets", h.HandleListBuckets)
-	mux.HandleFunc("POST /api/config/buckets", h.HandleCreateBucket)
-	mux.HandleFunc("DELETE /api/config/buckets/{name}", h.HandleDeleteBucket)
-	mux.HandleFunc("POST /api/config/buckets/{name}/apply", h.HandleApplyBucketByMerchant)
-	mux.HandleFunc("DELETE /api/config/buckets/{name}/merchant", h.HandleRemoveBucketByMerchant)
+	mux.HandleFunc("GET /api/config/categories/export", h.ExportCategories)      // must precede /{name}
+	mux.HandleFunc("GET /api/config/categories/mappings", h.GetCategoryMappings) // must precede /{name}
+	mux.HandleFunc("GET /api/config/categories", h.ListCategories)
+	mux.HandleFunc("POST /api/config/categories", h.CreateCategory)
+	mux.HandleFunc("DELETE /api/config/categories/{name}", h.DeleteCategory)
+	mux.HandleFunc("POST /api/config/categories/{name}/apply", h.ApplyCategoryByMerchant)
+	mux.HandleFunc("DELETE /api/config/categories/{name}/merchant", h.RemoveCategoryByMerchant)
+	mux.HandleFunc("GET /api/config/buckets/export", h.ExportBuckets)       // must precede /{name}
+	mux.HandleFunc("GET /api/config/buckets/mappings", h.GetBucketMappings) // must precede /{name}
+	mux.HandleFunc("GET /api/config/buckets", h.ListBuckets)
+	mux.HandleFunc("POST /api/config/buckets", h.CreateBucket)
+	mux.HandleFunc("DELETE /api/config/buckets/{name}", h.DeleteBucket)
+	mux.HandleFunc("POST /api/config/buckets/{name}/apply", h.ApplyBucketByMerchant)
+	mux.HandleFunc("DELETE /api/config/buckets/{name}/merchant", h.RemoveBucketByMerchant)
 
 	// Rules — export and import before /{id} to avoid wildcard capture
-	mux.HandleFunc("GET /api/rules", h.HandleListRules)
-	mux.HandleFunc("GET /api/rules/export", h.HandleExportRules)
-	mux.HandleFunc("POST /api/rules/import", h.HandleImportRules)
-	mux.HandleFunc("POST /api/rules", h.HandleCreateRule)
-	mux.HandleFunc("PUT /api/rules/{id}", h.HandleUpdateRule)
-	mux.HandleFunc("DELETE /api/rules/{id}", h.HandleDeleteRule)
+	mux.HandleFunc("GET /api/rules", h.ListRules)
+	mux.HandleFunc("GET /api/rules/export", h.ExportRules)
+	mux.HandleFunc("POST /api/rules/import", h.ImportRules)
+	mux.HandleFunc("POST /api/rules", h.CreateRule)
+	mux.HandleFunc("PUT /api/rules/{id}", h.UpdateRule)
+	mux.HandleFunc("DELETE /api/rules/{id}", h.DeleteRule)
 
 	// Transactions
 	// /search and /facets must be registered before /{id} to avoid the wildcard swallowing them.
-	mux.HandleFunc("GET /api/transactions/search", h.HandleSearchTransactions)
-	mux.HandleFunc("GET /api/transactions/facets", h.HandleGetFacets)
-	mux.HandleFunc("GET /api/transactions", h.HandleListTransactions)
-	mux.HandleFunc("GET /api/transactions/{id}", h.HandleGetTransaction)
-	mux.HandleFunc("PUT /api/transactions/{id}", h.HandleUpdateTransaction)
-	mux.HandleFunc("POST /api/transactions/{id}/labels", h.HandleAddLabels)
-	mux.HandleFunc("DELETE /api/transactions/{id}/labels/{label}", h.HandleRemoveLabel)
-	mux.HandleFunc("PUT /api/transactions/{id}/mute", h.HandleMuteTransaction)
-	mux.HandleFunc("PUT /api/transactions/{id}/mute-reason", h.HandleUpdateMuteReason)
+	mux.HandleFunc("GET /api/transactions/search", h.SearchTransactions)
+	mux.HandleFunc("GET /api/transactions/facets", h.GetFacets)
+	mux.HandleFunc("GET /api/transactions", h.ListTransactions)
+	mux.HandleFunc("GET /api/transactions/{id}", h.GetTransaction)
+	mux.HandleFunc("PUT /api/transactions/{id}", h.UpdateTransaction)
+	mux.HandleFunc("POST /api/transactions/{id}/labels", h.AddLabels)
+	mux.HandleFunc("DELETE /api/transactions/{id}/labels/{label}", h.RemoveLabel)
+	mux.HandleFunc("PUT /api/transactions/{id}/mute", h.MuteTransaction)
+	mux.HandleFunc("PUT /api/transactions/{id}/mute-reason", h.UpdateMuteReason)
 
 	// Extraction diagnostics
-	mux.HandleFunc("GET /api/extraction-diagnostics", h.HandleListExtractionDiagnostics)
-	mux.HandleFunc("GET /api/extraction-diagnostics/{id}", h.HandleGetExtractionDiagnostic)
-	mux.HandleFunc("PUT /api/extraction-diagnostics/{id}/status", h.HandleUpdateExtractionDiagnosticStatus)
+	mux.HandleFunc("GET /api/extraction-diagnostics", h.ListExtractionDiagnostics)
+	mux.HandleFunc("GET /api/extraction-diagnostics/{id}", h.GetExtractionDiagnostic)
+	mux.HandleFunc("PUT /api/extraction-diagnostics/{id}/status", h.UpdateExtractionDiagnosticStatus)
 
 	// Muted merchants
-	mux.HandleFunc("GET /api/muted-merchants", h.HandleListMutedMerchants)
-	mux.HandleFunc("POST /api/muted-merchants", h.HandleMuteByMerchant)
-	mux.HandleFunc("PUT /api/muted-merchants/{id}/reason", h.HandleUpdateMerchantReason)
-	mux.HandleFunc("DELETE /api/muted-merchants/{id}", h.HandleDeleteMutedMerchant)
+	mux.HandleFunc("GET /api/muted-merchants", h.ListMutedMerchants)
+	mux.HandleFunc("POST /api/muted-merchants", h.MuteByMerchant)
+	mux.HandleFunc("PUT /api/muted-merchants/{id}/reason", h.UpdateMerchantReason)
+	mux.HandleFunc("DELETE /api/muted-merchants/{id}", h.DeleteMutedMerchant)
 
 	// Merchant-wide categorization
-	mux.HandleFunc("POST /api/merchants/categorize", h.HandleCategorizeMerchant)
+	mux.HandleFunc("POST /api/merchants/categorize", h.CategorizeMerchant)
 }

@@ -2,23 +2,23 @@ package api
 
 import "time"
 
-// DocErrorResponse is the standard JSON error payload for OpenAPI generation.
-type DocErrorResponse struct {
+// ErrorResponse is the standard JSON error payload for OpenAPI generation.
+type ErrorResponse struct {
 	Error string `json:"error" example:"database not connected"`
 }
 
-// DocHealthResponse is the health check payload.
-type DocHealthResponse struct {
+// HealthResponse is the health check payload.
+type HealthResponse struct {
 	Status string `json:"status" example:"ok"`
 }
 
-// DocVersionResponse is the version payload.
-type DocVersionResponse struct {
+// VersionResponse is the version payload.
+type VersionResponse struct {
 	Version string `json:"version" example:"dev"`
 }
 
-// DocStatsResponse documents the stats payload embedded in status responses.
-type DocStatsResponse struct {
+// StatsResponse documents the stats payload embedded in status responses.
+type StatsResponse struct {
 	TotalCount         int                `json:"total_count"`
 	TotalBase          float64            `json:"total_base"`
 	BaseCurrency       string             `json:"base_currency" example:"INR"`
@@ -26,172 +26,172 @@ type DocStatsResponse struct {
 	TotalCategoryCount map[string]int     `json:"total_category_count"`
 }
 
-// DocStatusResponse documents the combined daemon and stats status payload.
-type DocStatusResponse struct {
-	Daemon DaemonStatus      `json:"daemon"`
-	Stats  *DocStatsResponse `json:"stats,omitempty"`
+// StatusResponse documents the combined daemon and stats status payload.
+type StatusResponse struct {
+	Daemon DaemonStatus   `json:"daemon"`
+	Stats  *StatsResponse `json:"stats,omitempty"`
 }
 
-// DocDaemonReaderRequest is the daemon start/rescan request body.
-type DocDaemonReaderRequest struct {
+// DaemonReaderRequest is the daemon start/rescan request body.
+type DaemonReaderRequest struct {
 	Reader string `json:"reader" example:"gmail"`
 }
 
-// DocStatusOnlyResponse is a simple status message payload.
-type DocStatusOnlyResponse struct {
+// StatusOnlyResponse is a simple status message payload.
+type StatusOnlyResponse struct {
 	Status string `json:"status" example:"ok"`
 }
 
-// DocActiveReaderResponse is the active reader config payload.
-type DocActiveReaderResponse struct {
+// ActiveReaderResponse is the active reader config payload.
+type ActiveReaderResponse struct {
 	Reader string `json:"reader" example:"gmail"`
 }
 
-// DocBaseCurrencyRequest is the base currency update payload.
-type DocBaseCurrencyRequest struct {
+// BaseCurrencyRequest is the base currency update payload.
+type BaseCurrencyRequest struct {
 	BaseCurrency string `json:"base_currency" example:"USD"`
 }
 
-// DocBaseCurrencyResponse is the base currency payload.
-type DocBaseCurrencyResponse struct {
+// BaseCurrencyResponse is the base currency payload.
+type BaseCurrencyResponse struct {
 	BaseCurrency string `json:"base_currency" example:"USD"`
 }
 
-// DocScanIntervalRequest is the scan interval update payload.
-type DocScanIntervalRequest struct {
+// ScanIntervalRequest is the scan interval update payload.
+type ScanIntervalRequest struct {
 	ScanInterval string `json:"scan_interval" example:"120"`
 }
 
-// DocScanIntervalResponse is the scan interval payload.
-type DocScanIntervalResponse struct {
+// ScanIntervalResponse is the scan interval payload.
+type ScanIntervalResponse struct {
 	ScanInterval string `json:"scan_interval" example:"120"`
 }
 
-// DocLookbackDaysRequest is the lookback days update payload.
-type DocLookbackDaysRequest struct {
+// LookbackDaysRequest is the lookback days update payload.
+type LookbackDaysRequest struct {
 	LookbackDays string `json:"lookback_days" example:"365"`
 }
 
-// DocLookbackDaysResponse is the lookback days payload.
-type DocLookbackDaysResponse struct {
+// LookbackDaysResponse is the lookback days payload.
+type LookbackDaysResponse struct {
 	LookbackDays string `json:"lookback_days" example:"365"`
 }
 
-// DocTimezoneRequest is the timezone update payload.
-type DocTimezoneRequest struct {
+// TimezoneRequest is the timezone update payload.
+type TimezoneRequest struct {
 	Timezone string `json:"timezone" example:"Asia/Kolkata"`
 }
 
-// DocTimezoneResponse is the timezone payload.
-type DocTimezoneResponse struct {
+// TimezoneResponse is the timezone payload.
+type TimezoneResponse struct {
 	Timezone string `json:"timezone" example:"Asia/Kolkata"`
 }
 
-// DocTimeFormatRequest is the time format update payload.
-type DocTimeFormatRequest struct {
+// TimeFormatRequest is the time format update payload.
+type TimeFormatRequest struct {
 	TimeFormat string `json:"time_format" example:"HH:mm"`
 }
 
-// DocTimeFormatResponse is the time format payload.
-type DocTimeFormatResponse struct {
+// TimeFormatResponse is the time format payload.
+type TimeFormatResponse struct {
 	TimeFormat string `json:"time_format" example:"HH:mm"`
 }
 
-// DocSetupStatusResponse is the first-run setup status payload.
-type DocSetupStatusResponse struct {
+// SetupStatusResponse is the first-run setup status payload.
+type SetupStatusResponse struct {
 	Required bool     `json:"required" example:"true"`
 	Missing  []string `json:"missing" example:"base_currency,timezone,time_format"`
 }
 
-// DocReaderCheckpointResponse is the reader checkpoint payload.
-type DocReaderCheckpointResponse struct {
+// ReaderCheckpointResponse is the reader checkpoint payload.
+type ReaderCheckpointResponse struct {
 	LastScanAt *string `json:"last_scan_at" example:"2026-04-14T09:00:00Z" extensions:"x-nullable"`
 }
 
-// DocSyncStatusResponse is the community sync status payload.
-type DocSyncStatusResponse struct {
+// SyncStatusResponse is the community sync status payload.
+type SyncStatusResponse struct {
 	LastSyncedAt   *time.Time `json:"last_synced_at,omitempty" extensions:"x-nullable"`
 	Error          *string    `json:"error,omitempty" extensions:"x-nullable"`
 	EntriesUpdated int        `json:"entries_updated"`
 }
 
-// DocLabelResponse documents a managed label.
-type DocLabelResponse struct {
+// LabelResponse documents a managed label.
+type LabelResponse struct {
 	Name      string    `json:"name" example:"food"`
 	Color     string    `json:"color" example:"#f59e0b"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// DocCreateLabelRequest is the label creation payload.
-type DocCreateLabelRequest struct {
+// CreateLabelRequest is the label creation payload.
+type CreateLabelRequest struct {
 	Name  string `json:"name" example:"food"`
 	Color string `json:"color" example:"#f59e0b"`
 }
 
-// DocUpdateLabelRequest is the label update payload.
-type DocUpdateLabelRequest struct {
+// UpdateLabelRequest is the label update payload.
+type UpdateLabelRequest struct {
 	Color string `json:"color" example:"#f59e0b"`
 }
 
-// DocLabelMutationResponse is the label create/update response payload.
-type DocLabelMutationResponse struct {
+// LabelMutationResponse is the label create/update response payload.
+type LabelMutationResponse struct {
 	Name  string `json:"name" example:"food"`
 	Color string `json:"color" example:"#f59e0b"`
 }
 
-// DocApplyLabelRequest is the label-by-merchant apply payload.
-type DocApplyLabelRequest struct {
+// ApplyLabelRequest is the label-by-merchant apply payload.
+type ApplyLabelRequest struct {
 	MerchantPattern string `json:"merchant_pattern" example:"swiggy"`
 }
 
-// DocAppliedCountResponse is the count payload for apply actions.
-type DocAppliedCountResponse struct {
+// AppliedCountResponse is the count payload for apply actions.
+type AppliedCountResponse struct {
 	Applied int64 `json:"applied"`
 }
 
-// DocLabelMappingsResponse documents label-to-merchant mappings.
-type DocLabelMappingsResponse map[string][]string
+// LabelMappingsResponse documents label-to-merchant mappings.
+type LabelMappingsResponse map[string][]string
 
-// DocCategoryResponse documents a managed category.
-type DocCategoryResponse struct {
+// CategoryResponse documents a managed category.
+type CategoryResponse struct {
 	Name        string `json:"name" example:"Food"`
 	Description string `json:"description,omitempty" example:"Restaurants and groceries"`
 	IsDefault   bool   `json:"is_default"`
 }
 
-// DocCreateCategoryRequest is the category creation payload.
-type DocCreateCategoryRequest struct {
+// CreateCategoryRequest is the category creation payload.
+type CreateCategoryRequest struct {
 	Name        string `json:"name" example:"Food"`
 	Description string `json:"description,omitempty" example:"Restaurants and groceries"`
 }
 
-// DocBucketResponse documents a managed bucket.
-type DocBucketResponse struct {
+// BucketResponse documents a managed bucket.
+type BucketResponse struct {
 	Name        string `json:"name" example:"Needs"`
 	Description string `json:"description,omitempty" example:"Essential spending"`
 	IsDefault   bool   `json:"is_default"`
 }
 
-// DocCreateBucketRequest is the bucket creation payload.
-type DocCreateBucketRequest struct {
+// CreateBucketRequest is the bucket creation payload.
+type CreateBucketRequest struct {
 	Name        string `json:"name" example:"Needs"`
 	Description string `json:"description,omitempty" example:"Essential spending"`
 }
 
-// DocNameResponse is a simple named resource payload.
-type DocNameResponse struct {
+// NameResponse is a simple named resource payload.
+type NameResponse struct {
 	Name string `json:"name" example:"Food"`
 }
 
-// DocBankColorResponse documents an embedded bank color mapping.
-type DocBankColorResponse struct {
+// BankColorResponse documents an embedded bank color mapping.
+type BankColorResponse struct {
 	Fragment string `json:"fragment" example:"hdfc"`
 	Color    string `json:"color" example:"#2563eb"`
 	Name     string `json:"name" example:"HDFC Bank"`
 }
 
-// DocTransactionResponse documents a transaction payload.
-type DocTransactionResponse struct {
+// TransactionResponse documents a transaction payload.
+type TransactionResponse struct {
 	ID               string    `json:"id" example:"tx_123"`
 	MessageID        string    `json:"message_id" example:"gmail-message-id"`
 	Amount           float64   `json:"amount" example:"249.50"`
@@ -213,29 +213,29 @@ type DocTransactionResponse struct {
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
-// DocTransactionsListResponse documents the paginated list payload.
-type DocTransactionsListResponse struct {
-	Transactions []DocTransactionResponse `json:"transactions"`
-	Total        int                      `json:"total"`
-	TotalAmount  float64                  `json:"total_amount"`
-	BaseCurrency string                   `json:"base_currency" example:"INR"`
-	Page         int                      `json:"page"`
-	PageSize     int                      `json:"page_size"`
+// TransactionsListResponse documents the paginated list payload.
+type TransactionsListResponse struct {
+	Transactions []TransactionResponse `json:"transactions"`
+	Total        int                   `json:"total"`
+	TotalAmount  float64               `json:"total_amount"`
+	BaseCurrency string                `json:"base_currency" example:"INR"`
+	Page         int                   `json:"page"`
+	PageSize     int                   `json:"page_size"`
 }
 
-// DocTransactionsSearchResponse documents the paginated search payload.
-type DocTransactionsSearchResponse struct {
-	Transactions []DocTransactionResponse `json:"transactions"`
-	Total        int                      `json:"total"`
-	TotalAmount  float64                  `json:"total_amount"`
-	BaseCurrency string                   `json:"base_currency" example:"INR"`
-	Page         int                      `json:"page"`
-	PageSize     int                      `json:"page_size"`
-	Query        string                   `json:"query" example:"coffee"`
+// TransactionsSearchResponse documents the paginated search payload.
+type TransactionsSearchResponse struct {
+	Transactions []TransactionResponse `json:"transactions"`
+	Total        int                   `json:"total"`
+	TotalAmount  float64               `json:"total_amount"`
+	BaseCurrency string                `json:"base_currency" example:"INR"`
+	Page         int                   `json:"page"`
+	PageSize     int                   `json:"page_size"`
+	Query        string                `json:"query" example:"coffee"`
 }
 
-// DocExtractionDiagnosticResponse documents an extraction diagnostic payload.
-type DocExtractionDiagnosticResponse struct {
+// ExtractionDiagnosticResponse documents an extraction diagnostic payload.
+type ExtractionDiagnosticResponse struct {
 	ID             string     `json:"id" example:"11111111-1111-1111-1111-111111111111"`
 	Status         string     `json:"status" example:"open"`
 	Reader         string     `json:"reader" example:"gmail"`
@@ -258,13 +258,13 @@ type DocExtractionDiagnosticResponse struct {
 	ResolvedAt     *time.Time `json:"resolved_at,omitempty"`
 }
 
-// DocExtractionDiagnosticStatusRequest is the diagnostic status update payload.
-type DocExtractionDiagnosticStatusRequest struct {
+// ExtractionDiagnosticStatusRequest is the diagnostic status update payload.
+type ExtractionDiagnosticStatusRequest struct {
 	Status string `json:"status" example:"resolved"`
 }
 
-// DocFacetsResponse documents the distinct transaction filter values.
-type DocFacetsResponse struct {
+// FacetsResponse documents the distinct transaction filter values.
+type FacetsResponse struct {
 	Sources    []string `json:"sources"`
 	Categories []string `json:"categories"`
 	Currencies []string `json:"currencies"`
@@ -273,36 +273,36 @@ type DocFacetsResponse struct {
 	Buckets    []string `json:"buckets"`
 }
 
-// DocTransactionUpdateRequest is the transaction patch payload.
-type DocTransactionUpdateRequest struct {
+// TransactionUpdateRequest is the transaction patch payload.
+type TransactionUpdateRequest struct {
 	Description *string `json:"description,omitempty" example:"Dinner order"`
 	Category    *string `json:"category,omitempty" example:"Food"`
 	Bucket      *string `json:"bucket,omitempty" example:"Needs"`
 }
 
-// DocTransactionLabelsRequest is the transaction labels mutation payload.
-type DocTransactionLabelsRequest struct {
+// TransactionLabelsRequest is the transaction labels mutation payload.
+type TransactionLabelsRequest struct {
 	Labels []string `json:"labels"`
 }
 
-// DocMuteTransactionRequest is the transaction mute payload.
-type DocMuteTransactionRequest struct {
+// MuteTransactionRequest is the transaction mute payload.
+type MuteTransactionRequest struct {
 	Muted  bool   `json:"muted"`
 	Reason string `json:"reason,omitempty" example:"Internal transfer"`
 }
 
-// DocMuteTransactionResponse is the transaction mute response payload.
-type DocMuteTransactionResponse struct {
+// MuteTransactionResponse is the transaction mute response payload.
+type MuteTransactionResponse struct {
 	Muted  bool   `json:"muted"`
 	Reason string `json:"reason,omitempty" example:"Internal transfer"`
 }
 
-// DocUpdateMuteReasonRequest is the mute reason update payload.
-type DocUpdateMuteReasonRequest struct {
+// UpdateMuteReasonRequest is the mute reason update payload.
+type UpdateMuteReasonRequest struct {
 	Reason string `json:"reason" example:"Internal transfer"`
 }
 
-// DocMuteReasonResponse is the mute reason response payload.
-type DocMuteReasonResponse struct {
+// MuteReasonResponse is the mute reason response payload.
+type MuteReasonResponse struct {
 	Reason string `json:"reason" example:"Internal transfer"`
 }

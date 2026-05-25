@@ -636,9 +636,9 @@ func decodeJSON(t *testing.T, body string, v any) {
 
 // --- health ---
 
-func TestHandleHealth(t *testing.T) {
+func TestHealth(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	rr := get(h.HandleHealth, "/api/health")
+	rr := get(h.Health, "/api/health")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -652,10 +652,10 @@ func TestHandleHealth(t *testing.T) {
 
 // --- status ---
 
-func TestHandleStatus_NilStore(t *testing.T) {
+func TestStatus_NilStore(t *testing.T) {
 	dm := &mockDaemon{status: DaemonStatus{Running: true}}
 	h := newTestHandlers(t, nil, dm)
-	rr := get(h.HandleStatus, "/api/status")
+	rr := get(h.Status, "/api/status")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -668,10 +668,10 @@ func TestHandleStatus_NilStore(t *testing.T) {
 	}
 }
 
-func TestHandleStatus_WithStats(t *testing.T) {
+func TestStatus_WithStats(t *testing.T) {
 	st := &mockStore{stats: &store.Stats{TotalCount: 42, TotalBase: 99999, BaseCurrency: "INR"}}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.HandleStatus, "/api/status")
+	rr := get(h.Status, "/api/status")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -686,9 +686,9 @@ func TestHandleStatus_WithStats(t *testing.T) {
 
 // --- plugin listing ---
 
-func TestHandleListReaders(t *testing.T) {
+func TestListReaders(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	rr := get(h.HandleListReaders, "/api/plugins/readers")
+	rr := get(h.ListReaders, "/api/plugins/readers")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -713,7 +713,7 @@ func TestHandleListReaders(t *testing.T) {
 	}
 }
 
-func TestHandleListReaders_NormalizesNilConfigSchema(t *testing.T) {
+func TestListReaders_NormalizesNilConfigSchema(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	registry := plugins.NewRegistry()
 	if err := registry.RegisterReader(&testReaderPlugin{
@@ -725,7 +725,7 @@ func TestHandleListReaders_NormalizesNilConfigSchema(t *testing.T) {
 	}
 	h.registry = registry
 
-	rr := get(h.HandleListReaders, "/api/plugins/readers")
+	rr := get(h.ListReaders, "/api/plugins/readers")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -743,9 +743,9 @@ func TestHandleListReaders_NormalizesNilConfigSchema(t *testing.T) {
 	}
 }
 
-func TestHandleListWriters(t *testing.T) {
+func TestListWriters(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	rr := get(h.HandleListWriters, "/api/plugins/writers")
+	rr := get(h.ListWriters, "/api/plugins/writers")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -759,13 +759,13 @@ func TestHandleListWriters(t *testing.T) {
 
 // --- credentials status ---
 
-func TestHandleCredentialsStatus_Missing(t *testing.T) {
+func TestCredentialsStatus_Missing(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	// h.dataDir is t.TempDir() — no credentials file exists there.
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/gmail/credentials/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
-	h.HandleCredentialsStatus(rr, req)
+	h.CredentialsStatus(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -777,7 +777,7 @@ func TestHandleCredentialsStatus_Missing(t *testing.T) {
 	}
 }
 
-func TestHandleCredentialsStatus_Present(t *testing.T) {
+func TestCredentialsStatus_Present(t *testing.T) {
 	ms := &mockStore{
 		readerSecrets: map[string][]byte{"gmail": []byte(`{"installed":{}}`)},
 	}
@@ -786,7 +786,7 @@ func TestHandleCredentialsStatus_Present(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/gmail/credentials/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
-	h.HandleCredentialsStatus(rr, req)
+	h.CredentialsStatus(rr, req)
 
 	var resp map[string]bool
 	decodeJSON(t, rr.Body.String(), &resp)
@@ -795,26 +795,26 @@ func TestHandleCredentialsStatus_Present(t *testing.T) {
 	}
 }
 
-func TestHandleCredentialsStatus_UnknownReader(t *testing.T) {
+func TestCredentialsStatus_UnknownReader(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/noexist/credentials/status", nil)
 	req.SetPathValue("name", "noexist")
 	rr := httptest.NewRecorder()
-	h.HandleCredentialsStatus(rr, req)
+	h.CredentialsStatus(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rr.Code)
 	}
 }
 
-func TestHandleUploadCredentials_SavesToStore(t *testing.T) {
+func TestUploadCredentials_SavesToStore(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/readers/gmail/credentials", strings.NewReader(`{"installed":{}}`))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 
-	h.HandleUploadCredentials(rr, req)
+	h.UploadCredentials(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
@@ -832,7 +832,7 @@ func TestHandleUploadCredentials_SavesToStore(t *testing.T) {
 	}
 }
 
-func TestHandleAuthStart_UsesMetadataScopes(t *testing.T) {
+func TestAuthStart_UsesMetadataScopes(t *testing.T) {
 	const expectedScope = "https://www.googleapis.com/auth/gmail.readonly"
 	secretJSON := `{
 		"installed": {
@@ -860,7 +860,7 @@ func TestHandleAuthStart_UsesMetadataScopes(t *testing.T) {
 	req.SetPathValue("name", "scoped")
 	rr := httptest.NewRecorder()
 
-	h.HandleAuthStart(rr, req)
+	h.AuthStart(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -878,12 +878,12 @@ func TestHandleAuthStart_UsesMetadataScopes(t *testing.T) {
 
 // --- auth status ---
 
-func TestHandleAuthStatus_NoToken(t *testing.T) {
+func TestAuthStatus_NoToken(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/gmail/auth/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
-	h.HandleAuthStatus(rr, req)
+	h.AuthStatus(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -895,12 +895,12 @@ func TestHandleAuthStatus_NoToken(t *testing.T) {
 	}
 }
 
-func TestHandleAuthStatus_ConfigReader(t *testing.T) {
+func TestAuthStatus_ConfigReader(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/thunderbird/auth/status", nil)
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
-	h.HandleAuthStatus(rr, req)
+	h.AuthStatus(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -912,7 +912,7 @@ func TestHandleAuthStatus_ConfigReader(t *testing.T) {
 	}
 }
 
-func TestHandleAuthStatus_UsesStoreToken(t *testing.T) {
+func TestAuthStatus_UsesStoreToken(t *testing.T) {
 	ms := &mockStore{
 		readerTokens: map[string][]byte{
 			"gmail": []byte(`{"access_token":"a","token_type":"Bearer","expiry":"2999-01-01T00:00:00Z"}`),
@@ -923,7 +923,7 @@ func TestHandleAuthStatus_UsesStoreToken(t *testing.T) {
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 
-	h.HandleAuthStatus(rr, req)
+	h.AuthStatus(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -937,12 +937,12 @@ func TestHandleAuthStatus_UsesStoreToken(t *testing.T) {
 
 // --- reader status ---
 
-func TestHandleReaderStatus_Thunderbird_NotConfigured(t *testing.T) {
+func TestReaderStatus_Thunderbird_NotConfigured(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/thunderbird/status", nil)
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
-	h.HandleReaderStatus(rr, req)
+	h.ReaderStatus(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -954,7 +954,7 @@ func TestHandleReaderStatus_Thunderbird_NotConfigured(t *testing.T) {
 	}
 }
 
-func TestHandleReaderStatus_Thunderbird_Configured(t *testing.T) {
+func TestReaderStatus_Thunderbird_Configured(t *testing.T) {
 	ms := &mockStore{
 		readerConfigs: map[string]json.RawMessage{
 			"thunderbird": json.RawMessage(`{"profilePath":"/tmp/tb"}`),
@@ -965,7 +965,7 @@ func TestHandleReaderStatus_Thunderbird_Configured(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/thunderbird/status", nil)
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
-	h.HandleReaderStatus(rr, req)
+	h.ReaderStatus(rr, req)
 
 	var resp map[string]any
 	decodeJSON(t, rr.Body.String(), &resp)
@@ -974,7 +974,7 @@ func TestHandleReaderStatus_Thunderbird_Configured(t *testing.T) {
 	}
 }
 
-func TestHandleSaveReaderConfig_SavesToStore(t *testing.T) {
+func TestSaveReaderConfig_SavesToStore(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	req := httptest.NewRequestWithContext(
@@ -986,7 +986,7 @@ func TestHandleSaveReaderConfig_SavesToStore(t *testing.T) {
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
 
-	h.HandleSaveReaderConfig(rr, req)
+	h.SaveReaderConfig(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
@@ -999,7 +999,7 @@ func TestHandleSaveReaderConfig_SavesToStore(t *testing.T) {
 	}
 }
 
-func TestHandleGetReaderConfig_LoadsFromStore(t *testing.T) {
+func TestGetReaderConfig_LoadsFromStore(t *testing.T) {
 	ms := &mockStore{
 		readerConfigs: map[string]json.RawMessage{
 			"thunderbird": json.RawMessage(`{"config":{"mailboxes":"Inbox"}}`),
@@ -1010,7 +1010,7 @@ func TestHandleGetReaderConfig_LoadsFromStore(t *testing.T) {
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
 
-	h.HandleGetReaderConfig(rr, req)
+	h.GetReaderConfig(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
@@ -1020,14 +1020,14 @@ func TestHandleGetReaderConfig_LoadsFromStore(t *testing.T) {
 	}
 }
 
-func TestHandleRevokeToken_DeletesStoreToken(t *testing.T) {
+func TestRevokeToken_DeletesStoreToken(t *testing.T) {
 	ms := &mockStore{readerTokens: map[string][]byte{"gmail": []byte(`{"access_token":"a"}`)}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/readers/gmail/auth/token", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 
-	h.HandleRevokeToken(rr, req)
+	h.RevokeToken(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
@@ -1039,18 +1039,18 @@ func TestHandleRevokeToken_DeletesStoreToken(t *testing.T) {
 
 // --- transactions ---
 
-func TestHandleListTransactions_NilStore(t *testing.T) {
+func TestListTransactions_NilStore(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	rr := get(h.HandleListTransactions, "/api/transactions")
+	rr := get(h.ListTransactions, "/api/transactions")
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", rr.Code)
 	}
 }
 
-func TestHandleListTransactions_Empty(t *testing.T) {
+func TestListTransactions_Empty(t *testing.T) {
 	st := &mockStore{transactions: []store.Transaction{}, listResult: store.TransactionListResult{Total: 0}}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.HandleListTransactions, "/api/transactions?page=1&page_size=10")
+	rr := get(h.ListTransactions, "/api/transactions?page=1&page_size=10")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -1069,10 +1069,10 @@ func TestHandleListTransactions_Empty(t *testing.T) {
 	}
 }
 
-func TestHandleListTransactions_NilSliceReturnsEmptyArray(t *testing.T) {
+func TestListTransactions_NilSliceReturnsEmptyArray(t *testing.T) {
 	st := &mockStore{transactions: nil, listResult: store.TransactionListResult{Total: 0}}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.HandleListTransactions, "/api/transactions?page=1&page_size=10")
+	rr := get(h.ListTransactions, "/api/transactions?page=1&page_size=10")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -1088,7 +1088,7 @@ func TestHandleListTransactions_NilSliceReturnsEmptyArray(t *testing.T) {
 	}
 }
 
-func TestHandleListTransactions_WithResults(t *testing.T) {
+func TestListTransactions_WithResults(t *testing.T) {
 	now := time.Now()
 	st := &mockStore{
 		transactions: []store.Transaction{
@@ -1100,7 +1100,7 @@ func TestHandleListTransactions_WithResults(t *testing.T) {
 		},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.HandleListTransactions, "/api/transactions")
+	rr := get(h.ListTransactions, "/api/transactions")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -1119,29 +1119,29 @@ func TestHandleListTransactions_WithResults(t *testing.T) {
 	}
 }
 
-func TestHandleListTransactions_StoreError(t *testing.T) {
+func TestListTransactions_StoreError(t *testing.T) {
 	st := &mockStore{listErr: errors.New("db error")}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.HandleListTransactions, "/api/transactions")
+	rr := get(h.ListTransactions, "/api/transactions")
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d", rr.Code)
 	}
 }
 
-func TestHandleListTransactions_InvalidControlCharFilter(t *testing.T) {
+func TestListTransactions_InvalidControlCharFilter(t *testing.T) {
 	st := &mockStore{}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.HandleListTransactions, "/api/transactions?currency=%00bad")
+	rr := get(h.ListTransactions, "/api/transactions?currency=%00bad")
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 
-func TestHandleListTransactions_HugePaginationFallsBackToDefaults(t *testing.T) {
+func TestListTransactions_HugePaginationFallsBackToDefaults(t *testing.T) {
 	st := &mockStore{transactions: []store.Transaction{}, listResult: store.TransactionListResult{Total: 0}}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.HandleListTransactions, "/api/transactions?page=576460752303423488&page_size=999999")
+	rr := get(h.ListTransactions, "/api/transactions?page=576460752303423488&page_size=999999")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -1154,7 +1154,7 @@ func TestHandleListTransactions_HugePaginationFallsBackToDefaults(t *testing.T) 
 	}
 }
 
-func TestHandleGetTransaction_Found(t *testing.T) {
+func TestGetTransaction_Found(t *testing.T) {
 	txn := &store.Transaction{ID: "11111111-1111-1111-1111-111111111111", Amount: 500, Currency: "INR", Labels: []string{"food"}}
 	st := &mockStore{getResult: txn}
 	h := newTestHandlers(t, st, &mockDaemon{})
@@ -1162,7 +1162,7 @@ func TestHandleGetTransaction_Found(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/11111111-1111-1111-1111-111111111111", nil)
 	req.SetPathValue("id", "11111111-1111-1111-1111-111111111111")
 	rr := httptest.NewRecorder()
-	h.HandleGetTransaction(rr, req)
+	h.GetTransaction(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -1174,35 +1174,35 @@ func TestHandleGetTransaction_Found(t *testing.T) {
 	}
 }
 
-func TestHandleGetTransaction_NotFound(t *testing.T) {
+func TestGetTransaction_NotFound(t *testing.T) {
 	st := &mockStore{getErr: store.ErrNotFound}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/22222222-2222-2222-2222-222222222222", nil)
 	req.SetPathValue("id", "22222222-2222-2222-2222-222222222222")
 	rr := httptest.NewRecorder()
-	h.HandleGetTransaction(rr, req)
+	h.GetTransaction(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rr.Code)
 	}
 }
 
-func TestHandleGetTransaction_InvalidID(t *testing.T) {
+func TestGetTransaction_InvalidID(t *testing.T) {
 	st := &mockStore{}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/not-a-uuid", nil)
 	req.SetPathValue("id", "not-a-uuid")
 	rr := httptest.NewRecorder()
-	h.HandleGetTransaction(rr, req)
+	h.GetTransaction(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 
-func TestHandleUpdateTransaction_Success(t *testing.T) {
+func TestUpdateTransaction_Success(t *testing.T) {
 	txn := &store.Transaction{ID: "abc", Description: "Updated", Labels: []string{}}
 	st := &mockStore{getResult: txn}
 	h := newTestHandlers(t, st, &mockDaemon{})
@@ -1211,14 +1211,14 @@ func TestHandleUpdateTransaction_Success(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/abc", strings.NewReader(body))
 	req.SetPathValue("id", "abc")
 	rr := httptest.NewRecorder()
-	h.HandleUpdateTransaction(rr, req)
+	h.UpdateTransaction(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body=%s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleUpdateTransaction_NotFound(t *testing.T) {
+func TestUpdateTransaction_NotFound(t *testing.T) {
 	st := &mockStore{updateTxErr: store.ErrNotFound}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
@@ -1226,32 +1226,32 @@ func TestHandleUpdateTransaction_NotFound(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/noexist", strings.NewReader(body))
 	req.SetPathValue("id", "noexist")
 	rr := httptest.NewRecorder()
-	h.HandleUpdateTransaction(rr, req)
+	h.UpdateTransaction(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rr.Code)
 	}
 }
 
-func TestHandleUpdateTransaction_InvalidJSON(t *testing.T) {
+func TestUpdateTransaction_InvalidJSON(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/abc", strings.NewReader("not-json"))
 	req.SetPathValue("id", "abc")
 	rr := httptest.NewRecorder()
-	h.HandleUpdateTransaction(rr, req)
+	h.UpdateTransaction(rr, req)
 
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d", rr.Code)
 	}
 }
 
-func TestHandleListExtractionDiagnostics_DefaultsStatusOpen(t *testing.T) {
+func TestListExtractionDiagnostics_DefaultsStatusOpen(t *testing.T) {
 	st := &mockStore{diagnostics: []store.ExtractionDiagnosticRow{{ID: "diag-1", Status: store.DiagnosticStatusOpen}}}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/extraction-diagnostics", nil)
 	rr := httptest.NewRecorder()
-	h.HandleListExtractionDiagnostics(rr, req)
+	h.ListExtractionDiagnostics(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body=%s)", rr.Code, rr.Body.String())
@@ -1266,13 +1266,13 @@ func TestHandleListExtractionDiagnostics_DefaultsStatusOpen(t *testing.T) {
 	}
 }
 
-func TestHandleListExtractionDiagnostics_StatusAllAndLimit(t *testing.T) {
+func TestListExtractionDiagnostics_StatusAllAndLimit(t *testing.T) {
 	st := &mockStore{}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/extraction-diagnostics?status=all&limit=25", nil)
 	rr := httptest.NewRecorder()
-	h.HandleListExtractionDiagnostics(rr, req)
+	h.ListExtractionDiagnostics(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body=%s)", rr.Code, rr.Body.String())
@@ -1285,38 +1285,38 @@ func TestHandleListExtractionDiagnostics_StatusAllAndLimit(t *testing.T) {
 	}
 }
 
-func TestHandleListExtractionDiagnostics_InvalidStatus(t *testing.T) {
+func TestListExtractionDiagnostics_InvalidStatus(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/extraction-diagnostics?status=pending", nil)
 	rr := httptest.NewRecorder()
-	h.HandleListExtractionDiagnostics(rr, req)
+	h.ListExtractionDiagnostics(rr, req)
 
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d", rr.Code)
 	}
 }
 
-func TestHandleListExtractionDiagnostics_InvalidLimit(t *testing.T) {
+func TestListExtractionDiagnostics_InvalidLimit(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/extraction-diagnostics?limit=bad", nil)
 	rr := httptest.NewRecorder()
-	h.HandleListExtractionDiagnostics(rr, req)
+	h.ListExtractionDiagnostics(rr, req)
 
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d", rr.Code)
 	}
 }
 
-func TestHandleGetExtractionDiagnostic_Found(t *testing.T) {
+func TestGetExtractionDiagnostic_Found(t *testing.T) {
 	row := &store.ExtractionDiagnosticRow{ID: "11111111-1111-1111-1111-111111111111", Status: store.DiagnosticStatusOpen}
 	h := newTestHandlers(t, &mockStore{diagnosticResult: row}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/extraction-diagnostics/11111111-1111-1111-1111-111111111111", nil)
 	req.SetPathValue("id", "11111111-1111-1111-1111-111111111111")
 	rr := httptest.NewRecorder()
-	h.HandleGetExtractionDiagnostic(rr, req)
+	h.GetExtractionDiagnostic(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body=%s)", rr.Code, rr.Body.String())
@@ -1328,46 +1328,46 @@ func TestHandleGetExtractionDiagnostic_Found(t *testing.T) {
 	}
 }
 
-func TestHandleGetExtractionDiagnostic_NotFound(t *testing.T) {
+func TestGetExtractionDiagnostic_NotFound(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{diagnosticErr: store.ErrNotFound}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/extraction-diagnostics/22222222-2222-2222-2222-222222222222", nil)
 	req.SetPathValue("id", "22222222-2222-2222-2222-222222222222")
 	rr := httptest.NewRecorder()
-	h.HandleGetExtractionDiagnostic(rr, req)
+	h.GetExtractionDiagnostic(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rr.Code)
 	}
 }
 
-func TestHandleGetExtractionDiagnostic_InvalidID(t *testing.T) {
+func TestGetExtractionDiagnostic_InvalidID(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{diagnosticErr: errors.New("store should not be called")}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/extraction-diagnostics/not-a-uuid", nil)
 	req.SetPathValue("id", "not-a-uuid")
 	rr := httptest.NewRecorder()
-	h.HandleGetExtractionDiagnostic(rr, req)
+	h.GetExtractionDiagnostic(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 
-func TestHandleGetExtractionDiagnostic_NilStore(t *testing.T) {
+func TestGetExtractionDiagnostic_NilStore(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/extraction-diagnostics/11111111-1111-1111-1111-111111111111", nil)
 	req.SetPathValue("id", "11111111-1111-1111-1111-111111111111")
 	rr := httptest.NewRecorder()
-	h.HandleGetExtractionDiagnostic(rr, req)
+	h.GetExtractionDiagnostic(rr, req)
 
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", rr.Code)
 	}
 }
 
-func TestHandleUpdateExtractionDiagnosticStatus_InvalidStatus(t *testing.T) {
+func TestUpdateExtractionDiagnosticStatus_InvalidStatus(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(
@@ -1378,14 +1378,14 @@ func TestHandleUpdateExtractionDiagnosticStatus_InvalidStatus(t *testing.T) {
 	)
 	req.SetPathValue("id", "11111111-1111-1111-1111-111111111111")
 	rr := httptest.NewRecorder()
-	h.HandleUpdateExtractionDiagnosticStatus(rr, req)
+	h.UpdateExtractionDiagnosticStatus(rr, req)
 
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d", rr.Code)
 	}
 }
 
-func TestHandleUpdateExtractionDiagnosticStatus_NotFound(t *testing.T) {
+func TestUpdateExtractionDiagnosticStatus_NotFound(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{diagnosticErr: store.ErrNotFound}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(
@@ -1396,14 +1396,14 @@ func TestHandleUpdateExtractionDiagnosticStatus_NotFound(t *testing.T) {
 	)
 	req.SetPathValue("id", "33333333-3333-3333-3333-333333333333")
 	rr := httptest.NewRecorder()
-	h.HandleUpdateExtractionDiagnosticStatus(rr, req)
+	h.UpdateExtractionDiagnosticStatus(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rr.Code)
 	}
 }
 
-func TestHandleUpdateExtractionDiagnosticStatus_InvalidID(t *testing.T) {
+func TestUpdateExtractionDiagnosticStatus_InvalidID(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{diagnosticErr: errors.New("store should not be called")}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(
@@ -1414,14 +1414,14 @@ func TestHandleUpdateExtractionDiagnosticStatus_InvalidID(t *testing.T) {
 	)
 	req.SetPathValue("id", "not-a-uuid")
 	rr := httptest.NewRecorder()
-	h.HandleUpdateExtractionDiagnosticStatus(rr, req)
+	h.UpdateExtractionDiagnosticStatus(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 
-func TestHandleUpdateExtractionDiagnosticStatus_Conflict(t *testing.T) {
+func TestUpdateExtractionDiagnosticStatus_Conflict(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{diagnosticErr: store.ErrDiagnosticConflict}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(
@@ -1432,14 +1432,14 @@ func TestHandleUpdateExtractionDiagnosticStatus_Conflict(t *testing.T) {
 	)
 	req.SetPathValue("id", "44444444-4444-4444-4444-444444444444")
 	rr := httptest.NewRecorder()
-	h.HandleUpdateExtractionDiagnosticStatus(rr, req)
+	h.UpdateExtractionDiagnosticStatus(rr, req)
 
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d", rr.Code)
 	}
 }
 
-func TestHandleUpdateExtractionDiagnosticStatus_NilStore(t *testing.T) {
+func TestUpdateExtractionDiagnosticStatus_NilStore(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(
@@ -1450,105 +1450,105 @@ func TestHandleUpdateExtractionDiagnosticStatus_NilStore(t *testing.T) {
 	)
 	req.SetPathValue("id", "11111111-1111-1111-1111-111111111111")
 	rr := httptest.NewRecorder()
-	h.HandleUpdateExtractionDiagnosticStatus(rr, req)
+	h.UpdateExtractionDiagnosticStatus(rr, req)
 
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", rr.Code)
 	}
 }
 
-func TestHandleListExtractionDiagnostics_NilStore(t *testing.T) {
+func TestListExtractionDiagnostics_NilStore(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/extraction-diagnostics", nil)
 	rr := httptest.NewRecorder()
-	h.HandleListExtractionDiagnostics(rr, req)
+	h.ListExtractionDiagnostics(rr, req)
 
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", rr.Code)
 	}
 }
 
-func TestHandleAddLabels_Success(t *testing.T) {
+func TestAddLabels_Success(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	body := `{"labels":["food","work"]}`
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/abc/labels", strings.NewReader(body))
 	req.SetPathValue("id", "abc")
 	rr := httptest.NewRecorder()
-	h.HandleAddLabels(rr, req)
+	h.AddLabels(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 }
 
-func TestHandleAddLabels_InvalidJSON(t *testing.T) {
+func TestAddLabels_InvalidJSON(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/abc/labels", strings.NewReader("bad"))
 	req.SetPathValue("id", "abc")
 	rr := httptest.NewRecorder()
-	h.HandleAddLabels(rr, req)
+	h.AddLabels(rr, req)
 
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d", rr.Code)
 	}
 }
 
-func TestHandleAddLabels_BatchSuccess(t *testing.T) {
+func TestAddLabels_BatchSuccess(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 
 	body := `{"labels":["food","work","recurring"]}`
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/abc/labels", strings.NewReader(body))
 	req.SetPathValue("id", "abc")
 	rr := httptest.NewRecorder()
-	h.HandleAddLabels(rr, req)
+	h.AddLabels(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleAddLabels_StoreError_Returns500(t *testing.T) {
+func TestAddLabels_StoreError_Returns500(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{addLabelsErr: errors.New("db error")}, &mockDaemon{})
 
 	body := `{"labels":["food"]}`
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/abc/labels", strings.NewReader(body))
 	req.SetPathValue("id", "abc")
 	rr := httptest.NewRecorder()
-	h.HandleAddLabels(rr, req)
+	h.AddLabels(rr, req)
 
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d", rr.Code)
 	}
 }
 
-func TestHandleRemoveLabel_Success(t *testing.T) {
+func TestRemoveLabel_Success(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/transactions/abc/labels/food", nil)
 	req.SetPathValue("id", "abc")
 	req.SetPathValue("label", "food")
 	rr := httptest.NewRecorder()
-	h.HandleRemoveLabel(rr, req)
+	h.RemoveLabel(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 }
 
-func TestHandleRemoveLabel_NotFound(t *testing.T) {
+func TestRemoveLabel_NotFound(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{removeLblErr: store.ErrNotFound}, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/transactions/abc/labels/missing", nil)
 	req.SetPathValue("id", "abc")
 	req.SetPathValue("label", "missing")
 	rr := httptest.NewRecorder()
-	h.HandleRemoveLabel(rr, req)
+	h.RemoveLabel(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rr.Code)
 	}
 }
 
-func TestHandleSearchTransactions_Basic(t *testing.T) {
+func TestSearchTransactions_Basic(t *testing.T) {
 	st := &mockStore{
 		searchResult: []store.Transaction{{ID: "x", MerchantInfo: "Zomato", Labels: []string{}}},
 		searchListResult: store.TransactionListResult{
@@ -1557,7 +1557,7 @@ func TestHandleSearchTransactions_Basic(t *testing.T) {
 		},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.HandleSearchTransactions, "/api/transactions/search?q=zomato")
+	rr := get(h.SearchTransactions, "/api/transactions/search?q=zomato")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -1578,13 +1578,13 @@ func TestHandleSearchTransactions_Basic(t *testing.T) {
 	}
 }
 
-func TestHandleSearchTransactions_EmptyArray(t *testing.T) {
+func TestSearchTransactions_EmptyArray(t *testing.T) {
 	st := &mockStore{
 		searchResult:     []store.Transaction{},
 		searchListResult: store.TransactionListResult{Total: 0},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.HandleSearchTransactions, "/api/transactions/search?q=zomato")
+	rr := get(h.SearchTransactions, "/api/transactions/search?q=zomato")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -1600,13 +1600,13 @@ func TestHandleSearchTransactions_EmptyArray(t *testing.T) {
 	}
 }
 
-func TestHandleSearchTransactions_NilSliceReturnsEmptyArray(t *testing.T) {
+func TestSearchTransactions_NilSliceReturnsEmptyArray(t *testing.T) {
 	st := &mockStore{
 		searchResult:     nil,
 		searchListResult: store.TransactionListResult{Total: 0},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.HandleSearchTransactions, "/api/transactions/search?q=zomato")
+	rr := get(h.SearchTransactions, "/api/transactions/search?q=zomato")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -1622,22 +1622,22 @@ func TestHandleSearchTransactions_NilSliceReturnsEmptyArray(t *testing.T) {
 	}
 }
 
-func TestHandleSearchTransactions_NilStore(t *testing.T) {
+func TestSearchTransactions_NilStore(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	rr := get(h.HandleSearchTransactions, "/api/transactions/search?q=foo")
+	rr := get(h.SearchTransactions, "/api/transactions/search?q=foo")
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", rr.Code)
 	}
 }
 
-func TestHandleSearchTransactions_MutedAndIndividualFlags(t *testing.T) {
+func TestSearchTransactions_MutedAndIndividualFlags(t *testing.T) {
 	st := &mockStore{
 		searchResult:     []store.Transaction{},
 		searchListResult: store.TransactionListResult{Total: 0},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
-	rr := get(h.HandleSearchTransactions, "/api/transactions/search?q=zomato&muted_only=1&individual_only=1")
+	rr := get(h.SearchTransactions, "/api/transactions/search?q=zomato&muted_only=1&individual_only=1")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -1650,23 +1650,23 @@ func TestHandleSearchTransactions_MutedAndIndividualFlags(t *testing.T) {
 	}
 }
 
-func TestHandleSearchTransactions_InvalidControlCharQuery(t *testing.T) {
+func TestSearchTransactions_InvalidControlCharQuery(t *testing.T) {
 	st := &mockStore{}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.HandleSearchTransactions, "/api/transactions/search?q=%00bad")
+	rr := get(h.SearchTransactions, "/api/transactions/search?q=%00bad")
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 
-func TestHandleSearchTransactions_HugePaginationFallsBackToDefaults(t *testing.T) {
+func TestSearchTransactions_HugePaginationFallsBackToDefaults(t *testing.T) {
 	st := &mockStore{
 		searchResult:     []store.Transaction{},
 		searchListResult: store.TransactionListResult{Total: 0},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.HandleSearchTransactions, "/api/transactions/search?q=test&page=576460752303423488&page_size=999999")
+	rr := get(h.SearchTransactions, "/api/transactions/search?q=test&page=576460752303423488&page_size=999999")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -1725,19 +1725,19 @@ func TestGenerateState_ContainsReaderName(t *testing.T) {
 
 // --- OAuth state TTL ---
 
-func TestHandleAuthCallback_RejectsUnknownState(t *testing.T) {
+func TestAuthCallback_RejectsUnknownState(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/auth/callback?state=doesnotexist&code=xyz", nil)
 	rr := httptest.NewRecorder()
-	h.HandleAuthCallback(rr, req)
+	h.AuthCallback(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for unknown state, got %d", rr.Code)
 	}
 }
 
-func TestHandleAuthCallback_RejectsExpiredState(t *testing.T) {
+func TestAuthCallback_RejectsExpiredState(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 
 	// Inject an already-expired entry directly into the map.
@@ -1751,7 +1751,7 @@ func TestHandleAuthCallback_RejectsExpiredState(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/auth/callback?state="+expiredState+"&code=xyz", nil)
 	rr := httptest.NewRecorder()
-	h.HandleAuthCallback(rr, req)
+	h.AuthCallback(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for expired state, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -1760,12 +1760,12 @@ func TestHandleAuthCallback_RejectsExpiredState(t *testing.T) {
 
 // --- app config / base currency ---
 
-func TestHandleGetBaseCurrency_DefaultsToConfig(t *testing.T) {
+func TestGetBaseCurrency_DefaultsToConfig(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/base-currency", nil)
 	rr := httptest.NewRecorder()
-	h.HandleGetBaseCurrency(rr, req)
+	h.GetBaseCurrency(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -1777,13 +1777,13 @@ func TestHandleGetBaseCurrency_DefaultsToConfig(t *testing.T) {
 	}
 }
 
-func TestHandleGetBaseCurrency_FromDB(t *testing.T) {
+func TestGetBaseCurrency_FromDB(t *testing.T) {
 	ms := &mockStore{appConfig: map[string]string{"base_currency": "USD"}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/base-currency", nil)
 	rr := httptest.NewRecorder()
-	h.HandleGetBaseCurrency(rr, req)
+	h.GetBaseCurrency(rr, req)
 
 	var resp map[string]string
 	decodeJSON(t, rr.Body.String(), &resp)
@@ -1792,12 +1792,12 @@ func TestHandleGetBaseCurrency_FromDB(t *testing.T) {
 	}
 }
 
-func TestHandleGetSetupStatusRequiresMissingPreferences(t *testing.T) {
+func TestGetSetupStatusRequiresMissingPreferences(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{appConfig: map[string]string{"scan_interval": "60"}}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/setup-status", nil)
 	rr := httptest.NewRecorder()
-	h.HandleGetSetupStatus(rr, req)
+	h.GetSetupStatus(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
@@ -1818,7 +1818,7 @@ func TestHandleGetSetupStatusRequiresMissingPreferences(t *testing.T) {
 	}
 }
 
-func TestHandleGetSetupStatusCompleteWhenPreferencesExist(t *testing.T) {
+func TestGetSetupStatusCompleteWhenPreferencesExist(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{appConfig: map[string]string{
 		"base_currency":   "USD",
 		"app.timezone":    "America/New_York",
@@ -1827,7 +1827,7 @@ func TestHandleGetSetupStatusCompleteWhenPreferencesExist(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/setup-status", nil)
 	rr := httptest.NewRecorder()
-	h.HandleGetSetupStatus(rr, req)
+	h.GetSetupStatus(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
@@ -1847,7 +1847,7 @@ func TestHandleGetSetupStatusCompleteWhenPreferencesExist(t *testing.T) {
 	}
 }
 
-func TestHandleGetDashboardData_Success(t *testing.T) {
+func TestGetDashboardData_Success(t *testing.T) {
 	ms := &mockStore{
 		dashboardData: &store.DashboardData{
 			CurrentMonth: store.DashboardSection{
@@ -1882,7 +1882,7 @@ func TestHandleGetDashboardData_Success(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/dashboard", nil)
 	rr := httptest.NewRecorder()
-	h.HandleGetDashboardData(rr, req)
+	h.GetDashboardData(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -1898,7 +1898,7 @@ func TestHandleGetDashboardData_Success(t *testing.T) {
 	}
 }
 
-func TestHandleGetMonthlyBreakdown_InvalidDimension(t *testing.T) {
+func TestGetMonthlyBreakdown_InvalidDimension(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(
@@ -1908,21 +1908,21 @@ func TestHandleGetMonthlyBreakdown_InvalidDimension(t *testing.T) {
 		nil,
 	)
 	rr := httptest.NewRecorder()
-	h.HandleGetLabelMonthlySpend(rr, req)
+	h.GetLabelMonthlySpend(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 
-func TestHandleSetBaseCurrency_Success(t *testing.T) {
+func TestSetBaseCurrency_Success(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
 	body := strings.NewReader(`{"base_currency":"usd"}`)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/base-currency", body)
 	rr := httptest.NewRecorder()
-	h.HandleSetBaseCurrency(rr, req)
+	h.SetBaseCurrency(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -1937,46 +1937,46 @@ func TestHandleSetBaseCurrency_Success(t *testing.T) {
 	}
 }
 
-func TestHandleSetBaseCurrency_InvalidCode(t *testing.T) {
+func TestSetBaseCurrency_InvalidCode(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 
 	for _, tc := range []string{`{"base_currency":"US"}`, `{"base_currency":"USDA"}`, `{"base_currency":"12A"}`} {
 		req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/base-currency", strings.NewReader(tc))
 		rr := httptest.NewRecorder()
-		h.HandleSetBaseCurrency(rr, req)
+		h.SetBaseCurrency(rr, req)
 		if rr.Code != http.StatusBadRequest {
 			t.Errorf("input %s: expected 400, got %d", tc, rr.Code)
 		}
 	}
 }
 
-func TestHandleSetBaseCurrency_NoStore(t *testing.T) {
+func TestSetBaseCurrency_NoStore(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/base-currency", strings.NewReader(`{"base_currency":"USD"}`))
 	rr := httptest.NewRecorder()
-	h.HandleSetBaseCurrency(rr, req)
+	h.SetBaseCurrency(rr, req)
 
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", rr.Code)
 	}
 }
 
-func TestHandleGetFacets_NoStore(t *testing.T) {
+func TestGetFacets_NoStore(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/facets", nil)
 	rr := httptest.NewRecorder()
-	h.HandleGetFacets(rr, req)
+	h.GetFacets(rr, req)
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", rr.Code)
 	}
 }
 
-func TestHandleGetFacets_ReturnsEmptySlices(t *testing.T) {
+func TestGetFacets_ReturnsEmptySlices(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/facets", nil)
 	rr := httptest.NewRecorder()
-	h.HandleGetFacets(rr, req)
+	h.GetFacets(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
@@ -2006,7 +2006,7 @@ func TestHandleGetFacets_ReturnsEmptySlices(t *testing.T) {
 	}
 }
 
-func TestHandleGetFacets_ReturnsLabelCounts(t *testing.T) {
+func TestGetFacets_ReturnsLabelCounts(t *testing.T) {
 	h := newTestHandlers(
 		t,
 		&mockStore{facets: &store.Facets{Labels: []string{"Food"}, LabelCounts: map[string]int{"Food": 3}}},
@@ -2015,7 +2015,7 @@ func TestHandleGetFacets_ReturnsLabelCounts(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/facets", nil)
 	rr := httptest.NewRecorder()
 
-	h.HandleGetFacets(rr, req)
+	h.GetFacets(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -2029,11 +2029,11 @@ func TestHandleGetFacets_ReturnsLabelCounts(t *testing.T) {
 	}
 }
 
-func TestHandleGetFacets_StoreError(t *testing.T) {
+func TestGetFacets_StoreError(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{getFacetsErr: errors.New("db error")}, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/facets", nil)
 	rr := httptest.NewRecorder()
-	h.HandleGetFacets(rr, req)
+	h.GetFacets(rr, req)
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d", rr.Code)
 	}
@@ -2041,18 +2041,18 @@ func TestHandleGetFacets_StoreError(t *testing.T) {
 
 // --- labels ---
 
-func TestHandleListLabels_NoStore(t *testing.T) {
+func TestListLabels_NoStore(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	rr := get(h.HandleListLabels, "/api/config/labels")
+	rr := get(h.ListLabels, "/api/config/labels")
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", rr.Code)
 	}
 }
 
-func TestHandleListLabels_Success(t *testing.T) {
+func TestListLabels_Success(t *testing.T) {
 	ms := &mockStore{labels: []store.Label{{Name: "food", Color: "#f59e0b"}}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	rr := get(h.HandleListLabels, "/api/config/labels")
+	rr := get(h.ListLabels, "/api/config/labels")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
@@ -2063,12 +2063,12 @@ func TestHandleListLabels_Success(t *testing.T) {
 	}
 }
 
-func TestHandleCreateLabel_Success(t *testing.T) {
+func TestCreateLabel_Success(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	body := strings.NewReader(`{"name":"groceries","color":"#aabbcc"}`)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/config/labels", body)
 	rr := httptest.NewRecorder()
-	h.HandleCreateLabel(rr, req)
+	h.CreateLabel(rr, req)
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
@@ -2079,7 +2079,7 @@ func TestHandleCreateLabel_Success(t *testing.T) {
 	}
 }
 
-func TestHandleDeleteLabel_NotFound(t *testing.T) {
+func TestDeleteLabel_NotFound(t *testing.T) {
 	ms := &mockStore{labelsErr: store.ErrNotFound}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/config/labels/missing", nil)
@@ -2088,13 +2088,13 @@ func TestHandleDeleteLabel_NotFound(t *testing.T) {
 	// DeleteLabel returns the labelsErr directly; since it's ErrNotFound the handler
 	// logs and returns 500 (DeleteLabel has no ErrNotFound branch in the handler).
 	// The store just returns the error; handler writes 500. Verify non-204.
-	h.HandleDeleteLabel(rr, req)
+	h.DeleteLabel(rr, req)
 	if rr.Code == http.StatusNoContent {
 		t.Fatalf("expected non-204 on error, got 204")
 	}
 }
 
-func TestHandleDeleteLabel_RemoveFromTransactionsOption(t *testing.T) {
+func TestDeleteLabel_RemoveFromTransactionsOption(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
@@ -2103,7 +2103,7 @@ func TestHandleDeleteLabel_RemoveFromTransactionsOption(t *testing.T) {
 	req.SetPathValue("name", "food")
 	rr := httptest.NewRecorder()
 
-	h.HandleDeleteLabel(rr, req)
+	h.DeleteLabel(rr, req)
 
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d", rr.Code)
@@ -2113,7 +2113,7 @@ func TestHandleDeleteLabel_RemoveFromTransactionsOption(t *testing.T) {
 	}
 }
 
-func TestHandleDeleteLabel_RemoveFromTransactionsQueryOption(t *testing.T) {
+func TestDeleteLabel_RemoveFromTransactionsQueryOption(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
@@ -2126,7 +2126,7 @@ func TestHandleDeleteLabel_RemoveFromTransactionsQueryOption(t *testing.T) {
 	req.SetPathValue("name", "food")
 	rr := httptest.NewRecorder()
 
-	h.HandleDeleteLabel(rr, req)
+	h.DeleteLabel(rr, req)
 
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d", rr.Code)
@@ -2138,10 +2138,10 @@ func TestHandleDeleteLabel_RemoveFromTransactionsQueryOption(t *testing.T) {
 
 // --- categories ---
 
-func TestHandleListCategories_Success(t *testing.T) {
+func TestListCategories_Success(t *testing.T) {
 	ms := &mockStore{categories: []store.Category{{Name: "food & dining", IsDefault: true}}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	rr := get(h.HandleListCategories, "/api/config/categories")
+	rr := get(h.ListCategories, "/api/config/categories")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
@@ -2152,22 +2152,22 @@ func TestHandleListCategories_Success(t *testing.T) {
 	}
 }
 
-func TestHandleDeleteCategory_DefaultRejected(t *testing.T) {
+func TestDeleteCategory_DefaultRejected(t *testing.T) {
 	ms := &mockStore{catsErr: fmt.Errorf("cannot delete default category \"food\"")}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/config/categories/food", nil)
 	req.SetPathValue("name", "food")
 	rr := httptest.NewRecorder()
-	h.HandleDeleteCategory(rr, req)
+	h.DeleteCategory(rr, req)
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleGetCategoryMappings_Success(t *testing.T) {
+func TestGetCategoryMappings_Success(t *testing.T) {
 	ms := &mockStore{categoryMappings: map[string][]string{"Food": {"swiggy", "zomato"}}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	rr := get(h.HandleGetCategoryMappings, "/api/config/categories/mappings")
+	rr := get(h.GetCategoryMappings, "/api/config/categories/mappings")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
@@ -2178,14 +2178,14 @@ func TestHandleGetCategoryMappings_Success(t *testing.T) {
 	}
 }
 
-func TestHandleApplyCategoryByMerchant_Success(t *testing.T) {
+func TestApplyCategoryByMerchant_Success(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	body := strings.NewReader(`{"merchant_pattern":"swiggy"}`)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/config/categories/Food/apply", body)
 	req.SetPathValue("name", "Food")
 	rr := httptest.NewRecorder()
 
-	h.HandleApplyCategoryByMerchant(rr, req)
+	h.ApplyCategoryByMerchant(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -2197,7 +2197,7 @@ func TestHandleApplyCategoryByMerchant_Success(t *testing.T) {
 	}
 }
 
-func TestHandleDeleteCategory_RemoveFromTransactionsOption(t *testing.T) {
+func TestDeleteCategory_RemoveFromTransactionsOption(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	body := strings.NewReader(`{"remove_from_transactions":true}`)
@@ -2205,7 +2205,7 @@ func TestHandleDeleteCategory_RemoveFromTransactionsOption(t *testing.T) {
 	req.SetPathValue("name", "Food")
 	rr := httptest.NewRecorder()
 
-	h.HandleDeleteCategory(rr, req)
+	h.DeleteCategory(rr, req)
 
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d", rr.Code)
@@ -2215,13 +2215,13 @@ func TestHandleDeleteCategory_RemoveFromTransactionsOption(t *testing.T) {
 	}
 }
 
-func TestHandleExportCategories_IncludesMerchants(t *testing.T) {
+func TestExportCategories_IncludesMerchants(t *testing.T) {
 	ms := &mockStore{
 		categories:       []store.Category{{Name: "Food"}},
 		categoryMappings: map[string][]string{"Food": {"swiggy"}},
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	rr := get(h.HandleExportCategories, "/api/config/categories/export")
+	rr := get(h.ExportCategories, "/api/config/categories/export")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
@@ -2238,10 +2238,10 @@ func TestHandleExportCategories_IncludesMerchants(t *testing.T) {
 
 // --- buckets ---
 
-func TestHandleListBuckets_Success(t *testing.T) {
+func TestListBuckets_Success(t *testing.T) {
 	ms := &mockStore{buckets: []store.Bucket{{Name: "needs", IsDefault: true}}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	rr := get(h.HandleListBuckets, "/api/config/buckets")
+	rr := get(h.ListBuckets, "/api/config/buckets")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
@@ -2252,10 +2252,10 @@ func TestHandleListBuckets_Success(t *testing.T) {
 	}
 }
 
-func TestHandleGetBucketMappings_Success(t *testing.T) {
+func TestGetBucketMappings_Success(t *testing.T) {
 	ms := &mockStore{bucketMappings: map[string][]string{"Needs": {"rent"}}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	rr := get(h.HandleGetBucketMappings, "/api/config/buckets/mappings")
+	rr := get(h.GetBucketMappings, "/api/config/buckets/mappings")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
@@ -2266,14 +2266,14 @@ func TestHandleGetBucketMappings_Success(t *testing.T) {
 	}
 }
 
-func TestHandleApplyBucketByMerchant_Success(t *testing.T) {
+func TestApplyBucketByMerchant_Success(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	body := strings.NewReader(`{"merchant_pattern":"rent"}`)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/config/buckets/Needs/apply", body)
 	req.SetPathValue("name", "Needs")
 	rr := httptest.NewRecorder()
 
-	h.HandleApplyBucketByMerchant(rr, req)
+	h.ApplyBucketByMerchant(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -2285,7 +2285,7 @@ func TestHandleApplyBucketByMerchant_Success(t *testing.T) {
 	}
 }
 
-func TestHandleDeleteBucket_RemoveFromTransactionsOption(t *testing.T) {
+func TestDeleteBucket_RemoveFromTransactionsOption(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	body := strings.NewReader(`{"remove_from_transactions":true}`)
@@ -2293,7 +2293,7 @@ func TestHandleDeleteBucket_RemoveFromTransactionsOption(t *testing.T) {
 	req.SetPathValue("name", "Needs")
 	rr := httptest.NewRecorder()
 
-	h.HandleDeleteBucket(rr, req)
+	h.DeleteBucket(rr, req)
 
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d", rr.Code)
@@ -2303,13 +2303,13 @@ func TestHandleDeleteBucket_RemoveFromTransactionsOption(t *testing.T) {
 	}
 }
 
-func TestHandleExportBuckets_IncludesMerchants(t *testing.T) {
+func TestExportBuckets_IncludesMerchants(t *testing.T) {
 	ms := &mockStore{
 		buckets:        []store.Bucket{{Name: "Needs"}},
 		bucketMappings: map[string][]string{"Needs": {"rent"}},
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	rr := get(h.HandleExportBuckets, "/api/config/buckets/export")
+	rr := get(h.ExportBuckets, "/api/config/buckets/export")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
@@ -2326,7 +2326,7 @@ func TestHandleExportBuckets_IncludesMerchants(t *testing.T) {
 
 // --- extended update transaction ---
 
-func TestHandleUpdateTransaction_InvalidCategory(t *testing.T) {
+func TestUpdateTransaction_InvalidCategory(t *testing.T) {
 	// Store returns empty category list, so any category name is invalid.
 	ms := &mockStore{categories: []store.Category{}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
@@ -2334,7 +2334,7 @@ func TestHandleUpdateTransaction_InvalidCategory(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/abc", body)
 	req.SetPathValue("id", "abc")
 	rr := httptest.NewRecorder()
-	h.HandleUpdateTransaction(rr, req)
+	h.UpdateTransaction(rr, req)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
@@ -2342,12 +2342,12 @@ func TestHandleUpdateTransaction_InvalidCategory(t *testing.T) {
 
 // --- scan interval ---
 
-func TestHandleGetScanInterval_Default(t *testing.T) {
+func TestGetScanInterval_Default(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/scan-interval", nil)
 	rr := httptest.NewRecorder()
-	h.HandleGetScanInterval(rr, req)
+	h.GetScanInterval(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -2359,14 +2359,14 @@ func TestHandleGetScanInterval_Default(t *testing.T) {
 	}
 }
 
-func TestHandleSetScanInterval_Valid(t *testing.T) {
+func TestSetScanInterval_Valid(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
 	body := strings.NewReader(`{"scan_interval":"120"}`)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/scan-interval", body)
 	rr := httptest.NewRecorder()
-	h.HandleSetScanInterval(rr, req)
+	h.SetScanInterval(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -2381,40 +2381,40 @@ func TestHandleSetScanInterval_Valid(t *testing.T) {
 	}
 }
 
-func TestHandleSetScanInterval_TooLow(t *testing.T) {
+func TestSetScanInterval_TooLow(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 
 	body := strings.NewReader(`{"scan_interval":"5"}`)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/scan-interval", body)
 	rr := httptest.NewRecorder()
-	h.HandleSetScanInterval(rr, req)
+	h.SetScanInterval(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleSetScanInterval_TooHigh(t *testing.T) {
+func TestSetScanInterval_TooHigh(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 
 	body := strings.NewReader(`{"scan_interval":"9999"}`)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/scan-interval", body)
 	rr := httptest.NewRecorder()
-	h.HandleSetScanInterval(rr, req)
+	h.SetScanInterval(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleGetReaderCheckpoint_EmptyValueReturnsNull(t *testing.T) {
+func TestGetReaderCheckpoint_EmptyValueReturnsNull(t *testing.T) {
 	ms := &mockStore{appConfig: map[string]string{"reader.gmail.last_scan_at": ""}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/readers/gmail/checkpoint", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
-	h.HandleGetReaderCheckpoint(rr, req)
+	h.GetReaderCheckpoint(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -2428,7 +2428,7 @@ func TestHandleGetReaderCheckpoint_EmptyValueReturnsNull(t *testing.T) {
 
 // --- heatmap ---
 
-func TestHandleGetHeatmap_Success(t *testing.T) {
+func TestGetHeatmap_Success(t *testing.T) {
 	ms := &mockStore{
 		heatmapData: &store.HeatmapData{
 			ByWeekdayHour: []store.WeekdayHourBucket{
@@ -2443,7 +2443,7 @@ func TestHandleGetHeatmap_Success(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap", nil)
 	rr := httptest.NewRecorder()
-	h.HandleGetHeatmap(rr, req)
+	h.GetHeatmap(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -2461,32 +2461,32 @@ func TestHandleGetHeatmap_Success(t *testing.T) {
 	}
 }
 
-func TestHandleGetHeatmap_StoreError_Returns500(t *testing.T) {
+func TestGetHeatmap_StoreError_Returns500(t *testing.T) {
 	ms := &mockStore{heatmapErr: errors.New("db connection lost")}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap", nil)
 	rr := httptest.NewRecorder()
-	h.HandleGetHeatmap(rr, req)
+	h.GetHeatmap(rr, req)
 
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleGetHeatmap_NoStore_Returns503(t *testing.T) {
+func TestGetHeatmap_NoStore_Returns503(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap", nil)
 	rr := httptest.NewRecorder()
-	h.HandleGetHeatmap(rr, req)
+	h.GetHeatmap(rr, req)
 
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleGetHeatmap_WithFromTo_Returns200(t *testing.T) {
+func TestGetHeatmap_WithFromTo_Returns200(t *testing.T) {
 	ms := &mockStore{
 		heatmapData: &store.HeatmapData{
 			ByWeekdayHour: []store.WeekdayHourBucket{{Weekday: 0, Hour: 10, Amount: 100, Count: 1}},
@@ -2501,7 +2501,7 @@ func TestHandleGetHeatmap_WithFromTo_Returns200(t *testing.T) {
 		nil,
 	)
 	rr := httptest.NewRecorder()
-	h.HandleGetHeatmap(rr, req)
+	h.GetHeatmap(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -2513,7 +2513,7 @@ func TestHandleGetHeatmap_WithFromTo_Returns200(t *testing.T) {
 	}
 }
 
-func TestHandleGetHeatmap_InvalidFrom_Returns400(t *testing.T) {
+func TestGetHeatmap_InvalidFrom_Returns400(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(
@@ -2522,14 +2522,14 @@ func TestHandleGetHeatmap_InvalidFrom_Returns400(t *testing.T) {
 		nil,
 	)
 	rr := httptest.NewRecorder()
-	h.HandleGetHeatmap(rr, req)
+	h.GetHeatmap(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleGetAnnualHeatmap_Success(t *testing.T) {
+func TestGetAnnualHeatmap_Success(t *testing.T) {
 	ms := &mockStore{
 		annualData: []store.DailyBucket{
 			{Date: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), Amount: 1500.0, Count: 3},
@@ -2539,7 +2539,7 @@ func TestHandleGetAnnualHeatmap_Success(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap/annual?year=2026", nil)
 	rr := httptest.NewRecorder()
-	h.HandleGetAnnualHeatmap(rr, req)
+	h.GetAnnualHeatmap(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -2560,25 +2560,25 @@ func TestHandleGetAnnualHeatmap_Success(t *testing.T) {
 	}
 }
 
-func TestHandleGetAnnualHeatmap_StoreError_Returns500(t *testing.T) {
+func TestGetAnnualHeatmap_StoreError_Returns500(t *testing.T) {
 	ms := &mockStore{annualErr: errors.New("db connection lost")}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap/annual?year=2026", nil)
 	rr := httptest.NewRecorder()
-	h.HandleGetAnnualHeatmap(rr, req)
+	h.GetAnnualHeatmap(rr, req)
 
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleGetAnnualHeatmap_NoStore_Returns503(t *testing.T) {
+func TestGetAnnualHeatmap_NoStore_Returns503(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap/annual?year=2026", nil)
 	rr := httptest.NewRecorder()
-	h.HandleGetAnnualHeatmap(rr, req)
+	h.GetAnnualHeatmap(rr, req)
 
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -2595,12 +2595,12 @@ const validRuleBody = `{
 	"source":{"type":"Credit Card","label":"Example Credit Card","bank":"Example Bank"}
 }`
 
-func TestHandleListRules_Success(t *testing.T) {
+func TestListRules_Success(t *testing.T) {
 	ms := &mockStore{rules: []store.RuleRow{{ID: "1", Name: "test", AmountRegex: `\d+`, MerchantRegex: `.+`}}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/rules", nil)
 	rr := httptest.NewRecorder()
-	h.HandleListRules(rr, req)
+	h.ListRules(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
@@ -2611,7 +2611,7 @@ func TestHandleListRules_Success(t *testing.T) {
 	}
 }
 
-func TestHandleListRules_ReturnsSourceObjectAndSenderEmails(t *testing.T) {
+func TestListRules_ReturnsSourceObjectAndSenderEmails(t *testing.T) {
 	ms := &mockStore{rules: []store.RuleRow{{
 		ID:              "1",
 		Name:            "HDFC Credit Card",
@@ -2627,7 +2627,7 @@ func TestHandleListRules_ReturnsSourceObjectAndSenderEmails(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/rules", nil)
 	rr := httptest.NewRecorder()
 
-	h.HandleListRules(rr, req)
+	h.ListRules(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -2649,27 +2649,27 @@ func TestHandleListRules_ReturnsSourceObjectAndSenderEmails(t *testing.T) {
 	}
 }
 
-func TestHandleListRules_NilStore_Returns503(t *testing.T) {
+func TestListRules_NilStore_Returns503(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/rules", nil)
 	rr := httptest.NewRecorder()
-	h.HandleListRules(rr, req)
+	h.ListRules(rr, req)
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", rr.Code)
 	}
 }
 
-func TestHandleCreateRule_Success(t *testing.T) {
+func TestCreateRule_Success(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(validRuleBody))
 	rr := httptest.NewRecorder()
-	h.HandleCreateRule(rr, req)
+	h.CreateRule(rr, req)
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleCreateRule_AcceptsSourceObjectAndSenderEmails(t *testing.T) {
+func TestCreateRule_AcceptsSourceObjectAndSenderEmails(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	body := `{
 		"name":"HDFC Credit Card",
@@ -2682,7 +2682,7 @@ func TestHandleCreateRule_AcceptsSourceObjectAndSenderEmails(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(body))
 	rr := httptest.NewRecorder()
 
-	h.HandleCreateRule(rr, req)
+	h.CreateRule(rr, req)
 
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -2700,12 +2700,12 @@ func TestHandleCreateRule_AcceptsSourceObjectAndSenderEmails(t *testing.T) {
 	}
 }
 
-func TestHandleCreateRule_DuplicateNameReturns409(t *testing.T) {
+func TestCreateRule_DuplicateNameReturns409(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{ruleErr: store.ErrRuleNameConflict}, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(validRuleBody))
 	rr := httptest.NewRecorder()
 
-	h.HandleCreateRule(rr, req)
+	h.CreateRule(rr, req)
 
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -2717,7 +2717,7 @@ func TestHandleCreateRule_DuplicateNameReturns409(t *testing.T) {
 	}
 }
 
-func TestHandleCreateRule_ClearsActiveReaderCheckpoint(t *testing.T) {
+func TestCreateRule_ClearsActiveReaderCheckpoint(t *testing.T) {
 	ms := &mockStore{
 		activeReader: "gmail",
 		appConfig:    map[string]string{"reader.gmail.last_scan_at": "2026-04-27T00:00:00Z"},
@@ -2730,7 +2730,7 @@ func TestHandleCreateRule_ClearsActiveReaderCheckpoint(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(validRuleBody))
 	rr := httptest.NewRecorder()
 
-	h.HandleCreateRule(rr, req)
+	h.CreateRule(rr, req)
 
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
@@ -2743,7 +2743,7 @@ func TestHandleCreateRule_ClearsActiveReaderCheckpoint(t *testing.T) {
 	}
 }
 
-func TestHandleCreateRule_RestartsRunningDaemonAfterCheckpointClear(t *testing.T) {
+func TestCreateRule_RestartsRunningDaemonAfterCheckpointClear(t *testing.T) {
 	ms := &mockStore{
 		activeReader: "gmail",
 		appConfig:    map[string]string{"reader.gmail.last_scan_at": "2026-04-27T00:00:00Z"},
@@ -2756,7 +2756,7 @@ func TestHandleCreateRule_RestartsRunningDaemonAfterCheckpointClear(t *testing.T
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(validRuleBody))
 	rr := httptest.NewRecorder()
 
-	h.HandleCreateRule(rr, req)
+	h.CreateRule(rr, req)
 
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
@@ -2766,7 +2766,7 @@ func TestHandleCreateRule_RestartsRunningDaemonAfterCheckpointClear(t *testing.T
 	}
 }
 
-func TestHandleCreateRule_MissingAmountRegex_Returns422(t *testing.T) {
+func TestCreateRule_MissingAmountRegex_Returns422(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	body := `{
 		"name":"test",
@@ -2776,13 +2776,13 @@ func TestHandleCreateRule_MissingAmountRegex_Returns422(t *testing.T) {
 	}`
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(body))
 	rr := httptest.NewRecorder()
-	h.HandleCreateRule(rr, req)
+	h.CreateRule(rr, req)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d", rr.Code)
 	}
 }
 
-func TestHandleCreateRule_InvalidAmountRegex_Returns422(t *testing.T) {
+func TestCreateRule_InvalidAmountRegex_Returns422(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	body := `{
 		"name":"test",
@@ -2793,13 +2793,13 @@ func TestHandleCreateRule_InvalidAmountRegex_Returns422(t *testing.T) {
 	}`
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(body))
 	rr := httptest.NewRecorder()
-	h.HandleCreateRule(rr, req)
+	h.CreateRule(rr, req)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d", rr.Code)
 	}
 }
 
-func TestHandleUpdateRule_AnyRule_FullUpdate(t *testing.T) {
+func TestUpdateRule_AnyRule_FullUpdate(t *testing.T) {
 	ms := &mockStore{ruleResult: &store.RuleRow{ID: "1", Predefined: true}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	body := `{
@@ -2812,13 +2812,13 @@ func TestHandleUpdateRule_AnyRule_FullUpdate(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/rules/1", strings.NewReader(body))
 	req.SetPathValue("id", "1")
 	rr := httptest.NewRecorder()
-	h.HandleUpdateRule(rr, req)
+	h.UpdateRule(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleUpdateRule_DuplicateNameReturns409(t *testing.T) {
+func TestUpdateRule_DuplicateNameReturns409(t *testing.T) {
 	ms := &mockStore{ruleErr: store.ErrRuleNameConflict}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	body := `{
@@ -2832,7 +2832,7 @@ func TestHandleUpdateRule_DuplicateNameReturns409(t *testing.T) {
 	req.SetPathValue("id", "1")
 	rr := httptest.NewRecorder()
 
-	h.HandleUpdateRule(rr, req)
+	h.UpdateRule(rr, req)
 
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -2844,31 +2844,31 @@ func TestHandleUpdateRule_DuplicateNameReturns409(t *testing.T) {
 	}
 }
 
-func TestHandleDeleteRule_PredefinedRule_Returns403(t *testing.T) {
+func TestDeleteRule_PredefinedRule_Returns403(t *testing.T) {
 	ms := &mockStore{ruleResult: &store.RuleRow{ID: "1", Predefined: true}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/rules/1", nil)
 	req.SetPathValue("id", "1")
 	rr := httptest.NewRecorder()
-	h.HandleDeleteRule(rr, req)
+	h.DeleteRule(rr, req)
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d", rr.Code)
 	}
 }
 
-func TestHandleDeleteRule_UserRule_Returns204(t *testing.T) {
+func TestDeleteRule_UserRule_Returns204(t *testing.T) {
 	ms := &mockStore{ruleResult: &store.RuleRow{ID: "1", Predefined: false}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/rules/1", nil)
 	req.SetPathValue("id", "1")
 	rr := httptest.NewRecorder()
-	h.HandleDeleteRule(rr, req)
+	h.DeleteRule(rr, req)
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d", rr.Code)
 	}
 }
 
-func TestHandleExportRules_OnlyNonPredefinedRules(t *testing.T) {
+func TestExportRules_OnlyNonPredefinedRules(t *testing.T) {
 	ms := &mockStore{rules: []store.RuleRow{
 		{ID: "1", Name: "predefined", Predefined: true, AmountRegex: `\d+`, MerchantRegex: `.+`},
 		{ID: "2", Name: "usr", Predefined: false, AmountRegex: `\d+`, MerchantRegex: `.+`},
@@ -2876,7 +2876,7 @@ func TestHandleExportRules_OnlyNonPredefinedRules(t *testing.T) {
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/rules/export", nil)
 	rr := httptest.NewRecorder()
-	h.HandleExportRules(rr, req)
+	h.ExportRules(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
@@ -2894,7 +2894,7 @@ func TestHandleExportRules_OnlyNonPredefinedRules(t *testing.T) {
 	}
 }
 
-func TestHandleExportRules_UsesVersionedDocument(t *testing.T) {
+func TestExportRules_UsesVersionedDocument(t *testing.T) {
 	ms := &mockStore{rules: []store.RuleRow{
 		{ID: "1", Name: "predefined", Predefined: true, AmountRegex: `\d+`, MerchantRegex: `.+`},
 		{
@@ -2913,7 +2913,7 @@ func TestHandleExportRules_UsesVersionedDocument(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/rules/export", nil)
 	rr := httptest.NewRecorder()
 
-	h.HandleExportRules(rr, req)
+	h.ExportRules(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -2941,7 +2941,7 @@ func TestHandleExportRules_UsesVersionedDocument(t *testing.T) {
 	}
 }
 
-func TestHandleImportRules_AcceptsVersionedDocument(t *testing.T) {
+func TestImportRules_AcceptsVersionedDocument(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	body := `{
@@ -2959,7 +2959,7 @@ func TestHandleImportRules_AcceptsVersionedDocument(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules/import", strings.NewReader(body))
 	rr := httptest.NewRecorder()
 
-	h.HandleImportRules(rr, req)
+	h.ImportRules(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -2976,12 +2976,12 @@ func TestHandleImportRules_AcceptsVersionedDocument(t *testing.T) {
 	}
 }
 
-func TestHandleImportRules_InvalidRegex_Returns422(t *testing.T) {
+func TestImportRules_InvalidRegex_Returns422(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	body := `[{"name":"bad","amountRegex":"[invalid","merchantInfoRegex":".+"}]`
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules/import", strings.NewReader(body))
 	rr := httptest.NewRecorder()
-	h.HandleImportRules(rr, req)
+	h.ImportRules(rr, req)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
@@ -2989,11 +2989,11 @@ func TestHandleImportRules_InvalidRegex_Returns422(t *testing.T) {
 
 // --- thunderbird discovery + guide ---
 
-func TestHandleDiscoverProfiles_Returns200WithProfilesKey(t *testing.T) {
+func TestDiscoverProfiles_Returns200WithProfilesKey(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/thunderbird/discover/profiles", nil)
 	rr := httptest.NewRecorder()
-	h.HandleDiscoverProfiles(rr, req)
+	h.DiscoverProfiles(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -3005,18 +3005,18 @@ func TestHandleDiscoverProfiles_Returns200WithProfilesKey(t *testing.T) {
 	}
 }
 
-func TestHandleDiscoverMailboxes_MissingParam_Returns400(t *testing.T) {
+func TestDiscoverMailboxes_MissingParam_Returns400(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/thunderbird/discover/mailboxes", nil)
 	rr := httptest.NewRecorder()
-	h.HandleDiscoverMailboxes(rr, req)
+	h.DiscoverMailboxes(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 
-func TestHandleDiscoverMailboxes_NonexistentProfile_Returns404(t *testing.T) {
+func TestDiscoverMailboxes_NonexistentProfile_Returns404(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	req := httptest.NewRequestWithContext(
 		context.Background(), http.MethodGet,
@@ -3024,14 +3024,14 @@ func TestHandleDiscoverMailboxes_NonexistentProfile_Returns404(t *testing.T) {
 		nil,
 	)
 	rr := httptest.NewRecorder()
-	h.HandleDiscoverMailboxes(rr, req)
+	h.DiscoverMailboxes(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rr.Code)
 	}
 }
 
-func TestHandleGetReaderGuide_NoGuide_Returns404(t *testing.T) {
+func TestGetReaderGuide_NoGuide_Returns404(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	registry := plugins.NewRegistry()
 	if err := registry.RegisterReader(&testReaderPlugin{name: "noguide", authType: plugins.AuthTypeConfig}); err != nil {
@@ -3043,14 +3043,14 @@ func TestHandleGetReaderGuide_NoGuide_Returns404(t *testing.T) {
 	req.SetPathValue("name", "noguide")
 	rr := httptest.NewRecorder()
 
-	h.HandleGetReaderGuide(rr, req)
+	h.GetReaderGuide(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleGetReaderGuide_ReturnsMetadataGuide(t *testing.T) {
+func TestGetReaderGuide_ReturnsMetadataGuide(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	registry := plugins.NewRegistry()
 	guide := json.RawMessage(`{"sections":[{"title":"Setup","steps":[{"text":"Do the setup"}]}]}`)
@@ -3063,7 +3063,7 @@ func TestHandleGetReaderGuide_ReturnsMetadataGuide(t *testing.T) {
 	req.SetPathValue("name", "guided")
 	rr := httptest.NewRecorder()
 
-	h.HandleGetReaderGuide(rr, req)
+	h.GetReaderGuide(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
@@ -3075,7 +3075,7 @@ func TestHandleGetReaderGuide_ReturnsMetadataGuide(t *testing.T) {
 
 // --- rescan ---
 
-func TestHandleRescan_DaemonRunning_Returns202Rescanning(t *testing.T) {
+func TestRescan_DaemonRunning_Returns202Rescanning(t *testing.T) {
 	called := false
 	ms := &mockStore{}
 	dm := &mockDaemon{status: DaemonStatus{Running: true}}
@@ -3085,7 +3085,7 @@ func TestHandleRescan_DaemonRunning_Returns202Rescanning(t *testing.T) {
 	body := `{"reader":"gmail"}`
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/daemon/rescan", strings.NewReader(body))
 	rr := httptest.NewRecorder()
-	h.HandleRescan(rr, req)
+	h.Rescan(rr, req)
 
 	if rr.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -3100,7 +3100,7 @@ func TestHandleRescan_DaemonRunning_Returns202Rescanning(t *testing.T) {
 	}
 }
 
-func TestHandleRescan_DaemonNotRunning_Returns202Rescanning(t *testing.T) {
+func TestRescan_DaemonNotRunning_Returns202Rescanning(t *testing.T) {
 	called := false
 	ms := &mockStore{}
 	dm := &mockDaemon{status: DaemonStatus{Running: false}}
@@ -3110,7 +3110,7 @@ func TestHandleRescan_DaemonNotRunning_Returns202Rescanning(t *testing.T) {
 	body := `{"reader":"gmail"}`
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/daemon/rescan", strings.NewReader(body))
 	rr := httptest.NewRecorder()
-	h.HandleRescan(rr, req)
+	h.Rescan(rr, req)
 
 	if rr.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -3125,72 +3125,72 @@ func TestHandleRescan_DaemonNotRunning_Returns202Rescanning(t *testing.T) {
 	}
 }
 
-// --- HandleAuthExchange ---
+// --- AuthExchange ---
 
-func TestHandleAuthExchange_MissingURL_Returns400(t *testing.T) {
+func TestAuthExchange_MissingURL_Returns400(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/readers/gmail/auth/exchange", strings.NewReader(`{}`))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
-	h.HandleAuthExchange(rr, req)
+	h.AuthExchange(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for missing url, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleAuthExchange_MalformedURL_Returns400(t *testing.T) {
+func TestAuthExchange_MalformedURL_Returns400(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/readers/gmail/auth/exchange", strings.NewReader(`{"url":":::not-a-url"}`))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
-	h.HandleAuthExchange(rr, req)
+	h.AuthExchange(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for malformed url, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleAuthExchange_MissingCode_Returns400(t *testing.T) {
+func TestAuthExchange_MissingCode_Returns400(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	body := `{"url":"http://localhost:8080/api/auth/callback?state=somestate"}`
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/readers/gmail/auth/exchange", strings.NewReader(body))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
-	h.HandleAuthExchange(rr, req)
+	h.AuthExchange(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for missing code, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleAuthExchange_MissingState_Returns400(t *testing.T) {
+func TestAuthExchange_MissingState_Returns400(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	body := `{"url":"http://localhost:8080/api/auth/callback?code=4%2F0Acode"}`
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/readers/gmail/auth/exchange", strings.NewReader(body))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
-	h.HandleAuthExchange(rr, req)
+	h.AuthExchange(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for missing state, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleAuthExchange_UnknownState_Returns400(t *testing.T) {
+func TestAuthExchange_UnknownState_Returns400(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	body := `{"url":"http://localhost:8080/api/auth/callback?code=4%2F0Acode&state=doesnotexist"}`
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/readers/gmail/auth/exchange", strings.NewReader(body))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
-	h.HandleAuthExchange(rr, req)
+	h.AuthExchange(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for unknown state, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleAuthExchange_ExpiredState_Returns400(t *testing.T) {
+func TestAuthExchange_ExpiredState_Returns400(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 
 	expiredState := "reader:gmail:expiredtoken"
@@ -3205,14 +3205,14 @@ func TestHandleAuthExchange_ExpiredState_Returns400(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/readers/gmail/auth/exchange", strings.NewReader(body))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
-	h.HandleAuthExchange(rr, req)
+	h.AuthExchange(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for expired state, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandleAuthExchange_RestartsRunningDaemonAfterTokenSaved(t *testing.T) {
+func TestAuthExchange_RestartsRunningDaemonAfterTokenSaved(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("token endpoint method = %s, want POST", r.Method)
@@ -3249,7 +3249,7 @@ func TestHandleAuthExchange_RestartsRunningDaemonAfterTokenSaved(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/readers/gmail/auth/exchange", strings.NewReader(body))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
-	h.HandleAuthExchange(rr, req)
+	h.AuthExchange(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -3262,7 +3262,7 @@ func TestHandleAuthExchange_RestartsRunningDaemonAfterTokenSaved(t *testing.T) {
 	}
 }
 
-func TestHandleListTransactions_BucketParam(t *testing.T) {
+func TestListTransactions_BucketParam(t *testing.T) {
 	now := time.Now()
 	st := &mockStore{
 		transactions: []store.Transaction{
@@ -3274,7 +3274,7 @@ func TestHandleListTransactions_BucketParam(t *testing.T) {
 		listResult: store.TransactionListResult{Total: 1},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.HandleListTransactions, "/api/transactions?bucket=wants")
+	rr := get(h.ListTransactions, "/api/transactions?bucket=wants")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
@@ -3286,11 +3286,11 @@ func TestHandleListTransactions_BucketParam(t *testing.T) {
 	}
 }
 
-func TestHandleListTransactions_WeekdayHourTimezoneParams(t *testing.T) {
+func TestListTransactions_WeekdayHourTimezoneParams(t *testing.T) {
 	st := &mockStore{transactions: []store.Transaction{}, listResult: store.TransactionListResult{Total: 0}}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
-	rr := get(h.HandleListTransactions, "/api/transactions?weekday=5&hour_from=9&hour_to=9&tz=Asia/Kolkata")
+	rr := get(h.ListTransactions, "/api/transactions?weekday=5&hour_from=9&hour_to=9&tz=Asia/Kolkata")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
@@ -3309,12 +3309,12 @@ func TestHandleListTransactions_WeekdayHourTimezoneParams(t *testing.T) {
 	}
 }
 
-func TestHandleListTransactions_WeekdayHourTimezoneAndDateParams(t *testing.T) {
+func TestListTransactions_WeekdayHourTimezoneAndDateParams(t *testing.T) {
 	st := &mockStore{transactions: []store.Transaction{}, listResult: store.TransactionListResult{Total: 0}}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	rr := get(
-		h.HandleListTransactions,
+		h.ListTransactions,
 		"/api/transactions?weekday=0&hour_from=23&hour_to=23&tz=Asia/Calcutta&date_from=2026-04-01T00:00:00.000Z&date_to=2026-04-30T23:59:59.000Z",
 	)
 
@@ -3341,12 +3341,12 @@ func TestHandleListTransactions_WeekdayHourTimezoneAndDateParams(t *testing.T) {
 	}
 }
 
-func TestHandleListTransactions_ExcludeParams(t *testing.T) {
+func TestListTransactions_ExcludeParams(t *testing.T) {
 	st := &mockStore{transactions: []store.Transaction{}, listResult: store.TransactionListResult{Total: 0}}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	rr := get(
-		h.HandleListTransactions,
+		h.ListTransactions,
 		"/api/transactions?exclude_categories=Shopping,Food%20%26%20Dining&exclude_labels=Top,Recurring&exclude_buckets=Needs,Wants&exclude_sources=HDFC,Amex",
 	)
 
@@ -3367,12 +3367,12 @@ func TestHandleListTransactions_ExcludeParams(t *testing.T) {
 	}
 }
 
-func TestHandleListTransactions_StructuredSourceParams(t *testing.T) {
+func TestListTransactions_StructuredSourceParams(t *testing.T) {
 	st := &mockStore{transactions: []store.Transaction{}, listResult: store.TransactionListResult{Total: 0}}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	rr := get(
-		h.HandleListTransactions,
+		h.ListTransactions,
 		"/api/transactions?source_type=Credit%20Card&bank=HDFC&exclude_source_types=UPI,NetBanking&exclude_banks=ICICI,SBI",
 	)
 
@@ -3393,12 +3393,12 @@ func TestHandleListTransactions_StructuredSourceParams(t *testing.T) {
 	}
 }
 
-func TestHandleListTransactions_MissingTaxonomyParams(t *testing.T) {
+func TestListTransactions_MissingTaxonomyParams(t *testing.T) {
 	st := &mockStore{transactions: []store.Transaction{}, listResult: store.TransactionListResult{Total: 0}}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	rr := get(
-		h.HandleListTransactions,
+		h.ListTransactions,
 		"/api/transactions?category_missing=1&bucket_missing=1&label_missing=1",
 	)
 
@@ -3416,7 +3416,7 @@ func TestHandleListTransactions_MissingTaxonomyParams(t *testing.T) {
 	}
 }
 
-func TestHandleListTransactions_InvalidTimezoneFallsBackToAppTimezone(t *testing.T) {
+func TestListTransactions_InvalidTimezoneFallsBackToAppTimezone(t *testing.T) {
 	st := &mockStore{
 		transactions: []store.Transaction{},
 		listResult:   store.TransactionListResult{Total: 0},
@@ -3424,7 +3424,7 @@ func TestHandleListTransactions_InvalidTimezoneFallsBackToAppTimezone(t *testing
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
-	rr := get(h.HandleListTransactions, "/api/transactions?weekday=5&hour_from=9&hour_to=9&tz=Not/AZone")
+	rr := get(h.ListTransactions, "/api/transactions?weekday=5&hour_from=9&hour_to=9&tz=Not/AZone")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
@@ -3434,7 +3434,7 @@ func TestHandleListTransactions_InvalidTimezoneFallsBackToAppTimezone(t *testing
 	}
 }
 
-func TestHandleListTransactions_MissingTimezoneFallsBackToAppTimezone(t *testing.T) {
+func TestListTransactions_MissingTimezoneFallsBackToAppTimezone(t *testing.T) {
 	st := &mockStore{
 		transactions: []store.Transaction{},
 		listResult:   store.TransactionListResult{Total: 0},
@@ -3442,7 +3442,7 @@ func TestHandleListTransactions_MissingTimezoneFallsBackToAppTimezone(t *testing
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
-	rr := get(h.HandleListTransactions, "/api/transactions?weekday=5&hour_from=9&hour_to=9")
+	rr := get(h.ListTransactions, "/api/transactions?weekday=5&hour_from=9&hour_to=9")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
@@ -3452,11 +3452,11 @@ func TestHandleListTransactions_MissingTimezoneFallsBackToAppTimezone(t *testing
 	}
 }
 
-func TestHandleGetTimezoneDefaultsToEmptyWhenUnset(t *testing.T) {
+func TestGetTimezoneDefaultsToEmptyWhenUnset(t *testing.T) {
 	st := &mockStore{}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
-	rr := get(h.HandleGetTimezone, "/api/config/timezone")
+	rr := get(h.GetTimezone, "/api/config/timezone")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
@@ -3473,7 +3473,7 @@ func TestHandleGetTimezoneDefaultsToEmptyWhenUnset(t *testing.T) {
 
 // --- banks ---
 
-func TestHandleListBanks(t *testing.T) {
+func TestListBanks(t *testing.T) {
 	banksJSON := []byte(`[{"fragment":"hdfc","color":"#E31837","name":"HDFC Bank"}]`)
 
 	tests := []struct {
@@ -3501,7 +3501,7 @@ func TestHandleListBanks(t *testing.T) {
 			h := newTestHandlers(t, &mockStore{}, &mockDaemon{}, tc.banksData)
 			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/banks", nil)
 			w := httptest.NewRecorder()
-			h.HandleListBanks(w, req)
+			h.ListBanks(w, req)
 			if w.Code != tc.wantStatus {
 				t.Errorf("got status %d, want %d", w.Code, tc.wantStatus)
 			}
@@ -3532,12 +3532,12 @@ func (m *mockStore) GetSyncStatus(_ context.Context) (store.SyncStatus, error) {
 }
 func (m *mockStore) SetSyncStatus(_ context.Context, _ store.SyncStatus) error { return nil }
 
-func TestHandleGetSyncStatus_NoStore(t *testing.T) {
+func TestGetSyncStatus_NoStore(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/sync/status", nil)
 	rr := httptest.NewRecorder()
-	h.HandleGetSyncStatus(rr, req)
+	h.GetSyncStatus(rr, req)
 
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", rr.Code)
@@ -3549,13 +3549,13 @@ func TestHandleGetSyncStatus_NoStore(t *testing.T) {
 	}
 }
 
-func TestHandleCategorizeMerchant_OK(t *testing.T) {
+func TestCategorizeMerchant_OK(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	body := `{"merchant":"Netflix","category":"Entertainment","bucket":"Wants"}`
 	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/merchants/categorize", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	h.HandleCategorizeMerchant(w, r)
+	h.CategorizeMerchant(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
 	}
@@ -3568,36 +3568,36 @@ func TestHandleCategorizeMerchant_OK(t *testing.T) {
 	}
 }
 
-func TestHandleCategorizeMerchant_EmptyMerchant(t *testing.T) {
+func TestCategorizeMerchant_EmptyMerchant(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	body := `{"merchant":"","category":"Entertainment","bucket":"Wants"}`
 	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/merchants/categorize", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	h.HandleCategorizeMerchant(w, r)
+	h.CategorizeMerchant(w, r)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d", w.Code)
 	}
 }
 
-func TestHandleCategorizeMerchant_InvalidJSON(t *testing.T) {
+func TestCategorizeMerchant_InvalidJSON(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/merchants/categorize", strings.NewReader("not-json"))
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	h.HandleCategorizeMerchant(w, r)
+	h.CategorizeMerchant(w, r)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d", w.Code)
 	}
 }
 
-func TestHandleCategorizeMerchant_StoreError(t *testing.T) {
+func TestCategorizeMerchant_StoreError(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{updateErr: errors.New("db down")}, &mockDaemon{})
 	body := `{"merchant":"Netflix","category":"Entertainment","bucket":"Wants"}`
 	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/merchants/categorize", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	h.HandleCategorizeMerchant(w, r)
+	h.CategorizeMerchant(w, r)
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("want 500, got %d", w.Code)
 	}

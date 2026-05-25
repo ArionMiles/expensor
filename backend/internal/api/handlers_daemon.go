@@ -8,21 +8,21 @@ import (
 
 // --- daemon control ---
 
-// HandleStartDaemon handles POST /api/daemon/start.
+// StartDaemon handles POST /api/daemon/start.
 // Body: {"reader": "gmail"}
 // Triggers the background daemon with the given reader if it is not already running.
 // @Summary Start the daemon
 // @Tags Bootstrap
 // @Accept json
 // @Produce json
-// @Param request body DocDaemonReaderRequest true "Daemon start request"
-// @Success 200 {object} DocStatusOnlyResponse "Daemon already running"
-// @Success 202 {object} DocStatusOnlyResponse "Daemon starting"
-// @Failure 400 {object} DocErrorResponse
-// @Failure 422 {object} DocErrorResponse
-// @Failure 501 {object} DocErrorResponse
+// @Param request body DaemonReaderRequest true "Daemon start request"
+// @Success 200 {object} StatusOnlyResponse "Daemon already running"
+// @Success 202 {object} StatusOnlyResponse "Daemon starting"
+// @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 501 {object} ErrorResponse
 // @Router /daemon/start [post]
-func (h *Handlers) HandleStartDaemon(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) StartDaemon(w http.ResponseWriter, r *http.Request) {
 	if h.startFn == nil {
 		writeError(w, http.StatusNotImplemented, "daemon start not configured")
 		return
@@ -49,7 +49,7 @@ func (h *Handlers) HandleStartDaemon(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "starting"})
 }
 
-// HandleRescan handles POST /api/daemon/rescan.
+// Rescan handles POST /api/daemon/rescan.
 // Body: {"reader": "<name>"}
 // Stops any running daemon and restarts with forceRescan=true, bypassing the
 // checkpoint and state deduplication so the full lookback window is scanned.
@@ -57,12 +57,12 @@ func (h *Handlers) HandleStartDaemon(w http.ResponseWriter, r *http.Request) {
 // @Tags Bootstrap
 // @Accept json
 // @Produce json
-// @Param request body DocDaemonReaderRequest true "Daemon rescan request"
-// @Success 202 {object} DocStatusOnlyResponse
-// @Failure 400 {object} DocErrorResponse
-// @Failure 501 {object} DocErrorResponse
+// @Param request body DaemonReaderRequest true "Daemon rescan request"
+// @Success 202 {object} StatusOnlyResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 501 {object} ErrorResponse
 // @Router /daemon/rescan [post]
-func (h *Handlers) HandleRescan(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) Rescan(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Reader string `json:"reader"`
 	}
@@ -83,15 +83,15 @@ func (h *Handlers) HandleRescan(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "rescanning"})
 }
 
-// HandleGetActiveReader handles GET /api/config/active-reader.
+// GetActiveReader handles GET /api/config/active-reader.
 // Returns the reader name persisted from the last daemon start, or "" if none.
 // @Summary Get the active reader
 // @Tags Config
 // @Produce json
-// @Success 200 {object} DocActiveReaderResponse
-// @Failure 500 {object} DocErrorResponse
+// @Success 200 {object} ActiveReaderResponse
+// @Failure 500 {object} ErrorResponse
 // @Router /config/active-reader [get]
-func (h *Handlers) HandleGetActiveReader(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) GetActiveReader(w http.ResponseWriter, r *http.Request) {
 	reader, err := h.readActiveReader(r.Context())
 	if err != nil {
 		h.logger.Error("failed to read active reader", "error", err)
