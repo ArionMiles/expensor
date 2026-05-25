@@ -2,8 +2,6 @@
 package gmail
 
 import (
-	"log/slog"
-	"net/http"
 	"time"
 
 	gmailapi "google.golang.org/api/gmail/v1"
@@ -12,7 +10,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 	gmailreader "github.com/ArionMiles/expensor/backend/pkg/reader/gmail"
-	"github.com/ArionMiles/expensor/backend/pkg/state"
 )
 
 // Plugin implements the ReaderPlugin interface for Gmail.
@@ -24,50 +21,41 @@ type Plugin struct {
 // the centralized content/readers/gmail/guide.json via go:embed.
 func (p *Plugin) SetGuideData(data []byte) { p.guideData = data }
 
-// Name returns the plugin name.
-func (p *Plugin) Name() string { return "gmail" }
-
-// Description returns a human-readable description.
-func (p *Plugin) Description() string {
-	return "Read expense transactions from Gmail messages"
+// Metadata returns catalog metadata for the Gmail reader plugin.
+func (p *Plugin) Metadata() plugins.ReaderMetadata {
+	return plugins.ReaderMetadata{
+		Name:        "gmail",
+		Description: "Read expense transactions from Gmail messages",
+		Auth: plugins.AuthSpec{
+			Type:                      plugins.AuthTypeOAuth,
+			RequiredScopes:            []string{gmailapi.GmailReadonlyScope},
+			RequiresCredentialsUpload: true,
+		},
+		ConfigSchema: []plugins.ConfigField{},
+		SetupGuide:   p.guideData,
+	}
 }
-
-// RequiredScopes returns the OAuth scopes needed by this plugin.
-func (p *Plugin) RequiredScopes() []string {
-	return []string{gmailapi.GmailReadonlyScope}
-}
-
-// AuthType returns the authentication type for Gmail (OAuth2).
-func (p *Plugin) AuthType() plugins.AuthType { return plugins.AuthTypeOAuth }
-
-// RequiresCredentialsUpload reports that Gmail needs a client_secret.json upload.
-func (p *Plugin) RequiresCredentialsUpload() bool { return true }
-
-// ConfigSchema returns an empty schema — Gmail is configured via OAuth, not form fields.
-func (p *Plugin) ConfigSchema() []plugins.ConfigField { return []plugins.ConfigField{} }
-
-// SetupGuide returns the injected setup guide for Gmail.
-func (p *Plugin) SetupGuide() []byte { return p.guideData }
 
 // NewReader creates a new Gmail reader instance.
-func (p *Plugin) NewReader( //nolint:revive // interface method; argument count dictated by ReaderPlugin
-	httpClient *http.Client, cfg *config.Config, rules []api.Rule,
-	resolver api.CategoryResolver, stateManager *state.Manager, diagnosticSink api.DiagnosticSink, logger *slog.Logger,
-) (api.Reader, error) {
+func (p *Plugin) NewReader(input plugins.ReaderInput) (api.Reader, error) {
+	cfg := input.AppConfig
+	if cfg == nil {
+		cfg = &config.Config{}
+	}
 	interval := time.Duration(cfg.ScanInterval) * time.Second
 	if interval == 0 {
 		interval = 60 * time.Second
 	}
 	readerCfg := gmailreader.Config{
-		Rules:          rules,
-		Resolver:       resolver,
+		Rules:          input.Rules,
+		Resolver:       input.Resolver,
 		Interval:       interval,
-		State:          stateManager,
+		State:          input.StateManager,
 		LookbackDays:   cfg.LookbackDays,
 		LastScanAt:     cfg.LastScanAt,
 		ForceFullScan:  cfg.ForceFullScan,
 		OnCheckpoint:   cfg.OnCheckpoint,
-		DiagnosticSink: diagnosticSink,
+		DiagnosticSink: input.DiagnosticSink,
 	}
-	return gmailreader.New(httpClient, readerCfg, logger)
+	return gmailreader.New(input.HTTPClient, readerCfg, input.Logger)
 }

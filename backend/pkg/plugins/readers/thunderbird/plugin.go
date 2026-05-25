@@ -2,15 +2,13 @@
 package thunderbird
 
 import (
-	"log/slog"
-	"net/http"
+	"encoding/json"
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 	tbreader "github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
-	"github.com/ArionMiles/expensor/backend/pkg/state"
 )
 
 // Plugin implements the ReaderPlugin interface for Thunderbird.
@@ -22,23 +20,20 @@ type Plugin struct {
 // the centralized content/readers/thunderbird/guide.json via go:embed.
 func (p *Plugin) SetGuideData(data []byte) { p.guideData = data }
 
-// Name returns the plugin name.
-func (p *Plugin) Name() string { return "thunderbird" }
-
-// Description returns a human-readable description.
-func (p *Plugin) Description() string {
-	return "Read expense transactions from Thunderbird mailbox files (MBOX format)"
+// Metadata returns catalog metadata for the Thunderbird reader plugin.
+func (p *Plugin) Metadata() plugins.ReaderMetadata {
+	return plugins.ReaderMetadata{
+		Name:        "thunderbird",
+		Description: "Read expense transactions from Thunderbird mailbox files (MBOX format)",
+		Auth: plugins.AuthSpec{
+			Type:                      plugins.AuthTypeConfig,
+			RequiredScopes:            []string{},
+			RequiresCredentialsUpload: false,
+		},
+		ConfigSchema: p.ConfigSchema(),
+		SetupGuide:   p.guideData,
+	}
 }
-
-// RequiredScopes returns the OAuth scopes needed by this plugin.
-// Thunderbird reader doesn't need OAuth as it reads local files.
-func (p *Plugin) RequiredScopes() []string { return []string{} }
-
-// AuthType returns the authentication type for Thunderbird (config-only, no OAuth).
-func (p *Plugin) AuthType() plugins.AuthType { return plugins.AuthTypeConfig }
-
-// RequiresCredentialsUpload reports that Thunderbird does not need credentials upload.
-func (p *Plugin) RequiresCredentialsUpload() bool { return false }
 
 // ConfigSchema returns the fields required to configure Thunderbird.
 func (p *Plugin) ConfigSchema() []plugins.ConfigField {
@@ -80,22 +75,29 @@ func (p *Plugin) ApplyConfig(cfg *config.Config, raw map[string]any) {
 }
 
 // NewReader creates a new Thunderbird reader instance.
-// The httpClient parameter is unused for Thunderbird (no OAuth needed).
-func (p *Plugin) NewReader( //nolint:revive // interface method; argument count dictated by ReaderPlugin
-	httpClient *http.Client, cfg *config.Config, rules []api.Rule,
-	resolver api.CategoryResolver, stateManager *state.Manager, diagnosticSink api.DiagnosticSink, logger *slog.Logger,
-) (api.Reader, error) {
+func (p *Plugin) NewReader(input plugins.ReaderInput) (api.Reader, error) {
+	cfg := config.Config{}
+	if input.AppConfig != nil {
+		cfg = *input.AppConfig
+	}
+	if len(input.ReaderConfig) > 0 {
+		var raw map[string]any
+		if err := json.Unmarshal(input.ReaderConfig, &raw); err == nil {
+			p.ApplyConfig(&cfg, raw)
+		}
+	}
+
 	readerCfg := tbreader.Config{
 		ProfilePath:    cfg.Thunderbird.ProfilePath,
 		Mailboxes:      cfg.Thunderbird.GetMailboxes(),
-		Rules:          rules,
-		Resolver:       resolver,
-		State:          stateManager,
+		Rules:          input.Rules,
+		Resolver:       input.Resolver,
+		State:          input.StateManager,
 		Interval:       time.Duration(cfg.ScanInterval) * time.Second,
 		LastScanAt:     cfg.LastScanAt,
 		ForceFullScan:  cfg.ForceFullScan,
 		OnCheckpoint:   cfg.OnCheckpoint,
-		DiagnosticSink: diagnosticSink,
+		DiagnosticSink: input.DiagnosticSink,
 	}
-	return tbreader.New(readerCfg, logger)
+	return tbreader.New(readerCfg, input.Logger)
 }
