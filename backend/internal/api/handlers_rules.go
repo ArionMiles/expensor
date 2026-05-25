@@ -239,8 +239,8 @@ func validateRuleRow(row store.RuleRow) error {
 	return validateRuleRegexes(row.AmountRegex, row.MerchantRegex, row.CurrencyRegex)
 }
 
-// HandleListRules handles GET /api/rules.
-func (h *Handlers) HandleListRules(w http.ResponseWriter, r *http.Request) {
+// ListRules handles GET /api/rules.
+func (h *Handlers) ListRules(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -254,8 +254,8 @@ func (h *Handlers) HandleListRules(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, ruleRowsToHTTP(rules))
 }
 
-// HandleCreateRule handles POST /api/rules.
-func (h *Handlers) HandleCreateRule(w http.ResponseWriter, r *http.Request) {
+// CreateRule handles POST /api/rules.
+func (h *Handlers) CreateRule(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -306,9 +306,9 @@ func (h *Handlers) readActiveReader(ctx context.Context) (string, error) {
 	return h.store.GetActiveReader(ctx)
 }
 
-// HandleUpdateRule handles PUT /api/rules/{id}.
+// UpdateRule handles PUT /api/rules/{id}.
 // All rules (predefined and user-created) are fully editable.
-func (h *Handlers) HandleUpdateRule(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) UpdateRule(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -341,9 +341,9 @@ func (h *Handlers) HandleUpdateRule(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, ruleRowToHTTP(*updated))
 }
 
-// HandleDeleteRule handles DELETE /api/rules/{id}.
+// DeleteRule handles DELETE /api/rules/{id}.
 // Returns 403 for system rules.
-func (h *Handlers) HandleDeleteRule(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) DeleteRule(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -374,9 +374,9 @@ func (h *Handlers) HandleDeleteRule(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// HandleExportRules handles GET /api/rules/export.
+// ExportRules handles GET /api/rules/export.
 // Downloads all user rules as a JSON file in rules.json format.
-func (h *Handlers) HandleExportRules(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) ExportRules(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -400,9 +400,9 @@ func (h *Handlers) HandleExportRules(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(ruleDocumentJSON{Version: 2, Presets: ruleDocumentPresets(export), Rules: export})
 }
 
-// HandleImportRules handles POST /api/rules/import.
+// ImportRules handles POST /api/rules/import.
 // Validates all rules first; rejects the entire import if any rule fails.
-func (h *Handlers) HandleImportRules(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) ImportRules(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return

@@ -11,18 +11,18 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
-// HandleListExtractionDiagnostics handles GET /api/extraction-diagnostics.
+// ListExtractionDiagnostics handles GET /api/extraction-diagnostics.
 // @Summary List extraction diagnostics
 // @Tags Extraction Diagnostics
 // @Produce json
 // @Param status query string false "Diagnostic status filter"
 // @Param limit query int false "Maximum rows to return"
-// @Success 200 {array} DocExtractionDiagnosticResponse
-// @Failure 422 {object} DocErrorResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Success 200 {array} ExtractionDiagnosticResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /extraction-diagnostics [get]
-func (h *Handlers) HandleListExtractionDiagnostics(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) ListExtractionDiagnostics(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -59,18 +59,18 @@ func (h *Handlers) HandleListExtractionDiagnostics(w http.ResponseWriter, r *htt
 	writeJSON(w, http.StatusOK, rows)
 }
 
-// HandleGetExtractionDiagnostic handles GET /api/extraction-diagnostics/{id}.
+// GetExtractionDiagnostic handles GET /api/extraction-diagnostics/{id}.
 // @Summary Get an extraction diagnostic
 // @Tags Extraction Diagnostics
 // @Produce json
 // @Param id path string true "Diagnostic ID"
-// @Success 200 {object} DocExtractionDiagnosticResponse
-// @Failure 400 {object} DocErrorResponse
-// @Failure 404 {object} DocErrorResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Success 200 {object} ExtractionDiagnosticResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /extraction-diagnostics/{id} [get]
-func (h *Handlers) HandleGetExtractionDiagnostic(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) GetExtractionDiagnostic(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -95,22 +95,22 @@ func (h *Handlers) HandleGetExtractionDiagnostic(w http.ResponseWriter, r *http.
 	writeJSON(w, http.StatusOK, row)
 }
 
-// HandleUpdateExtractionDiagnosticStatus handles PUT /api/extraction-diagnostics/{id}/status.
+// UpdateExtractionDiagnosticStatus handles PUT /api/extraction-diagnostics/{id}/status.
 // @Summary Update extraction diagnostic status
 // @Tags Extraction Diagnostics
 // @Accept json
 // @Produce json
 // @Param id path string true "Diagnostic ID"
-// @Param request body DocExtractionDiagnosticStatusRequest true "Diagnostic status payload"
-// @Success 200 {object} DocExtractionDiagnosticResponse
-// @Failure 400 {object} DocErrorResponse
-// @Failure 404 {object} DocErrorResponse
-// @Failure 409 {object} DocErrorResponse
-// @Failure 422 {object} DocErrorResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Param request body ExtractionDiagnosticStatusRequest true "Diagnostic status payload"
+// @Success 200 {object} ExtractionDiagnosticResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /extraction-diagnostics/{id}/status [put]
-func (h *Handlers) HandleUpdateExtractionDiagnosticStatus(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) UpdateExtractionDiagnosticStatus(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -122,7 +122,7 @@ func (h *Handlers) HandleUpdateExtractionDiagnosticStatus(w http.ResponseWriter,
 		return
 	}
 
-	var body DocExtractionDiagnosticStatusRequest
+	var body ExtractionDiagnosticStatusRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
 		return

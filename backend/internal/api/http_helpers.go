@@ -9,8 +9,8 @@ import (
 
 // --- helpers ---
 
-// getBaseCurrency returns the base currency from the DB, falling back to INR.
-func (h *Handlers) getBaseCurrency(ctx context.Context) string {
+// currentBaseCurrency returns the base currency from the DB, falling back to INR.
+func (h *Handlers) currentBaseCurrency(ctx context.Context) string {
 	if h.store != nil {
 		if val, err := h.store.GetAppConfig(ctx, "base_currency"); err == nil && val != "" {
 			return val

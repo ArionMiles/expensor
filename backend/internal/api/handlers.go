@@ -127,33 +127,33 @@ func NewHandlers(cfg HandlersConfig) *Handlers {
 
 // --- health & status ---
 
-// HandleHealth handles GET /api/health.
+// Health handles GET /api/health.
 // @Summary Health check
 // @Tags Bootstrap
 // @Produce json
-// @Success 200 {object} DocHealthResponse
+// @Success 200 {object} HealthResponse
 // @Router /health [get]
-func (h *Handlers) HandleHealth(w http.ResponseWriter, _ *http.Request) {
+func (h *Handlers) Health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// HandleVersion handles GET /api/version.
+// Version handles GET /api/version.
 // @Summary Get backend version
 // @Tags Bootstrap
 // @Produce json
-// @Success 200 {object} DocVersionResponse
+// @Success 200 {object} VersionResponse
 // @Router /version [get]
-func (h *Handlers) HandleVersion(w http.ResponseWriter, _ *http.Request) {
+func (h *Handlers) Version(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"version": h.version})
 }
 
-// HandleStatus handles GET /api/status.
+// Status handles GET /api/status.
 // @Summary Get daemon and stats status
 // @Tags Bootstrap
 // @Produce json
-// @Success 200 {object} DocStatusResponse
+// @Success 200 {object} StatusResponse
 // @Router /status [get]
-func (h *Handlers) HandleStatus(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 	ds := h.daemon.Status()
 
 	type statusResponse struct {
@@ -163,7 +163,7 @@ func (h *Handlers) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	resp := statusResponse{Daemon: ds}
 
 	if h.store != nil {
-		currency := h.getBaseCurrency(r.Context())
+		currency := h.currentBaseCurrency(r.Context())
 		if stats, err := h.store.GetStats(r.Context(), currency); err == nil {
 			resp.Stats = stats
 		}

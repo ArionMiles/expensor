@@ -2,16 +2,16 @@ package api
 
 import "net/http"
 
-// HandleTriggerSync triggers an immediate community content sync.
+// TriggerSync triggers an immediate community content sync.
 // POST /api/config/sync
 // @Summary Trigger community content sync
 // @Tags Config
 // @Accept json
 // @Produce json
-// @Success 200 {object} DocStatusOnlyResponse
-// @Failure 503 {object} DocErrorResponse
+// @Success 200 {object} StatusOnlyResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /config/sync [post]
-func (h *Handlers) HandleTriggerSync(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) TriggerSync(w http.ResponseWriter, r *http.Request) {
 	if h.syncFn == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "sync not configured"})
 		return
@@ -20,16 +20,16 @@ func (h *Handlers) HandleTriggerSync(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// HandleGetSyncStatus returns the last community sync status.
+// GetSyncStatus returns the last community sync status.
 // GET /api/config/sync/status
 // @Summary Get community sync status
 // @Tags Config
 // @Produce json
-// @Success 200 {object} DocSyncStatusResponse
-// @Failure 500 {object} DocErrorResponse
-// @Failure 503 {object} DocErrorResponse
+// @Success 200 {object} SyncStatusResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Router /config/sync/status [get]
-func (h *Handlers) HandleGetSyncStatus(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) GetSyncStatus(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return

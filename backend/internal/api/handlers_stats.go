@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// HandleGetChartData handles GET /api/stats/charts.
-func (h *Handlers) HandleGetChartData(w http.ResponseWriter, r *http.Request) {
+// GetChartData handles GET /api/stats/charts.
+func (h *Handlers) GetChartData(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -22,8 +22,8 @@ func (h *Handlers) HandleGetChartData(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, cd)
 }
 
-// HandleGetDashboardData handles GET /api/stats/dashboard.
-func (h *Handlers) HandleGetDashboardData(w http.ResponseWriter, r *http.Request) {
+// GetDashboardData handles GET /api/stats/dashboard.
+func (h *Handlers) GetDashboardData(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -39,10 +39,10 @@ func (h *Handlers) HandleGetDashboardData(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, data)
 }
 
-// HandleGetHeatmap handles GET /api/stats/heatmap.
+// GetHeatmap handles GET /api/stats/heatmap.
 // Optional query params: from=<RFC3339>, to=<RFC3339> (both or neither).
 // Returns 400 if either param is present but malformed.
-func (h *Handlers) HandleGetHeatmap(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) GetHeatmap(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
@@ -63,10 +63,10 @@ func (h *Handlers) HandleGetHeatmap(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, data)
 }
 
-// HandleGetAnnualHeatmap handles GET /api/stats/heatmap/annual?year=YYYY.
+// GetAnnualHeatmap handles GET /api/stats/heatmap/annual?year=YYYY.
 // Returns per-day transaction totals for the requested calendar year.
 // Defaults to the current year when ?year is absent or invalid.
-func (h *Handlers) HandleGetAnnualHeatmap(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) GetAnnualHeatmap(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
