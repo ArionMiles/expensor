@@ -20,7 +20,7 @@ The work has two equal outcomes:
 |-------|--------|-------|
 | Observability package and store instrumentation | Complete | Implemented in `pr/backend-observability-code-health`; see `docs/superpowers/plans/2026-05-24-observability-store-instrumentation.md`. |
 | Plugin registry cleanup | Complete | Registry is now catalog-only; reader/writer metadata is explicit; daemon wiring owns construction. |
-| API handler decomposition | Pending | Requires a separate implementation plan. |
+| API handler decomposition | In progress | Active on branch `pr/api-handler-decomposition`; first pass is behavior-preserving file decomposition. |
 | Store package ownership cleanup beyond instrumentation | Pending | Remaining work includes read-model ownership and `store.go` model/helper split. |
 | Processed-message state context cleanup | Pending | Requires a separate implementation plan. |
 | Provider-specific domain cleanup | Pending | Includes moving Gmail query construction out of `pkg/api`. |
@@ -318,7 +318,7 @@ Run component or contract tests only for slices that touch store behavior, daemo
 3. Replace store inline `QueryInstrumentation` with interface decorators. **Complete.**
 4. Split store capability interfaces and clean up `store.go` ownership. **Partially complete for instrumentation boundaries; remaining ownership cleanup is deferred.**
 5. Refactor plugin metadata and construction boundary. **Complete.**
-6. Split `internal/api/handlers.go` by resource without behavior changes.
+6. Split `internal/api/handlers.go` by resource without behavior changes. **In progress.**
 7. Make processed-message state context-aware.
 8. Move Gmail-specific rule query construction out of `pkg/api`.
 9. Update `AGENTS.md` with backend code-health rules.
