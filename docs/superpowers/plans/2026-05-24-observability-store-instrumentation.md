@@ -8,10 +8,11 @@
 
 - Implemented `backend/pkg/observability` with `slog` setup, OTLP-only OpenTelemetry trace/metric provider setup, no-op defaults, and shutdown handling.
 - Kept logs on `slog`; OpenTelemetry log export and stdout telemetry exporters were intentionally not added.
-- Added local OpenTelemetry Collector, Jaeger, and Prometheus wiring for `task dev`.
+- Added local OpenTelemetry Collector, Jaeger, and Prometheus wiring for `task dev` via an explicit Compose profile; `task db:start` remains Postgres-only.
 - Moved store instrumentation out of concrete repositories and into `store.InstrumentedStore`.
 - Adjusted the original decorator design after review: each instrumented store method starts/ends its span inline and calls `s.next` directly. There are no generic callback wrappers like `observe1`/`observe2`.
 - Removed explicit duration timing from store operation recording. Spans convey elapsed time; store metrics currently emit a low-cardinality operation counter tagged by namespace, operation, and status.
+- Sanitized store trace errors: span status uses a stable class and raw store errors are not recorded as span events/status descriptions.
 - Deleted the old repository-level `QueryInstrumentation` implementation and tests.
 - Wired the instrumented store into `cmd/server` for API, daemon store calls, and diagnostic persistence while retaining raw `*store.Store` for startup seeding and closing.
 - Added AGENTS/CLAUDE backend guidance for observability, store instrumentation, and PR-template usage.
@@ -632,8 +633,7 @@ func (s *Scope) RecordOperation(ctx context.Context, op Operation) {
 
 	span := trace.SpanFromContext(ctx)
 	if op.Err != nil {
-		span.RecordError(op.Err)
-		span.SetStatus(codes.Error, op.Err.Error())
+		span.SetStatus(codes.Error, "error")
 		s.logger.ErrorContext(ctx, "operation failed",
 			"namespace", op.Namespace,
 			"operation", op.Name,
@@ -736,7 +736,7 @@ In `tests/docker-compose.local.yml`, add services:
 - `otel-collector` using `otel/opentelemetry-collector-contrib:0.140.0`, mounting `./otel-collector.local.yml`, exposing `4317:4317`, `4318:4318`, and `8889:8889`, and depending on `jaeger`.
 - `prometheus` using `prom/prometheus:v3.7.3`, mounting `./prometheus.local.yml`, exposing `9090:9090`, and depending on `otel-collector`.
 
-Keep the existing `postgres` service behavior unchanged.
+Keep the existing `postgres` service behavior unchanged. Put `jaeger`, `otel-collector`, and `prometheus` behind an `observability` Compose profile so `task db:start` remains Postgres-only.
 
 - [x] **Step 3: Enable OTLP telemetry in local env**
 
@@ -757,14 +757,14 @@ Update the `dev` task description to mention local observability services and UR
 - Jaeger traces: `http://localhost:16686`
 - Prometheus metrics: `http://localhost:9090`
 
-In the `dev` command, `task db:start` already runs `docker compose -f docker-compose.local.yml --env-file .env up -d` from `tests`, so all services in the compose file start together. Add echo lines after the health wait:
+Add a separate `observability:start` task that runs the Compose `observability` profile, and have `task dev` call it after `task db:start`. Add echo lines for:
 
 ```bash
 echo "Jaeger traces: http://localhost:16686"
 echo "Prometheus metrics: http://localhost:9090"
 ```
 
-Update the `db:start` task summary/description from "PostgreSQL container" to "local development containers" because it now starts PostgreSQL plus observability services.
+Keep the `db:start` task summary/description scoped to the PostgreSQL container so database-only workflows do not require observability ports to be free.
 
 - [x] **Step 5: Verify compose config**
 

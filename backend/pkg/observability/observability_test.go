@@ -8,6 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace/noop"
+
 	"github.com/ArionMiles/expensor/backend/pkg/observability"
 )
 
@@ -145,5 +150,32 @@ func TestOperationRecorderAcceptsSuccessAndError(t *testing.T) {
 	})
 	if strings.Contains(logs.String(), "duration_ms") {
 		t.Fatalf("operation logs should not include duration_ms, got %q", logs.String())
+	}
+}
+
+func TestOperationRecorderDoesNotExportRawErrorToSpan(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	otel.SetTracerProvider(provider)
+	defer otel.SetTracerProvider(noop.NewTracerProvider())
+
+	scope := observability.NewScope(slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)), "test")
+	ctx, span := scope.Start(context.Background(), "store.test.error")
+	scope.RecordOperation(ctx, observability.Operation{
+		Namespace: "store",
+		Name:      "test.error",
+		Err:       errors.New("processed message key sensitive-key-123"),
+	})
+	span.End()
+
+	spans := recorder.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("ended spans = %d, want 1", len(spans))
+	}
+	if got := spans[0].Status().Description; got != "error" {
+		t.Fatalf("span status description = %q, want sanitized error class", got)
+	}
+	if events := spans[0].Events(); len(events) != 0 {
+		t.Fatalf("span events = %d, want 0 to avoid exporting raw error details", len(events))
 	}
 }

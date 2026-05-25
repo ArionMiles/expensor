@@ -147,6 +147,8 @@ Instrumentation records:
 
 Implementation note from the completed observability slice: store decorators should start spans inline in the instrumented method, call `next` directly, and then record the operation result. Do not hide the delegated call inside callback helpers like `observe1` or `observe2`. Store operation duration is represented by the span; do not add separate `time.Now()` timing unless a future metrics requirement explicitly needs a histogram.
 
+Store operation errors must be sanitized before entering OTel data. Do not call `span.RecordError` with raw store errors or use `err.Error()` as a span status description; use a stable low-cardinality class such as `error` for trace status and keep raw error text in `slog` only.
+
 Use low-cardinality metrics attributes only:
 
 - `repository`
@@ -162,6 +164,7 @@ Avoid sensitive or high-cardinality attributes:
 - rule names
 - raw SQL
 - raw error strings
+- span events or status descriptions derived from raw errors
 - email bodies or snippets
 
 Composition should happen at wiring boundaries. Concrete repositories should not import or call observability helpers.

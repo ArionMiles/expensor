@@ -66,6 +66,7 @@ task audit:fe         # npm audit on production dependencies
 
 task build:binary     # Optimized Go binary → bin/expensor
 task db:start         # Start local dev postgres container
+task observability:start # Start local OpenTelemetry Collector + Jaeger + Prometheus
 task db:stop          # Stop local dev postgres container
 ```
 
@@ -99,7 +100,7 @@ Keep `slog` as the application logging API. Use OpenTelemetry for traces and met
 
 Do not add stdout trace or metric exporters. Stdout is for logs only; Expensor telemetry exporters are `none` or `otlp`.
 
-Do not put high-cardinality or sensitive values in metrics or trace attributes, including email bodies, snippets, sender addresses, message IDs, transaction IDs, merchant names, and raw SQL.
+Do not put high-cardinality or sensitive values in metrics, trace attributes, span events, or span status descriptions, including email bodies, snippets, sender addresses, message IDs, transaction IDs, merchant names, raw error strings, and raw SQL.
 
 ### Plugin system
 Reader and writer plugins implement interfaces in `pkg/api`. Plugins are registered in `cmd/server/main.go` and selected at runtime via the web UI (not env vars). Adding a new reader means implementing `plugins.ReaderPlugin` and registering it in the registry.
