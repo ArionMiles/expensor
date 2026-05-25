@@ -20,7 +20,9 @@ The work has two equal outcomes:
 |-------|--------|-------|
 | Observability package and store instrumentation | Complete | Implemented in `pr/backend-observability-code-health`; see `docs/superpowers/plans/2026-05-24-observability-store-instrumentation.md`. |
 | Plugin registry cleanup | Complete | Registry is now catalog-only; reader/writer metadata is explicit; daemon wiring owns construction. |
-| API handler decomposition | Pending | Requires a separate implementation plan. |
+| API handler decomposition | In progress | Active on branch `pr/api-handler-decomposition`; first pass is behavior-preserving file decomposition. |
+| API handler naming cleanup | Pending | Next leg after decomposition: remove redundant `Handle` receiver-method prefixes and `Doc` OpenAPI DTO prefixes without changing routes or payloads. |
+| API spec and contract coverage expansion | Pending | Follow the rename cleanup by documenting more registered routes and expanding Schemathesis beyond the current read-only allowlist. |
 | Store package ownership cleanup beyond instrumentation | Pending | Remaining work includes read-model ownership and `store.go` model/helper split. |
 | Processed-message state context cleanup | Pending | Requires a separate implementation plan. |
 | Provider-specific domain cleanup | Pending | Includes moving Gmail query construction out of `pkg/api`. |
@@ -227,6 +229,30 @@ Split `internal/api/handlers.go` by resource:
 
 Keep handler behavior stable. The main improvement is ownership clarity and simpler future changes.
 
+After the behavior-preserving split, do a second naming-only API cleanup:
+
+- Rename `(*Handlers).Handle*` methods to resource/action names without the redundant `Handle` prefix. For example, `HandleListTransactions` becomes `ListTransactions`, `HandleGetTransaction` becomes `GetTransaction`, and `HandleStartDaemon` becomes `StartDaemon`.
+- Update `server.go`, direct handler unit tests, comments, and any `//nolint` justifications to use the new method names.
+- Rename OpenAPI-only request/response DTOs in `openapi_types.go` to drop the redundant `Doc` prefix. For example, `DocHealthResponse` becomes `HealthResponse`, `DocTransactionUpdateRequest` becomes `TransactionUpdateRequest`, and `DocTransactionsListResponse` becomes `TransactionsListResponse`.
+- Update Swaggo annotations and in-handler decode variables to reference the renamed DTOs.
+- Keep JSON tags, route paths, HTTP methods, status codes, and response/request payload shapes unchanged.
+- Run `task openapi:check` and inspect the generated diff. Component schema names are expected to change because the Go type names change; path shapes and payload fields should not change except for those component references.
+
+After the naming cleanup, add a coverage-expansion leg for OpenAPI and contract tests:
+
+- Inventory `server.go` registered `/api` routes against `api/openapi/expensor.openapi.yaml` and `tests/contract/allowlist.tsv`. Capture the current counts in the implementation plan so progress is measurable.
+- Add Swaggo annotations and DTOs for currently undocumented route groups in small resource-oriented batches. Prioritize routes that the frontend consumes and routes with stable deterministic responses:
+  - stats endpoints
+  - rules list/export/import/CRUD
+  - reader/plugin metadata and setup-guide endpoints
+  - muted merchant and merchant categorization endpoints
+  - taxonomy export/mapping/merchant-helper endpoints
+- Keep auth redirect and credential-upload routes out of the first expansion unless deterministic examples and safe request bodies are available.
+- Expand `tests/contract/allowlist.tsv` in phases instead of enabling every route at once. Start with additional `GET` endpoints and deterministic idempotent routes, then add mutation routes only when the Compose seed data and examples make their expected responses stable.
+- For mutation coverage, prefer isolated seeded records or repeatable request examples that do not make later allowlist entries order-dependent.
+- Keep Schemathesis positive-mode contract checks focused on `not_a_server_error`, status-code conformance, content-type conformance, and response-schema conformance unless the API examples are strong enough for broader checks.
+- Verification for each batch must include `task openapi:check` and `task test:be:contract`.
+
 Add small HTTP helpers where they reduce real duplication:
 
 - store availability guard
@@ -318,10 +344,12 @@ Run component or contract tests only for slices that touch store behavior, daemo
 3. Replace store inline `QueryInstrumentation` with interface decorators. **Complete.**
 4. Split store capability interfaces and clean up `store.go` ownership. **Partially complete for instrumentation boundaries; remaining ownership cleanup is deferred.**
 5. Refactor plugin metadata and construction boundary. **Complete.**
-6. Split `internal/api/handlers.go` by resource without behavior changes.
-7. Make processed-message state context-aware.
-8. Move Gmail-specific rule query construction out of `pkg/api`.
-9. Update `AGENTS.md` with backend code-health rules.
+6. Split `internal/api/handlers.go` by resource without behavior changes. **In progress.**
+7. Rename decomposed API handler methods and OpenAPI DTOs to remove redundant `Handle` and `Doc` prefixes.
+8. Expand OpenAPI route coverage and Schemathesis allowlist coverage in deterministic batches.
+9. Make processed-message state context-aware.
+10. Move Gmail-specific rule query construction out of `pkg/api`.
+11. Update `AGENTS.md` with backend code-health rules.
 
 The exact implementation plan may split these further, but each slice should be independently testable.
 

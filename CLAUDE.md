@@ -11,19 +11,26 @@ backend/          Go module (github.com/ArionMiles/expensor/backend)
   cmd/server/     Main binary — HTTP server + daemon orchestration
   internal/
     api/          HTTP handlers, routing, middleware, Storer interface
+    compat/       Runtime compatibility import helpers
     daemon/       Reader → writer pipeline
+    migration/    Embedded migration runner
     plugins/      Plugin registry
-    store/        PostgreSQL query layer (pgx/v5)
+    store/        PostgreSQL repositories, read models, and instrumentation
   migrations/     Numbered SQL files embedded into the binary (001_, 002_, …)
   pkg/
     api/          Core interfaces: Reader, Writer, Rule, Labels
+    client/       OAuth client helpers
     config/       koanf-based env config
     extractor/    Regex extraction helpers
-    plugins/      Plugin wrappers (readers: gmail, thunderbird; writer: postgres)
+    observability/ OpenTelemetry configuration, metrics, tracing, and store decorators
+    plugins/      Plugin wrappers (readers/gmail, readers/thunderbird, writers/postgres)
     reader/       Concrete reader implementations
+    rules/        Versioned rule document loading and fixture helpers
+    state/        Runtime state helpers
     writer/       Concrete writer implementations
+api/openapi/      Committed generated OpenAPI artifact
 frontend/         React + Vite + Tailwind (src/, public/)
-tests/            Integration test helpers, local docker-compose
+tests/            Component/contract fixtures, local docker-compose, rule-email fixtures
 ```
 
 ## Essential Commands
@@ -31,7 +38,7 @@ tests/            Integration test helpers, local docker-compose
 Always prefer `task` over bare `go`/`npm` commands — task targets handle tooling, env loading, and working directory.
 
 ```bash
-task dev              # Start postgres + backend + frontend (full stack, loads tests/.env)
+task dev              # Start postgres + observability + backend + frontend (loads tests/.env)
 task run              # Backend only
 task run:frontend     # Frontend Vite dev server only
 
@@ -39,6 +46,7 @@ task run:frontend     # Frontend Vite dev server only
 task fmt              # Format all (Go: gci + gofumpt; TS: prettier)
 task fmt:be           # Format Go only
 task fmt:fe           # Format frontend only (prettier)
+task fmt:fe:check     # Check frontend formatting without modifying files
 
 # Linting (aggregate runs both stacks)
 task lint             # Lint all (Go local config + TypeScript)
@@ -48,12 +56,16 @@ task lint:be:new      # Lint only new/changed Go files (compared to main)
 task lint:fe          # TypeScript type-check (tsc --noEmit)
 
 # Testing
-task test             # Run all tests
+task test             # Run default backend Go tests + frontend Vitest (excludes component/contract/browser)
 task test:be          # Go unit tests (integration tests require Docker; -short skips them)
-task test:be:cover    # Go tests with HTML coverage report
+task test:be:cover    # Go tests with coverage.out and function-level coverage summary
+task test:be:cover:check # Check backend coverage floor from backend/coverage.out
 task test:be:component # Docker Compose-backed backend component tests
 task test:be:contract # Backend OpenAPI contract tests via Schemathesis
 task test:fe          # Frontend unit and component tests (Vitest)
+task test:fe:watch    # Frontend tests in watch mode
+task test:fe:cover    # Frontend Vitest coverage
+task test:fe:cover:check # Check frontend coverage floor
 task test:fe:e2e      # Frontend mocked Playwright E2E tests
 task test:fe:e2e:smoke # Full-stack Playwright smoke tests against backend + Postgres
 task screenshots:readme # Mocked README dashboard screenshot fixture
@@ -64,7 +76,11 @@ task audit            # Audit all (Go: govulncheck; npm: npm audit)
 task audit:be         # govulncheck on Go source
 task audit:fe         # npm audit on production dependencies
 
+task build            # Compile all backend Go packages
 task build:binary     # Optimized Go binary → bin/expensor
+task build:docker     # Build local Docker image with version metadata
+task openapi:generate # Regenerate api/openapi/expensor.openapi.yaml
+task openapi:check    # Regenerate OpenAPI and fail on committed artifact drift
 task db:start         # Start local dev postgres container
 task observability:start # Start local OpenTelemetry Collector + Jaeger + Prometheus
 task db:stop          # Stop local dev postgres container
@@ -191,7 +207,7 @@ Follow TDD for backend and frontend work:
 1. Write failing tests first
 2. Confirm they fail
 3. Implement to make them pass
-4. Run full suite (`task test`) to catch regressions
+4. Run the narrow relevant suite, then `task test`; add component, contract, or browser suites when the touched area requires them
 
 No new feature ships without tests. When enhancing an existing feature, first inspect the current test coverage for that behavior. If no appropriate tests exist, add the requisite tests and confirm they fail before changing production code.
 
