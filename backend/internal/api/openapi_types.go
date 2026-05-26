@@ -47,6 +47,148 @@ type ActiveReaderResponse struct {
 	Reader string `json:"reader" example:"gmail"`
 }
 
+// ConfigFieldResponse documents reader plugin configuration field metadata.
+type ConfigFieldResponse struct {
+	Name      string `json:"name" example:"profilePath"`
+	Label     string `json:"label" example:"Profile path"`
+	Type      string `json:"type" example:"text"`
+	Required  bool   `json:"required"`
+	Help      string `json:"help,omitempty" example:"Path to the Thunderbird profile"`
+	DependsOn string `json:"depends_on,omitempty" example:"profilePath"`
+}
+
+// ReaderInfoResponse documents reader plugin metadata.
+type ReaderInfoResponse struct {
+	Name                      string                `json:"name" example:"thunderbird"`
+	Description               string                `json:"description" example:"Read transaction emails from Thunderbird"`
+	AuthType                  string                `json:"auth_type" example:"config"`
+	RequiresCredentialsUpload bool                  `json:"requires_credentials_upload"`
+	ConfigSchema              []ConfigFieldResponse `json:"config_schema"`
+}
+
+// WriterInfoResponse documents writer plugin metadata.
+type WriterInfoResponse struct {
+	Name        string `json:"name" example:"postgres"`
+	Description string `json:"description" example:"Store transactions in PostgreSQL"`
+}
+
+// ReaderGuideResponse documents a reader setup guide payload.
+type ReaderGuideResponse struct {
+	Sections []GuideSectionResponse `json:"sections"`
+	Notes    []GuideNoteResponse    `json:"notes,omitempty"`
+}
+
+// GuideSectionResponse documents a titled group of setup guide steps.
+type GuideSectionResponse struct {
+	Title string              `json:"title" example:"Connect Thunderbird"`
+	Steps []GuideStepResponse `json:"steps"`
+	Link  *GuideLinkResponse  `json:"link,omitempty"`
+}
+
+// GuideStepResponse documents a single setup guide step.
+type GuideStepResponse struct {
+	Text     string   `json:"text" example:"Select your Thunderbird profile"`
+	SubSteps []string `json:"sub_steps,omitempty"`
+}
+
+// GuideLinkResponse documents an optional setup guide link.
+type GuideLinkResponse struct {
+	Label string `json:"label" example:"Thunderbird profiles"`
+	URL   string `json:"url" example:"https://support.mozilla.org/kb/profiles-where-thunderbird-stores-user-data"`
+}
+
+// GuideNoteResponse documents a setup guide callout.
+type GuideNoteResponse struct {
+	Type string `json:"type" example:"info"`
+	Text string `json:"text" example:"Docker deployments need the Thunderbird profile mounted into the container."`
+}
+
+// TimeBucketResponse documents a single chart time-period data point.
+type TimeBucketResponse struct {
+	Period string  `json:"period" example:"2026-05"`
+	Amount float64 `json:"amount" example:"249.50"`
+	Count  int     `json:"count" example:"3"`
+}
+
+// CategoryMonthlyEntryResponse documents current/prior month spend for a category.
+type CategoryMonthlyEntryResponse struct {
+	Current float64 `json:"current" example:"1200.50"`
+	Prior   float64 `json:"prior" example:"950.25"`
+}
+
+// ChartDataResponse documents chart stats data.
+type ChartDataResponse struct {
+	MonthlySpend      []TimeBucketResponse                    `json:"monthly_spend"`
+	DailySpend        []TimeBucketResponse                    `json:"daily_spend"`
+	ByCategory        map[string]float64                      `json:"by_category"`
+	ByBucket          map[string]float64                      `json:"by_bucket"`
+	ByLabel           map[string]float64                      `json:"by_label"`
+	BySource          map[string]float64                      `json:"by_source"`
+	BySourceType      map[string]float64                      `json:"by_source_type"`
+	ByBank            map[string]float64                      `json:"by_bank"`
+	ByCategoryMonthly map[string]CategoryMonthlyEntryResponse `json:"by_category_monthly"`
+}
+
+// DashboardSectionResponse documents a dashboard slice.
+type DashboardSectionResponse struct {
+	Label  string            `json:"label" example:"Current Month"`
+	Stats  StatsResponse     `json:"stats"`
+	Charts ChartDataResponse `json:"charts"`
+}
+
+// DashboardDataResponse documents dashboard stats data.
+type DashboardDataResponse struct {
+	CurrentMonth DashboardSectionResponse `json:"current_month"`
+	AllTime      DashboardSectionResponse `json:"all_time"`
+}
+
+// WeekdayHourBucketResponse documents spend totals for a weekday/hour heatmap cell.
+type WeekdayHourBucketResponse struct {
+	Weekday int     `json:"weekday" example:"1"`
+	Hour    int     `json:"hour" example:"14"`
+	Amount  float64 `json:"amount" example:"249.50"`
+	Count   int     `json:"count" example:"3"`
+}
+
+// DayOfMonthBucketResponse documents spend totals for a day-of-month heatmap cell.
+type DayOfMonthBucketResponse struct {
+	Day    int     `json:"day" example:"15"`
+	Amount float64 `json:"amount" example:"249.50"`
+	Count  int     `json:"count" example:"3"`
+}
+
+// HeatmapDataResponse documents heatmap stats data.
+type HeatmapDataResponse struct {
+	ByWeekdayHour []WeekdayHourBucketResponse `json:"by_weekday_hour"`
+	ByDayOfMonth  []DayOfMonthBucketResponse  `json:"by_day_of_month"`
+}
+
+// DailyBucketResponse documents spend totals for a calendar date.
+type DailyBucketResponse struct {
+	Date   time.Time `json:"date"`
+	Amount float64   `json:"amount" example:"249.50"`
+	Count  int       `json:"count" example:"3"`
+}
+
+// AnnualHeatmapResponse documents annual heatmap stats data.
+type AnnualHeatmapResponse struct {
+	Year    int                   `json:"year" example:"2026"`
+	Buckets []DailyBucketResponse `json:"buckets"`
+}
+
+// MonthlyBreakdownSeriesResponse documents a named monthly spend series.
+type MonthlyBreakdownSeriesResponse struct {
+	Label string    `json:"label" example:"Food"`
+	Data  []float64 `json:"data"`
+}
+
+// MonthlyBreakdownResponse documents monthly breakdown stats data.
+type MonthlyBreakdownResponse struct {
+	Labels []string                         `json:"labels"`
+	Months []string                         `json:"months"`
+	Series []MonthlyBreakdownSeriesResponse `json:"series"`
+}
+
 // BaseCurrencyRequest is the base currency update payload.
 type BaseCurrencyRequest struct {
 	BaseCurrency string `json:"base_currency" example:"USD"`

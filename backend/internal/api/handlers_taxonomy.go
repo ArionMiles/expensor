@@ -201,6 +201,15 @@ func (h *Handlers) RemoveLabelByMerchant(w http.ResponseWriter, r *http.Request)
 //   - dimension=labels|categories|buckets (default: labels)
 //
 // Response: {"labels":["Food","Travel"], "months":["2025-05","2025-06",...], "series":[{"label":"Food","data":[...]}]}
+// @Summary Get label monthly spend
+// @Tags Stats
+// @Produce json
+// @Param dimension query string false "Breakdown dimension" Enums(labels,categories,buckets) default(labels)
+// @Success 200 {object} MonthlyBreakdownResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /stats/labels/monthly [get]
 func (h *Handlers) GetLabelMonthlySpend(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")

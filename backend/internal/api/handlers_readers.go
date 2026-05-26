@@ -38,6 +38,11 @@ type WriterInfo struct {
 }
 
 // ListReaders handles GET /api/plugins/readers.
+// @Summary List reader plugins
+// @Tags Readers
+// @Produce json
+// @Success 200 {array} ReaderInfoResponse
+// @Router /plugins/readers [get]
 func (h *Handlers) ListReaders(w http.ResponseWriter, _ *http.Request) {
 	rps := h.registry.ListReaders()
 	infos := make([]ReaderInfo, 0, len(rps))
@@ -59,6 +64,11 @@ func (h *Handlers) ListReaders(w http.ResponseWriter, _ *http.Request) {
 }
 
 // ListWriters handles GET /api/plugins/writers.
+// @Summary List writer plugins
+// @Tags Readers
+// @Produce json
+// @Success 200 {array} WriterInfoResponse
+// @Router /plugins/writers [get]
 func (h *Handlers) ListWriters(w http.ResponseWriter, _ *http.Request) {
 	wps := h.registry.ListWriters()
 	infos := make([]WriterInfo, 0, len(wps))
@@ -634,6 +644,13 @@ func (h *Handlers) DiscoverMailboxes(w http.ResponseWriter, r *http.Request) {
 
 // GetReaderGuide handles GET /api/readers/{name}/guide.
 // Returns the structured setup guide for a reader when metadata includes one.
+// @Summary Get reader setup guide
+// @Tags Readers
+// @Produce json
+// @Param name path string true "Reader name" example(thunderbird)
+// @Success 200 {object} ReaderGuideResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /readers/{name}/guide [get]
 func (h *Handlers) GetReaderGuide(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	plugin, err := h.registry.GetReader(name)

@@ -6,6 +6,16 @@ definitions:
         example: gmail
         type: string
     type: object
+  api.AnnualHeatmapResponse:
+    properties:
+      buckets:
+        items:
+          $ref: '#/definitions/api.DailyBucketResponse'
+        type: array
+      year:
+        example: 2026
+        type: integer
+    type: object
   api.AppliedCountResponse:
     properties:
       applied:
@@ -52,6 +62,15 @@ definitions:
         example: Needs
         type: string
     type: object
+  api.CategoryMonthlyEntryResponse:
+    properties:
+      current:
+        example: 1200.5
+        type: number
+      prior:
+        example: 950.25
+        type: number
+    type: object
   api.CategoryResponse:
     properties:
       description:
@@ -61,6 +80,65 @@ definitions:
         type: boolean
       name:
         example: Food
+        type: string
+    type: object
+  api.ChartDataResponse:
+    properties:
+      by_bank:
+        additionalProperties:
+          type: number
+        type: object
+      by_bucket:
+        additionalProperties:
+          type: number
+        type: object
+      by_category:
+        additionalProperties:
+          type: number
+        type: object
+      by_category_monthly:
+        additionalProperties:
+          $ref: '#/definitions/api.CategoryMonthlyEntryResponse'
+        type: object
+      by_label:
+        additionalProperties:
+          type: number
+        type: object
+      by_source:
+        additionalProperties:
+          type: number
+        type: object
+      by_source_type:
+        additionalProperties:
+          type: number
+        type: object
+      daily_spend:
+        items:
+          $ref: '#/definitions/api.TimeBucketResponse'
+        type: array
+      monthly_spend:
+        items:
+          $ref: '#/definitions/api.TimeBucketResponse'
+        type: array
+    type: object
+  api.ConfigFieldResponse:
+    properties:
+      depends_on:
+        example: profilePath
+        type: string
+      help:
+        example: Path to the Thunderbird profile
+        type: string
+      label:
+        example: Profile path
+        type: string
+      name:
+        example: profilePath
+        type: string
+      required:
+        type: boolean
+      type:
+        example: text
         type: string
     type: object
   api.CreateBucketRequest:
@@ -104,6 +182,46 @@ definitions:
         type: boolean
       started_at:
         type: string
+    type: object
+  api.DailyBucketResponse:
+    properties:
+      amount:
+        example: 249.5
+        type: number
+      count:
+        example: 3
+        type: integer
+      date:
+        type: string
+    type: object
+  api.DashboardDataResponse:
+    properties:
+      all_time:
+        $ref: '#/definitions/api.DashboardSectionResponse'
+      current_month:
+        $ref: '#/definitions/api.DashboardSectionResponse'
+    type: object
+  api.DashboardSectionResponse:
+    properties:
+      charts:
+        $ref: '#/definitions/api.ChartDataResponse'
+      label:
+        example: Current Month
+        type: string
+      stats:
+        $ref: '#/definitions/api.StatsResponse'
+    type: object
+  api.DayOfMonthBucketResponse:
+    properties:
+      amount:
+        example: 249.5
+        type: number
+      count:
+        example: 3
+        type: integer
+      day:
+        example: 15
+        type: integer
     type: object
   api.ErrorResponse:
     properties:
@@ -206,11 +324,63 @@ definitions:
           type: string
         type: array
     type: object
+  api.GuideLinkResponse:
+    properties:
+      label:
+        example: Thunderbird profiles
+        type: string
+      url:
+        example: https://support.mozilla.org/kb/profiles-where-thunderbird-stores-user-data
+        type: string
+    type: object
+  api.GuideNoteResponse:
+    properties:
+      text:
+        example: Docker deployments need the Thunderbird profile mounted into the
+          container.
+        type: string
+      type:
+        example: info
+        type: string
+    type: object
+  api.GuideSectionResponse:
+    properties:
+      link:
+        $ref: '#/definitions/api.GuideLinkResponse'
+      steps:
+        items:
+          $ref: '#/definitions/api.GuideStepResponse'
+        type: array
+      title:
+        example: Connect Thunderbird
+        type: string
+    type: object
+  api.GuideStepResponse:
+    properties:
+      sub_steps:
+        items:
+          type: string
+        type: array
+      text:
+        example: Select your Thunderbird profile
+        type: string
+    type: object
   api.HealthResponse:
     properties:
       status:
         example: ok
         type: string
+    type: object
+  api.HeatmapDataResponse:
+    properties:
+      by_day_of_month:
+        items:
+          $ref: '#/definitions/api.DayOfMonthBucketResponse'
+        type: array
+      by_weekday_hour:
+        items:
+          $ref: '#/definitions/api.WeekdayHourBucketResponse'
+        type: array
     type: object
   api.LabelMappingsResponse:
     additionalProperties:
@@ -250,6 +420,31 @@ definitions:
         example: "365"
         type: string
     type: object
+  api.MonthlyBreakdownResponse:
+    properties:
+      labels:
+        items:
+          type: string
+        type: array
+      months:
+        items:
+          type: string
+        type: array
+      series:
+        items:
+          $ref: '#/definitions/api.MonthlyBreakdownSeriesResponse'
+        type: array
+    type: object
+  api.MonthlyBreakdownSeriesResponse:
+    properties:
+      data:
+        items:
+          type: number
+        type: array
+      label:
+        example: Food
+        type: string
+    type: object
   api.MuteReasonResponse:
     properties:
       reason:
@@ -284,6 +479,35 @@ definitions:
         example: "2026-04-14T09:00:00Z"
         type: string
         x-nullable: true
+    type: object
+  api.ReaderGuideResponse:
+    properties:
+      notes:
+        items:
+          $ref: '#/definitions/api.GuideNoteResponse'
+        type: array
+      sections:
+        items:
+          $ref: '#/definitions/api.GuideSectionResponse'
+        type: array
+    type: object
+  api.ReaderInfoResponse:
+    properties:
+      auth_type:
+        example: config
+        type: string
+      config_schema:
+        items:
+          $ref: '#/definitions/api.ConfigFieldResponse'
+        type: array
+      description:
+        example: Read transaction emails from Thunderbird
+        type: string
+      name:
+        example: thunderbird
+        type: string
+      requires_credentials_upload:
+        type: boolean
     type: object
   api.ScanIntervalRequest:
     properties:
@@ -352,6 +576,18 @@ definitions:
       last_synced_at:
         type: string
         x-nullable: true
+    type: object
+  api.TimeBucketResponse:
+    properties:
+      amount:
+        example: 249.5
+        type: number
+      count:
+        example: 3
+        type: integer
+      period:
+        example: 2026-05
+        type: string
     type: object
   api.TimeFormatRequest:
     properties:
@@ -504,6 +740,30 @@ definitions:
     properties:
       version:
         example: dev
+        type: string
+    type: object
+  api.WeekdayHourBucketResponse:
+    properties:
+      amount:
+        example: 249.5
+        type: number
+      count:
+        example: 3
+        type: integer
+      hour:
+        example: 14
+        type: integer
+      weekday:
+        example: 1
+        type: integer
+    type: object
+  api.WriterInfoResponse:
+    properties:
+      description:
+        example: Store transactions in PostgreSQL
+        type: string
+      name:
+        example: postgres
         type: string
     type: object
 info:
@@ -1439,6 +1699,192 @@ paths:
       summary: Health check
       tags:
       - Bootstrap
+  /plugins/readers:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.ReaderInfoResponse'
+            type: array
+      summary: List reader plugins
+      tags:
+      - Readers
+  /plugins/writers:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.WriterInfoResponse'
+            type: array
+      summary: List writer plugins
+      tags:
+      - Readers
+  /readers/{name}/guide:
+    get:
+      parameters:
+      - description: Reader name
+        example: thunderbird
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ReaderGuideResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get reader setup guide
+      tags:
+      - Readers
+  /stats/charts:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ChartDataResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get chart data
+      tags:
+      - Stats
+  /stats/dashboard:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.DashboardDataResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get dashboard data
+      tags:
+      - Stats
+  /stats/heatmap:
+    get:
+      parameters:
+      - description: RFC3339 start timestamp
+        example: "2026-05-01T00:00:00Z"
+        in: query
+        name: from
+        type: string
+      - description: RFC3339 end timestamp
+        example: "2026-05-31T23:59:59Z"
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.HeatmapDataResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get spending heatmap
+      tags:
+      - Stats
+  /stats/heatmap/annual:
+    get:
+      parameters:
+      - description: Calendar year
+        example: 2026
+        in: query
+        name: year
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AnnualHeatmapResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get annual spending heatmap
+      tags:
+      - Stats
+  /stats/labels/monthly:
+    get:
+      parameters:
+      - default: labels
+        description: Breakdown dimension
+        enum:
+        - labels
+        - categories
+        - buckets
+        in: query
+        name: dimension
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.MonthlyBreakdownResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get label monthly spend
+      tags:
+      - Stats
   /status:
     get:
       produces:

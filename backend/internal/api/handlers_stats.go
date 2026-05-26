@@ -8,6 +8,13 @@ import (
 )
 
 // GetChartData handles GET /api/stats/charts.
+// @Summary Get chart data
+// @Tags Stats
+// @Produce json
+// @Success 200 {object} ChartDataResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /stats/charts [get]
 func (h *Handlers) GetChartData(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
@@ -23,6 +30,13 @@ func (h *Handlers) GetChartData(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetDashboardData handles GET /api/stats/dashboard.
+// @Summary Get dashboard data
+// @Tags Stats
+// @Produce json
+// @Success 200 {object} DashboardDataResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /stats/dashboard [get]
 func (h *Handlers) GetDashboardData(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
@@ -42,6 +56,16 @@ func (h *Handlers) GetDashboardData(w http.ResponseWriter, r *http.Request) {
 // GetHeatmap handles GET /api/stats/heatmap.
 // Optional query params: from=<RFC3339>, to=<RFC3339> (both or neither).
 // Returns 400 if either param is present but malformed.
+// @Summary Get spending heatmap
+// @Tags Stats
+// @Produce json
+// @Param from query string false "RFC3339 start timestamp" example(2026-05-01T00:00:00Z)
+// @Param to query string false "RFC3339 end timestamp" example(2026-05-31T23:59:59Z)
+// @Success 200 {object} HeatmapDataResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /stats/heatmap [get]
 func (h *Handlers) GetHeatmap(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
@@ -66,6 +90,14 @@ func (h *Handlers) GetHeatmap(w http.ResponseWriter, r *http.Request) {
 // GetAnnualHeatmap handles GET /api/stats/heatmap/annual?year=YYYY.
 // Returns per-day transaction totals for the requested calendar year.
 // Defaults to the current year when ?year is absent or invalid.
+// @Summary Get annual spending heatmap
+// @Tags Stats
+// @Produce json
+// @Param year query int false "Calendar year" example(2026)
+// @Success 200 {object} AnnualHeatmapResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /stats/heatmap/annual [get]
 func (h *Handlers) GetAnnualHeatmap(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")

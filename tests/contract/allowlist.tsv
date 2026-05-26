@@ -16,3 +16,11 @@ GET	/config/timezone	timezone config
 GET	/transactions	transaction listing
 GET	/transactions/facets	transaction facets
 GET	/transactions/search	transaction search
+GET	/plugins/readers	reader plugin metadata
+GET	/plugins/writers	writer plugin metadata
+GET	/readers/{name}/guide	reader setup guide
+GET	/stats/dashboard	dashboard stats data
+GET	/stats/charts	chart stats data
+GET	/stats/labels/monthly	label monthly stats data
+GET	/stats/heatmap	spending heatmap data
+GET	/stats/heatmap/annual	annual heatmap data
