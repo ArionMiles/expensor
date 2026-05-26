@@ -509,6 +509,152 @@ definitions:
       requires_credentials_upload:
         type: boolean
     type: object
+  api.RuleDocumentEntryResponse:
+    properties:
+      amount_regex:
+        example: INR\s+([0-9,.]+)
+        type: string
+      currency_regex:
+        example: (INR)
+        type: string
+      merchant_regex:
+        example: at\s+(.+)$
+        type: string
+      name:
+        example: Contract Rule
+        type: string
+      sender_emails:
+        items:
+          type: string
+        type: array
+      source:
+        $ref: '#/definitions/api.RuleSourceResponse'
+      subject_contains:
+        example: Contract transaction
+        type: string
+    type: object
+  api.RuleDocumentResponse:
+    properties:
+      presets:
+        $ref: '#/definitions/api.RulePresetsResponse'
+      rules:
+        items:
+          $ref: '#/definitions/api.RuleDocumentEntryResponse'
+        type: array
+      version:
+        example: 2
+        type: integer
+    type: object
+  api.RuleImportResponse:
+    properties:
+      imported:
+        example: 1
+        type: integer
+    type: object
+  api.RuleMutationRequest:
+    properties:
+      amount_regex:
+        example: INR\s+([0-9,.]+)
+        type: string
+      currency_regex:
+        example: (INR)
+        type: string
+      merchant_regex:
+        example: at\s+(.+)$
+        type: string
+      name:
+        example: Contract Rule
+        type: string
+      sender_emails:
+        items:
+          type: string
+        type: array
+      source:
+        $ref: '#/definitions/api.RuleSourceResponse'
+      subject_contains:
+        example: Contract transaction
+        type: string
+    type: object
+  api.RulePresetValueResponse:
+    properties:
+      origin:
+        example: custom
+        type: string
+      value:
+        example: Email
+        type: string
+    type: object
+  api.RulePresetsResponse:
+    properties:
+      banks:
+        items:
+          $ref: '#/definitions/api.RulePresetValueResponse'
+        type: array
+      source_types:
+        items:
+          $ref: '#/definitions/api.RulePresetValueResponse'
+        type: array
+    type: object
+  api.RuleResponse:
+    properties:
+      amount_regex:
+        example: INR\s+([0-9,.]+)
+        type: string
+      bank:
+        example: Contract Bank
+        type: string
+      created_at:
+        type: string
+      currency_regex:
+        example: (INR)
+        type: string
+      id:
+        example: 11111111-1111-1111-1111-111111111111
+        type: string
+      merchant_regex:
+        example: at\s+(.+)$
+        type: string
+      name:
+        example: Contract Rule
+        type: string
+      predefined:
+        type: boolean
+      sender_email:
+        example: contract@example.com
+        type: string
+      sender_emails:
+        items:
+          type: string
+        type: array
+      source:
+        $ref: '#/definitions/api.RuleSourceResponse'
+      source_label:
+        example: Contract
+        type: string
+      source_type:
+        example: Email
+        type: string
+      subject_contains:
+        example: Contract transaction
+        type: string
+      transaction_source:
+        example: Email - Contract Bank
+        type: string
+      updated_at:
+        type: string
+    type: object
+  api.RuleSourceResponse:
+    properties:
+      bank:
+        example: Contract Bank
+        type: string
+      label:
+        example: Contract
+        type: string
+      type:
+        example: Email
+        type: string
+    type: object
   api.ScanIntervalRequest:
     properties:
       scan_interval:
@@ -1750,6 +1896,200 @@ paths:
       summary: Get reader setup guide
       tags:
       - Readers
+  /rules:
+    get:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.RuleResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: List rules
+      tags:
+      - Rules
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Rule payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.RuleMutationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.RuleResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Create a rule
+      tags:
+      - Rules
+  /rules/{id}:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: Rule ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Delete a rule
+      tags:
+      - Rules
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Rule ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Rule payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.RuleMutationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.RuleResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Update a rule
+      tags:
+      - Rules
+  /rules/export:
+    get:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.RuleDocumentResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Export rules
+      tags:
+      - Rules
+  /rules/import:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Rules document
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.RuleDocumentResponse'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.RuleImportResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Import rules
+      tags:
+      - Rules
   /stats/charts:
     get:
       produces:

@@ -47,6 +47,79 @@ type ActiveReaderResponse struct {
 	Reader string `json:"reader" example:"gmail"`
 }
 
+// RuleSourceResponse documents a structured rule source.
+type RuleSourceResponse struct {
+	Type  string `json:"type" example:"Email"`
+	Label string `json:"label" example:"Contract"`
+	Bank  string `json:"bank" example:"Contract Bank"`
+}
+
+// RuleResponse documents a rule returned by the API.
+type RuleResponse struct {
+	ID                string             `json:"id,omitempty" example:"11111111-1111-1111-1111-111111111111"`
+	Name              string             `json:"name" example:"Contract Rule"`
+	SenderEmail       string             `json:"sender_email,omitempty" example:"contract@example.com"`
+	SenderEmails      []string           `json:"sender_emails"`
+	SubjectContains   string             `json:"subject_contains" example:"Contract transaction"`
+	AmountRegex       string             `json:"amount_regex" example:"INR\\s+([0-9,.]+)"`
+	MerchantRegex     string             `json:"merchant_regex" example:"at\\s+(.+)$"`
+	CurrencyRegex     string             `json:"currency_regex" example:"(INR)"`
+	TransactionSource string             `json:"transaction_source,omitempty" example:"Email - Contract Bank"`
+	SourceType        string             `json:"source_type,omitempty" example:"Email"`
+	SourceLabel       string             `json:"source_label,omitempty" example:"Contract"`
+	Bank              string             `json:"bank,omitempty" example:"Contract Bank"`
+	Source            RuleSourceResponse `json:"source"`
+	Predefined        bool               `json:"predefined"`
+	CreatedAt         time.Time          `json:"created_at,omitempty"`
+	UpdatedAt         time.Time          `json:"updated_at,omitempty"`
+}
+
+// RuleMutationRequest documents the create/update rule payload.
+type RuleMutationRequest struct {
+	Name            string             `json:"name" example:"Contract Rule"`
+	SenderEmails    []string           `json:"sender_emails"`
+	SubjectContains string             `json:"subject_contains" example:"Contract transaction"`
+	AmountRegex     string             `json:"amount_regex" example:"INR\\s+([0-9,.]+)"`
+	MerchantRegex   string             `json:"merchant_regex" example:"at\\s+(.+)$"`
+	CurrencyRegex   string             `json:"currency_regex" example:"(INR)"`
+	Source          RuleSourceResponse `json:"source"`
+}
+
+// RulePresetValueResponse documents a rule preset taxonomy value.
+type RulePresetValueResponse struct {
+	Value  string `json:"value" example:"Email"`
+	Origin string `json:"origin" example:"custom"`
+}
+
+// RulePresetsResponse documents rule document taxonomy presets.
+type RulePresetsResponse struct {
+	SourceTypes []RulePresetValueResponse `json:"source_types"`
+	Banks       []RulePresetValueResponse `json:"banks"`
+}
+
+// RuleDocumentEntryResponse documents a rule entry in an import/export document.
+type RuleDocumentEntryResponse struct {
+	Name            string             `json:"name" example:"Contract Rule"`
+	SenderEmails    []string           `json:"sender_emails"`
+	SubjectContains string             `json:"subject_contains" example:"Contract transaction"`
+	AmountRegex     string             `json:"amount_regex" example:"INR\\s+([0-9,.]+)"`
+	MerchantRegex   string             `json:"merchant_regex" example:"at\\s+(.+)$"`
+	CurrencyRegex   string             `json:"currency_regex" example:"(INR)"`
+	Source          RuleSourceResponse `json:"source"`
+}
+
+// RuleDocumentResponse documents a versioned rules import/export document.
+type RuleDocumentResponse struct {
+	Version int                         `json:"version" example:"2"`
+	Presets RulePresetsResponse         `json:"presets"`
+	Rules   []RuleDocumentEntryResponse `json:"rules"`
+}
+
+// RuleImportResponse documents a rules import result.
+type RuleImportResponse struct {
+	Imported int `json:"imported" example:"1"`
+}
+
 // ConfigFieldResponse documents reader plugin configuration field metadata.
 type ConfigFieldResponse struct {
 	Name      string `json:"name" example:"profilePath"`
