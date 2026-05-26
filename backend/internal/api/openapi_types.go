@@ -359,9 +359,35 @@ type ApplyLabelRequest struct {
 	MerchantPattern string `json:"merchant_pattern" example:"swiggy"`
 }
 
+// TaxonomyExportRowResponse documents exported taxonomy rows with merchant mappings.
+type TaxonomyExportRowResponse struct {
+	Name      string   `json:"name" example:"Food & Dining"`
+	Merchants []string `json:"merchants,omitempty"`
+}
+
+// LabelTaxonomyExportRowResponse documents exported labels with color and merchant mappings.
+type LabelTaxonomyExportRowResponse struct {
+	Name      string   `json:"name" example:"Online"`
+	Color     string   `json:"color" example:"#f59e0b"`
+	Merchants []string `json:"merchants,omitempty"`
+}
+
+// TaxonomyMappingsResponse documents taxonomy-to-merchant mappings.
+type TaxonomyMappingsResponse map[string][]string
+
+// TaxonomyMerchantRequest is the merchant-pattern payload for taxonomy apply/remove actions.
+type TaxonomyMerchantRequest struct {
+	MerchantPattern string `json:"merchant_pattern" example:"Swiggy"`
+}
+
 // AppliedCountResponse is the count payload for apply actions.
 type AppliedCountResponse struct {
 	Applied int64 `json:"applied"`
+}
+
+// RemovedCountResponse is the count payload for remove actions.
+type RemovedCountResponse struct {
+	Removed int64 `json:"removed"`
 }
 
 // LabelMappingsResponse documents label-to-merchant mappings.

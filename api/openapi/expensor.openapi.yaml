@@ -408,6 +408,19 @@ definitions:
         example: food
         type: string
     type: object
+  api.LabelTaxonomyExportRowResponse:
+    properties:
+      color:
+        example: '#f59e0b'
+        type: string
+      merchants:
+        items:
+          type: string
+        type: array
+      name:
+        example: Online
+        type: string
+    type: object
   api.LookbackDaysRequest:
     properties:
       lookback_days:
@@ -508,6 +521,11 @@ definitions:
         type: string
       requires_credentials_upload:
         type: boolean
+    type: object
+  api.RemovedCountResponse:
+    properties:
+      removed:
+        type: integer
     type: object
   api.RuleDocumentEntryResponse:
     properties:
@@ -722,6 +740,28 @@ definitions:
       last_synced_at:
         type: string
         x-nullable: true
+    type: object
+  api.TaxonomyExportRowResponse:
+    properties:
+      merchants:
+        items:
+          type: string
+        type: array
+      name:
+        example: Food & Dining
+        type: string
+    type: object
+  api.TaxonomyMappingsResponse:
+    additionalProperties:
+      items:
+        type: string
+      type: array
+    type: object
+  api.TaxonomyMerchantRequest:
+    properties:
+      merchant_pattern:
+        example: Swiggy
+        type: string
     type: object
   api.TimeBucketResponse:
     properties:
@@ -1082,6 +1122,126 @@ paths:
       summary: Delete a bucket
       tags:
       - Taxonomy
+  /config/buckets/{name}/apply:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Bucket name
+        example: Needs
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Merchant pattern payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.TaxonomyMerchantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppliedCountResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Apply a bucket by merchant pattern
+      tags:
+      - Taxonomy
+  /config/buckets/{name}/merchant:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: Bucket name
+        example: Needs
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Merchant pattern payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.TaxonomyMerchantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.RemovedCountResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Remove a bucket by merchant pattern
+      tags:
+      - Taxonomy
+  /config/buckets/export:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.TaxonomyExportRowResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Export buckets
+      tags:
+      - Taxonomy
+  /config/buckets/mappings:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.TaxonomyMappingsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get bucket mappings
+      tags:
+      - Taxonomy
   /config/categories:
     get:
       produces:
@@ -1162,6 +1322,126 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Delete a category
+      tags:
+      - Taxonomy
+  /config/categories/{name}/apply:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Category name
+        example: Food & Dining
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Merchant pattern payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.TaxonomyMerchantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppliedCountResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Apply a category by merchant pattern
+      tags:
+      - Taxonomy
+  /config/categories/{name}/merchant:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: Category name
+        example: Food & Dining
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Merchant pattern payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.TaxonomyMerchantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.RemovedCountResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Remove a category by merchant pattern
+      tags:
+      - Taxonomy
+  /config/categories/export:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.TaxonomyExportRowResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Export categories
+      tags:
+      - Taxonomy
+  /config/categories/mappings:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.TaxonomyMappingsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get category mappings
       tags:
       - Taxonomy
   /config/labels:
@@ -1319,6 +1599,67 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Apply a label by merchant pattern
+      tags:
+      - Taxonomy
+  /config/labels/{name}/merchant:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: Label name
+        example: Online
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Merchant pattern payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.TaxonomyMerchantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.RemovedCountResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Remove a label by merchant pattern
+      tags:
+      - Taxonomy
+  /config/labels/export:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.LabelTaxonomyExportRowResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Export labels
       tags:
       - Taxonomy
   /config/labels/mappings:

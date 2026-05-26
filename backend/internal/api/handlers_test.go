@@ -2236,6 +2236,42 @@ func TestExportCategories_IncludesMerchants(t *testing.T) {
 	}
 }
 
+func TestExportCategories_NilStoreReturns503(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+	rr := get(h.ExportCategories, "/api/config/categories/export")
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestApplyCategoryByMerchant_NilStoreReturns503(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+	body := strings.NewReader(`{"merchant_pattern":"swiggy"}`)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/config/categories/Food/apply", body)
+	req.SetPathValue("name", "Food")
+	rr := httptest.NewRecorder()
+
+	h.ApplyCategoryByMerchant(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestRemoveCategoryByMerchant_NilStoreReturns503(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+	body := strings.NewReader(`{"merchant_pattern":"swiggy"}`)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/config/categories/Food/merchant", body)
+	req.SetPathValue("name", "Food")
+	rr := httptest.NewRecorder()
+
+	h.RemoveCategoryByMerchant(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
 // --- buckets ---
 
 func TestListBuckets_Success(t *testing.T) {
@@ -2321,6 +2357,42 @@ func TestExportBuckets_IncludesMerchants(t *testing.T) {
 	merchants, ok := resp[0]["merchants"].([]any)
 	if !ok || len(merchants) != 1 || merchants[0] != "rent" {
 		t.Fatalf("expected merchants in export, got %#v", resp)
+	}
+}
+
+func TestExportBuckets_NilStoreReturns503(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+	rr := get(h.ExportBuckets, "/api/config/buckets/export")
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestApplyBucketByMerchant_NilStoreReturns503(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+	body := strings.NewReader(`{"merchant_pattern":"rent"}`)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/config/buckets/Needs/apply", body)
+	req.SetPathValue("name", "Needs")
+	rr := httptest.NewRecorder()
+
+	h.ApplyBucketByMerchant(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestRemoveBucketByMerchant_NilStoreReturns503(t *testing.T) {
+	h := newTestHandlers(t, nil, &mockDaemon{})
+	body := strings.NewReader(`{"merchant_pattern":"rent"}`)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/config/buckets/Needs/merchant", body)
+	req.SetPathValue("name", "Needs")
+	rr := httptest.NewRecorder()
+
+	h.RemoveBucketByMerchant(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 

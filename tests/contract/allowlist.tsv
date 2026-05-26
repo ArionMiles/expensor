@@ -26,3 +26,13 @@ GET	/stats/charts	chart stats data
 GET	/stats/labels/monthly	label monthly stats data
 GET	/stats/heatmap	spending heatmap data
 GET	/stats/heatmap/annual	annual heatmap data
+GET	/config/labels/export	label taxonomy export
+GET	/config/categories/export	category taxonomy export
+GET	/config/categories/mappings	category merchant mappings
+GET	/config/buckets/export	bucket taxonomy export
+GET	/config/buckets/mappings	bucket merchant mappings
+POST	/config/categories/{name}/apply	category merchant apply
+DELETE	/config/categories/{name}/merchant	category merchant removal
+POST	/config/buckets/{name}/apply	bucket merchant apply
+DELETE	/config/buckets/{name}/merchant	bucket merchant removal
+DELETE	/config/labels/{name}/merchant	label merchant removal
