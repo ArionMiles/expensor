@@ -547,3 +547,40 @@ type UpdateMuteReasonRequest struct {
 type MuteReasonResponse struct {
 	Reason string `json:"reason" example:"Internal transfer"`
 }
+
+// MutedMerchantResponse is a muted merchant pattern with the current muted transaction count.
+type MutedMerchantResponse struct {
+	ID         string    `json:"id" example:"11111111-1111-1111-1111-111111111111"`
+	Pattern    string    `json:"pattern" example:"Swiggy"`
+	Reason     string    `json:"reason,omitempty" example:"contract check"`
+	CreatedAt  time.Time `json:"created_at"`
+	MutedCount int       `json:"muted_count"`
+}
+
+// MuteMerchantRequest is the merchant mute payload.
+type MuteMerchantRequest struct {
+	Pattern string `json:"pattern" example:"Swiggy" binding:"required"`
+	Reason  string `json:"reason,omitempty" example:"contract check"`
+}
+
+// MuteMerchantResponse is the merchant mute response payload.
+type MuteMerchantResponse struct {
+	Pattern string `json:"pattern" example:"Swiggy"`
+}
+
+// MerchantReasonRequest is the muted merchant reason update payload.
+type MerchantReasonRequest struct {
+	Reason string `json:"reason" example:"contract check"`
+}
+
+// CategorizeMerchantRequest is the merchant-wide categorization payload.
+type CategorizeMerchantRequest struct {
+	Merchant string `json:"merchant" example:"Swiggy" binding:"required"`
+	Category string `json:"category" example:"Food & Dining"`
+	Bucket   string `json:"bucket" example:"Wants"`
+}
+
+// CategorizeMerchantResponse is the merchant-wide categorization response payload.
+type CategorizeMerchantResponse struct {
+	Updated int `json:"updated"`
+}

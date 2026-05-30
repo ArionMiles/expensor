@@ -62,6 +62,25 @@ definitions:
         example: Needs
         type: string
     type: object
+  api.CategorizeMerchantRequest:
+    properties:
+      bucket:
+        example: Wants
+        type: string
+      category:
+        example: Food & Dining
+        type: string
+      merchant:
+        example: Swiggy
+        type: string
+    required:
+    - merchant
+    type: object
+  api.CategorizeMerchantResponse:
+    properties:
+      updated:
+        type: integer
+    type: object
   api.CategoryMonthlyEntryResponse:
     properties:
       current:
@@ -433,6 +452,12 @@ definitions:
         example: "365"
         type: string
     type: object
+  api.MerchantReasonRequest:
+    properties:
+      reason:
+        example: contract check
+        type: string
+    type: object
   api.MonthlyBreakdownResponse:
     properties:
       labels:
@@ -458,6 +483,23 @@ definitions:
         example: Food
         type: string
     type: object
+  api.MuteMerchantRequest:
+    properties:
+      pattern:
+        example: Swiggy
+        type: string
+      reason:
+        example: contract check
+        type: string
+    required:
+    - pattern
+    type: object
+  api.MuteMerchantResponse:
+    properties:
+      pattern:
+        example: Swiggy
+        type: string
+    type: object
   api.MuteReasonResponse:
     properties:
       reason:
@@ -478,6 +520,22 @@ definitions:
         type: boolean
       reason:
         example: Internal transfer
+        type: string
+    type: object
+  api.MutedMerchantResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        example: 11111111-1111-1111-1111-111111111111
+        type: string
+      muted_count:
+        type: integer
+      pattern:
+        example: Swiggy
+        type: string
+      reason:
+        example: contract check
         type: string
     type: object
   api.NameResponse:
@@ -2186,6 +2244,167 @@ paths:
       summary: Health check
       tags:
       - Bootstrap
+  /merchants/categorize:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Merchant categorization payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.CategorizeMerchantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.CategorizeMerchantResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Categorize all matching merchant transactions
+      tags:
+      - Transactions
+  /muted-merchants:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.MutedMerchantResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: List muted merchant patterns
+      tags:
+      - Transactions
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Merchant mute payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.MuteMerchantRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.MuteMerchantResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Mute transactions by merchant pattern
+      tags:
+      - Transactions
+  /muted-merchants/{id}:
+    delete:
+      parameters:
+      - description: Muted merchant ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Unmute existing transactions matching the merchant pattern
+        in: query
+        name: unmute
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Delete a muted merchant pattern
+      tags:
+      - Transactions
+  /muted-merchants/{id}/reason:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Muted merchant ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Muted merchant reason payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.MerchantReasonRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.MuteReasonResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Update a muted merchant reason
+      tags:
+      - Transactions
   /plugins/readers:
     get:
       produces:

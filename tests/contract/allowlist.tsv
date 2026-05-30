@@ -31,6 +31,9 @@ GET	/config/categories/export	category taxonomy export
 GET	/config/categories/mappings	category merchant mappings
 GET	/config/buckets/export	bucket taxonomy export
 GET	/config/buckets/mappings	bucket merchant mappings
+GET	/muted-merchants	muted merchant listing
+POST	/muted-merchants	mute merchant pattern
+POST	/merchants/categorize	merchant categorization
 POST	/config/categories/{name}/apply	category merchant apply
 DELETE	/config/categories/{name}/merchant	category merchant removal
 POST	/config/buckets/{name}/apply	bucket merchant apply
