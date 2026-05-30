@@ -86,6 +86,20 @@ func (h *Handlers) ListWriters(w http.ResponseWriter, _ *http.Request) {
 
 // UploadCredentials handles POST /api/readers/{name}/credentials.
 // Accepts a JSON file upload (e.g. Google client_secret.json) and saves it to the runtime store.
+// @Summary Upload reader OAuth credentials
+// @Tags Readers
+// @Accept json
+// @Produce json
+// @Param name path string true "Reader name" example(gmail)
+// @Param request body object true "OAuth client credentials JSON"
+// @Success 200 {object} UploadCredentialsResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 413 {object} ErrorResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /readers/{name}/credentials [post]
 func (h *Handlers) UploadCredentials(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	plugin, err := h.registry.GetReader(name)
@@ -137,6 +151,14 @@ func (h *Handlers) UploadCredentials(w http.ResponseWriter, r *http.Request) {
 }
 
 // CredentialsStatus handles GET /api/readers/{name}/credentials/status.
+// @Summary Get reader credentials status
+// @Tags Readers
+// @Produce json
+// @Param name path string true "Reader name" example(gmail)
+// @Success 200 {object} CredentialsStatusResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /readers/{name}/credentials/status [get]
 func (h *Handlers) CredentialsStatus(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.registry.GetReader(name); err != nil {
@@ -161,6 +183,17 @@ func (h *Handlers) CredentialsStatus(w http.ResponseWriter, r *http.Request) {
 
 // AuthStart handles POST /api/readers/{name}/auth/start.
 // Returns a Google OAuth consent URL for the given reader.
+// @Summary Start reader OAuth authorization
+// @Tags Readers
+// @Produce json
+// @Param name path string true "Reader name" example(gmail)
+// @Success 200 {object} AuthStartResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 412 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /readers/{name}/auth/start [post]
 func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	plugin, err := h.registry.GetReader(name)
@@ -279,6 +312,15 @@ func (h *Handlers) restartReaderDaemonAfterAuth(name string) {
 
 // AuthCallback handles GET /api/auth/callback.
 // This is the shared OAuth redirect target for all readers.
+// @Summary Handle reader OAuth callback
+// @Tags Readers
+// @Produce json
+// @Param state query string true "OAuth state"
+// @Param code query string true "OAuth authorization code"
+// @Success 302 "Found"
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /auth/callback [get]
 func (h *Handlers) AuthCallback(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
 	code := r.URL.Query().Get("code")
@@ -316,6 +358,16 @@ func (h *Handlers) AuthCallback(w http.ResponseWriter, r *http.Request) {
 // Accepts the full redirect URL (containing code and state params) pasted by
 // the user when the automatic redirect is unreachable (e.g. homeserver without
 // a public domain). Validates state, exchanges the code, and saves the token.
+// @Summary Exchange a pasted reader OAuth callback URL
+// @Tags Readers
+// @Accept json
+// @Produce json
+// @Param name path string true "Reader name" example(gmail)
+// @Param request body AuthExchangeRequest true "OAuth callback URL payload"
+// @Success 200 {object} AuthExchangeResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /readers/{name}/auth/exchange [post]
 func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 
@@ -373,6 +425,14 @@ func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 }
 
 // AuthStatus handles GET /api/readers/{name}/auth/status.
+// @Summary Get reader auth status
+// @Tags Readers
+// @Produce json
+// @Param name path string true "Reader name" example(gmail)
+// @Success 200 {object} AuthStatusResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /readers/{name}/auth/status [get]
 func (h *Handlers) AuthStatus(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	plugin, err := h.registry.GetReader(name)
@@ -415,6 +475,15 @@ func (h *Handlers) AuthStatus(w http.ResponseWriter, r *http.Request) {
 
 // DisconnectReader handles DELETE /api/readers/{name}.
 // Removes all stored credentials, token, and config files for the reader.
+// @Summary Disconnect a reader
+// @Tags Readers
+// @Produce json
+// @Param name path string true "Reader name" example(thunderbird)
+// @Success 200 {object} ReaderDisconnectResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /readers/{name} [delete]
 func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.registry.GetReader(name); err != nil {
@@ -437,6 +506,15 @@ func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 }
 
 // RevokeToken handles DELETE /api/readers/{name}/auth/token.
+// @Summary Revoke a reader OAuth token
+// @Tags Readers
+// @Produce json
+// @Param name path string true "Reader name" example(gmail)
+// @Success 200 {object} ReaderTokenRevokeResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /readers/{name}/auth/token [delete]
 func (h *Handlers) RevokeToken(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.registry.GetReader(name); err != nil {
@@ -469,6 +547,14 @@ func (h *Handlers) RevokeToken(w http.ResponseWriter, r *http.Request) {
 // --- reader config (for config-only readers like Thunderbird) ---
 
 // GetReaderConfig handles GET /api/readers/{name}/config.
+// @Summary Get reader runtime config
+// @Tags Readers
+// @Produce json
+// @Param name path string true "Reader name" example(thunderbird)
+// @Success 200 {object} ReaderConfigResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /readers/{name}/config [get]
 func (h *Handlers) GetReaderConfig(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.registry.GetReader(name); err != nil {
@@ -497,6 +583,19 @@ func (h *Handlers) GetReaderConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 // SaveReaderConfig handles POST /api/readers/{name}/config.
+// @Summary Save reader runtime config
+// @Tags Readers
+// @Accept json
+// @Produce json
+// @Param name path string true "Reader name" example(thunderbird)
+// @Param request body ReaderConfigRequest true "Reader config JSON"
+// @Success 200 {object} ReaderConfigSaveResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /readers/{name}/config [post]
 func (h *Handlers) SaveReaderConfig(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.registry.GetReader(name); err != nil {
@@ -534,6 +633,13 @@ func (h *Handlers) SaveReaderConfig(w http.ResponseWriter, r *http.Request) {
 
 // ReaderStatus handles GET /api/readers/{name}/status.
 // Returns overall readiness: credentials present, auth valid, config present.
+// @Summary Get reader readiness status
+// @Tags Readers
+// @Produce json
+// @Param name path string true "Reader name" example(thunderbird)
+// @Success 200 {object} ReaderStatusResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /readers/{name}/status [get]
 func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	plugin, err := h.registry.GetReader(name)
@@ -588,6 +694,11 @@ func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 // DiscoverProfiles handles GET /api/readers/thunderbird/discover/profiles.
 // Returns discovered Thunderbird profile directories from platform paths,
 // the Docker mount /thunderbird-profile, and THUNDERBIRD_DATA_DIR env var.
+// @Summary Discover Thunderbird profiles
+// @Tags Readers
+// @Produce json
+// @Success 200 {object} ThunderbirdProfilesResponse
+// @Router /readers/thunderbird/discover/profiles [get]
 func (h *Handlers) DiscoverProfiles(w http.ResponseWriter, _ *http.Request) {
 	var paths []string
 	seen := make(map[string]struct{})
@@ -620,6 +731,15 @@ func (h *Handlers) DiscoverProfiles(w http.ResponseWriter, _ *http.Request) {
 
 // DiscoverMailboxes handles GET /api/readers/thunderbird/discover/mailboxes?profile=<path>.
 // Returns available MBOX mailbox names within the given Thunderbird profile directory.
+// @Summary Discover Thunderbird mailboxes
+// @Tags Readers
+// @Produce json
+// @Param profile query string true "Thunderbird profile path"
+// @Success 200 {object} ThunderbirdMailboxesResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /readers/thunderbird/discover/mailboxes [get]
 func (h *Handlers) DiscoverMailboxes(w http.ResponseWriter, r *http.Request) {
 	profile := r.URL.Query().Get("profile")
 	if profile == "" {

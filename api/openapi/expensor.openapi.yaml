@@ -27,6 +27,40 @@ definitions:
         example: swiggy
         type: string
     type: object
+  api.AuthExchangeRequest:
+    properties:
+      url:
+        example: http://localhost:8080/api/auth/callback?state=state&code=code
+        type: string
+    required:
+    - url
+    type: object
+  api.AuthExchangeResponse:
+    properties:
+      status:
+        example: authorized
+        type: string
+    type: object
+  api.AuthStartResponse:
+    properties:
+      redirect_uri:
+        example: http://localhost:8080/api/auth/callback
+        type: string
+      url:
+        example: https://accounts.google.com/o/oauth2/auth
+        type: string
+    type: object
+  api.AuthStatusResponse:
+    properties:
+      auth_type:
+        example: config
+        type: string
+      authenticated:
+        type: boolean
+      expiry:
+        type: string
+        x-nullable: true
+    type: object
   api.BankColorResponse:
     properties:
       color:
@@ -186,6 +220,11 @@ definitions:
       name:
         example: food
         type: string
+    type: object
+  api.CredentialsStatusResponse:
+    properties:
+      exists:
+        type: boolean
     type: object
   api.DaemonReaderRequest:
     properties:
@@ -551,6 +590,28 @@ definitions:
         type: string
         x-nullable: true
     type: object
+  api.ReaderConfigRequest:
+    additionalProperties: {}
+    type: object
+  api.ReaderConfigResponse:
+    additionalProperties: {}
+    type: object
+  api.ReaderConfigSaveResponse:
+    properties:
+      status:
+        example: saved
+        type: string
+    type: object
+  api.ReaderDisconnectResponse:
+    properties:
+      files_removed:
+        items:
+          type: string
+        type: array
+      status:
+        example: disconnected
+        type: string
+    type: object
   api.ReaderGuideResponse:
     properties:
       notes:
@@ -579,6 +640,26 @@ definitions:
         type: string
       requires_credentials_upload:
         type: boolean
+    type: object
+  api.ReaderStatusResponse:
+    properties:
+      auth_type:
+        example: config
+        type: string
+      authenticated:
+        type: boolean
+      config_present:
+        type: boolean
+      credentials_uploaded:
+        type: boolean
+      ready:
+        type: boolean
+    type: object
+  api.ReaderTokenRevokeResponse:
+    properties:
+      status:
+        example: revoked
+        type: string
     type: object
   api.RemovedCountResponse:
     properties:
@@ -821,6 +902,20 @@ definitions:
         example: Swiggy
         type: string
     type: object
+  api.ThunderbirdMailboxesResponse:
+    properties:
+      mailboxes:
+        items:
+          type: string
+        type: array
+    type: object
+  api.ThunderbirdProfilesResponse:
+    properties:
+      profiles:
+        items:
+          type: string
+        type: array
+    type: object
   api.TimeBucketResponse:
     properties:
       amount:
@@ -980,6 +1075,12 @@ definitions:
         example: Internal transfer
         type: string
     type: object
+  api.UploadCredentialsResponse:
+    properties:
+      path:
+        example: db://reader_runtime/gmail/client_secret
+        type: string
+    type: object
   api.VersionResponse:
     properties:
       version:
@@ -1016,6 +1117,35 @@ info:
   title: Expensor API
   version: dev
 paths:
+  /auth/callback:
+    get:
+      parameters:
+      - description: OAuth state
+        in: query
+        name: state
+        required: true
+        type: string
+      - description: OAuth authorization code
+        in: query
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "302":
+          description: Found
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Handle reader OAuth callback
+      tags:
+      - Readers
   /config/active-reader:
     get:
       produces:
@@ -1796,6 +1926,7 @@ paths:
     delete:
       parameters:
       - description: Reader name
+        example: thunderbird
         in: path
         name: name
         required: true
@@ -1819,6 +1950,7 @@ paths:
     get:
       parameters:
       - description: Reader name
+        example: thunderbird
         in: path
         name: name
         required: true
@@ -2433,6 +2565,320 @@ paths:
       summary: List writer plugins
       tags:
       - Readers
+  /readers/{name}:
+    delete:
+      parameters:
+      - description: Reader name
+        example: thunderbird
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ReaderDisconnectResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Disconnect a reader
+      tags:
+      - Readers
+  /readers/{name}/auth/exchange:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Reader name
+        example: gmail
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: OAuth callback URL payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.AuthExchangeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AuthExchangeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Exchange a pasted reader OAuth callback URL
+      tags:
+      - Readers
+  /readers/{name}/auth/start:
+    post:
+      parameters:
+      - description: Reader name
+        example: gmail
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AuthStartResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "412":
+          description: Precondition Failed
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Start reader OAuth authorization
+      tags:
+      - Readers
+  /readers/{name}/auth/status:
+    get:
+      parameters:
+      - description: Reader name
+        example: gmail
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AuthStatusResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get reader auth status
+      tags:
+      - Readers
+  /readers/{name}/auth/token:
+    delete:
+      parameters:
+      - description: Reader name
+        example: gmail
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ReaderTokenRevokeResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Revoke a reader OAuth token
+      tags:
+      - Readers
+  /readers/{name}/config:
+    get:
+      parameters:
+      - description: Reader name
+        example: thunderbird
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ReaderConfigResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get reader runtime config
+      tags:
+      - Readers
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Reader name
+        example: thunderbird
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Reader config JSON
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.ReaderConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ReaderConfigSaveResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Save reader runtime config
+      tags:
+      - Readers
+  /readers/{name}/credentials:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Reader name
+        example: gmail
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: OAuth client credentials JSON
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.UploadCredentialsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Upload reader OAuth credentials
+      tags:
+      - Readers
+  /readers/{name}/credentials/status:
+    get:
+      parameters:
+      - description: Reader name
+        example: gmail
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.CredentialsStatusResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get reader credentials status
+      tags:
+      - Readers
   /readers/{name}/guide:
     get:
       parameters:
@@ -2454,6 +2900,71 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Get reader setup guide
+      tags:
+      - Readers
+  /readers/{name}/status:
+    get:
+      parameters:
+      - description: Reader name
+        example: thunderbird
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ReaderStatusResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get reader readiness status
+      tags:
+      - Readers
+  /readers/thunderbird/discover/mailboxes:
+    get:
+      parameters:
+      - description: Thunderbird profile path
+        in: query
+        name: profile
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ThunderbirdMailboxesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Discover Thunderbird mailboxes
+      tags:
+      - Readers
+  /readers/thunderbird/discover/profiles:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ThunderbirdProfilesResponse'
+      summary: Discover Thunderbird profiles
       tags:
       - Readers
   /rules:

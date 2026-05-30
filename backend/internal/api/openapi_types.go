@@ -139,6 +139,80 @@ type ReaderInfoResponse struct {
 	ConfigSchema              []ConfigFieldResponse `json:"config_schema"`
 }
 
+// UploadCredentialsResponse documents a stored reader credentials location.
+type UploadCredentialsResponse struct {
+	Path string `json:"path" example:"db://reader_runtime/gmail/client_secret"`
+}
+
+// CredentialsStatusResponse documents whether reader credentials are present.
+type CredentialsStatusResponse struct {
+	Exists bool `json:"exists"`
+}
+
+// AuthStartResponse documents an OAuth authorization start response.
+type AuthStartResponse struct {
+	URL         string `json:"url" example:"https://accounts.google.com/o/oauth2/auth"`
+	RedirectURI string `json:"redirect_uri" example:"http://localhost:8080/api/auth/callback"`
+}
+
+// AuthExchangeRequest documents a manual OAuth callback exchange request.
+type AuthExchangeRequest struct {
+	URL string `json:"url" example:"http://localhost:8080/api/auth/callback?state=state&code=code" binding:"required"`
+}
+
+// AuthExchangeResponse documents a successful manual OAuth exchange.
+type AuthExchangeResponse struct {
+	Status string `json:"status" example:"authorized"`
+}
+
+// AuthStatusResponse documents a reader auth status payload.
+type AuthStatusResponse struct {
+	Authenticated bool       `json:"authenticated"`
+	AuthType      string     `json:"auth_type,omitempty" example:"config"`
+	Expiry        *time.Time `json:"expiry,omitempty" extensions:"x-nullable"`
+}
+
+// ReaderDisconnectResponse documents a reader disconnect result.
+type ReaderDisconnectResponse struct {
+	Status       string   `json:"status" example:"disconnected"`
+	FilesRemoved []string `json:"files_removed"`
+}
+
+// ReaderTokenRevokeResponse documents an OAuth token revoke result.
+type ReaderTokenRevokeResponse struct {
+	Status string `json:"status" example:"revoked"`
+}
+
+// ReaderConfigRequest documents arbitrary persisted reader configuration JSON.
+type ReaderConfigRequest map[string]any
+
+// ReaderConfigResponse documents arbitrary persisted reader configuration JSON.
+type ReaderConfigResponse map[string]any
+
+// ReaderConfigSaveResponse documents a reader config save result.
+type ReaderConfigSaveResponse struct {
+	Status string `json:"status" example:"saved"`
+}
+
+// ReaderStatusResponse documents a reader readiness status payload.
+type ReaderStatusResponse struct {
+	CredentialsUploaded bool   `json:"credentials_uploaded"`
+	Authenticated       bool   `json:"authenticated"`
+	ConfigPresent       bool   `json:"config_present"`
+	AuthType            string `json:"auth_type" example:"config"`
+	Ready               bool   `json:"ready"`
+}
+
+// ThunderbirdProfilesResponse documents discovered Thunderbird profile paths.
+type ThunderbirdProfilesResponse struct {
+	Profiles []string `json:"profiles"`
+}
+
+// ThunderbirdMailboxesResponse documents discovered Thunderbird mailboxes.
+type ThunderbirdMailboxesResponse struct {
+	Mailboxes []string `json:"mailboxes"`
+}
+
 // WriterInfoResponse documents writer plugin metadata.
 type WriterInfoResponse struct {
 	Name        string `json:"name" example:"postgres"`

@@ -9,7 +9,9 @@ GET	/config/categories	category taxonomy
 GET	/config/labels	label taxonomy
 GET	/config/labels/mappings	label merchant mappings
 GET	/config/lookback-days	lookback-days config
+GET	/config/readers/{name}/checkpoint	reader checkpoint config
 GET	/config/scan-interval	scan-interval config
+GET	/config/setup-status	first-run setup status
 GET	/config/sync/status	config sync status
 GET	/config/time-format	time-format config
 GET	/config/timezone	timezone config
@@ -38,4 +40,5 @@ POST	/config/categories/{name}/apply	category merchant apply
 DELETE	/config/categories/{name}/merchant	category merchant removal
 POST	/config/buckets/{name}/apply	bucket merchant apply
 DELETE	/config/buckets/{name}/merchant	bucket merchant removal
+DELETE	/config/readers/{name}/checkpoint	clear reader checkpoint
 DELETE	/config/labels/{name}/merchant	label merchant removal
