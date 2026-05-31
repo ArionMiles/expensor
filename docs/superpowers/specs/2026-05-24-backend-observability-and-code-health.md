@@ -1,7 +1,7 @@
 # Backend Observability and Code Health — Design Spec
 
 **Date:** 2026-05-24
-**Status:** Observability/store instrumentation, plugin registry cleanup, API handler decomposition/naming cleanup, and API contract coverage slices are complete on the PR branch; broader backend code-health work remains.
+**Status:** Backend observability and code-health cleanup is complete on the follow-up branch. The original PR slices landed, and the remaining observability targets, store ownership cleanup, processed-message state context cleanup, and provider-specific Gmail query cleanup have follow-up coverage.
 
 ---
 
@@ -23,9 +23,9 @@ The work has two equal outcomes:
 | API handler decomposition | Complete | Handler files are split by resource ownership; follow-up naming cleanup has also landed on the current PR branch. |
 | API handler naming cleanup | Complete | Redundant `Handle` receiver-method prefixes and `Doc` OpenAPI DTO prefixes were removed without intentional route or payload changes. |
 | API spec and contract coverage expansion | Complete for this slice | All 88 registered `/api` routes have OpenAPI `@Router` coverage and an explicit contract-test decision: 72 deterministic allowlist entries and 16 scoped exclusions for OAuth, filesystem, or live reader/runtime state. |
-| Store package ownership cleanup beyond instrumentation | Pending | Remaining work includes read-model ownership and `store.go` model/helper split. |
-| Processed-message state context cleanup | Pending | Requires a separate implementation plan. |
-| Provider-specific domain cleanup | Pending | Includes moving Gmail query construction out of `pkg/api`. |
+| Store package ownership cleanup beyond instrumentation | Complete | Model/helper files are split, read-model ownership is explicit, and `Store` keeps single-implementation repositories as concrete private fields. |
+| Processed-message state context cleanup | Complete | DB-backed processed-message state uses caller contexts. |
+| Provider-specific domain cleanup | Complete | Gmail query construction lives in the Gmail reader package; `pkg/api.Rule` stays provider-neutral. |
 
 ---
 
@@ -350,8 +350,10 @@ Run component or contract tests only for slices that touch store behavior, daemo
 7. Rename decomposed API handler methods and OpenAPI DTOs to remove redundant `Handle` and `Doc` prefixes. **Complete.**
 8. Expand OpenAPI route coverage and Schemathesis allowlist coverage in deterministic batches. **Complete for this PR slice.**
 9. Update `AGENTS.md` with backend code-health rules. **Complete.**
-10. Make processed-message state context-aware. **Pending follow-up.**
-11. Move Gmail-specific rule query construction out of `pkg/api`. **Pending follow-up.**
+10. Make processed-message state context-aware. **Complete.**
+11. Move Gmail-specific rule query construction out of `pkg/api`. **Complete.**
+12. Add observability for HTTP middleware, daemon runner, Gmail/Thunderbird readers, Postgres writer batches, diagnostics, and community sync. **Complete on follow-up branch.**
+13. Finish store facade ownership cleanup by keeping single-implementation repositories concrete and removing type-assertion bridges. **Complete on follow-up branch.**
 
 ### Current PR Branch State
 
@@ -376,9 +378,7 @@ Route and contract inventory:
 - Missing route decisions: 0.
 - Allowlist/exclusion overlaps: 0.
 
-The remaining program work is outside the API contract coverage slice: processed-message state context propagation, Gmail-specific query construction ownership, and deeper `internal/store` ownership cleanup.
-
-The exact implementation plan may split these further, but each slice should be independently testable.
+No remaining implementation gaps are tracked by this spec. Future observability work should be driven by new requirements, such as additional histograms or dashboard-specific signals, rather than this cleanup spec.
 
 ---
 

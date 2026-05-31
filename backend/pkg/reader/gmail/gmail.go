@@ -14,12 +14,14 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/extractor"
+	"github.com/ArionMiles/expensor/backend/pkg/observability"
 	"github.com/ArionMiles/expensor/backend/pkg/state"
 )
 
@@ -38,6 +40,7 @@ type Reader struct {
 	diagnosticSlots     chan struct{}
 	diagnosticSlotsOnce sync.Once
 	logger              *slog.Logger
+	scope               *observability.Scope
 }
 
 // Config holds configuration for the Gmail reader.
@@ -65,6 +68,8 @@ type Config struct {
 	State *state.Manager
 	// DiagnosticSink records best-effort extraction diagnostics.
 	DiagnosticSink api.DiagnosticSink
+	// ObservabilityScope records reader telemetry. Defaults to a Gmail reader scope.
+	ObservabilityScope *observability.Scope
 }
 
 // New creates a new Gmail reader.
@@ -103,7 +108,22 @@ func New(httpClient *http.Client, cfg Config, logger *slog.Logger) (*Reader, err
 		diagnosticSink:  cfg.DiagnosticSink,
 		diagnosticSlots: make(chan struct{}, maxConcurrentDiagnostics),
 		logger:          logger,
+		scope:           readerScope(cfg.ObservabilityScope, logger),
 	}, nil
+}
+
+func readerScope(scope *observability.Scope, logger *slog.Logger) *observability.Scope {
+	if scope != nil {
+		return scope
+	}
+	return observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/pkg/reader/gmail")
+}
+
+func (r *Reader) observabilityScope() *observability.Scope {
+	if r.scope == nil {
+		r.scope = readerScope(nil, r.logger)
+	}
+	return r.scope
 }
 
 // Read continuously evaluates rules and sends extracted transactions to the output channel.
@@ -199,6 +219,9 @@ const (
 )
 
 func (r *Reader) evaluateRules(ctx context.Context, out chan<- *api.TransactionDetails) error {
+	ctx, span := r.observabilityScope().Start(ctx, "gmail.scan")
+	defer span.End()
+
 	r.logger.Info("starting rule evaluation", "rule_count", len(r.rules))
 
 	sem := make(chan struct{}, maxConcurrentRules)
@@ -229,10 +252,15 @@ func (r *Reader) evaluateRules(ctx context.Context, out chan<- *api.TransactionD
 	for err := range errCh {
 		ruleErrs = append(ruleErrs, err)
 	}
-	return errors.Join(ruleErrs...)
+	err := errors.Join(ruleErrs...)
+	r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "gmail", Name: "scan", Err: err})
+	return err
 }
 
 func (r *Reader) processRule(ctx context.Context, rule api.Rule, out chan<- *api.TransactionDetails) error {
+	ctx, span := r.observabilityScope().Start(ctx, "gmail.rule")
+	defer span.End()
+
 	logger := r.logger.With("rule", rule.Name, "source", rule.Source)
 	queries := r.buildRuleQueries(rule, logger)
 
@@ -260,8 +288,11 @@ func (r *Reader) processRule(ctx context.Context, rule api.Rule, out chan<- *api
 		}
 	}
 
+	err := errors.Join(messageErrs...)
+	span.SetAttributes(attribute.Int("gmail.messages_processed", totalFound))
+	r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "gmail", Name: "rule", Err: err})
 	logger.Info("rule processing complete", "rule", rule.Name, "messages_processed", totalFound)
-	return errors.Join(messageErrs...)
+	return err
 }
 
 func (r *Reader) buildRuleQuery(rule api.Rule, logger *slog.Logger) string {
@@ -335,6 +366,8 @@ func (r *Reader) listMessagesPage(ctx context.Context, query, pageToken string) 
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	ctx, span := r.observabilityScope().Start(ctx, "gmail.messages.list")
+	defer span.End()
 
 	var resp *gmail.ListMessagesResponse
 	err := doWithAuthRetry(func() error {
@@ -346,6 +379,7 @@ func (r *Reader) listMessagesPage(ctx context.Context, query, pageToken string) 
 		resp, callErr = req.Do()
 		return callErr
 	})
+	r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "gmail", Name: "messages.list", Err: err})
 	return resp, err
 }
 
@@ -389,11 +423,15 @@ func (r *Reader) shouldSkipMessage(ctx context.Context, msgID string, logger *sl
 	if r.state == nil || !r.state.IsProcessed(ctx, msgID) {
 		return false
 	}
+	r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "gmail", Name: "messages.skipped"})
 	logger.Debug("skipping already processed message", "message_id", msgID)
 	return true
 }
 
 func (r *Reader) processMessage(ctx context.Context, msgID string, rule api.Rule, out chan<- *api.TransactionDetails) error {
+	ctx, span := r.observabilityScope().Start(ctx, "gmail.messages.get")
+	defer span.End()
+
 	var msg *gmail.Message
 	err := doWithAuthRetry(func() error {
 		var callErr error
@@ -401,6 +439,7 @@ func (r *Reader) processMessage(ctx context.Context, msgID string, rule api.Rule
 		return callErr
 	})
 	if err != nil {
+		r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "gmail", Name: "messages.get", Err: err})
 		return fmt.Errorf("getting message: %w", err)
 	}
 
@@ -443,19 +482,23 @@ func (r *Reader) processMessage(ctx context.Context, msgID string, rule api.Rule
 	// Message will be marked as processed only after successful write and acknowledgment
 	select {
 	case <-ctx.Done():
+		r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "gmail", Name: "messages.get", Err: ctx.Err()})
 		return ctx.Err()
 	case out <- transaction:
 	}
 
+	r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "gmail", Name: "messages.get"})
 	return nil
 }
 
 func (r *Reader) recordExtractionDiagnostic(ctx context.Context, diagnostic api.ExtractionDiagnostic) {
 	if r.diagnosticSink == nil || len(diagnostic.FailureReasons) == 0 {
+		r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "diagnostics", Name: "skipped"})
 		return
 	}
 	release, ok := r.acquireDiagnosticSlot()
 	if !ok {
+		r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "diagnostics", Name: "skipped"})
 		r.diagnosticLogger().Warn("skipping extraction diagnostic; diagnostic recorder is saturated",
 			"reader", diagnostic.Reader, "message_id", diagnostic.MessageID)
 		return
@@ -466,7 +509,11 @@ func (r *Reader) recordExtractionDiagnostic(ctx context.Context, diagnostic api.
 		defer release()
 		diagnosticCtx, cancel := context.WithTimeout(ctx, diagnosticRecordTimeout)
 		defer cancel()
-		if err := sink.RecordExtractionDiagnostic(diagnosticCtx, diagnostic); err != nil {
+		diagnosticCtx, span := r.observabilityScope().Start(diagnosticCtx, "diagnostics.record")
+		err := sink.RecordExtractionDiagnostic(diagnosticCtx, diagnostic)
+		r.observabilityScope().RecordOperation(diagnosticCtx, observability.Operation{Namespace: "diagnostics", Name: "record", Err: err})
+		span.End()
+		if err != nil {
 			if logger == nil {
 				logger = slog.Default()
 			}

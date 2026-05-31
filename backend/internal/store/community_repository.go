@@ -35,6 +35,10 @@ type categorySnapshotEntry struct {
 }
 
 func NewCommunityRepository(deps repositoryDependencies) CommunityRepository {
+	return newPGCommunityRepository(deps)
+}
+
+func newPGCommunityRepository(deps repositoryDependencies) *pgCommunityRepository {
 	return &pgCommunityRepository{
 		pool: deps.pool,
 	}

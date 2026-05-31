@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -12,9 +13,15 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace/noop"
+
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
+	"github.com/ArionMiles/expensor/backend/pkg/observability"
 )
 
 // mockReader implements api.Reader for testing.
@@ -149,6 +156,44 @@ func TestNew(t *testing.T) {
 				t.Error("expected logger to be set (default if nil)")
 			}
 		})
+	}
+}
+
+func TestRunCreatesDaemonLifecycleSpan(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		_ = provider.Shutdown(t.Context())
+		otel.SetTracerProvider(noop.NewTracerProvider())
+	})
+
+	registry := plugins.NewRegistry()
+	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: &mockReader{}}); err != nil {
+		t.Fatalf("RegisterReader() error = %v", err)
+	}
+	if err := registry.RegisterWriter(&mockWriterPlugin{name: "test-writer", writer: &mockWriter{}}); err != nil {
+		t.Fatalf("RegisterWriter() error = %v", err)
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	scope := observability.NewScope(logger, "test/daemon")
+	runner := NewWithScope(registry, &http.Client{}, logger, scope)
+
+	err := runner.Run(t.Context(), RunConfig{
+		ReaderName: "test-reader",
+		WriterName: "test-writer",
+		Config:     &config.Config{},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	spans := recorder.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("ended spans = %d, want 1", len(spans))
+	}
+	if spans[0].Name() != "daemon.run" {
+		t.Fatalf("span name = %q, want daemon.run", spans[0].Name())
 	}
 }
 

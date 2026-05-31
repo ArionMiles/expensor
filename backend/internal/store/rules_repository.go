@@ -23,6 +23,10 @@ type pgRulesRepository struct {
 }
 
 func NewRulesRepository(deps repositoryDependencies) RulesRepository {
+	return newPGRulesRepository(deps)
+}
+
+func newPGRulesRepository(deps repositoryDependencies) *pgRulesRepository {
 	return &pgRulesRepository{
 		pool: deps.pool,
 	}

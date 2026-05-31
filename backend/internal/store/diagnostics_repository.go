@@ -21,6 +21,10 @@ type pgDiagnosticsRepository struct {
 }
 
 func NewDiagnosticsRepository(deps repositoryDependencies) DiagnosticsRepository {
+	return newPGDiagnosticsRepository(deps)
+}
+
+func newPGDiagnosticsRepository(deps repositoryDependencies) *pgDiagnosticsRepository {
 	return &pgDiagnosticsRepository{
 		pool: deps.pool,
 	}

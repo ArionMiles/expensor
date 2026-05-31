@@ -68,14 +68,13 @@ func (s *Store) PoolForTest() *pgxpool.Pool {
 func (s *Store) SetNowForTestSequence(seq ...time.Time) func() {
 	prev := s.now
 	var prevReadModelNow func() time.Time
-	readModel, _ := s.readModel.(*pgReadModelRepository)
-	if readModel != nil {
-		prevReadModelNow = readModel.now
+	if s.readModel != nil {
+		prevReadModelNow = s.readModel.now
 	}
 	if len(seq) == 0 {
 		s.now = prev
-		if readModel != nil {
-			readModel.now = prevReadModelNow
+		if s.readModel != nil {
+			s.readModel.now = prevReadModelNow
 		}
 		return func() {}
 	}
@@ -92,14 +91,14 @@ func (s *Store) SetNowForTestSequence(seq ...time.Time) func() {
 		idx++
 		return v
 	}
-	if readModel != nil {
-		readModel.now = s.now
+	if s.readModel != nil {
+		s.readModel.now = s.now
 	}
 
 	return func() {
 		s.now = prev
-		if readModel != nil {
-			readModel.now = prevReadModelNow
+		if s.readModel != nil {
+			s.readModel.now = prevReadModelNow
 		}
 	}
 }

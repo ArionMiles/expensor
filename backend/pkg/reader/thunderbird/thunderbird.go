@@ -13,9 +13,11 @@ import (
 	"time"
 
 	"github.com/emersion/go-mbox"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/extractor"
+	"github.com/ArionMiles/expensor/backend/pkg/observability"
 	"github.com/ArionMiles/expensor/backend/pkg/state"
 )
 
@@ -33,6 +35,7 @@ type Reader struct {
 	diagnosticSlots     chan struct{}
 	diagnosticSlotsOnce sync.Once
 	logger              *slog.Logger
+	scope               *observability.Scope
 }
 
 const (
@@ -62,6 +65,8 @@ type Config struct {
 	OnCheckpoint func(time.Time)
 	// DiagnosticSink records best-effort extraction diagnostics.
 	DiagnosticSink api.DiagnosticSink
+	// ObservabilityScope records reader telemetry. Defaults to a Thunderbird reader scope.
+	ObservabilityScope *observability.Scope
 }
 
 // New creates a new Thunderbird reader.
@@ -95,7 +100,22 @@ func New(cfg Config, logger *slog.Logger) (*Reader, error) {
 		diagnosticSink:  cfg.DiagnosticSink,
 		diagnosticSlots: make(chan struct{}, maxConcurrentDiagnostics),
 		logger:          logger,
+		scope:           readerScope(cfg.ObservabilityScope, logger),
 	}, nil
+}
+
+func readerScope(scope *observability.Scope, logger *slog.Logger) *observability.Scope {
+	if scope != nil {
+		return scope
+	}
+	return observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird")
+}
+
+func (r *Reader) observabilityScope() *observability.Scope {
+	if r.scope == nil {
+		r.scope = readerScope(nil, r.logger)
+	}
+	return r.scope
 }
 
 // Read continuously scans mailboxes and sends extracted transactions to the output channel.
@@ -183,12 +203,20 @@ func (r *Reader) handleAcknowledgments(ctx context.Context, ackChan <-chan strin
 
 // scanAllMailboxes scans all configured mailboxes for new transactions.
 func (r *Reader) scanAllMailboxes(ctx context.Context, out chan<- *api.TransactionDetails) error {
+	ctx, span := r.observabilityScope().Start(ctx, "thunderbird.scan")
+	defer span.End()
+
 	r.logger.Info("starting mailbox scan", "mailbox_count", len(r.mailboxPaths))
+	var scanErr error
+	defer func() {
+		r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "thunderbird", Name: "scan", Err: scanErr})
+	}()
 
 	for mailboxName, mailboxPath := range r.mailboxPaths {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			scanErr = ctx.Err()
+			return scanErr
 		default:
 		}
 
@@ -204,6 +232,9 @@ func (r *Reader) scanAllMailboxes(ctx context.Context, out chan<- *api.Transacti
 
 // scanMailbox scans a single mailbox for transactions.
 func (r *Reader) scanMailbox(ctx context.Context, mailboxName, mailboxPath string, out chan<- *api.TransactionDetails) error {
+	ctx, span := r.observabilityScope().Start(ctx, "thunderbird.mailbox.scan")
+	defer span.End()
+
 	logger := r.logger.With("mailbox", mailboxName, "path", mailboxPath)
 
 	file, err := os.Open(mailboxPath)
@@ -219,7 +250,9 @@ func (r *Reader) scanMailbox(ctx context.Context, mailboxName, mailboxPath strin
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			err := ctx.Err()
+			r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "thunderbird", Name: "mailbox.scan", Err: err})
+			return err
 		default:
 		}
 
@@ -250,6 +283,11 @@ func (r *Reader) scanMailbox(ctx context.Context, mailboxName, mailboxPath strin
 	}
 
 	logger.Info("mailbox scan complete", "processed", processedCount, "skipped", skippedCount)
+	span.SetAttributes(
+		attribute.Int("thunderbird.messages_processed", processedCount),
+		attribute.Int("thunderbird.messages_skipped", skippedCount),
+	)
+	r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "thunderbird", Name: "mailbox.scan"})
 	return nil
 }
 
@@ -261,24 +299,31 @@ func (r *Reader) processMessage(
 	mailboxPath string,
 	out chan<- *api.TransactionDetails,
 ) (bool, error) {
+	ctx, span := r.observabilityScope().Start(ctx, "thunderbird.messages.process")
+	defer span.End()
+
 	messageID := msg.Header.Get("Message-Id")
 	dateStr := msg.Header.Get("Date")
 	msgKey := state.GenerateKey(mailboxPath, messageID, dateStr)
 
 	if r.state != nil && r.state.IsProcessed(ctx, msgKey) {
+		r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "thunderbird", Name: "messages.skipped"})
 		return false, nil
 	}
 	if r.isBeforeCheckpoint(dateStr) {
+		r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "thunderbird", Name: "messages.skipped"})
 		return false, nil
 	}
 
 	rule, matches := r.matchesRule(msg)
 	if !matches {
+		r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "thunderbird", Name: "messages.skipped"})
 		return false, nil
 	}
 
 	transaction, err := r.extractTransaction(ctx, msg, rule, msgKey)
 	if err != nil {
+		r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "thunderbird", Name: "messages.process", Err: err})
 		r.logger.Warn("failed to extract transaction", "error", err, "message_key", msgKey)
 		return false, nil
 	}
@@ -286,8 +331,11 @@ func (r *Reader) processMessage(
 
 	select {
 	case <-ctx.Done():
-		return false, ctx.Err()
+		err := ctx.Err()
+		r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "thunderbird", Name: "messages.process", Err: err})
+		return false, err
 	case out <- transaction:
+		r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "thunderbird", Name: "messages.process"})
 		r.logger.Debug("extracted transaction",
 			"amount", transaction.Amount,
 			"merchant", transaction.MerchantInfo,
@@ -352,10 +400,12 @@ func (r *Reader) extractTransaction(ctx context.Context, msg *mail.Message, rule
 
 func (r *Reader) recordExtractionDiagnostic(ctx context.Context, diagnostic api.ExtractionDiagnostic) {
 	if r.diagnosticSink == nil || len(diagnostic.FailureReasons) == 0 {
+		r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "diagnostics", Name: "skipped"})
 		return
 	}
 	release, ok := r.acquireDiagnosticSlot()
 	if !ok {
+		r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "diagnostics", Name: "skipped"})
 		r.diagnosticLogger().Warn("skipping extraction diagnostic; diagnostic recorder is saturated",
 			"reader", diagnostic.Reader, "message_id", diagnostic.MessageID)
 		return
@@ -366,7 +416,11 @@ func (r *Reader) recordExtractionDiagnostic(ctx context.Context, diagnostic api.
 		defer release()
 		diagnosticCtx, cancel := context.WithTimeout(ctx, diagnosticRecordTimeout)
 		defer cancel()
-		if err := sink.RecordExtractionDiagnostic(diagnosticCtx, diagnostic); err != nil {
+		diagnosticCtx, span := r.observabilityScope().Start(diagnosticCtx, "diagnostics.record")
+		err := sink.RecordExtractionDiagnostic(diagnosticCtx, diagnostic)
+		r.observabilityScope().RecordOperation(diagnosticCtx, observability.Operation{Namespace: "diagnostics", Name: "record", Err: err})
+		span.End()
+		if err != nil {
 			if logger == nil {
 				logger = slog.Default()
 			}
