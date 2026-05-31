@@ -10,8 +10,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -570,7 +568,6 @@ func newTestHandlers(t *testing.T, st Storer, dm DaemonStatusProvider, banksData
 		Version:      "test",
 		BaseURL:      "http://localhost:8080",
 		FrontendURL:  "http://localhost:5173",
-		DataDir:      t.TempDir(),
 		ScanInterval: 60,
 		LookbackDays: 180,
 		BanksData:    banks,
@@ -767,7 +764,6 @@ func TestListWriters(t *testing.T) {
 
 func TestCredentialsStatus_Missing(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	// h.dataDir is t.TempDir() — no credentials file exists there.
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/gmail/credentials/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
@@ -832,9 +828,6 @@ func TestUploadCredentials_SavesToStore(t *testing.T) {
 	}
 	if string(ms.readerSecrets["gmail"]) != `{"installed":{}}` {
 		t.Fatalf("secret was not persisted to store: %s", ms.readerSecrets["gmail"])
-	}
-	if _, err := os.Stat(filepath.Join(h.dataDir, "client_secret_gmail.json")); !os.IsNotExist(err) {
-		t.Fatalf("credentials should not be written to disk, stat err=%v", err)
 	}
 }
 
@@ -999,9 +992,6 @@ func TestSaveReaderConfig_SavesToStore(t *testing.T) {
 	}
 	if !bytes.Contains(ms.readerConfigs["thunderbird"], []byte("Inbox")) {
 		t.Fatalf("config not persisted: %s", ms.readerConfigs["thunderbird"])
-	}
-	if _, err := os.Stat(filepath.Join(h.dataDir, "config_thunderbird.json")); !os.IsNotExist(err) {
-		t.Fatalf("config should not be written to disk, stat err=%v", err)
 	}
 }
 

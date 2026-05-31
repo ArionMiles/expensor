@@ -60,9 +60,6 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 		cfg := config.Config{}
 		cfg.ApplyDefaults()
 
-		if cfg.StateFile != config.DefaultStateFile {
-			t.Errorf("StateFile: got %q, want %q", cfg.StateFile, config.DefaultStateFile)
-		}
 		if cfg.ScanInterval != 60 {
 			t.Errorf("ScanInterval: got %d, want 60", cfg.ScanInterval)
 		}
@@ -88,7 +85,6 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 
 	t.Run("pre-set values are not overwritten", func(t *testing.T) {
 		cfg := config.Config{
-			StateFile:    "custom/state.json",
 			ScanInterval: 120,
 			LookbackDays: 365,
 			Postgres: config.PostgresConfig{
@@ -101,9 +97,6 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 		}
 		cfg.ApplyDefaults()
 
-		if cfg.StateFile != "custom/state.json" {
-			t.Errorf("StateFile: got %q, want \"custom/state.json\"", cfg.StateFile)
-		}
 		if cfg.ScanInterval != 120 {
 			t.Errorf("ScanInterval: got %d, want 120", cfg.ScanInterval)
 		}
@@ -156,12 +149,9 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 	})
 }
 
-func TestApplyDefaults_DataDirAndCurrency(t *testing.T) {
+func TestApplyDefaults_BaseCurrency(t *testing.T) {
 	c := config.Config{}
 	c.ApplyDefaults()
-	if c.DataDir != "data" {
-		t.Errorf("expected DataDir=data, got %q", c.DataDir)
-	}
 	if c.BaseCurrency != "INR" {
 		t.Errorf("expected BaseCurrency=INR, got %q", c.BaseCurrency)
 	}

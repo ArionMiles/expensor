@@ -7,12 +7,6 @@ import (
 	"time"
 )
 
-// ClientSecretFile is the legacy default path to the Google OAuth credentials JSON file.
-const ClientSecretFile = "data/client_secret.json"
-
-// DefaultStateFile is the legacy default path to the state file for tracking processed messages.
-const DefaultStateFile = "data/state.json"
-
 // Config holds the application configuration loaded from environment variables.
 // Reader and writer plugin selection is driven by the web UI, not env vars.
 type Config struct {
@@ -33,16 +27,6 @@ type Config struct {
 	// Environment variable: FRONTEND_URL
 	// Default: same as BASE_URL
 	FrontendURL string `koanf:"FRONTEND_URL"`
-
-	// StateFile is the legacy path to the state file for tracking processed messages.
-	// Environment variable: EXPENSOR_STATE_FILE
-	// Default: data/state.json
-	StateFile string `koanf:"EXPENSOR_STATE_FILE"`
-
-	// DataDir is the legacy directory for importing state, token, and credential files.
-	// Environment variable: EXPENSOR_DATA_DIR
-	// Default: data
-	DataDir string `koanf:"EXPENSOR_DATA_DIR"`
 
 	// BaseCurrency is the primary currency used for aggregate stats.
 	// Environment variable: EXPENSOR_BASE_CURRENCY
@@ -159,12 +143,6 @@ func (c *Config) ApplyDefaults() {
 		c.FrontendURL = c.BaseURL
 	}
 
-	if c.StateFile == "" {
-		c.StateFile = DefaultStateFile
-	}
-	if c.DataDir == "" {
-		c.DataDir = "data"
-	}
 	if c.BaseCurrency == "" {
 		c.BaseCurrency = "INR"
 	}

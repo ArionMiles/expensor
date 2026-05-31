@@ -23,7 +23,6 @@ import (
 	"github.com/knadh/koanf/v2"
 
 	httpapi "github.com/ArionMiles/expensor/backend/internal/api"
-	"github.com/ArionMiles/expensor/backend/internal/compat"
 	"github.com/ArionMiles/expensor/backend/internal/daemon"
 	"github.com/ArionMiles/expensor/backend/internal/migration"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
@@ -374,12 +373,6 @@ func run() int {
 		return 1
 	}
 
-	if result, err := compat.NewRuntimeImporter(cfg.DataDir, pgStore, logger.With("component", "runtime_importer")).Import(ctx); err != nil {
-		logger.Warn("legacy runtime import failed", "error", err)
-	} else if result.ImportedFiles > 0 {
-		logger.Info("legacy runtime files imported", "files", result.ImportedFiles)
-	}
-
 	// Seed embedded content and build the CategoryResolver. Close is deferred only
 	// after seeding succeeds, so the failure path closes the store explicitly.
 	resolver, err := seedStartupData(ctx, pgStore, content, logger)
@@ -419,7 +412,6 @@ func run() int {
 		Version:            Version,
 		BaseURL:            cfg.BaseURL,
 		FrontendURL:        cfg.FrontendURL,
-		DataDir:            cfg.DataDir,
 		ThunderbirdDataDir: cfg.Thunderbird.DataDir,
 		ScanInterval:       cfg.ScanInterval,
 		LookbackDays:       cfg.LookbackDays,

@@ -643,7 +643,7 @@ func (r *pgReadModelRepository) queryTimeBuckets(ctx context.Context, q string, 
 	}
 	defer rows.Close()
 
-	var buckets []TimeBucket
+	buckets := []TimeBucket{}
 	for rows.Next() {
 		var b TimeBucket
 		if err := rows.Scan(&b.Period, &b.Amount, &b.Count); err != nil {

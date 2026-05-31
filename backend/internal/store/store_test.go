@@ -2021,6 +2021,12 @@ func TestGetDashboardData_UsesSingleNowAcrossSections(t *testing.T) {
 	if data.CurrentMonth.Stats.TotalCount != 0 {
 		t.Fatalf("expected current-month total_count=0, got %d", data.CurrentMonth.Stats.TotalCount)
 	}
+	if data.CurrentMonth.Charts.MonthlySpend == nil {
+		t.Fatal("expected current-month monthly spend to serialize as an empty array, got nil")
+	}
+	if data.CurrentMonth.Charts.DailySpend == nil {
+		t.Fatal("expected current-month daily spend to serialize as an empty array, got nil")
+	}
 	if got := data.AllTime.Charts.ByCategoryMonthly["Shopping"]; got != (store.CategoryMonthlyEntry{}) {
 		t.Fatalf("expected all-time category monthly to exclude April spend for March snapshot, got %+v", got)
 	}
