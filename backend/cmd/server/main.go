@@ -861,6 +861,19 @@ func syncCommunityContent(ctx context.Context, st httpapi.Storer, baseURL string
 	if baseURL == "" {
 		return
 	}
+	scope := observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/cmd/server/community_sync")
+	ctx, span := scope.Start(ctx, "community_sync.sync")
+	defer span.End()
+	start := time.Now()
+	var syncErr error
+	defer func() {
+		scope.RecordDuration(ctx, observability.DurationOperation{
+			Namespace: "community_sync",
+			Name:      "sync",
+			Duration:  time.Since(start),
+			Err:       syncErr,
+		})
+	}()
 	logger.Info("syncing community content", "url", baseURL)
 
 	fetchJSON := func(path string, dest any) error {
@@ -882,21 +895,25 @@ func syncCommunityContent(ctx context.Context, st httpapi.Storer, baseURL string
 
 	var mccEntries []store.MCCEntry
 	if err := fetchJSON("mcc.json", &mccEntries); err != nil {
+		syncErr = err
 		recordSyncError(ctx, st, err, logger)
 		return
 	}
 	var catEntries []store.MerchantCategoryEntry
 	if err := fetchJSON("categories.json", &catEntries); err != nil {
+		syncErr = err
 		recordSyncError(ctx, st, err, logger)
 		return
 	}
 
 	if err := st.SeedMCCCodes(ctx, mccEntries); err != nil {
+		syncErr = err
 		recordSyncError(ctx, st, err, logger)
 		return
 	}
 	updated, err := st.SeedMerchantCategories(ctx, catEntries)
 	if err != nil {
+		syncErr = err
 		recordSyncError(ctx, st, err, logger)
 		return
 	}

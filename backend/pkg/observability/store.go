@@ -3,12 +3,15 @@ package observability
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
+
+const errorStatus = "error"
 
 // Operation describes one low-cardinality operation measurement.
 type Operation struct {
@@ -17,11 +20,21 @@ type Operation struct {
 	Err       error
 }
 
+// DurationOperation describes one low-cardinality duration measurement.
+type DurationOperation struct {
+	Namespace  string
+	Name       string
+	Duration   time.Duration
+	StatusCode int
+	Err        error
+	Attributes []attribute.KeyValue
+}
+
 // RecordOperation records a span result, metrics, and a trace-aware log entry.
 func (s *Scope) RecordOperation(ctx context.Context, op Operation) {
 	status := "ok"
 	if op.Err != nil {
-		status = "error"
+		status = errorStatus
 	}
 
 	attrs := []attribute.KeyValue{
@@ -46,11 +59,38 @@ func (s *Scope) RecordOperation(ctx context.Context, op Operation) {
 	}
 
 	if op.Err != nil {
-		span.SetStatus(codes.Error, "error")
+		span.SetStatus(codes.Error, errorStatus)
 		logAttrs = append(logAttrs, slog.Any("error", op.Err))
 		s.logger.LogAttrs(ctx, slog.LevelError, "operation failed", logAttrs...)
 		return
 	}
 
 	s.logger.LogAttrs(ctx, slog.LevelDebug, "operation completed", logAttrs...)
+}
+
+// RecordDuration records request or batch latency with low-cardinality attributes.
+func (s *Scope) RecordDuration(ctx context.Context, op DurationOperation) {
+	status := "ok"
+	if op.Err != nil || op.StatusCode >= 500 {
+		status = errorStatus
+	}
+	attrs := []attribute.KeyValue{
+		attribute.String("namespace", op.Namespace),
+		attribute.String("operation", op.Name),
+		attribute.String("status", status),
+	}
+	attrs = append(attrs, op.Attributes...)
+	if op.StatusCode > 0 {
+		attrs = append(attrs, attribute.Int("status_code", op.StatusCode))
+	}
+
+	counter, _ := s.meter.Int64Counter(op.Namespace + ".operations")
+	counter.Add(ctx, 1, metric.WithAttributes(attrs...))
+	histogram, _ := s.meter.Float64Histogram(op.Namespace + ".duration_ms")
+	histogram.Record(ctx, float64(op.Duration.Milliseconds()), metric.WithAttributes(attrs...))
+
+	span := trace.SpanFromContext(ctx)
+	if status == errorStatus {
+		span.SetStatus(codes.Error, errorStatus)
+	}
 }

@@ -45,6 +45,10 @@ type pgRuntimeRepository struct {
 }
 
 func NewRuntimeRepository(deps repositoryDependencies) RuntimeRepository {
+	return newPGRuntimeRepository(deps)
+}
+
+func newPGRuntimeRepository(deps repositoryDependencies) *pgRuntimeRepository {
 	return &pgRuntimeRepository{
 		pool: deps.pool,
 	}

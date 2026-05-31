@@ -27,6 +27,10 @@ type pgReadModelRepository struct {
 }
 
 func NewReadModelRepository(deps repositoryDependencies, runtime RuntimeRepository) ReadModelRepository {
+	return newPGReadModelRepository(deps, runtime)
+}
+
+func newPGReadModelRepository(deps repositoryDependencies, runtime RuntimeRepository) *pgReadModelRepository {
 	return &pgReadModelRepository{
 		pool:    deps.pool,
 		runtime: runtime,

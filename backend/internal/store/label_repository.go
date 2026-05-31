@@ -49,6 +49,10 @@ type taxonomyItem struct {
 
 // NewTaxonomyRepository returns a PostgreSQL-backed taxonomy repository.
 func NewTaxonomyRepository(deps repositoryDependencies) TaxonomyRepository {
+	return newPGTaxonomyRepository(deps)
+}
+
+func newPGTaxonomyRepository(deps repositoryDependencies) *pgTaxonomyRepository {
 	return &pgTaxonomyRepository{
 		pool: deps.pool,
 	}

@@ -6,7 +6,6 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -23,13 +22,13 @@ type Store struct {
 	pool      *pgxpool.Pool
 	logger    *slog.Logger
 	now       func() time.Time
-	community CommunityRepository
-	diag      DiagnosticsRepository
-	readModel ReadModelRepository
-	rules     RulesRepository
-	runtime   RuntimeRepository
-	taxonomy  TaxonomyRepository
-	txns      TransactionsRepository
+	community *pgCommunityRepository
+	diag      *pgDiagnosticsRepository
+	readModel *pgReadModelRepository
+	rules     *pgRulesRepository
+	runtime   *pgRuntimeRepository
+	taxonomy  *pgTaxonomyRepository
+	txns      *pgTransactionsRepository
 }
 
 var _ api.DiagnosticSink = (*Store)(nil)
@@ -97,13 +96,13 @@ func (s *Store) initRepositories() {
 		logger: s.logger,
 		now:    s.now,
 	}
-	s.community = NewCommunityRepository(deps)
-	s.diag = NewDiagnosticsRepository(deps)
-	s.rules = NewRulesRepository(deps)
-	s.runtime = NewRuntimeRepository(deps)
-	s.readModel = NewReadModelRepository(deps, s.runtime)
-	s.taxonomy = NewTaxonomyRepository(deps)
-	s.txns = NewTransactionsRepository(deps)
+	s.community = newPGCommunityRepository(deps)
+	s.diag = newPGDiagnosticsRepository(deps)
+	s.rules = newPGRulesRepository(deps)
+	s.runtime = newPGRuntimeRepository(deps)
+	s.readModel = newPGReadModelRepository(deps, s.runtime)
+	s.taxonomy = newPGTaxonomyRepository(deps)
+	s.txns = newPGTransactionsRepository(deps)
 }
 
 // Close releases the store's connection pool.
@@ -117,11 +116,7 @@ func (s *Store) queryTransactionTotals(
 	where string,
 	args []any,
 ) (TransactionListResult, error) {
-	repo, ok := s.txns.(*pgTransactionsRepository)
-	if !ok {
-		return TransactionListResult{}, errors.New("transactions repository unavailable")
-	}
-	return repo.queryTransactionTotals(ctx, join, where, args)
+	return s.txns.queryTransactionTotals(ctx, join, where, args)
 }
 
 // ListTransactions returns a paginated, filtered list of transactions and the total
@@ -557,11 +552,7 @@ func (s *Store) GetMutedMerchantPatterns(ctx context.Context) ([]string, error) 
 }
 
 func (s *Store) loadLabels(ctx context.Context, txns []Transaction) error {
-	repo, ok := s.txns.(*pgTransactionsRepository)
-	if !ok {
-		return errors.New("transactions repository unavailable")
-	}
-	return repo.loadLabels(ctx, txns)
+	return s.txns.loadLabels(ctx, txns)
 }
 
 // SeedMCCCodes upserts all MCC codes. Community content is authoritative for

@@ -4,6 +4,10 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+
+	"github.com/ArionMiles/expensor/backend/pkg/observability"
 )
 
 // loggingMiddleware logs method, path, status, and duration for every request.
@@ -18,6 +22,42 @@ func loggingMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 			"status", rw.status,
 			"duration_ms", time.Since(start).Milliseconds(),
 		)
+	})
+}
+
+// observabilityMiddleware records low-cardinality HTTP request telemetry.
+func observabilityMiddleware(scope *observability.Scope, next http.Handler) http.Handler {
+	if scope == nil {
+		scope = observability.NewScope(slog.Default(), "github.com/ArionMiles/expensor/backend/internal/api")
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx, span := scope.Start(r.Context(), "http.server.request")
+		defer span.End()
+
+		start := time.Now()
+		rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
+		req := r.WithContext(ctx)
+		next.ServeHTTP(rw, req)
+
+		route := req.Pattern
+		if route == "" {
+			route = "unmatched"
+		}
+		span.SetAttributes(
+			attribute.String("http.request.method", r.Method),
+			attribute.String("http.route", route),
+			attribute.Int("http.response.status_code", rw.status),
+		)
+		scope.RecordDuration(ctx, observability.DurationOperation{
+			Namespace:  "http",
+			Name:       "server.request",
+			Duration:   time.Since(start),
+			StatusCode: rw.status,
+			Attributes: []attribute.KeyValue{
+				attribute.String("method", r.Method),
+				attribute.String("route", route),
+			},
+		})
 	})
 }
 

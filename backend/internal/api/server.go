@@ -10,6 +10,8 @@ import (
 	"path"
 	"path/filepath"
 	"time"
+
+	"github.com/ArionMiles/expensor/backend/pkg/observability"
 )
 
 // Server wraps the HTTP server and its dependencies.
@@ -28,7 +30,8 @@ func NewServer(port int, handlers *Handlers, staticDir string, logger *slog.Logg
 		mux.HandleFunc("/", spaHandler(staticDir))
 	}
 
-	chain := corsMiddleware(loggingMiddleware(logger, recoveryMiddleware(logger, mux)))
+	scope := observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/internal/api")
+	chain := corsMiddleware(loggingMiddleware(logger, observabilityMiddleware(scope, recoveryMiddleware(logger, mux))))
 
 	return &Server{
 		httpServer: &http.Server{

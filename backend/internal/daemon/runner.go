@@ -15,6 +15,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
+	"github.com/ArionMiles/expensor/backend/pkg/observability"
 	"github.com/ArionMiles/expensor/backend/pkg/state"
 )
 
@@ -23,18 +24,28 @@ type Runner struct {
 	registry   *plugins.Registry
 	httpClient *http.Client
 	logger     *slog.Logger
+	scope      *observability.Scope
 }
 
 // New creates a new daemon runner.
 func New(registry *plugins.Registry, httpClient *http.Client, logger *slog.Logger) *Runner {
+	return NewWithScope(registry, httpClient, logger, nil)
+}
+
+// NewWithScope creates a daemon runner with an explicit observability scope.
+func NewWithScope(registry *plugins.Registry, httpClient *http.Client, logger *slog.Logger, scope *observability.Scope) *Runner {
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if scope == nil {
+		scope = observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/internal/daemon")
 	}
 
 	return &Runner{
 		registry:   registry,
 		httpClient: httpClient,
 		logger:     logger,
+		scope:      scope,
 	}
 }
 
@@ -64,7 +75,18 @@ type ReaderRuntimeStore interface {
 // Run starts the expense tracking daemon with the given configuration.
 // It blocks until the context is canceled or an error occurs.
 func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
+	ctx, span := r.scope.Start(ctx, "daemon.run")
+	defer span.End()
+
 	cfg := runCfg.Config
+	var runErr error
+	defer func() {
+		r.scope.RecordOperation(ctx, observability.Operation{
+			Namespace: "daemon",
+			Name:      "run",
+			Err:       runErr,
+		})
+	}()
 
 	r.logger.Info("starting expensor daemon",
 		"reader", runCfg.ReaderName,
@@ -73,6 +95,7 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 
 	readerPlugin, err := r.registry.GetReader(runCfg.ReaderName)
 	if err != nil {
+		runErr = err
 		return fmt.Errorf("creating reader: %w", err)
 	}
 	reader, err := readerPlugin.NewReader(plugins.ReaderInput{
@@ -86,11 +109,13 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 		Logger:         r.logger.With("component", "reader", "plugin", runCfg.ReaderName),
 	})
 	if err != nil {
+		runErr = err
 		return fmt.Errorf("creating reader: %w", err)
 	}
 
 	writerPlugin, err := r.registry.GetWriter(runCfg.WriterName)
 	if err != nil {
+		runErr = err
 		return fmt.Errorf("creating writer: %w", err)
 	}
 	writer, err := writerPlugin.NewWriter(plugins.WriterInput{
@@ -99,6 +124,7 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 		Logger:     r.logger.With("component", "writer", "plugin", runCfg.WriterName),
 	})
 	if err != nil {
+		runErr = err
 		return fmt.Errorf("creating writer: %w", err)
 	}
 
@@ -115,6 +141,7 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 	if err := g.Wait(); err != nil &&
 		!errors.Is(err, context.Canceled) &&
 		!errors.Is(err, context.DeadlineExceeded) {
+		runErr = err
 		r.logger.Error("daemon error", "error", err)
 	}
 

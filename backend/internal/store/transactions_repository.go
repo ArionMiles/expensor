@@ -38,6 +38,10 @@ type pgTransactionsRepository struct {
 }
 
 func NewTransactionsRepository(deps repositoryDependencies) TransactionsRepository {
+	return newPGTransactionsRepository(deps)
+}
+
+func newPGTransactionsRepository(deps repositoryDependencies) *pgTransactionsRepository {
 	return &pgTransactionsRepository{
 		pool: deps.pool,
 	}

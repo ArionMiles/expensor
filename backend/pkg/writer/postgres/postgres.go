@@ -11,10 +11,12 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/ArionMiles/expensor/backend/internal/migration"
 	"github.com/ArionMiles/expensor/backend/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/observability"
 )
 
 // RunMigrations applies all numbered SQL migrations from the embedded migrations
@@ -52,6 +54,7 @@ type Writer struct {
 	logger        *slog.Logger
 	batchSize     int
 	flushInterval time.Duration
+	scope         *observability.Scope
 }
 
 // compile-time check: *Writer must satisfy io.Closer.
@@ -125,6 +128,7 @@ func New(cfg Config, logger *slog.Logger) (*Writer, error) {
 		logger:        logger,
 		batchSize:     cfg.BatchSize,
 		flushInterval: cfg.FlushInterval,
+		scope:         observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/pkg/writer/postgres"),
 	}
 
 	// Run migrations
@@ -213,10 +217,27 @@ func (w *Writer) writeBatch(ctx context.Context, transactions []*api.Transaction
 	if len(transactions) == 0 {
 		return nil
 	}
+	ctx, span := w.observabilityScope().Start(ctx, "postgres_writer.batch_write")
+	defer span.End()
+	start := time.Now()
+	span.SetAttributes(attribute.Int("postgres_writer.batch_size", len(transactions)))
+	var writeErr error
+	defer func() {
+		w.observabilityScope().RecordDuration(ctx, observability.DurationOperation{
+			Namespace: "postgres_writer",
+			Name:      "batch_write",
+			Duration:  time.Since(start),
+			Err:       writeErr,
+			Attributes: []attribute.KeyValue{
+				attribute.Int("batch_size", len(transactions)),
+			},
+		})
+	}()
 
 	// Start a transaction
 	tx, err := w.pool.Begin(ctx)
 	if err != nil {
+		writeErr = err
 		return fmt.Errorf("beginning transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -277,12 +298,14 @@ func (w *Writer) writeBatch(ctx context.Context, transactions []*api.Transaction
 	for i := 0; i < len(transactions); i++ {
 		if err := batchResults.QueryRow().Scan(&txnIDs[i]); err != nil {
 			_ = batchResults.Close()
+			writeErr = err
 			return fmt.Errorf("inserting transaction %d: %w", i, err)
 		}
 	}
 
 	// Close batch results before executing more queries on the transaction
 	if err := batchResults.Close(); err != nil {
+		writeErr = err
 		return fmt.Errorf("closing batch results: %w", err)
 	}
 
@@ -290,27 +313,39 @@ func (w *Writer) writeBatch(ctx context.Context, transactions []*api.Transaction
 	for i, txn := range transactions {
 		if len(txn.Labels) > 0 {
 			if err := w.insertLabels(ctx, tx, txnIDs[i], txn.Labels); err != nil {
+				writeErr = err
 				return fmt.Errorf("inserting labels for transaction %s: %w", txnIDs[i], err)
 			}
 		}
 	}
 
 	if err := w.applyMerchantLabels(ctx, tx, txnIDs); err != nil {
+		writeErr = err
 		return fmt.Errorf("auto-applying merchant labels: %w", err)
 	}
 	if err := w.applyMerchantCategories(ctx, tx, txnIDs); err != nil {
+		writeErr = err
 		return fmt.Errorf("auto-applying merchant categories: %w", err)
 	}
 	if err := w.applyMutedMerchants(ctx, tx, txnIDs); err != nil {
+		writeErr = err
 		return fmt.Errorf("auto-muting transactions: %w", err)
 	}
 
 	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
+		writeErr = err
 		return fmt.Errorf("committing transaction: %w", err)
 	}
 
 	return nil
+}
+
+func (w *Writer) observabilityScope() *observability.Scope {
+	if w.scope == nil {
+		w.scope = observability.NewScope(w.logger, "github.com/ArionMiles/expensor/backend/pkg/writer/postgres")
+	}
+	return w.scope
 }
 
 func (w *Writer) normalizeWriteInput(txn *api.TransactionDetails) (string, time.Time) {
