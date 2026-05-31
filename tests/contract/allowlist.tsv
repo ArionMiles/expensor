@@ -1,8 +1,6 @@
 GET	/health	health endpoint
 GET	/version	version endpoint
 GET	/status	daemon status endpoint
-POST	/daemon/start	start daemon with deterministic reader
-POST	/daemon/rescan	rescan deterministic reader
 GET	/config/active-reader	active reader config
 GET	/config/banks	bank color mappings
 GET	/config/base-currency	base currency config
@@ -18,7 +16,6 @@ GET	/config/scan-interval	scan-interval config
 PUT	/config/scan-interval	update scan-interval config
 GET	/config/setup-status	first-run setup status
 GET	/config/sync/status	config sync status
-POST	/config/sync	trigger config sync
 GET	/config/time-format	time-format config
 PUT	/config/time-format	update time-format config
 GET	/config/timezone	timezone config

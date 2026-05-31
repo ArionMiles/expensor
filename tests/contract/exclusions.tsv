@@ -11,3 +11,6 @@ GET	/readers/{name}/status	live reader readiness state
 GET	/readers/{name}/config	live reader runtime config
 POST	/readers/{name}/config	live reader runtime config
 GET	/readers/{name}/credentials/status	external OAuth credential state
+POST	/daemon/start	live reader runtime start state
+POST	/daemon/rescan	live reader runtime rescan state
+POST	/config/sync	external community content sync state
