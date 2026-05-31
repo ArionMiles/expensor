@@ -955,11 +955,32 @@ git commit --no-gpg-sign -m "test: expand deterministic api contract coverage"
 
 ## Task 8: Final Verification and PR Readiness
 
+**Status:** Complete locally on branch `pr/backend-observability-code-health-next`.
+
+Final route inventory:
+
+- Registered API routes: 88.
+- OpenAPI `@Router` annotations: 88.
+- Contract allowlist entries: 72.
+- Contract exclusions: 16.
+- Missing route decisions: 0.
+- Allowlist/exclusion overlaps: 0.
+
+Final local verification:
+
+- `task openapi:check`: pass.
+- `task test:be`: pass.
+- `task test:be:component`: pass.
+- `task test:be:contract`: pass.
+- `task lint:be:prod`: pass with `0 issues`.
+
+PR CI status is intentionally not recorded here because it changes after push; use GitHub checks on PR #8 for the current result.
+
 **Files:**
 
 - Modify only files required by verification fixes.
 
-- [ ] **Step 1: Run OpenAPI drift check**
+- [x] **Step 1: Run OpenAPI drift check**
 
 Run:
 
@@ -969,7 +990,7 @@ task openapi:check
 
 Expected: PASS with no diff in `api/openapi/expensor.openapi.yaml`.
 
-- [ ] **Step 2: Run backend unit tests**
+- [x] **Step 2: Run backend unit tests**
 
 Run:
 
@@ -979,7 +1000,7 @@ task test:be
 
 Expected: PASS.
 
-- [ ] **Step 3: Run backend contract tests**
+- [x] **Step 3: Run backend contract tests**
 
 Run:
 
@@ -989,7 +1010,7 @@ task test:be:contract
 
 Expected: PASS.
 
-- [ ] **Step 4: Run strict backend lint**
+- [x] **Step 4: Run strict backend lint**
 
 Run:
 
@@ -999,7 +1020,7 @@ task lint:be:prod
 
 Expected: PASS with `0 issues`.
 
-- [ ] **Step 5: Inspect route coverage counts**
+- [x] **Step 5: Inspect route coverage counts**
 
 Run:
 
@@ -1015,7 +1036,7 @@ Expected:
 - `allowlist.tsv + exclusions.tsv` non-comment entries equal registered route count.
 - Exclusions are limited to the Scope Boundary categories.
 
-- [ ] **Step 6: Review final diff**
+- [x] **Step 6: Review final diff**
 
 Run:
 
