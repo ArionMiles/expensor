@@ -264,3 +264,127 @@ SELECT
 FROM transaction_labels
 WHERE transaction_id IN (SELECT id FROM transactions WHERE message_id LIKE 'seed-msg-%')
 ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING;
+
+INSERT INTO labels (name, color) VALUES
+  ('ContractLabel', '#f59e0b')
+ON CONFLICT (name) DO UPDATE SET color = EXCLUDED.color;
+
+INSERT INTO categories (name, description, is_default) VALUES
+  ('ContractCategory', 'Stable contract-test category', false)
+ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description;
+
+INSERT INTO buckets (name, description, is_default) VALUES
+  ('ContractBucket', 'Stable contract-test bucket', false)
+ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description;
+
+INSERT INTO transaction_labels (transaction_id, label) VALUES
+  ('00000000-0000-0000-0000-000000000001', 'Online')
+ON CONFLICT (transaction_id, label) DO NOTHING;
+
+INSERT INTO transaction_label_sources (transaction_id, label, source_type, merchant_pattern) VALUES
+  ('00000000-0000-0000-0000-000000000001', 'Online', 'manual', '')
+ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING;
+
+INSERT INTO rules (
+  id,
+  name,
+  sender_email,
+  sender_emails,
+  subject_contains,
+  amount_regex,
+  merchant_regex,
+  currency_regex,
+  transaction_source,
+  source_type,
+  source_label,
+  bank,
+  predefined
+) VALUES (
+  '00000000-0000-0000-0000-00000000c001',
+  'Contract Existing Rule',
+  'contract-existing@example.com',
+  ARRAY['contract-existing@example.com'],
+  'Contract transaction',
+  'INR\s+([0-9,.]+)',
+  'at\s+(.+)$',
+  '(INR)',
+  'Contract',
+  'Email',
+  'Contract',
+  'Contract Bank',
+  false
+) ON CONFLICT (id) DO UPDATE SET
+  sender_email = EXCLUDED.sender_email,
+  sender_emails = EXCLUDED.sender_emails,
+  subject_contains = EXCLUDED.subject_contains,
+  amount_regex = EXCLUDED.amount_regex,
+  merchant_regex = EXCLUDED.merchant_regex,
+  currency_regex = EXCLUDED.currency_regex,
+  transaction_source = EXCLUDED.transaction_source,
+  source_type = EXCLUDED.source_type,
+  source_label = EXCLUDED.source_label,
+  bank = EXCLUDED.bank,
+  predefined = EXCLUDED.predefined,
+  updated_at = NOW();
+
+INSERT INTO extraction_diagnostics (
+  id,
+  status,
+  reader,
+  message_id,
+  source,
+  sender,
+  sender_email,
+  subject,
+  email_body,
+  received_at,
+  snippet,
+  rule_id,
+  rule_name,
+  amount_regex,
+  merchant_regex,
+  currency_regex,
+  failure_reasons
+) VALUES (
+  '00000000-0000-0000-0000-00000000c002',
+  'open',
+  'thunderbird',
+  'contract-diagnostic-message',
+  'Contract Bank',
+  'Contract Bank',
+  'contract@example.com',
+  'Contract transaction',
+  'Your card was charged INR 249.50 at Swiggy',
+  '2026-05-31T06:00:00Z',
+  'Your card was charged INR 249.50 at Swiggy',
+  '00000000-0000-0000-0000-00000000c001',
+  'Contract Existing Rule',
+  'INR\s+([0-9,.]+)',
+  'at\s+(.+)$',
+  '(INR)',
+  ARRAY['amount_not_found']
+) ON CONFLICT (id) DO UPDATE SET
+  status = EXCLUDED.status,
+  reader = EXCLUDED.reader,
+  message_id = EXCLUDED.message_id,
+  source = EXCLUDED.source,
+  sender = EXCLUDED.sender,
+  sender_email = EXCLUDED.sender_email,
+  subject = EXCLUDED.subject,
+  email_body = EXCLUDED.email_body,
+  received_at = EXCLUDED.received_at,
+  snippet = EXCLUDED.snippet,
+  rule_id = EXCLUDED.rule_id,
+  rule_name = EXCLUDED.rule_name,
+  amount_regex = EXCLUDED.amount_regex,
+  merchant_regex = EXCLUDED.merchant_regex,
+  currency_regex = EXCLUDED.currency_regex,
+  failure_reasons = EXCLUDED.failure_reasons,
+  updated_at = NOW(),
+  resolved_at = NULL;
+
+INSERT INTO muted_merchants (id, pattern, reason) VALUES
+  ('00000000-0000-0000-0000-00000000c003', 'Contract Muted Merchant', 'contract check')
+ON CONFLICT (id) DO UPDATE SET
+  pattern = EXCLUDED.pattern,
+  reason = EXCLUDED.reason;

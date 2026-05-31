@@ -34,7 +34,7 @@ type StatusResponse struct {
 
 // DaemonReaderRequest is the daemon start/rescan request body.
 type DaemonReaderRequest struct {
-	Reader string `json:"reader" example:"gmail"`
+	Reader string `json:"reader" example:"thunderbird" binding:"required"`
 }
 
 // StatusOnlyResponse is a simple status message payload.
@@ -49,9 +49,9 @@ type ActiveReaderResponse struct {
 
 // RuleSourceResponse documents a structured rule source.
 type RuleSourceResponse struct {
-	Type  string `json:"type" example:"Email"`
+	Type  string `json:"type" example:"Email" binding:"required"`
 	Label string `json:"label" example:"Contract"`
-	Bank  string `json:"bank" example:"Contract Bank"`
+	Bank  string `json:"bank" example:"Contract Bank" binding:"required"`
 }
 
 // RuleResponse documents a rule returned by the API.
@@ -76,13 +76,13 @@ type RuleResponse struct {
 
 // RuleMutationRequest documents the create/update rule payload.
 type RuleMutationRequest struct {
-	Name            string             `json:"name" example:"Contract Rule"`
-	SenderEmails    []string           `json:"sender_emails"`
+	Name            string             `json:"name" example:"Contract Rule" binding:"required"`
+	SenderEmails    []string           `json:"sender_emails" binding:"required"`
 	SubjectContains string             `json:"subject_contains" example:"Contract transaction"`
-	AmountRegex     string             `json:"amount_regex" example:"INR\\s+([0-9,.]+)"`
-	MerchantRegex   string             `json:"merchant_regex" example:"at\\s+(.+)$"`
+	AmountRegex     string             `json:"amount_regex" example:"INR\\s+([0-9,.]+)" binding:"required"`
+	MerchantRegex   string             `json:"merchant_regex" example:"at\\s+(.+)$" binding:"required"`
 	CurrencyRegex   string             `json:"currency_regex" example:"(INR)"`
-	Source          RuleSourceResponse `json:"source"`
+	Source          RuleSourceResponse `json:"source" binding:"required"`
 }
 
 // RulePresetValueResponse documents a rule preset taxonomy value.
@@ -99,20 +99,20 @@ type RulePresetsResponse struct {
 
 // RuleDocumentEntryResponse documents a rule entry in an import/export document.
 type RuleDocumentEntryResponse struct {
-	Name            string             `json:"name" example:"Contract Rule"`
-	SenderEmails    []string           `json:"sender_emails"`
+	Name            string             `json:"name" example:"Contract Import Rule" binding:"required"`
+	SenderEmails    []string           `json:"sender_emails" binding:"required"`
 	SubjectContains string             `json:"subject_contains" example:"Contract transaction"`
-	AmountRegex     string             `json:"amount_regex" example:"INR\\s+([0-9,.]+)"`
-	MerchantRegex   string             `json:"merchant_regex" example:"at\\s+(.+)$"`
+	AmountRegex     string             `json:"amount_regex" example:"INR\\s+([0-9,.]+)" binding:"required"`
+	MerchantRegex   string             `json:"merchant_regex" example:"at\\s+(.+)$" binding:"required"`
 	CurrencyRegex   string             `json:"currency_regex" example:"(INR)"`
-	Source          RuleSourceResponse `json:"source"`
+	Source          RuleSourceResponse `json:"source" binding:"required"`
 }
 
 // RuleDocumentResponse documents a versioned rules import/export document.
 type RuleDocumentResponse struct {
-	Version int                         `json:"version" example:"2"`
+	Version int                         `json:"version" example:"2" binding:"required"`
 	Presets RulePresetsResponse         `json:"presets"`
-	Rules   []RuleDocumentEntryResponse `json:"rules"`
+	Rules   []RuleDocumentEntryResponse `json:"rules" binding:"required"`
 }
 
 // RuleImportResponse documents a rules import result.
@@ -338,7 +338,7 @@ type MonthlyBreakdownResponse struct {
 
 // BaseCurrencyRequest is the base currency update payload.
 type BaseCurrencyRequest struct {
-	BaseCurrency string `json:"base_currency" example:"USD"`
+	BaseCurrency string `json:"base_currency" example:"INR" binding:"required" minLength:"3" maxLength:"3"`
 }
 
 // BaseCurrencyResponse is the base currency payload.
@@ -348,7 +348,7 @@ type BaseCurrencyResponse struct {
 
 // ScanIntervalRequest is the scan interval update payload.
 type ScanIntervalRequest struct {
-	ScanInterval string `json:"scan_interval" example:"120"`
+	ScanInterval string `json:"scan_interval" example:"120" binding:"required"`
 }
 
 // ScanIntervalResponse is the scan interval payload.
@@ -358,7 +358,7 @@ type ScanIntervalResponse struct {
 
 // LookbackDaysRequest is the lookback days update payload.
 type LookbackDaysRequest struct {
-	LookbackDays string `json:"lookback_days" example:"365"`
+	LookbackDays string `json:"lookback_days" example:"365" binding:"required"`
 }
 
 // LookbackDaysResponse is the lookback days payload.
@@ -368,7 +368,7 @@ type LookbackDaysResponse struct {
 
 // TimezoneRequest is the timezone update payload.
 type TimezoneRequest struct {
-	Timezone string `json:"timezone" example:"Asia/Kolkata"`
+	Timezone string `json:"timezone" example:"Asia/Kolkata" binding:"required"`
 }
 
 // TimezoneResponse is the timezone payload.
@@ -378,7 +378,7 @@ type TimezoneResponse struct {
 
 // TimeFormatRequest is the time format update payload.
 type TimeFormatRequest struct {
-	TimeFormat string `json:"time_format" example:"HH:mm"`
+	TimeFormat string `json:"time_format" example:"HH:mm" binding:"required" enums:"HH:mm,HH:mm:ss,h:mm a,h:mm:ss a"`
 }
 
 // TimeFormatResponse is the time format payload.
@@ -413,24 +413,24 @@ type LabelResponse struct {
 
 // CreateLabelRequest is the label creation payload.
 type CreateLabelRequest struct {
-	Name  string `json:"name" example:"food"`
+	Name  string `json:"name" example:"ContractLabel" binding:"required"`
 	Color string `json:"color" example:"#f59e0b"`
 }
 
 // UpdateLabelRequest is the label update payload.
 type UpdateLabelRequest struct {
-	Color string `json:"color" example:"#f59e0b"`
+	Color string `json:"color" example:"#f59e0b" binding:"required"`
 }
 
 // LabelMutationResponse is the label create/update response payload.
 type LabelMutationResponse struct {
-	Name  string `json:"name" example:"food"`
+	Name  string `json:"name" example:"ContractLabel"`
 	Color string `json:"color" example:"#f59e0b"`
 }
 
 // ApplyLabelRequest is the label-by-merchant apply payload.
 type ApplyLabelRequest struct {
-	MerchantPattern string `json:"merchant_pattern" example:"swiggy"`
+	MerchantPattern string `json:"merchant_pattern" example:"Swiggy" binding:"required"`
 }
 
 // TaxonomyExportRowResponse documents exported taxonomy rows with merchant mappings.
@@ -476,8 +476,8 @@ type CategoryResponse struct {
 
 // CreateCategoryRequest is the category creation payload.
 type CreateCategoryRequest struct {
-	Name        string `json:"name" example:"Food"`
-	Description string `json:"description,omitempty" example:"Restaurants and groceries"`
+	Name        string `json:"name" example:"ContractCategory" binding:"required"`
+	Description string `json:"description,omitempty" example:"Contract category"`
 }
 
 // BucketResponse documents a managed bucket.
@@ -489,13 +489,13 @@ type BucketResponse struct {
 
 // CreateBucketRequest is the bucket creation payload.
 type CreateBucketRequest struct {
-	Name        string `json:"name" example:"Needs"`
-	Description string `json:"description,omitempty" example:"Essential spending"`
+	Name        string `json:"name" example:"ContractBucket" binding:"required"`
+	Description string `json:"description,omitempty" example:"Contract bucket"`
 }
 
 // NameResponse is a simple named resource payload.
 type NameResponse struct {
-	Name string `json:"name" example:"Food"`
+	Name string `json:"name" example:"ContractCategory"`
 }
 
 // BankColorResponse documents an embedded bank color mapping.
@@ -507,25 +507,25 @@ type BankColorResponse struct {
 
 // TransactionResponse documents a transaction payload.
 type TransactionResponse struct {
-	ID               string    `json:"id" example:"tx_123"`
-	MessageID        string    `json:"message_id" example:"gmail-message-id"`
-	Amount           float64   `json:"amount" example:"249.50"`
-	Currency         string    `json:"currency" example:"INR"`
-	OriginalAmount   *float64  `json:"original_amount,omitempty"`
-	OriginalCurrency *string   `json:"original_currency,omitempty"`
-	ExchangeRate     *float64  `json:"exchange_rate,omitempty"`
-	Timestamp        time.Time `json:"timestamp"`
-	MerchantInfo     string    `json:"merchant_info" example:"Swiggy"`
-	Category         string    `json:"category" example:"Food"`
-	Bucket           string    `json:"bucket" example:"Needs"`
-	Source           string    `json:"source" example:"gmail"`
-	Description      string    `json:"description" example:"Dinner order"`
-	Labels           []string  `json:"labels"`
-	Muted            bool      `json:"muted"`
-	MutedByMerchant  bool      `json:"muted_by_merchant"`
-	MuteReason       string    `json:"mute_reason,omitempty" example:"Internal transfer"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID               string             `json:"id" example:"00000000-0000-0000-0000-000000000001"`
+	MessageID        string             `json:"message_id" example:"gmail-message-id"`
+	Amount           float64            `json:"amount" example:"249.50"`
+	Currency         string             `json:"currency" example:"INR"`
+	OriginalAmount   *float64           `json:"original_amount,omitempty"`
+	OriginalCurrency *string            `json:"original_currency,omitempty"`
+	ExchangeRate     *float64           `json:"exchange_rate,omitempty"`
+	Timestamp        time.Time          `json:"timestamp"`
+	MerchantInfo     string             `json:"merchant_info" example:"Swiggy"`
+	Category         string             `json:"category" example:"Food & Dining"`
+	Bucket           string             `json:"bucket" example:"Needs"`
+	Source           RuleSourceResponse `json:"source"`
+	Description      string             `json:"description" example:"Dinner order"`
+	Labels           []string           `json:"labels"`
+	Muted            bool               `json:"muted"`
+	MutedByMerchant  bool               `json:"muted_by_merchant"`
+	MuteReason       string             `json:"mute_reason,omitempty" example:"Internal transfer"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
 }
 
 // TransactionsListResponse documents the paginated list payload.
@@ -575,7 +575,7 @@ type ExtractionDiagnosticResponse struct {
 
 // ExtractionDiagnosticStatusRequest is the diagnostic status update payload.
 type ExtractionDiagnosticStatusRequest struct {
-	Status string `json:"status" example:"resolved"`
+	Status string `json:"status" example:"resolved" binding:"required" enums:"open,resolved,ignored"`
 }
 
 // FacetsResponse documents the distinct transaction filter values.
@@ -591,19 +591,19 @@ type FacetsResponse struct {
 // TransactionUpdateRequest is the transaction patch payload.
 type TransactionUpdateRequest struct {
 	Description *string `json:"description,omitempty" example:"Dinner order"`
-	Category    *string `json:"category,omitempty" example:"Food"`
-	Bucket      *string `json:"bucket,omitempty" example:"Needs"`
+	Category    *string `json:"category,omitempty" example:"Food & Dining"`
+	Bucket      *string `json:"bucket,omitempty" example:"Wants"`
 }
 
 // TransactionLabelsRequest is the transaction labels mutation payload.
 type TransactionLabelsRequest struct {
-	Labels []string `json:"labels"`
+	Labels []string `json:"labels" binding:"required"`
 }
 
 // MuteTransactionRequest is the transaction mute payload.
 type MuteTransactionRequest struct {
 	Muted  bool   `json:"muted"`
-	Reason string `json:"reason,omitempty" example:"Internal transfer"`
+	Reason string `json:"reason,omitempty" example:"contract check"`
 }
 
 // MuteTransactionResponse is the transaction mute response payload.
@@ -614,7 +614,7 @@ type MuteTransactionResponse struct {
 
 // UpdateMuteReasonRequest is the mute reason update payload.
 type UpdateMuteReasonRequest struct {
-	Reason string `json:"reason" example:"Internal transfer"`
+	Reason string `json:"reason" example:"contract check" binding:"required"`
 }
 
 // MuteReasonResponse is the mute reason response payload.

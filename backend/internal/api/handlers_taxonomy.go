@@ -76,7 +76,7 @@ func (h *Handlers) CreateLabel(w http.ResponseWriter, r *http.Request) {
 // @Tags Taxonomy
 // @Accept json
 // @Produce json
-// @Param name path string true "Label name"
+// @Param name path string true "Label name" example(ContractLabel)
 // @Param request body UpdateLabelRequest true "Label color payload"
 // @Success 200 {object} LabelMutationResponse
 // @Failure 404 {object} ErrorResponse
@@ -113,8 +113,7 @@ func (h *Handlers) UpdateLabel(w http.ResponseWriter, r *http.Request) {
 // Body: {"remove_from_transactions": true}
 // @Summary Delete a label
 // @Tags Taxonomy
-// @Produce json
-// @Param name path string true "Label name"
+// @Param name path string true "Label name" example(ContractLabel)
 // @Success 204 "No Content"
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
@@ -143,7 +142,7 @@ func (h *Handlers) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 // @Tags Taxonomy
 // @Accept json
 // @Produce json
-// @Param name path string true "Label name"
+// @Param name path string true "Label name" example(ContractLabel)
 // @Param request body ApplyLabelRequest true "Merchant pattern payload"
 // @Success 200 {object} AppliedCountResponse
 // @Failure 422 {object} ErrorResponse
@@ -417,8 +416,7 @@ func (h *Handlers) CreateCategory(w http.ResponseWriter, r *http.Request) {
 // DeleteCategory handles DELETE /api/config/categories/{name}.
 // @Summary Delete a category
 // @Tags Taxonomy
-// @Produce json
-// @Param name path string true "Category name"
+// @Param name path string true "Category name" example(ContractCategory)
 // @Success 204 "No Content"
 // @Failure 404 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
@@ -539,8 +537,7 @@ func (h *Handlers) CreateBucket(w http.ResponseWriter, r *http.Request) {
 // DeleteBucket handles DELETE /api/config/buckets/{name}.
 // @Summary Delete a bucket
 // @Tags Taxonomy
-// @Produce json
-// @Param name path string true "Bucket name"
+// @Param name path string true "Bucket name" example(ContractBucket)
 // @Success 204 "No Content"
 // @Failure 404 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
@@ -777,9 +774,10 @@ func (h *Handlers) handleTaxonomyMerchant(
 // @Tags Transactions
 // @Accept json
 // @Produce json
-// @Param id path string true "Transaction ID"
+// @Param id path string true "Transaction ID" format(uuid) example(00000000-0000-0000-0000-000000000001)
 // @Param request body TransactionLabelsRequest true "Labels payload"
 // @Success 200 {object} StatusOnlyResponse
+// @Failure 400 {object} ErrorResponse
 // @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
@@ -790,7 +788,10 @@ func (h *Handlers) AddLabels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := r.PathValue("id")
+	id, ok := uuidPathValue(w, r, "id", "transaction")
+	if !ok {
+		return
+	}
 	var body struct {
 		Labels []string `json:"labels"`
 	}
@@ -812,9 +813,10 @@ func (h *Handlers) AddLabels(w http.ResponseWriter, r *http.Request) {
 // @Summary Remove a label from a transaction
 // @Tags Transactions
 // @Produce json
-// @Param id path string true "Transaction ID"
-// @Param label path string true "Label name"
+// @Param id path string true "Transaction ID" format(uuid) example(00000000-0000-0000-0000-000000000001)
+// @Param label path string true "Label name" example(Online)
 // @Success 200 {object} StatusOnlyResponse
+// @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
@@ -825,7 +827,10 @@ func (h *Handlers) RemoveLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := r.PathValue("id")
+	id, ok := uuidPathValue(w, r, "id", "transaction")
+	if !ok {
+		return
+	}
 	label := r.PathValue("label")
 
 	if err := h.store.RemoveLabel(r.Context(), id, label); err != nil {
