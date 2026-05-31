@@ -1,89 +1,21 @@
-# Expensor — Claude Instructions
+# Expensor — Agent Instructions
 
-## Project Overview
+This file is loaded by Codex through `AGENTS.md` and by Claude Code. Keep it focused on guidance that prevents likely agent mistakes. Prefer discovering layout, package names, and routine commands from the repository instead of duplicating them here.
 
-Expensor is a personal finance tracker that reads expense emails (Gmail, Thunderbird), extracts transaction details via regex rules, and stores them in PostgreSQL. It has a Go backend (HTTP API + daemon runner) and a React/Vite/Tailwind frontend.
+## Command Policy
 
-## Repository Layout
+Always prefer `task` over bare `go`/`npm` commands. Task targets handle working directories, env loading, and project-specific tooling.
 
-```
-backend/          Go module (github.com/ArionMiles/expensor/backend)
-  cmd/server/     Main binary — HTTP server + daemon orchestration
-  internal/
-    api/          HTTP handlers, routing, middleware, Storer interface
-    compat/       Runtime compatibility import helpers
-    daemon/       Reader → writer pipeline
-    migration/    Embedded migration runner
-    plugins/      Plugin registry
-    store/        PostgreSQL repositories, read models, and instrumentation
-  migrations/     Numbered SQL files embedded into the binary (001_, 002_, …)
-  pkg/
-    api/          Core interfaces: Reader, Writer, Rule, Labels
-    client/       OAuth client helpers
-    config/       koanf-based env config
-    extractor/    Regex extraction helpers
-    observability/ OpenTelemetry configuration, metrics, tracing, and store decorators
-    plugins/      Plugin wrappers (readers/gmail, readers/thunderbird, writers/postgres)
-    reader/       Concrete reader implementations
-    rules/        Versioned rule document loading and fixture helpers
-    state/        Runtime state helpers
-    writer/       Concrete writer implementations
-api/openapi/      Committed generated OpenAPI artifact
-frontend/         React + Vite + Tailwind (src/, public/)
-tests/            Component/contract fixtures, local docker-compose, rule-email fixtures
-```
-
-## Essential Commands
-
-Always prefer `task` over bare `go`/`npm` commands — task targets handle tooling, env loading, and working directory.
+Use `task --list-all` to discover available targets. Common defaults:
 
 ```bash
-task dev              # Start postgres + observability + backend + frontend (loads tests/.env)
-task run              # Backend only
-task run:frontend     # Frontend Vite dev server only
-
-# Formatting (aggregate runs both stacks)
-task fmt              # Format all (Go: gci + gofumpt; TS: prettier)
-task fmt:be           # Format Go only
-task fmt:fe           # Format frontend only (prettier)
-task fmt:fe:check     # Check frontend formatting without modifying files
-
-# Linting (aggregate runs both stacks)
-task lint             # Lint all (Go local config + TypeScript)
-task lint:be          # Lint Go with local config (.golangci.toml)
-task lint:be:prod     # Strict CI lint (.golangci-prod.toml) — must be clean before commit
-task lint:be:new      # Lint only new/changed Go files (compared to main)
-task lint:fe          # TypeScript type-check (tsc --noEmit)
-
-# Testing
-task test             # Run default backend Go tests + frontend Vitest (excludes component/contract/browser)
-task test:be          # Go unit tests (integration tests require Docker; -short skips them)
-task test:be:cover    # Go tests with coverage.out and function-level coverage summary
-task test:be:cover:check # Check backend coverage floor from backend/coverage.out
-task test:be:component # Docker Compose-backed backend component tests
-task test:be:contract # Backend OpenAPI contract tests via Schemathesis
-task test:fe          # Frontend unit and component tests (Vitest)
-task test:fe:watch    # Frontend tests in watch mode
-task test:fe:cover    # Frontend Vitest coverage
-task test:fe:cover:check # Check frontend coverage floor
-task test:fe:e2e      # Frontend mocked Playwright E2E tests
-task test:fe:e2e:smoke # Full-stack Playwright smoke tests against backend + Postgres
-task screenshots:readme # Mocked README dashboard screenshot fixture
-task screenshots:live   # Live high-resolution dashboard + transactions screenshots
-
-# Security audit (aggregate runs both stacks)
-task audit            # Audit all (Go: govulncheck; npm: npm audit)
-task audit:be         # govulncheck on Go source
-task audit:fe         # npm audit on production dependencies
-
-task build            # Compile all backend Go packages
-task build:binary     # Optimized Go binary → bin/expensor
-task build:docker     # Build local Docker image with version metadata
-task openapi:generate # Regenerate api/openapi/expensor.openapi.yaml
+task dev              # Start the local app stack
+task fmt              # Format backend and frontend
+task test             # Default backend + frontend tests
+task test:be          # Backend tests; some tests use Docker
+task test:fe          # Frontend unit/component tests
+task lint:be:prod     # Strict backend lint; must report 0 issues before commit
 task openapi:check    # Regenerate OpenAPI and fail on committed artifact drift
-task db:start         # Start local dev postgres container
-task observability:start # Start local OpenTelemetry Collector + Jaeger + Prometheus
-task db:stop          # Stop local dev postgres container
 ```
 
 ## Security Vulnerability Workflow
