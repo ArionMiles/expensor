@@ -24,8 +24,10 @@ definitions:
   api.ApplyLabelRequest:
     properties:
       merchant_pattern:
-        example: swiggy
+        example: Swiggy
         type: string
+    required:
+    - merchant_pattern
     type: object
   api.AuthExchangeRequest:
     properties:
@@ -76,8 +78,12 @@ definitions:
   api.BaseCurrencyRequest:
     properties:
       base_currency:
-        example: USD
+        example: INR
+        maxLength: 3
+        minLength: 3
         type: string
+    required:
+    - base_currency
     type: object
   api.BaseCurrencyResponse:
     properties:
@@ -197,20 +203,24 @@ definitions:
   api.CreateBucketRequest:
     properties:
       description:
-        example: Essential spending
+        example: Contract bucket
         type: string
       name:
-        example: Needs
+        example: ContractBucket
         type: string
+    required:
+    - name
     type: object
   api.CreateCategoryRequest:
     properties:
       description:
-        example: Restaurants and groceries
+        example: Contract category
         type: string
       name:
-        example: Food
+        example: ContractCategory
         type: string
+    required:
+    - name
     type: object
   api.CreateLabelRequest:
     properties:
@@ -218,8 +228,10 @@ definitions:
         example: '#f59e0b'
         type: string
       name:
-        example: food
+        example: ContractLabel
         type: string
+    required:
+    - name
     type: object
   api.CredentialsStatusResponse:
     properties:
@@ -229,8 +241,10 @@ definitions:
   api.DaemonReaderRequest:
     properties:
       reader:
-        example: gmail
+        example: thunderbird
         type: string
+    required:
+    - reader
     type: object
   api.DaemonStatus:
     properties:
@@ -352,8 +366,14 @@ definitions:
   api.ExtractionDiagnosticStatusRequest:
     properties:
       status:
+        enum:
+        - open
+        - resolved
+        - ignored
         example: resolved
         type: string
+    required:
+    - status
     type: object
   api.FacetsResponse:
     properties:
@@ -452,7 +472,7 @@ definitions:
         example: '#f59e0b'
         type: string
       name:
-        example: food
+        example: ContractLabel
         type: string
     type: object
   api.LabelResponse:
@@ -484,6 +504,8 @@ definitions:
       lookback_days:
         example: "365"
         type: string
+    required:
+    - lookback_days
     type: object
   api.LookbackDaysResponse:
     properties:
@@ -550,7 +572,7 @@ definitions:
       muted:
         type: boolean
       reason:
-        example: Internal transfer
+        example: contract check
         type: string
     type: object
   api.MuteTransactionResponse:
@@ -580,7 +602,7 @@ definitions:
   api.NameResponse:
     properties:
       name:
-        example: Food
+        example: ContractCategory
         type: string
     type: object
   api.ReaderCheckpointResponse:
@@ -678,7 +700,7 @@ definitions:
         example: at\s+(.+)$
         type: string
       name:
-        example: Contract Rule
+        example: Contract Import Rule
         type: string
       sender_emails:
         items:
@@ -689,6 +711,12 @@ definitions:
       subject_contains:
         example: Contract transaction
         type: string
+    required:
+    - amount_regex
+    - merchant_regex
+    - name
+    - sender_emails
+    - source
     type: object
   api.RuleDocumentResponse:
     properties:
@@ -701,6 +729,9 @@ definitions:
       version:
         example: 2
         type: integer
+    required:
+    - rules
+    - version
     type: object
   api.RuleImportResponse:
     properties:
@@ -731,6 +762,12 @@ definitions:
       subject_contains:
         example: Contract transaction
         type: string
+    required:
+    - amount_regex
+    - merchant_regex
+    - name
+    - sender_emails
+    - source
     type: object
   api.RulePresetValueResponse:
     properties:
@@ -811,12 +848,17 @@ definitions:
       type:
         example: Email
         type: string
+    required:
+    - bank
+    - type
     type: object
   api.ScanIntervalRequest:
     properties:
       scan_interval:
         example: "120"
         type: string
+    required:
+    - scan_interval
     type: object
   api.ScanIntervalResponse:
     properties:
@@ -931,8 +973,15 @@ definitions:
   api.TimeFormatRequest:
     properties:
       time_format:
+        enum:
+        - HH:mm
+        - HH:mm:ss
+        - h:mm a
+        - h:mm:ss a
         example: HH:mm
         type: string
+    required:
+    - time_format
     type: object
   api.TimeFormatResponse:
     properties:
@@ -945,6 +994,8 @@ definitions:
       timezone:
         example: Asia/Kolkata
         type: string
+    required:
+    - timezone
     type: object
   api.TimezoneResponse:
     properties:
@@ -958,6 +1009,8 @@ definitions:
         items:
           type: string
         type: array
+    required:
+    - labels
     type: object
   api.TransactionResponse:
     properties:
@@ -968,7 +1021,7 @@ definitions:
         example: Needs
         type: string
       category:
-        example: Food
+        example: Food & Dining
         type: string
       created_at:
         type: string
@@ -981,7 +1034,7 @@ definitions:
       exchange_rate:
         type: number
       id:
-        example: tx_123
+        example: 00000000-0000-0000-0000-000000000001
         type: string
       labels:
         items:
@@ -1005,8 +1058,7 @@ definitions:
       original_currency:
         type: string
       source:
-        example: gmail
-        type: string
+        $ref: '#/definitions/api.RuleSourceResponse'
       timestamp:
         type: string
       updated_at:
@@ -1015,10 +1067,10 @@ definitions:
   api.TransactionUpdateRequest:
     properties:
       bucket:
-        example: Needs
+        example: Wants
         type: string
       category:
-        example: Food
+        example: Food & Dining
         type: string
       description:
         example: Dinner order
@@ -1068,12 +1120,16 @@ definitions:
       color:
         example: '#f59e0b'
         type: string
+    required:
+    - color
     type: object
   api.UpdateMuteReasonRequest:
     properties:
       reason:
-        example: Internal transfer
+        example: contract check
         type: string
+    required:
+    - reason
     type: object
   api.UploadCredentialsResponse:
     properties:
@@ -1286,12 +1342,11 @@ paths:
     delete:
       parameters:
       - description: Bucket name
+        example: ContractBucket
         in: path
         name: name
         required: true
         type: string
-      produces:
-      - application/json
       responses:
         "204":
           description: No Content
@@ -1488,12 +1543,11 @@ paths:
     delete:
       parameters:
       - description: Category name
+        example: ContractCategory
         in: path
         name: name
         required: true
         type: string
-      produces:
-      - application/json
       responses:
         "204":
           description: No Content
@@ -1690,12 +1744,11 @@ paths:
     delete:
       parameters:
       - description: Label name
+        example: ContractLabel
         in: path
         name: name
         required: true
         type: string
-      produces:
-      - application/json
       responses:
         "204":
           description: No Content
@@ -1715,6 +1768,7 @@ paths:
       - application/json
       parameters:
       - description: Label name
+        example: ContractLabel
         in: path
         name: name
         required: true
@@ -1757,6 +1811,7 @@ paths:
       - application/json
       parameters:
       - description: Label name
+        example: ContractLabel
         in: path
         name: name
         required: true
@@ -1926,13 +1981,14 @@ paths:
     delete:
       parameters:
       - description: Reader name
+        enum:
+        - thunderbird
+        - gmail
         example: thunderbird
         in: path
         name: name
         required: true
         type: string
-      produces:
-      - application/json
       responses:
         "204":
           description: No Content
@@ -1950,6 +2006,9 @@ paths:
     get:
       parameters:
       - description: Reader name
+        enum:
+        - thunderbird
+        - gmail
         example: thunderbird
         in: path
         name: name
@@ -2248,12 +2307,20 @@ paths:
   /extraction-diagnostics:
     get:
       parameters:
-      - description: Diagnostic status filter
+      - default: open
+        description: Diagnostic status filter
+        enum:
+        - open
+        - resolved
+        - ignored
+        - all
         in: query
         name: status
         type: string
-      - description: Maximum rows to return
+      - default: 20
+        description: Maximum rows to return
         in: query
+        minimum: 1
         name: limit
         type: integer
       produces:
@@ -2284,6 +2351,8 @@ paths:
     get:
       parameters:
       - description: Diagnostic ID
+        example: 00000000-0000-0000-0000-00000000c002
+        format: uuid
         in: path
         name: id
         required: true
@@ -2320,6 +2389,8 @@ paths:
       - application/json
       parameters:
       - description: Diagnostic ID
+        example: 00000000-0000-0000-0000-00000000c002
+        format: uuid
         in: path
         name: id
         required: true
@@ -2467,6 +2538,8 @@ paths:
     delete:
       parameters:
       - description: Muted merchant ID
+        example: 00000000-0000-0000-0000-00000000c003
+        format: uuid
         in: path
         name: id
         required: true
@@ -2475,11 +2548,13 @@ paths:
         in: query
         name: unmute
         type: boolean
-      produces:
-      - application/json
       responses:
         "204":
           description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -2501,6 +2576,8 @@ paths:
       - application/json
       parameters:
       - description: Muted merchant ID
+        example: 00000000-0000-0000-0000-00000000c003
+        format: uuid
         in: path
         name: id
         required: true
@@ -2569,6 +2646,9 @@ paths:
     delete:
       parameters:
       - description: Reader name
+        enum:
+        - thunderbird
+        - gmail
         example: thunderbird
         in: path
         name: name
@@ -3033,15 +3113,19 @@ paths:
       - application/json
       parameters:
       - description: Rule ID
+        example: 00000000-0000-0000-0000-00000000c001
+        format: uuid
         in: path
         name: id
         required: true
         type: string
-      produces:
-      - application/json
       responses:
         "204":
           description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "403":
           description: Forbidden
           schema:
@@ -3066,6 +3150,8 @@ paths:
       - application/json
       parameters:
       - description: Rule ID
+        example: 00000000-0000-0000-0000-00000000c001
+        format: uuid
         in: path
         name: id
         required: true
@@ -3083,6 +3169,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.RuleResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -3456,6 +3546,8 @@ paths:
     get:
       parameters:
       - description: Transaction ID
+        example: 00000000-0000-0000-0000-000000000001
+        format: uuid
         in: path
         name: id
         required: true
@@ -3491,6 +3583,8 @@ paths:
       - application/json
       parameters:
       - description: Transaction ID
+        example: 00000000-0000-0000-0000-000000000001
+        format: uuid
         in: path
         name: id
         required: true
@@ -3508,6 +3602,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.TransactionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -3533,6 +3631,8 @@ paths:
       - application/json
       parameters:
       - description: Transaction ID
+        example: 00000000-0000-0000-0000-000000000001
+        format: uuid
         in: path
         name: id
         required: true
@@ -3550,6 +3650,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.StatusOnlyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
@@ -3569,11 +3673,14 @@ paths:
     delete:
       parameters:
       - description: Transaction ID
+        example: 00000000-0000-0000-0000-000000000001
+        format: uuid
         in: path
         name: id
         required: true
         type: string
       - description: Label name
+        example: Online
         in: path
         name: label
         required: true
@@ -3585,6 +3692,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.StatusOnlyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -3606,6 +3717,8 @@ paths:
       - application/json
       parameters:
       - description: Transaction ID
+        example: 00000000-0000-0000-0000-000000000001
+        format: uuid
         in: path
         name: id
         required: true
@@ -3648,6 +3761,8 @@ paths:
       - application/json
       parameters:
       - description: Transaction ID
+        example: 00000000-0000-0000-0000-000000000001
+        format: uuid
         in: path
         name: id
         required: true

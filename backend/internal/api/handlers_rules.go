@@ -334,9 +334,10 @@ func (h *Handlers) readActiveReader(ctx context.Context) (string, error) {
 // @Tags Rules
 // @Accept json
 // @Produce json
-// @Param id path string true "Rule ID"
+// @Param id path string true "Rule ID" format(uuid) example(00000000-0000-0000-0000-00000000c001)
 // @Param request body RuleMutationRequest true "Rule payload"
 // @Success 200 {object} RuleResponse
+// @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
 // @Failure 422 {object} ErrorResponse
@@ -348,7 +349,10 @@ func (h *Handlers) UpdateRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
 	}
-	id := r.PathValue("id")
+	id, ok := uuidPathValue(w, r, "id", "rule")
+	if !ok {
+		return
+	}
 	var body ruleHTTPJSON
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
@@ -382,9 +386,9 @@ func (h *Handlers) UpdateRule(w http.ResponseWriter, r *http.Request) {
 // @Summary Delete a rule
 // @Tags Rules
 // @Accept json
-// @Produce json
-// @Param id path string true "Rule ID"
+// @Param id path string true "Rule ID" format(uuid) example(00000000-0000-0000-0000-00000000c001)
 // @Success 204
+// @Failure 400 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
@@ -395,7 +399,10 @@ func (h *Handlers) DeleteRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
 	}
-	id := r.PathValue("id")
+	id, ok := uuidPathValue(w, r, "id", "rule")
+	if !ok {
+		return
+	}
 	existing, err := h.store.GetRule(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {

@@ -22,6 +22,12 @@ import (
 	pkgapi "github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
+const (
+	testTransactionID   = "11111111-1111-1111-1111-111111111111"
+	testRuleID          = "22222222-2222-2222-2222-222222222222"
+	testMutedMerchantID = "33333333-3333-3333-3333-333333333333"
+)
+
 // --- mocks ---
 
 type mockDaemon struct {
@@ -1203,13 +1209,13 @@ func TestGetTransaction_InvalidID(t *testing.T) {
 }
 
 func TestUpdateTransaction_Success(t *testing.T) {
-	txn := &store.Transaction{ID: "abc", Description: "Updated", Labels: []string{}}
+	txn := &store.Transaction{ID: testTransactionID, Description: "Updated", Labels: []string{}}
 	st := &mockStore{getResult: txn}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	body := `{"description":"Updated"}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/abc", strings.NewReader(body))
-	req.SetPathValue("id", "abc")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/11111111-1111-1111-1111-111111111111", strings.NewReader(body))
+	req.SetPathValue("id", testTransactionID)
 	rr := httptest.NewRecorder()
 	h.UpdateTransaction(rr, req)
 
@@ -1223,8 +1229,8 @@ func TestUpdateTransaction_NotFound(t *testing.T) {
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	body := `{"description":"x"}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/noexist", strings.NewReader(body))
-	req.SetPathValue("id", "noexist")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/"+testTransactionID, strings.NewReader(body))
+	req.SetPathValue("id", testTransactionID)
 	rr := httptest.NewRecorder()
 	h.UpdateTransaction(rr, req)
 
@@ -1233,10 +1239,36 @@ func TestUpdateTransaction_NotFound(t *testing.T) {
 	}
 }
 
+func TestUpdateTransaction_FetchUpdatedNotFound(t *testing.T) {
+	st := &mockStore{getErr: store.ErrNotFound}
+	h := newTestHandlers(t, st, &mockDaemon{})
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/"+testTransactionID, strings.NewReader(`{}`))
+	req.SetPathValue("id", testTransactionID)
+	rr := httptest.NewRecorder()
+	h.UpdateTransaction(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rr.Code)
+	}
+}
+
+func TestUpdateTransaction_InvalidID(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/not-a-uuid", strings.NewReader(`{}`))
+	req.SetPathValue("id", "not-a-uuid")
+	rr := httptest.NewRecorder()
+	h.UpdateTransaction(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
 func TestUpdateTransaction_InvalidJSON(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/abc", strings.NewReader("not-json"))
-	req.SetPathValue("id", "abc")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/11111111-1111-1111-1111-111111111111", strings.NewReader("not-json"))
+	req.SetPathValue("id", testTransactionID)
 	rr := httptest.NewRecorder()
 	h.UpdateTransaction(rr, req)
 
@@ -1472,8 +1504,8 @@ func TestListExtractionDiagnostics_NilStore(t *testing.T) {
 func TestAddLabels_Success(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	body := `{"labels":["food","work"]}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/abc/labels", strings.NewReader(body))
-	req.SetPathValue("id", "abc")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/11111111-1111-1111-1111-111111111111/labels", strings.NewReader(body))
+	req.SetPathValue("id", testTransactionID)
 	rr := httptest.NewRecorder()
 	h.AddLabels(rr, req)
 
@@ -1484,8 +1516,8 @@ func TestAddLabels_Success(t *testing.T) {
 
 func TestAddLabels_InvalidJSON(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/abc/labels", strings.NewReader("bad"))
-	req.SetPathValue("id", "abc")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/11111111-1111-1111-1111-111111111111/labels", strings.NewReader("bad"))
+	req.SetPathValue("id", testTransactionID)
 	rr := httptest.NewRecorder()
 	h.AddLabels(rr, req)
 
@@ -1494,12 +1526,24 @@ func TestAddLabels_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestAddLabels_InvalidID(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/not-a-uuid/labels", strings.NewReader(`{"labels":["food"]}`))
+	req.SetPathValue("id", "not-a-uuid")
+	rr := httptest.NewRecorder()
+	h.AddLabels(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
 func TestAddLabels_BatchSuccess(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 
 	body := `{"labels":["food","work","recurring"]}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/abc/labels", strings.NewReader(body))
-	req.SetPathValue("id", "abc")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/11111111-1111-1111-1111-111111111111/labels", strings.NewReader(body))
+	req.SetPathValue("id", testTransactionID)
 	rr := httptest.NewRecorder()
 	h.AddLabels(rr, req)
 
@@ -1512,8 +1556,8 @@ func TestAddLabels_StoreError_Returns500(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{addLabelsErr: errors.New("db error")}, &mockDaemon{})
 
 	body := `{"labels":["food"]}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/abc/labels", strings.NewReader(body))
-	req.SetPathValue("id", "abc")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/11111111-1111-1111-1111-111111111111/labels", strings.NewReader(body))
+	req.SetPathValue("id", testTransactionID)
 	rr := httptest.NewRecorder()
 	h.AddLabels(rr, req)
 
@@ -1524,8 +1568,8 @@ func TestAddLabels_StoreError_Returns500(t *testing.T) {
 
 func TestRemoveLabel_Success(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/transactions/abc/labels/food", nil)
-	req.SetPathValue("id", "abc")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/transactions/11111111-1111-1111-1111-111111111111/labels/food", nil)
+	req.SetPathValue("id", testTransactionID)
 	req.SetPathValue("label", "food")
 	rr := httptest.NewRecorder()
 	h.RemoveLabel(rr, req)
@@ -1537,14 +1581,51 @@ func TestRemoveLabel_Success(t *testing.T) {
 
 func TestRemoveLabel_NotFound(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{removeLblErr: store.ErrNotFound}, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/transactions/abc/labels/missing", nil)
-	req.SetPathValue("id", "abc")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/transactions/11111111-1111-1111-1111-111111111111/labels/missing", nil)
+	req.SetPathValue("id", testTransactionID)
 	req.SetPathValue("label", "missing")
 	rr := httptest.NewRecorder()
 	h.RemoveLabel(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rr.Code)
+	}
+}
+
+func TestRemoveLabel_InvalidID(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/transactions/not-a-uuid/labels/food", nil)
+	req.SetPathValue("id", "not-a-uuid")
+	req.SetPathValue("label", "food")
+	rr := httptest.NewRecorder()
+	h.RemoveLabel(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestMuteTransaction_InvalidID(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/not-a-uuid/mute", strings.NewReader(`{"muted":true}`))
+	req.SetPathValue("id", "not-a-uuid")
+	rr := httptest.NewRecorder()
+	h.MuteTransaction(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestUpdateMuteReason_InvalidID(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/not-a-uuid/mute-reason", strings.NewReader(`{"reason":"x"}`))
+	req.SetPathValue("id", "not-a-uuid")
+	rr := httptest.NewRecorder()
+	h.UpdateMuteReason(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 
@@ -2403,8 +2484,8 @@ func TestUpdateTransaction_InvalidCategory(t *testing.T) {
 	ms := &mockStore{categories: []store.Category{}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	body := strings.NewReader(`{"category":"nonexistent"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/abc", body)
-	req.SetPathValue("id", "abc")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/11111111-1111-1111-1111-111111111111", body)
+	req.SetPathValue("id", testTransactionID)
 	rr := httptest.NewRecorder()
 	h.UpdateTransaction(rr, req)
 	if rr.Code != http.StatusUnprocessableEntity {
@@ -2881,8 +2962,8 @@ func TestUpdateRule_AnyRule_FullUpdate(t *testing.T) {
 		"merchant_regex":".+",
 		"source":{"type":"Credit Card","label":"Example Credit Card","bank":"Example Bank"}
 	}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/rules/1", strings.NewReader(body))
-	req.SetPathValue("id", "1")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/rules/22222222-2222-2222-2222-222222222222", strings.NewReader(body))
+	req.SetPathValue("id", testRuleID)
 	rr := httptest.NewRecorder()
 	h.UpdateRule(rr, req)
 	if rr.Code != http.StatusOK {
@@ -2900,8 +2981,8 @@ func TestUpdateRule_DuplicateNameReturns409(t *testing.T) {
 		"merchant_regex":".+",
 		"source":{"type":"Credit Card","label":"Example Credit Card","bank":"Example Bank"}
 	}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/rules/1", strings.NewReader(body))
-	req.SetPathValue("id", "1")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/rules/22222222-2222-2222-2222-222222222222", strings.NewReader(body))
+	req.SetPathValue("id", testRuleID)
 	rr := httptest.NewRecorder()
 
 	h.UpdateRule(rr, req)
@@ -2916,11 +2997,31 @@ func TestUpdateRule_DuplicateNameReturns409(t *testing.T) {
 	}
 }
 
+func TestUpdateRule_InvalidIDReturns400(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	body := `{
+		"name":"updated",
+		"sender_emails":["alerts@example.com"],
+		"amount_regex":"\\d+",
+		"merchant_regex":".+",
+		"source":{"type":"Credit Card","label":"Example Credit Card","bank":"Example Bank"}
+	}`
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/rules/not-a-uuid", strings.NewReader(body))
+	req.SetPathValue("id", "not-a-uuid")
+	rr := httptest.NewRecorder()
+
+	h.UpdateRule(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
 func TestDeleteRule_PredefinedRule_Returns403(t *testing.T) {
 	ms := &mockStore{ruleResult: &store.RuleRow{ID: "1", Predefined: true}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/rules/1", nil)
-	req.SetPathValue("id", "1")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/rules/22222222-2222-2222-2222-222222222222", nil)
+	req.SetPathValue("id", testRuleID)
 	rr := httptest.NewRecorder()
 	h.DeleteRule(rr, req)
 	if rr.Code != http.StatusForbidden {
@@ -2931,12 +3032,25 @@ func TestDeleteRule_PredefinedRule_Returns403(t *testing.T) {
 func TestDeleteRule_UserRule_Returns204(t *testing.T) {
 	ms := &mockStore{ruleResult: &store.RuleRow{ID: "1", Predefined: false}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/rules/1", nil)
-	req.SetPathValue("id", "1")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/rules/22222222-2222-2222-2222-222222222222", nil)
+	req.SetPathValue("id", testRuleID)
 	rr := httptest.NewRecorder()
 	h.DeleteRule(rr, req)
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d", rr.Code)
+	}
+}
+
+func TestDeleteRule_InvalidIDReturns400(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/rules/not-a-uuid", nil)
+	req.SetPathValue("id", "not-a-uuid")
+	rr := httptest.NewRecorder()
+
+	h.DeleteRule(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 
@@ -3672,5 +3786,29 @@ func TestCategorizeMerchant_StoreError(t *testing.T) {
 	h.CategorizeMerchant(w, r)
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("want 500, got %d", w.Code)
+	}
+}
+
+func TestUpdateMerchantReason_InvalidID(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/muted-merchants/not-a-uuid/reason", strings.NewReader(`{"reason":"x"}`))
+	req.SetPathValue("id", "not-a-uuid")
+	rr := httptest.NewRecorder()
+	h.UpdateMerchantReason(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestDeleteMutedMerchant_InvalidID(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/muted-merchants/not-a-uuid", nil)
+	req.SetPathValue("id", "not-a-uuid")
+	rr := httptest.NewRecorder()
+	h.DeleteMutedMerchant(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }

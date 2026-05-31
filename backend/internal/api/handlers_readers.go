@@ -478,7 +478,7 @@ func (h *Handlers) AuthStatus(w http.ResponseWriter, r *http.Request) {
 // @Summary Disconnect a reader
 // @Tags Readers
 // @Produce json
-// @Param name path string true "Reader name" example(thunderbird)
+// @Param name path string true "Reader name" Enums(thunderbird,gmail) example(thunderbird)
 // @Success 200 {object} ReaderDisconnectResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse

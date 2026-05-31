@@ -15,8 +15,8 @@ import (
 // @Summary List extraction diagnostics
 // @Tags Extraction Diagnostics
 // @Produce json
-// @Param status query string false "Diagnostic status filter"
-// @Param limit query int false "Maximum rows to return"
+// @Param status query string false "Diagnostic status filter" Enums(open,resolved,ignored,all) default(open)
+// @Param limit query int false "Maximum rows to return" minimum(1) default(20)
 // @Success 200 {array} ExtractionDiagnosticResponse
 // @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
@@ -63,7 +63,7 @@ func (h *Handlers) ListExtractionDiagnostics(w http.ResponseWriter, r *http.Requ
 // @Summary Get an extraction diagnostic
 // @Tags Extraction Diagnostics
 // @Produce json
-// @Param id path string true "Diagnostic ID"
+// @Param id path string true "Diagnostic ID" format(uuid) example(00000000-0000-0000-0000-00000000c002)
 // @Success 200 {object} ExtractionDiagnosticResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
@@ -100,7 +100,7 @@ func (h *Handlers) GetExtractionDiagnostic(w http.ResponseWriter, r *http.Reques
 // @Tags Extraction Diagnostics
 // @Accept json
 // @Produce json
-// @Param id path string true "Diagnostic ID"
+// @Param id path string true "Diagnostic ID" format(uuid) example(00000000-0000-0000-0000-00000000c002)
 // @Param request body ExtractionDiagnosticStatusRequest true "Diagnostic status payload"
 // @Success 200 {object} ExtractionDiagnosticResponse
 // @Failure 400 {object} ErrorResponse

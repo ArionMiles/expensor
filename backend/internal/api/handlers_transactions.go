@@ -9,8 +9,6 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/google/uuid"
-
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
@@ -182,7 +180,7 @@ func containsControlChars(value string) bool {
 // @Summary Get a transaction
 // @Tags Transactions
 // @Produce json
-// @Param id path string true "Transaction ID"
+// @Param id path string true "Transaction ID" format(uuid) example(00000000-0000-0000-0000-000000000001)
 // @Success 200 {object} TransactionResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
@@ -195,9 +193,8 @@ func (h *Handlers) GetTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := r.PathValue("id")
-	if _, err := uuid.Parse(id); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid transaction id")
+	id, ok := uuidPathValue(w, r, "id", "transaction")
+	if !ok {
 		return
 	}
 	txn, err := h.store.GetTransaction(r.Context(), id)
@@ -254,9 +251,10 @@ func (h *Handlers) validateBucket(w http.ResponseWriter, r *http.Request, name s
 // @Tags Transactions
 // @Accept json
 // @Produce json
-// @Param id path string true "Transaction ID"
+// @Param id path string true "Transaction ID" format(uuid) example(00000000-0000-0000-0000-000000000001)
 // @Param request body TransactionUpdateRequest true "Transaction update payload"
 // @Success 200 {object} TransactionResponse
+// @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
@@ -267,7 +265,10 @@ func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
 	}
-	id := r.PathValue("id")
+	id, ok := uuidPathValue(w, r, "id", "transaction")
+	if !ok {
+		return
+	}
 	var body struct {
 		Description *string `json:"description"`
 		Category    *string `json:"category"`
@@ -302,6 +303,10 @@ func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := h.store.GetTransaction(r.Context(), id)
 	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "transaction not found")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to fetch updated transaction")
 		return
 	}
@@ -316,7 +321,7 @@ func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 // @Tags Transactions
 // @Accept json
 // @Produce json
-// @Param id path string true "Transaction ID"
+// @Param id path string true "Transaction ID" format(uuid) example(00000000-0000-0000-0000-000000000001)
 // @Param request body MuteTransactionRequest true "Mute payload"
 // @Success 200 {object} MuteTransactionResponse
 // @Failure 400 {object} ErrorResponse
@@ -329,7 +334,10 @@ func (h *Handlers) MuteTransaction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
 	}
-	id := r.PathValue("id")
+	id, ok := uuidPathValue(w, r, "id", "transaction")
+	if !ok {
+		return
+	}
 	var body struct {
 		Muted  bool   `json:"muted"`
 		Reason string `json:"reason"`
@@ -357,7 +365,7 @@ func (h *Handlers) MuteTransaction(w http.ResponseWriter, r *http.Request) {
 // @Tags Transactions
 // @Accept json
 // @Produce json
-// @Param id path string true "Transaction ID"
+// @Param id path string true "Transaction ID" format(uuid) example(00000000-0000-0000-0000-000000000001)
 // @Param request body UpdateMuteReasonRequest true "Mute reason payload"
 // @Success 200 {object} MuteReasonResponse
 // @Failure 400 {object} ErrorResponse
@@ -372,7 +380,10 @@ func (h *Handlers) UpdateMuteReason(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
 	}
-	id := r.PathValue("id")
+	id, ok := uuidPathValue(w, r, "id", "transaction")
+	if !ok {
+		return
+	}
 	var body struct {
 		Reason string `json:"reason"`
 	}
@@ -456,7 +467,7 @@ func (h *Handlers) MuteByMerchant(w http.ResponseWriter, r *http.Request) {
 // @Tags Transactions
 // @Accept json
 // @Produce json
-// @Param id path string true "Muted merchant ID"
+// @Param id path string true "Muted merchant ID" format(uuid) example(00000000-0000-0000-0000-00000000c003)
 // @Param request body MerchantReasonRequest true "Muted merchant reason payload"
 // @Success 200 {object} MuteReasonResponse
 // @Failure 400 {object} ErrorResponse
@@ -471,7 +482,10 @@ func (h *Handlers) UpdateMerchantReason(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
 	}
-	id := r.PathValue("id")
+	id, ok := uuidPathValue(w, r, "id", "muted merchant")
+	if !ok {
+		return
+	}
 	var body struct {
 		Reason string `json:"reason"`
 	}
@@ -497,10 +511,10 @@ func (h *Handlers) UpdateMerchantReason(w http.ResponseWriter, r *http.Request) 
 //
 // @Summary Delete a muted merchant pattern
 // @Tags Transactions
-// @Produce json
-// @Param id path string true "Muted merchant ID"
+// @Param id path string true "Muted merchant ID" format(uuid) example(00000000-0000-0000-0000-00000000c003)
 // @Param unmute query bool false "Unmute existing transactions matching the merchant pattern"
 // @Success 204
+// @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
@@ -510,7 +524,10 @@ func (h *Handlers) DeleteMutedMerchant(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
 	}
-	id := r.PathValue("id")
+	id, ok := uuidPathValue(w, r, "id", "muted merchant")
+	if !ok {
+		return
+	}
 
 	var err error
 	if r.URL.Query().Get("unmute") == queryValueTrue {
