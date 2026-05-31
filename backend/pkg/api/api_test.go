@@ -9,44 +9,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
-func TestRule_BuildGmailQuery(t *testing.T) {
-	tests := []struct {
-		name string
-		rule api.Rule
-		want string
-	}{
-		{
-			name: "both sender and subject",
-			rule: api.Rule{SenderEmail: "alerts@bank.com", SubjectContains: "Transaction Alert"},
-			want: `from:alerts@bank.com subject:"Transaction Alert"`,
-		},
-		{
-			name: "only sender",
-			rule: api.Rule{SenderEmail: "alerts@bank.com"},
-			want: "from:alerts@bank.com",
-		},
-		{
-			name: "only subject",
-			rule: api.Rule{SubjectContains: "Transaction Alert"},
-			want: `subject:"Transaction Alert"`,
-		},
-		{
-			name: "neither sender nor subject",
-			rule: api.Rule{},
-			want: "",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := tc.rule.BuildGmailQuery()
-			if got != tc.want {
-				t.Errorf("got %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
-
 func TestRule_MatchesEmail(t *testing.T) {
 	tests := []struct {
 		name    string

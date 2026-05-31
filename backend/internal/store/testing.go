@@ -67,8 +67,16 @@ func (s *Store) PoolForTest() *pgxpool.Pool {
 // After the provided timestamps are exhausted, the last value is reused.
 func (s *Store) SetNowForTestSequence(seq ...time.Time) func() {
 	prev := s.now
+	var prevReadModelNow func() time.Time
+	readModel, _ := s.readModel.(*pgReadModelRepository)
+	if readModel != nil {
+		prevReadModelNow = readModel.now
+	}
 	if len(seq) == 0 {
 		s.now = prev
+		if readModel != nil {
+			readModel.now = prevReadModelNow
+		}
 		return func() {}
 	}
 
@@ -84,8 +92,14 @@ func (s *Store) SetNowForTestSequence(seq ...time.Time) func() {
 		idx++
 		return v
 	}
+	if readModel != nil {
+		readModel.now = s.now
+	}
 
 	return func() {
 		s.now = prev
+		if readModel != nil {
+			readModel.now = prevReadModelNow
+		}
 	}
 }

@@ -3,7 +3,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net/mail"
 	"regexp"
 	"strings"
@@ -155,42 +154,6 @@ func ExtractionFailureReasons(transaction *TransactionDetails) []string {
 		reasons = append(reasons, FailureMerchantEmpty)
 	}
 	return reasons
-}
-
-// BuildGmailQuery constructs a Gmail API query string from the rule's fields.
-// Note: the caller is responsible for appending date filters (e.g. after:YYYY/MM/DD).
-func (r *Rule) BuildGmailQuery() string {
-	queries := r.BuildGmailQueries()
-	if len(queries) == 0 {
-		return ""
-	}
-	return queries[0]
-}
-
-// BuildGmailQueries constructs one Gmail query per sender. Gmail's query
-// language supports OR, but separate queries keep rule evaluation and
-// diagnostics tied to the exact sender variant that matched.
-func (r *Rule) BuildGmailQueries() []string {
-	senders := r.normalizedSenders()
-	if len(senders) == 0 {
-		return []string{r.buildGmailQueryForSender("")}
-	}
-	queries := make([]string, 0, len(senders))
-	for _, sender := range senders {
-		queries = append(queries, r.buildGmailQueryForSender(sender))
-	}
-	return queries
-}
-
-func (r *Rule) buildGmailQueryForSender(sender string) string {
-	var parts []string
-	if sender != "" {
-		parts = append(parts, fmt.Sprintf("from:%s", sender))
-	}
-	if r.SubjectContains != "" {
-		parts = append(parts, fmt.Sprintf("subject:%q", r.SubjectContains))
-	}
-	return strings.Join(parts, " ")
 }
 
 // MatchesEmail checks if an email matches this rule based on sender and subject.

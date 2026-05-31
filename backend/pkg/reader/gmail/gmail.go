@@ -184,7 +184,7 @@ func (r *Reader) handleAcknowledgments(ctx context.Context, ackChan <-chan strin
 				return
 			}
 			if r.state != nil {
-				if err := r.state.MarkProcessed(msgID); err != nil {
+				if err := r.state.MarkProcessed(ctx, msgID); err != nil {
 					r.logger.Warn("failed to mark message as processed in state", "message_id", msgID, "error", err)
 				}
 			}
@@ -273,7 +273,7 @@ func (r *Reader) buildRuleQuery(rule api.Rule, logger *slog.Logger) string {
 }
 
 func (r *Reader) buildRuleQueries(rule api.Rule, logger *slog.Logger) []string {
-	queries := rule.BuildGmailQueries()
+	queries := buildGmailQueriesForRule(rule)
 	since := r.effectiveSince()
 	logger.Debug("executing gmail query", "since", since.Format("2006/01/02"),
 		"checkpoint", r.lastScanAt != nil && !r.forceFullScan)
@@ -283,6 +283,50 @@ func (r *Reader) buildRuleQueries(rule api.Rule, logger *slog.Logger) []string {
 			query += " "
 		}
 		out = append(out, query+fmt.Sprintf("after:%s", since.Format("2006/01/02")))
+	}
+	return out
+}
+
+func buildGmailQueriesForRule(rule api.Rule) []string {
+	senders := normalizedRuleSenders(rule)
+	if len(senders) == 0 {
+		return []string{buildGmailQueryForSender(rule, "")}
+	}
+	queries := make([]string, 0, len(senders))
+	for _, sender := range senders {
+		queries = append(queries, buildGmailQueryForSender(rule, sender))
+	}
+	return queries
+}
+
+func buildGmailQueryForSender(rule api.Rule, sender string) string {
+	var parts []string
+	if sender != "" {
+		parts = append(parts, fmt.Sprintf("from:%s", sender))
+	}
+	if rule.SubjectContains != "" {
+		parts = append(parts, fmt.Sprintf("subject:%q", rule.SubjectContains))
+	}
+	return strings.Join(parts, " ")
+}
+
+func normalizedRuleSenders(rule api.Rule) []string {
+	raw := rule.SenderEmails
+	if len(raw) == 0 && rule.SenderEmail != "" {
+		raw = []string{rule.SenderEmail}
+	}
+	seen := make(map[string]struct{}, len(raw))
+	out := make([]string, 0, len(raw))
+	for _, sender := range raw {
+		normalized := strings.ToLower(strings.TrimSpace(senderEmail(sender)))
+		if normalized == "" {
+			continue
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
 	}
 	return out
 }
@@ -324,7 +368,7 @@ func (r *Reader) processRuleMessages(
 	processed := 0
 	var messageErrs []error
 	for _, msg := range messages {
-		if r.shouldSkipMessage(msg.Id, logger) {
+		if r.shouldSkipMessage(ctx, msg.Id, logger) {
 			continue
 		}
 		if err := r.processMessage(ctx, msg.Id, rule, out); err != nil {
@@ -341,8 +385,8 @@ func (r *Reader) processRuleMessages(
 	return processed, messageErrs, nil
 }
 
-func (r *Reader) shouldSkipMessage(msgID string, logger *slog.Logger) bool {
-	if r.state == nil || !r.state.IsProcessed(msgID) {
+func (r *Reader) shouldSkipMessage(ctx context.Context, msgID string, logger *slog.Logger) bool {
+	if r.state == nil || !r.state.IsProcessed(ctx, msgID) {
 		return false
 	}
 	logger.Debug("skipping already processed message", "message_id", msgID)

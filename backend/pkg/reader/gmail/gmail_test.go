@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -618,6 +619,22 @@ func TestProcessRule_QueriesEveryExactSender(t *testing.T) {
 				t.Fatalf("query[%d] = %q, missing %q", i, queries[i], fragment)
 			}
 		}
+	}
+}
+
+func TestBuildGmailQueriesForRule(t *testing.T) {
+	rule := api.Rule{
+		SenderEmails:    []string{"alerts@hdfcbank.net", "alerts@hdfcbank.bank.in"},
+		SubjectContains: "HDFC Bank Credit Card",
+	}
+
+	got := buildGmailQueriesForRule(rule)
+	want := []string{
+		`from:alerts@hdfcbank.net subject:"HDFC Bank Credit Card"`,
+		`from:alerts@hdfcbank.bank.in subject:"HDFC Bank Credit Card"`,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("queries = %#v, want %#v", got, want)
 	}
 }
 
