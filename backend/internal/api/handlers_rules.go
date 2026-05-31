@@ -240,6 +240,15 @@ func validateRuleRow(row store.RuleRow) error {
 }
 
 // ListRules handles GET /api/rules.
+//
+// @Summary List rules
+// @Tags Rules
+// @Accept json
+// @Produce json
+// @Success 200 {array} RuleResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /rules [get]
 func (h *Handlers) ListRules(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
@@ -255,6 +264,18 @@ func (h *Handlers) ListRules(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateRule handles POST /api/rules.
+//
+// @Summary Create a rule
+// @Tags Rules
+// @Accept json
+// @Produce json
+// @Param request body RuleMutationRequest true "Rule payload"
+// @Success 201 {object} RuleResponse
+// @Failure 409 {object} ErrorResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /rules [post]
 func (h *Handlers) CreateRule(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
@@ -308,12 +329,30 @@ func (h *Handlers) readActiveReader(ctx context.Context) (string, error) {
 
 // UpdateRule handles PUT /api/rules/{id}.
 // All rules (predefined and user-created) are fully editable.
+//
+// @Summary Update a rule
+// @Tags Rules
+// @Accept json
+// @Produce json
+// @Param id path string true "Rule ID" format(uuid) example(00000000-0000-0000-0000-00000000c001)
+// @Param request body RuleMutationRequest true "Rule payload"
+// @Success 200 {object} RuleResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /rules/{id} [put]
 func (h *Handlers) UpdateRule(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
 	}
-	id := r.PathValue("id")
+	id, ok := uuidPathValue(w, r, "id", "rule")
+	if !ok {
+		return
+	}
 	var body ruleHTTPJSON
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
@@ -343,12 +382,27 @@ func (h *Handlers) UpdateRule(w http.ResponseWriter, r *http.Request) {
 
 // DeleteRule handles DELETE /api/rules/{id}.
 // Returns 403 for system rules.
+//
+// @Summary Delete a rule
+// @Tags Rules
+// @Accept json
+// @Param id path string true "Rule ID" format(uuid) example(00000000-0000-0000-0000-00000000c001)
+// @Success 204
+// @Failure 400 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /rules/{id} [delete]
 func (h *Handlers) DeleteRule(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
 	}
-	id := r.PathValue("id")
+	id, ok := uuidPathValue(w, r, "id", "rule")
+	if !ok {
+		return
+	}
 	existing, err := h.store.GetRule(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -376,6 +430,15 @@ func (h *Handlers) DeleteRule(w http.ResponseWriter, r *http.Request) {
 
 // ExportRules handles GET /api/rules/export.
 // Downloads all user rules as a JSON file in rules.json format.
+//
+// @Summary Export rules
+// @Tags Rules
+// @Accept json
+// @Produce json
+// @Success 200 {object} RuleDocumentResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /rules/export [get]
 func (h *Handlers) ExportRules(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
@@ -402,6 +465,17 @@ func (h *Handlers) ExportRules(w http.ResponseWriter, r *http.Request) {
 
 // ImportRules handles POST /api/rules/import.
 // Validates all rules first; rejects the entire import if any rule fails.
+//
+// @Summary Import rules
+// @Tags Rules
+// @Accept json
+// @Produce json
+// @Param request body RuleDocumentResponse true "Rules document"
+// @Success 200 {object} RuleImportResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /rules/import [post]
 func (h *Handlers) ImportRules(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")

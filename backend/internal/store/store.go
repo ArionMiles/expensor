@@ -1030,6 +1030,12 @@ func buildHeatmapWhere(from, to *time.Time) (string, []any) {
 	if from == nil && to == nil {
 		return " WHERE muted = false", nil
 	}
+	if from == nil {
+		return " WHERE muted = false AND timestamp <= $1", []any{*to}
+	}
+	if to == nil {
+		return " WHERE muted = false AND timestamp >= $1", []any{*from}
+	}
 	return " WHERE muted = false AND timestamp >= $1 AND timestamp <= $2", []any{*from, *to}
 }
 

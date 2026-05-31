@@ -366,7 +366,7 @@ func (h *Handlers) GetSetupStatus(w http.ResponseWriter, r *http.Request) {
 // @Summary Get a reader checkpoint
 // @Tags Config
 // @Produce json
-// @Param name path string true "Reader name"
+// @Param name path string true "Reader name" Enums(thunderbird,gmail) example(thunderbird)
 // @Success 200 {object} ReaderCheckpointResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/readers/{name}/checkpoint [get]
@@ -390,8 +390,7 @@ func (h *Handlers) GetReaderCheckpoint(w http.ResponseWriter, r *http.Request) {
 // now-absent checkpoint immediately rather than waiting for the next interval.
 // @Summary Clear a reader checkpoint
 // @Tags Config
-// @Produce json
-// @Param name path string true "Reader name"
+// @Param name path string true "Reader name" Enums(thunderbird,gmail) example(thunderbird)
 // @Success 204 "No Content"
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse

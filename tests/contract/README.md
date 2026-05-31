@@ -12,7 +12,7 @@ This suite runs the official Schemathesis container against the generated OpenAP
 
 The first Phase 4 baseline intentionally covers read-only, parameter-free operations. This keeps the contract suite deterministic and avoids mixing schema conformance with stateful business behavior.
 
-The allowlist lives in `allowlist.tsv`. Add endpoints there only after confirming they are stable enough for generated contract inputs.
+Every registered backend API route must have an explicit contract coverage decision. Deterministic routes belong in `allowlist.tsv`; excluded routes belong in `exclusions.tsv` with a reason. Exclusions are limited to routes that require external OAuth, filesystem credential/profile discovery, or live reader state.
 
 ## Local workflow
 

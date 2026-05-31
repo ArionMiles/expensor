@@ -1,0 +1,16 @@
+GET	/auth/callback	external OAuth redirect state
+POST	/readers/{name}/credentials	filesystem-style credential upload and OAuth client JSON
+GET	/readers/thunderbird/discover/profiles	filesystem profile discovery
+GET	/readers/thunderbird/discover/mailboxes	filesystem mailbox discovery
+POST	/readers/{name}/auth/start	external OAuth credentials and consent URL
+POST	/readers/{name}/auth/exchange	external OAuth callback state and token exchange
+DELETE	/readers/{name}/auth/token	external OAuth token state
+GET	/readers/{name}/auth/status	external OAuth token state
+DELETE	/readers/{name}	live reader runtime disconnect state
+GET	/readers/{name}/status	live reader readiness state
+GET	/readers/{name}/config	live reader runtime config
+POST	/readers/{name}/config	live reader runtime config
+GET	/readers/{name}/credentials/status	external OAuth credential state
+POST	/daemon/start	live reader runtime start state
+POST	/daemon/rescan	live reader runtime rescan state
+POST	/config/sync	external community content sync state

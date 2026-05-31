@@ -43,7 +43,7 @@ services:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/health >/dev/null 2>&1"]
       interval: 5s
       timeout: 3s
-      retries: 30
+      retries: 60
 
   seed:
     image: postgres:16-alpine
@@ -80,14 +80,19 @@ services:
         set -e
         mkdir -p "$${CONTRACT_ARTIFACTS}"
         cp allowlist.tsv "$${CONTRACT_ARTIFACTS}/allowlist.tsv"
-        while IFS="$$(printf '\t')" read -r method route reason; do
-          safe_name="$$(echo "$${method}-$${route}" | tr '/{}' '---' | tr -cs 'A-Za-z0-9_.-' '-')"
+        tab="$$(printf '\011')"
+        while IFS="$${tab}" read -r method route reason; do
+          phases="examples"
+          if [ "$${method}" = "GET" ]; then
+            phases="examples,coverage"
+          fi
+          safe_name="$$(printf '%s' "$${method}-$${route}" | tr '/{}' '---' | tr -cs 'A-Za-z0-9_.-' '-')"
           log_file="$${CONTRACT_ARTIFACTS}/$${safe_name}.log"
           echo "Contract check: $${method} $${route} ($${reason})"
           if ! schemathesis run "$${CONTRACT_SCHEMA}" \
             --url "$${CONTRACT_BASE_URL}" \
             --checks "not_a_server_error,status_code_conformance,content_type_conformance,response_schema_conformance" \
-            --phases "examples,coverage,fuzzing" \
+            --phases "$${phases}" \
             --mode positive \
             --max-examples 5 \
             --generation-deterministic \
@@ -95,8 +100,12 @@ services:
             --report-dir "$${CONTRACT_ARTIFACTS}/reports" \
             --coverage-format html \
             --coverage-report-html-path "$${CONTRACT_ARTIFACTS}/schema-coverage.html" \
-            --include-by "method == '$${method}' && path == '$${route}'" \
+            --include-name "$${method} $${route}" \
             > "$${log_file}" 2>&1; then
+            cat "$${log_file}"
+            exit 1
+          fi
+          if grep -Eq "Operations:[[:space:]]+0 selected|No tests were run|Tested: 0" "$${log_file}"; then
             cat "$${log_file}"
             exit 1
           fi

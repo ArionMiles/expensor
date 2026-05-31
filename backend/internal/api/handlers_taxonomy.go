@@ -76,7 +76,7 @@ func (h *Handlers) CreateLabel(w http.ResponseWriter, r *http.Request) {
 // @Tags Taxonomy
 // @Accept json
 // @Produce json
-// @Param name path string true "Label name"
+// @Param name path string true "Label name" example(ContractLabel)
 // @Param request body UpdateLabelRequest true "Label color payload"
 // @Success 200 {object} LabelMutationResponse
 // @Failure 404 {object} ErrorResponse
@@ -113,8 +113,7 @@ func (h *Handlers) UpdateLabel(w http.ResponseWriter, r *http.Request) {
 // Body: {"remove_from_transactions": true}
 // @Summary Delete a label
 // @Tags Taxonomy
-// @Produce json
-// @Param name path string true "Label name"
+// @Param name path string true "Label name" example(ContractLabel)
 // @Success 204 "No Content"
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
@@ -143,7 +142,7 @@ func (h *Handlers) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 // @Tags Taxonomy
 // @Accept json
 // @Produce json
-// @Param name path string true "Label name"
+// @Param name path string true "Label name" example(ContractLabel)
 // @Param request body ApplyLabelRequest true "Merchant pattern payload"
 // @Success 200 {object} AppliedCountResponse
 // @Failure 422 {object} ErrorResponse
@@ -174,6 +173,17 @@ func (h *Handlers) ApplyLabel(w http.ResponseWriter, r *http.Request) {
 
 // RemoveLabelByMerchant handles DELETE /api/config/labels/{name}/merchant.
 // Body: {"merchant_pattern": "swiggy"}
+// @Summary Remove a label by merchant pattern
+// @Tags Taxonomy
+// @Accept json
+// @Produce json
+// @Param name path string true "Label name" example(Online)
+// @Param request body TaxonomyMerchantRequest true "Merchant pattern payload"
+// @Success 200 {object} RemovedCountResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /config/labels/{name}/merchant [delete]
 func (h *Handlers) RemoveLabelByMerchant(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
@@ -201,6 +211,15 @@ func (h *Handlers) RemoveLabelByMerchant(w http.ResponseWriter, r *http.Request)
 //   - dimension=labels|categories|buckets (default: labels)
 //
 // Response: {"labels":["Food","Travel"], "months":["2025-05","2025-06",...], "series":[{"label":"Food","data":[...]}]}
+// @Summary Get label monthly spend
+// @Tags Stats
+// @Produce json
+// @Param dimension query string false "Breakdown dimension" Enums(labels,categories,buckets) default(labels)
+// @Success 200 {object} MonthlyBreakdownResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /stats/labels/monthly [get]
 func (h *Handlers) GetLabelMonthlySpend(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
@@ -252,6 +271,13 @@ func (h *Handlers) GetLabelMappings(w http.ResponseWriter, r *http.Request) {
 
 // ExportLabels handles GET /api/config/labels/export.
 // Returns labels with their persisted merchant mappings as a downloadable JSON file.
+// @Summary Export labels
+// @Tags Taxonomy
+// @Produce json
+// @Success 200 {array} LabelTaxonomyExportRowResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /config/labels/export [get]
 func (h *Handlers) ExportLabels(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
@@ -290,19 +316,35 @@ func (h *Handlers) ExportLabels(w http.ResponseWriter, r *http.Request) {
 
 // ExportCategories handles GET /api/config/categories/export.
 // Returns categories with their persisted merchant mappings as a downloadable JSON file.
+// @Summary Export categories
+// @Tags Taxonomy
+// @Produce json
+// @Success 200 {array} TaxonomyExportRowResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /config/categories/export [get]
 func (h *Handlers) ExportCategories(w http.ResponseWriter, r *http.Request) {
 	handleExportNamedTaxonomy(w, r, taxonomyExportConfig[store.Category]{
-		handlers:    h,
-		singular:    "category",
-		plural:      "categories",
-		filename:    "expensor-categories.json",
-		list:        func(ctx context.Context) ([]store.Category, error) { return h.store.ListCategories(ctx) },
-		getMappings: h.store.GetCategoryMappings,
-		nameOf:      func(item store.Category) string { return item.Name },
+		handlers: h,
+		singular: "category",
+		plural:   "categories",
+		filename: "expensor-categories.json",
+		list:     func(ctx context.Context) ([]store.Category, error) { return h.store.ListCategories(ctx) },
+		getMappings: func(ctx context.Context) (map[string][]string, error) {
+			return h.store.GetCategoryMappings(ctx)
+		},
+		nameOf: func(item store.Category) string { return item.Name },
 	})
 }
 
 // GetCategoryMappings handles GET /api/config/categories/mappings.
+// @Summary Get category mappings
+// @Tags Taxonomy
+// @Produce json
+// @Success 200 {object} TaxonomyMappingsResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /config/categories/mappings [get]
 func (h *Handlers) GetCategoryMappings(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
@@ -374,8 +416,7 @@ func (h *Handlers) CreateCategory(w http.ResponseWriter, r *http.Request) {
 // DeleteCategory handles DELETE /api/config/categories/{name}.
 // @Summary Delete a category
 // @Tags Taxonomy
-// @Produce json
-// @Param name path string true "Category name"
+// @Param name path string true "Category name" example(ContractCategory)
 // @Success 204 "No Content"
 // @Failure 404 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
@@ -404,13 +445,39 @@ func (h *Handlers) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 }
 
 // ApplyCategoryByMerchant handles POST /api/config/categories/{name}/apply.
+// @Summary Apply a category by merchant pattern
+// @Tags Taxonomy
+// @Accept json
+// @Produce json
+// @Param name path string true "Category name" example(Food & Dining)
+// @Param request body TaxonomyMerchantRequest true "Merchant pattern payload"
+// @Success 200 {object} AppliedCountResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /config/categories/{name}/apply [post]
 func (h *Handlers) ApplyCategoryByMerchant(w http.ResponseWriter, r *http.Request) {
-	h.handleApplyTaxonomyMerchant(w, r, "category", h.store.ApplyCategoryByMerchant)
+	h.handleApplyTaxonomyMerchant(w, r, "category", func(ctx context.Context, category, pattern string) (int64, error) {
+		return h.store.ApplyCategoryByMerchant(ctx, category, pattern)
+	})
 }
 
 // RemoveCategoryByMerchant handles DELETE /api/config/categories/{name}/merchant.
+// @Summary Remove a category by merchant pattern
+// @Tags Taxonomy
+// @Accept json
+// @Produce json
+// @Param name path string true "Category name" example(Food & Dining)
+// @Param request body TaxonomyMerchantRequest true "Merchant pattern payload"
+// @Success 200 {object} RemovedCountResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /config/categories/{name}/merchant [delete]
 func (h *Handlers) RemoveCategoryByMerchant(w http.ResponseWriter, r *http.Request) {
-	h.handleRemoveTaxonomyMerchant(w, r, "category", h.store.RemoveCategoryByMerchant)
+	h.handleRemoveTaxonomyMerchant(w, r, "category", func(ctx context.Context, category, pattern string) (int64, error) {
+		return h.store.RemoveCategoryByMerchant(ctx, category, pattern)
+	})
 }
 
 // ListBuckets handles GET /api/config/buckets.
@@ -470,8 +537,7 @@ func (h *Handlers) CreateBucket(w http.ResponseWriter, r *http.Request) {
 // DeleteBucket handles DELETE /api/config/buckets/{name}.
 // @Summary Delete a bucket
 // @Tags Taxonomy
-// @Produce json
-// @Param name path string true "Bucket name"
+// @Param name path string true "Bucket name" example(ContractBucket)
 // @Success 204 "No Content"
 // @Failure 404 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
@@ -500,19 +566,35 @@ func (h *Handlers) DeleteBucket(w http.ResponseWriter, r *http.Request) {
 
 // ExportBuckets handles GET /api/config/buckets/export.
 // Returns buckets with their persisted merchant mappings as a downloadable JSON file.
+// @Summary Export buckets
+// @Tags Taxonomy
+// @Produce json
+// @Success 200 {array} TaxonomyExportRowResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /config/buckets/export [get]
 func (h *Handlers) ExportBuckets(w http.ResponseWriter, r *http.Request) {
 	handleExportNamedTaxonomy(w, r, taxonomyExportConfig[store.Bucket]{
-		handlers:    h,
-		singular:    "bucket",
-		plural:      "buckets",
-		filename:    "expensor-buckets.json",
-		list:        func(ctx context.Context) ([]store.Bucket, error) { return h.store.ListBuckets(ctx) },
-		getMappings: h.store.GetBucketMappings,
-		nameOf:      func(item store.Bucket) string { return item.Name },
+		handlers: h,
+		singular: "bucket",
+		plural:   "buckets",
+		filename: "expensor-buckets.json",
+		list:     func(ctx context.Context) ([]store.Bucket, error) { return h.store.ListBuckets(ctx) },
+		getMappings: func(ctx context.Context) (map[string][]string, error) {
+			return h.store.GetBucketMappings(ctx)
+		},
+		nameOf: func(item store.Bucket) string { return item.Name },
 	})
 }
 
 // GetBucketMappings handles GET /api/config/buckets/mappings.
+// @Summary Get bucket mappings
+// @Tags Taxonomy
+// @Produce json
+// @Success 200 {object} TaxonomyMappingsResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /config/buckets/mappings [get]
 func (h *Handlers) GetBucketMappings(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
@@ -528,13 +610,39 @@ func (h *Handlers) GetBucketMappings(w http.ResponseWriter, r *http.Request) {
 }
 
 // ApplyBucketByMerchant handles POST /api/config/buckets/{name}/apply.
+// @Summary Apply a bucket by merchant pattern
+// @Tags Taxonomy
+// @Accept json
+// @Produce json
+// @Param name path string true "Bucket name" example(Needs)
+// @Param request body TaxonomyMerchantRequest true "Merchant pattern payload"
+// @Success 200 {object} AppliedCountResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /config/buckets/{name}/apply [post]
 func (h *Handlers) ApplyBucketByMerchant(w http.ResponseWriter, r *http.Request) {
-	h.handleApplyTaxonomyMerchant(w, r, "bucket", h.store.ApplyBucketByMerchant)
+	h.handleApplyTaxonomyMerchant(w, r, "bucket", func(ctx context.Context, bucket, pattern string) (int64, error) {
+		return h.store.ApplyBucketByMerchant(ctx, bucket, pattern)
+	})
 }
 
 // RemoveBucketByMerchant handles DELETE /api/config/buckets/{name}/merchant.
+// @Summary Remove a bucket by merchant pattern
+// @Tags Taxonomy
+// @Accept json
+// @Produce json
+// @Param name path string true "Bucket name" example(Needs)
+// @Param request body TaxonomyMerchantRequest true "Merchant pattern payload"
+// @Success 200 {object} RemovedCountResponse
+// @Failure 422 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /config/buckets/{name}/merchant [delete]
 func (h *Handlers) RemoveBucketByMerchant(w http.ResponseWriter, r *http.Request) {
-	h.handleRemoveTaxonomyMerchant(w, r, "bucket", h.store.RemoveBucketByMerchant)
+	h.handleRemoveTaxonomyMerchant(w, r, "bucket", func(ctx context.Context, bucket, pattern string) (int64, error) {
+		return h.store.RemoveBucketByMerchant(ctx, bucket, pattern)
+	})
 }
 
 func taxonomyCleanupFlag(w http.ResponseWriter, r *http.Request) (bool, bool) {
@@ -666,9 +774,10 @@ func (h *Handlers) handleTaxonomyMerchant(
 // @Tags Transactions
 // @Accept json
 // @Produce json
-// @Param id path string true "Transaction ID"
+// @Param id path string true "Transaction ID" format(uuid) example(00000000-0000-0000-0000-000000000001)
 // @Param request body TransactionLabelsRequest true "Labels payload"
 // @Success 200 {object} StatusOnlyResponse
+// @Failure 400 {object} ErrorResponse
 // @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
@@ -679,7 +788,10 @@ func (h *Handlers) AddLabels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := r.PathValue("id")
+	id, ok := uuidPathValue(w, r, "id", "transaction")
+	if !ok {
+		return
+	}
 	var body struct {
 		Labels []string `json:"labels"`
 	}
@@ -701,9 +813,10 @@ func (h *Handlers) AddLabels(w http.ResponseWriter, r *http.Request) {
 // @Summary Remove a label from a transaction
 // @Tags Transactions
 // @Produce json
-// @Param id path string true "Transaction ID"
-// @Param label path string true "Label name"
+// @Param id path string true "Transaction ID" format(uuid) example(00000000-0000-0000-0000-000000000001)
+// @Param label path string true "Label name" example(Online)
 // @Success 200 {object} StatusOnlyResponse
+// @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
@@ -714,7 +827,10 @@ func (h *Handlers) RemoveLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := r.PathValue("id")
+	id, ok := uuidPathValue(w, r, "id", "transaction")
+	if !ok {
+		return
+	}
 	label := r.PathValue("label")
 
 	if err := h.store.RemoveLabel(r.Context(), id, label); err != nil {

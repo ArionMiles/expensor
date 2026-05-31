@@ -1,7 +1,7 @@
 # Backend Observability and Code Health — Design Spec
 
 **Date:** 2026-05-24
-**Status:** Observability/store instrumentation slice complete; broader backend code-health work remains.
+**Status:** Observability/store instrumentation, plugin registry cleanup, API handler decomposition/naming cleanup, and API contract coverage slices are complete on the PR branch; broader backend code-health work remains.
 
 ---
 
@@ -20,9 +20,9 @@ The work has two equal outcomes:
 |-------|--------|-------|
 | Observability package and store instrumentation | Complete | Implemented in `pr/backend-observability-code-health`; see `docs/superpowers/plans/2026-05-24-observability-store-instrumentation.md`. |
 | Plugin registry cleanup | Complete | Registry is now catalog-only; reader/writer metadata is explicit; daemon wiring owns construction. |
-| API handler decomposition | In progress | Active on branch `pr/api-handler-decomposition`; first pass is behavior-preserving file decomposition. |
-| API handler naming cleanup | Pending | Next leg after decomposition: remove redundant `Handle` receiver-method prefixes and `Doc` OpenAPI DTO prefixes without changing routes or payloads. |
-| API spec and contract coverage expansion | Pending | Follow the rename cleanup by documenting more registered routes and expanding Schemathesis beyond the current read-only allowlist. |
+| API handler decomposition | Complete | Handler files are split by resource ownership; follow-up naming cleanup has also landed on the current PR branch. |
+| API handler naming cleanup | Complete | Redundant `Handle` receiver-method prefixes and `Doc` OpenAPI DTO prefixes were removed without intentional route or payload changes. |
+| API spec and contract coverage expansion | Complete for this slice | All 88 registered `/api` routes have OpenAPI `@Router` coverage and an explicit contract-test decision: 72 deterministic allowlist entries and 16 scoped exclusions for OAuth, filesystem, or live reader/runtime state. |
 | Store package ownership cleanup beyond instrumentation | Pending | Remaining work includes read-model ownership and `store.go` model/helper split. |
 | Processed-message state context cleanup | Pending | Requires a separate implementation plan. |
 | Provider-specific domain cleanup | Pending | Includes moving Gmail query construction out of `pkg/api`. |
@@ -332,6 +332,8 @@ Verification commands:
 - `task test:be`
 - `task lint:be:prod`
 - `task openapi:check` if handler/OpenAPI type movement changes generated output or annotations.
+- `task test:be:component` for store-backed API or seed changes.
+- `task test:be:contract` for OpenAPI or contract allowlist/exclusion changes.
 
 Run component or contract tests only for slices that touch store behavior, daemon wiring, or OpenAPI behavior.
 
@@ -344,12 +346,37 @@ Run component or contract tests only for slices that touch store behavior, daemo
 3. Replace store inline `QueryInstrumentation` with interface decorators. **Complete.**
 4. Split store capability interfaces and clean up `store.go` ownership. **Partially complete for instrumentation boundaries; remaining ownership cleanup is deferred.**
 5. Refactor plugin metadata and construction boundary. **Complete.**
-6. Split `internal/api/handlers.go` by resource without behavior changes. **In progress.**
-7. Rename decomposed API handler methods and OpenAPI DTOs to remove redundant `Handle` and `Doc` prefixes.
-8. Expand OpenAPI route coverage and Schemathesis allowlist coverage in deterministic batches.
-9. Make processed-message state context-aware.
-10. Move Gmail-specific rule query construction out of `pkg/api`.
-11. Update `AGENTS.md` with backend code-health rules.
+6. Split `internal/api/handlers.go` by resource without behavior changes. **Complete.**
+7. Rename decomposed API handler methods and OpenAPI DTOs to remove redundant `Handle` and `Doc` prefixes. **Complete.**
+8. Expand OpenAPI route coverage and Schemathesis allowlist coverage in deterministic batches. **Complete for this PR slice.**
+9. Update `AGENTS.md` with backend code-health rules. **Complete.**
+10. Make processed-message state context-aware. **Pending follow-up.**
+11. Move Gmail-specific rule query construction out of `pkg/api`. **Pending follow-up.**
+
+### Current PR Branch State
+
+Branch: `pr/backend-observability-code-health-next`
+
+PR: `https://github.com/ArionMiles/expensor/pull/8`
+
+Latest local slice verification:
+
+- `task openapi:check`: pass.
+- `task test:be`: pass.
+- `task test:be:component`: pass.
+- `task test:be:contract`: pass.
+- `task lint:be:prod`: pass with `0 issues`.
+
+Route and contract inventory:
+
+- Registered API routes: 88.
+- OpenAPI `@Router` annotations: 88.
+- Deterministic contract allowlist entries: 72.
+- Explicit contract exclusions: 16.
+- Missing route decisions: 0.
+- Allowlist/exclusion overlaps: 0.
+
+The remaining program work is outside the API contract coverage slice: processed-message state context propagation, Gmail-specific query construction ownership, and deeper `internal/store` ownership cleanup.
 
 The exact implementation plan may split these further, but each slice should be independently testable.
 

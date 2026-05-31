@@ -6,6 +6,16 @@ definitions:
         example: gmail
         type: string
     type: object
+  api.AnnualHeatmapResponse:
+    properties:
+      buckets:
+        items:
+          $ref: '#/definitions/api.DailyBucketResponse'
+        type: array
+      year:
+        example: 2026
+        type: integer
+    type: object
   api.AppliedCountResponse:
     properties:
       applied:
@@ -14,8 +24,44 @@ definitions:
   api.ApplyLabelRequest:
     properties:
       merchant_pattern:
-        example: swiggy
+        example: Swiggy
         type: string
+    required:
+    - merchant_pattern
+    type: object
+  api.AuthExchangeRequest:
+    properties:
+      url:
+        example: http://localhost:8080/api/auth/callback?state=state&code=code
+        type: string
+    required:
+    - url
+    type: object
+  api.AuthExchangeResponse:
+    properties:
+      status:
+        example: authorized
+        type: string
+    type: object
+  api.AuthStartResponse:
+    properties:
+      redirect_uri:
+        example: http://localhost:8080/api/auth/callback
+        type: string
+      url:
+        example: https://accounts.google.com/o/oauth2/auth
+        type: string
+    type: object
+  api.AuthStatusResponse:
+    properties:
+      auth_type:
+        example: config
+        type: string
+      authenticated:
+        type: boolean
+      expiry:
+        type: string
+        x-nullable: true
     type: object
   api.BankColorResponse:
     properties:
@@ -32,8 +78,12 @@ definitions:
   api.BaseCurrencyRequest:
     properties:
       base_currency:
-        example: USD
+        example: INR
+        maxLength: 3
+        minLength: 3
         type: string
+    required:
+    - base_currency
     type: object
   api.BaseCurrencyResponse:
     properties:
@@ -52,6 +102,34 @@ definitions:
         example: Needs
         type: string
     type: object
+  api.CategorizeMerchantRequest:
+    properties:
+      bucket:
+        example: Wants
+        type: string
+      category:
+        example: Food & Dining
+        type: string
+      merchant:
+        example: Swiggy
+        type: string
+    required:
+    - merchant
+    type: object
+  api.CategorizeMerchantResponse:
+    properties:
+      updated:
+        type: integer
+    type: object
+  api.CategoryMonthlyEntryResponse:
+    properties:
+      current:
+        example: 1200.5
+        type: number
+      prior:
+        example: 950.25
+        type: number
+    type: object
   api.CategoryResponse:
     properties:
       description:
@@ -63,23 +141,86 @@ definitions:
         example: Food
         type: string
     type: object
+  api.ChartDataResponse:
+    properties:
+      by_bank:
+        additionalProperties:
+          type: number
+        type: object
+      by_bucket:
+        additionalProperties:
+          type: number
+        type: object
+      by_category:
+        additionalProperties:
+          type: number
+        type: object
+      by_category_monthly:
+        additionalProperties:
+          $ref: '#/definitions/api.CategoryMonthlyEntryResponse'
+        type: object
+      by_label:
+        additionalProperties:
+          type: number
+        type: object
+      by_source:
+        additionalProperties:
+          type: number
+        type: object
+      by_source_type:
+        additionalProperties:
+          type: number
+        type: object
+      daily_spend:
+        items:
+          $ref: '#/definitions/api.TimeBucketResponse'
+        type: array
+      monthly_spend:
+        items:
+          $ref: '#/definitions/api.TimeBucketResponse'
+        type: array
+    type: object
+  api.ConfigFieldResponse:
+    properties:
+      depends_on:
+        example: profilePath
+        type: string
+      help:
+        example: Path to the Thunderbird profile
+        type: string
+      label:
+        example: Profile path
+        type: string
+      name:
+        example: profilePath
+        type: string
+      required:
+        type: boolean
+      type:
+        example: text
+        type: string
+    type: object
   api.CreateBucketRequest:
     properties:
       description:
-        example: Essential spending
+        example: Contract bucket
         type: string
       name:
-        example: Needs
+        example: ContractBucket
         type: string
+    required:
+    - name
     type: object
   api.CreateCategoryRequest:
     properties:
       description:
-        example: Restaurants and groceries
+        example: Contract category
         type: string
       name:
-        example: Food
+        example: ContractCategory
         type: string
+    required:
+    - name
     type: object
   api.CreateLabelRequest:
     properties:
@@ -87,14 +228,23 @@ definitions:
         example: '#f59e0b'
         type: string
       name:
-        example: food
+        example: ContractLabel
         type: string
+    required:
+    - name
+    type: object
+  api.CredentialsStatusResponse:
+    properties:
+      exists:
+        type: boolean
     type: object
   api.DaemonReaderRequest:
     properties:
       reader:
-        example: gmail
+        example: thunderbird
         type: string
+    required:
+    - reader
     type: object
   api.DaemonStatus:
     properties:
@@ -104,6 +254,46 @@ definitions:
         type: boolean
       started_at:
         type: string
+    type: object
+  api.DailyBucketResponse:
+    properties:
+      amount:
+        example: 249.5
+        type: number
+      count:
+        example: 3
+        type: integer
+      date:
+        type: string
+    type: object
+  api.DashboardDataResponse:
+    properties:
+      all_time:
+        $ref: '#/definitions/api.DashboardSectionResponse'
+      current_month:
+        $ref: '#/definitions/api.DashboardSectionResponse'
+    type: object
+  api.DashboardSectionResponse:
+    properties:
+      charts:
+        $ref: '#/definitions/api.ChartDataResponse'
+      label:
+        example: Current Month
+        type: string
+      stats:
+        $ref: '#/definitions/api.StatsResponse'
+    type: object
+  api.DayOfMonthBucketResponse:
+    properties:
+      amount:
+        example: 249.5
+        type: number
+      count:
+        example: 3
+        type: integer
+      day:
+        example: 15
+        type: integer
     type: object
   api.ErrorResponse:
     properties:
@@ -176,8 +366,14 @@ definitions:
   api.ExtractionDiagnosticStatusRequest:
     properties:
       status:
+        enum:
+        - open
+        - resolved
+        - ignored
         example: resolved
         type: string
+    required:
+    - status
     type: object
   api.FacetsResponse:
     properties:
@@ -206,11 +402,63 @@ definitions:
           type: string
         type: array
     type: object
+  api.GuideLinkResponse:
+    properties:
+      label:
+        example: Thunderbird profiles
+        type: string
+      url:
+        example: https://support.mozilla.org/kb/profiles-where-thunderbird-stores-user-data
+        type: string
+    type: object
+  api.GuideNoteResponse:
+    properties:
+      text:
+        example: Docker deployments need the Thunderbird profile mounted into the
+          container.
+        type: string
+      type:
+        example: info
+        type: string
+    type: object
+  api.GuideSectionResponse:
+    properties:
+      link:
+        $ref: '#/definitions/api.GuideLinkResponse'
+      steps:
+        items:
+          $ref: '#/definitions/api.GuideStepResponse'
+        type: array
+      title:
+        example: Connect Thunderbird
+        type: string
+    type: object
+  api.GuideStepResponse:
+    properties:
+      sub_steps:
+        items:
+          type: string
+        type: array
+      text:
+        example: Select your Thunderbird profile
+        type: string
+    type: object
   api.HealthResponse:
     properties:
       status:
         example: ok
         type: string
+    type: object
+  api.HeatmapDataResponse:
+    properties:
+      by_day_of_month:
+        items:
+          $ref: '#/definitions/api.DayOfMonthBucketResponse'
+        type: array
+      by_weekday_hour:
+        items:
+          $ref: '#/definitions/api.WeekdayHourBucketResponse'
+        type: array
     type: object
   api.LabelMappingsResponse:
     additionalProperties:
@@ -224,7 +472,7 @@ definitions:
         example: '#f59e0b'
         type: string
       name:
-        example: food
+        example: ContractLabel
         type: string
     type: object
   api.LabelResponse:
@@ -238,16 +486,79 @@ definitions:
         example: food
         type: string
     type: object
+  api.LabelTaxonomyExportRowResponse:
+    properties:
+      color:
+        example: '#f59e0b'
+        type: string
+      merchants:
+        items:
+          type: string
+        type: array
+      name:
+        example: Online
+        type: string
+    type: object
   api.LookbackDaysRequest:
     properties:
       lookback_days:
         example: "365"
         type: string
+    required:
+    - lookback_days
     type: object
   api.LookbackDaysResponse:
     properties:
       lookback_days:
         example: "365"
+        type: string
+    type: object
+  api.MerchantReasonRequest:
+    properties:
+      reason:
+        example: contract check
+        type: string
+    type: object
+  api.MonthlyBreakdownResponse:
+    properties:
+      labels:
+        items:
+          type: string
+        type: array
+      months:
+        items:
+          type: string
+        type: array
+      series:
+        items:
+          $ref: '#/definitions/api.MonthlyBreakdownSeriesResponse'
+        type: array
+    type: object
+  api.MonthlyBreakdownSeriesResponse:
+    properties:
+      data:
+        items:
+          type: number
+        type: array
+      label:
+        example: Food
+        type: string
+    type: object
+  api.MuteMerchantRequest:
+    properties:
+      pattern:
+        example: Swiggy
+        type: string
+      reason:
+        example: contract check
+        type: string
+    required:
+    - pattern
+    type: object
+  api.MuteMerchantResponse:
+    properties:
+      pattern:
+        example: Swiggy
         type: string
     type: object
   api.MuteReasonResponse:
@@ -261,7 +572,7 @@ definitions:
       muted:
         type: boolean
       reason:
-        example: Internal transfer
+        example: contract check
         type: string
     type: object
   api.MuteTransactionResponse:
@@ -272,10 +583,26 @@ definitions:
         example: Internal transfer
         type: string
     type: object
+  api.MutedMerchantResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        example: 11111111-1111-1111-1111-111111111111
+        type: string
+      muted_count:
+        type: integer
+      pattern:
+        example: Swiggy
+        type: string
+      reason:
+        example: contract check
+        type: string
+    type: object
   api.NameResponse:
     properties:
       name:
-        example: Food
+        example: ContractCategory
         type: string
     type: object
   api.ReaderCheckpointResponse:
@@ -285,11 +612,253 @@ definitions:
         type: string
         x-nullable: true
     type: object
+  api.ReaderConfigRequest:
+    additionalProperties: {}
+    type: object
+  api.ReaderConfigResponse:
+    additionalProperties: {}
+    type: object
+  api.ReaderConfigSaveResponse:
+    properties:
+      status:
+        example: saved
+        type: string
+    type: object
+  api.ReaderDisconnectResponse:
+    properties:
+      files_removed:
+        items:
+          type: string
+        type: array
+      status:
+        example: disconnected
+        type: string
+    type: object
+  api.ReaderGuideResponse:
+    properties:
+      notes:
+        items:
+          $ref: '#/definitions/api.GuideNoteResponse'
+        type: array
+      sections:
+        items:
+          $ref: '#/definitions/api.GuideSectionResponse'
+        type: array
+    type: object
+  api.ReaderInfoResponse:
+    properties:
+      auth_type:
+        example: config
+        type: string
+      config_schema:
+        items:
+          $ref: '#/definitions/api.ConfigFieldResponse'
+        type: array
+      description:
+        example: Read transaction emails from Thunderbird
+        type: string
+      name:
+        example: thunderbird
+        type: string
+      requires_credentials_upload:
+        type: boolean
+    type: object
+  api.ReaderStatusResponse:
+    properties:
+      auth_type:
+        example: config
+        type: string
+      authenticated:
+        type: boolean
+      config_present:
+        type: boolean
+      credentials_uploaded:
+        type: boolean
+      ready:
+        type: boolean
+    type: object
+  api.ReaderTokenRevokeResponse:
+    properties:
+      status:
+        example: revoked
+        type: string
+    type: object
+  api.RemovedCountResponse:
+    properties:
+      removed:
+        type: integer
+    type: object
+  api.RuleDocumentEntryResponse:
+    properties:
+      amount_regex:
+        example: INR\s+([0-9,.]+)
+        type: string
+      currency_regex:
+        example: (INR)
+        type: string
+      merchant_regex:
+        example: at\s+(.+)$
+        type: string
+      name:
+        example: Contract Import Rule
+        type: string
+      sender_emails:
+        items:
+          type: string
+        type: array
+      source:
+        $ref: '#/definitions/api.RuleSourceResponse'
+      subject_contains:
+        example: Contract transaction
+        type: string
+    required:
+    - amount_regex
+    - merchant_regex
+    - name
+    - sender_emails
+    - source
+    type: object
+  api.RuleDocumentResponse:
+    properties:
+      presets:
+        $ref: '#/definitions/api.RulePresetsResponse'
+      rules:
+        items:
+          $ref: '#/definitions/api.RuleDocumentEntryResponse'
+        type: array
+      version:
+        example: 2
+        type: integer
+    required:
+    - rules
+    - version
+    type: object
+  api.RuleImportResponse:
+    properties:
+      imported:
+        example: 1
+        type: integer
+    type: object
+  api.RuleMutationRequest:
+    properties:
+      amount_regex:
+        example: INR\s+([0-9,.]+)
+        type: string
+      currency_regex:
+        example: (INR)
+        type: string
+      merchant_regex:
+        example: at\s+(.+)$
+        type: string
+      name:
+        example: Contract Rule
+        type: string
+      sender_emails:
+        items:
+          type: string
+        type: array
+      source:
+        $ref: '#/definitions/api.RuleSourceResponse'
+      subject_contains:
+        example: Contract transaction
+        type: string
+    required:
+    - amount_regex
+    - merchant_regex
+    - name
+    - sender_emails
+    - source
+    type: object
+  api.RulePresetValueResponse:
+    properties:
+      origin:
+        example: custom
+        type: string
+      value:
+        example: Email
+        type: string
+    type: object
+  api.RulePresetsResponse:
+    properties:
+      banks:
+        items:
+          $ref: '#/definitions/api.RulePresetValueResponse'
+        type: array
+      source_types:
+        items:
+          $ref: '#/definitions/api.RulePresetValueResponse'
+        type: array
+    type: object
+  api.RuleResponse:
+    properties:
+      amount_regex:
+        example: INR\s+([0-9,.]+)
+        type: string
+      bank:
+        example: Contract Bank
+        type: string
+      created_at:
+        type: string
+      currency_regex:
+        example: (INR)
+        type: string
+      id:
+        example: 11111111-1111-1111-1111-111111111111
+        type: string
+      merchant_regex:
+        example: at\s+(.+)$
+        type: string
+      name:
+        example: Contract Rule
+        type: string
+      predefined:
+        type: boolean
+      sender_email:
+        example: contract@example.com
+        type: string
+      sender_emails:
+        items:
+          type: string
+        type: array
+      source:
+        $ref: '#/definitions/api.RuleSourceResponse'
+      source_label:
+        example: Contract
+        type: string
+      source_type:
+        example: Email
+        type: string
+      subject_contains:
+        example: Contract transaction
+        type: string
+      transaction_source:
+        example: Email - Contract Bank
+        type: string
+      updated_at:
+        type: string
+    type: object
+  api.RuleSourceResponse:
+    properties:
+      bank:
+        example: Contract Bank
+        type: string
+      label:
+        example: Contract
+        type: string
+      type:
+        example: Email
+        type: string
+    required:
+    - bank
+    - type
+    type: object
   api.ScanIntervalRequest:
     properties:
       scan_interval:
         example: "120"
         type: string
+    required:
+    - scan_interval
     type: object
   api.ScanIntervalResponse:
     properties:
@@ -353,11 +922,66 @@ definitions:
         type: string
         x-nullable: true
     type: object
+  api.TaxonomyExportRowResponse:
+    properties:
+      merchants:
+        items:
+          type: string
+        type: array
+      name:
+        example: Food & Dining
+        type: string
+    type: object
+  api.TaxonomyMappingsResponse:
+    additionalProperties:
+      items:
+        type: string
+      type: array
+    type: object
+  api.TaxonomyMerchantRequest:
+    properties:
+      merchant_pattern:
+        example: Swiggy
+        type: string
+    type: object
+  api.ThunderbirdMailboxesResponse:
+    properties:
+      mailboxes:
+        items:
+          type: string
+        type: array
+    type: object
+  api.ThunderbirdProfilesResponse:
+    properties:
+      profiles:
+        items:
+          type: string
+        type: array
+    type: object
+  api.TimeBucketResponse:
+    properties:
+      amount:
+        example: 249.5
+        type: number
+      count:
+        example: 3
+        type: integer
+      period:
+        example: 2026-05
+        type: string
+    type: object
   api.TimeFormatRequest:
     properties:
       time_format:
+        enum:
+        - HH:mm
+        - HH:mm:ss
+        - h:mm a
+        - h:mm:ss a
         example: HH:mm
         type: string
+    required:
+    - time_format
     type: object
   api.TimeFormatResponse:
     properties:
@@ -370,6 +994,8 @@ definitions:
       timezone:
         example: Asia/Kolkata
         type: string
+    required:
+    - timezone
     type: object
   api.TimezoneResponse:
     properties:
@@ -383,6 +1009,8 @@ definitions:
         items:
           type: string
         type: array
+    required:
+    - labels
     type: object
   api.TransactionResponse:
     properties:
@@ -393,7 +1021,7 @@ definitions:
         example: Needs
         type: string
       category:
-        example: Food
+        example: Food & Dining
         type: string
       created_at:
         type: string
@@ -406,7 +1034,7 @@ definitions:
       exchange_rate:
         type: number
       id:
-        example: tx_123
+        example: 00000000-0000-0000-0000-000000000001
         type: string
       labels:
         items:
@@ -430,8 +1058,7 @@ definitions:
       original_currency:
         type: string
       source:
-        example: gmail
-        type: string
+        $ref: '#/definitions/api.RuleSourceResponse'
       timestamp:
         type: string
       updated_at:
@@ -440,10 +1067,10 @@ definitions:
   api.TransactionUpdateRequest:
     properties:
       bucket:
-        example: Needs
+        example: Wants
         type: string
       category:
-        example: Food
+        example: Food & Dining
         type: string
       description:
         example: Dinner order
@@ -493,11 +1120,21 @@ definitions:
       color:
         example: '#f59e0b'
         type: string
+    required:
+    - color
     type: object
   api.UpdateMuteReasonRequest:
     properties:
       reason:
-        example: Internal transfer
+        example: contract check
+        type: string
+    required:
+    - reason
+    type: object
+  api.UploadCredentialsResponse:
+    properties:
+      path:
+        example: db://reader_runtime/gmail/client_secret
         type: string
     type: object
   api.VersionResponse:
@@ -506,12 +1143,65 @@ definitions:
         example: dev
         type: string
     type: object
+  api.WeekdayHourBucketResponse:
+    properties:
+      amount:
+        example: 249.5
+        type: number
+      count:
+        example: 3
+        type: integer
+      hour:
+        example: 14
+        type: integer
+      weekday:
+        example: 1
+        type: integer
+    type: object
+  api.WriterInfoResponse:
+    properties:
+      description:
+        example: Store transactions in PostgreSQL
+        type: string
+      name:
+        example: postgres
+        type: string
+    type: object
 info:
   contact: {}
   description: This is the generated API contract for the Expensor backend.
   title: Expensor API
   version: dev
 paths:
+  /auth/callback:
+    get:
+      parameters:
+      - description: OAuth state
+        in: query
+        name: state
+        required: true
+        type: string
+      - description: OAuth authorization code
+        in: query
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "302":
+          description: Found
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Handle reader OAuth callback
+      tags:
+      - Readers
   /config/active-reader:
     get:
       produces:
@@ -652,12 +1342,11 @@ paths:
     delete:
       parameters:
       - description: Bucket name
+        example: ContractBucket
         in: path
         name: name
         required: true
         type: string
-      produces:
-      - application/json
       responses:
         "204":
           description: No Content
@@ -674,6 +1363,126 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Delete a bucket
+      tags:
+      - Taxonomy
+  /config/buckets/{name}/apply:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Bucket name
+        example: Needs
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Merchant pattern payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.TaxonomyMerchantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppliedCountResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Apply a bucket by merchant pattern
+      tags:
+      - Taxonomy
+  /config/buckets/{name}/merchant:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: Bucket name
+        example: Needs
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Merchant pattern payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.TaxonomyMerchantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.RemovedCountResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Remove a bucket by merchant pattern
+      tags:
+      - Taxonomy
+  /config/buckets/export:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.TaxonomyExportRowResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Export buckets
+      tags:
+      - Taxonomy
+  /config/buckets/mappings:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.TaxonomyMappingsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get bucket mappings
       tags:
       - Taxonomy
   /config/categories:
@@ -734,12 +1543,11 @@ paths:
     delete:
       parameters:
       - description: Category name
+        example: ContractCategory
         in: path
         name: name
         required: true
         type: string
-      produces:
-      - application/json
       responses:
         "204":
           description: No Content
@@ -756,6 +1564,126 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Delete a category
+      tags:
+      - Taxonomy
+  /config/categories/{name}/apply:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Category name
+        example: Food & Dining
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Merchant pattern payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.TaxonomyMerchantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppliedCountResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Apply a category by merchant pattern
+      tags:
+      - Taxonomy
+  /config/categories/{name}/merchant:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: Category name
+        example: Food & Dining
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Merchant pattern payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.TaxonomyMerchantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.RemovedCountResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Remove a category by merchant pattern
+      tags:
+      - Taxonomy
+  /config/categories/export:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.TaxonomyExportRowResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Export categories
+      tags:
+      - Taxonomy
+  /config/categories/mappings:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.TaxonomyMappingsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get category mappings
       tags:
       - Taxonomy
   /config/labels:
@@ -816,12 +1744,11 @@ paths:
     delete:
       parameters:
       - description: Label name
+        example: ContractLabel
         in: path
         name: name
         required: true
         type: string
-      produces:
-      - application/json
       responses:
         "204":
           description: No Content
@@ -841,6 +1768,7 @@ paths:
       - application/json
       parameters:
       - description: Label name
+        example: ContractLabel
         in: path
         name: name
         required: true
@@ -883,6 +1811,7 @@ paths:
       - application/json
       parameters:
       - description: Label name
+        example: ContractLabel
         in: path
         name: name
         required: true
@@ -913,6 +1842,67 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Apply a label by merchant pattern
+      tags:
+      - Taxonomy
+  /config/labels/{name}/merchant:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: Label name
+        example: Online
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Merchant pattern payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.TaxonomyMerchantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.RemovedCountResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Remove a label by merchant pattern
+      tags:
+      - Taxonomy
+  /config/labels/export:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.LabelTaxonomyExportRowResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Export labels
       tags:
       - Taxonomy
   /config/labels/mappings:
@@ -991,12 +1981,14 @@ paths:
     delete:
       parameters:
       - description: Reader name
+        enum:
+        - thunderbird
+        - gmail
+        example: thunderbird
         in: path
         name: name
         required: true
         type: string
-      produces:
-      - application/json
       responses:
         "204":
           description: No Content
@@ -1014,6 +2006,10 @@ paths:
     get:
       parameters:
       - description: Reader name
+        enum:
+        - thunderbird
+        - gmail
+        example: thunderbird
         in: path
         name: name
         required: true
@@ -1311,12 +2307,20 @@ paths:
   /extraction-diagnostics:
     get:
       parameters:
-      - description: Diagnostic status filter
+      - default: open
+        description: Diagnostic status filter
+        enum:
+        - open
+        - resolved
+        - ignored
+        - all
         in: query
         name: status
         type: string
-      - description: Maximum rows to return
+      - default: 20
+        description: Maximum rows to return
         in: query
+        minimum: 1
         name: limit
         type: integer
       produces:
@@ -1347,6 +2351,8 @@ paths:
     get:
       parameters:
       - description: Diagnostic ID
+        example: 00000000-0000-0000-0000-00000000c002
+        format: uuid
         in: path
         name: id
         required: true
@@ -1383,6 +2389,8 @@ paths:
       - application/json
       parameters:
       - description: Diagnostic ID
+        example: 00000000-0000-0000-0000-00000000c002
+        format: uuid
         in: path
         name: id
         required: true
@@ -1439,6 +2447,945 @@ paths:
       summary: Health check
       tags:
       - Bootstrap
+  /merchants/categorize:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Merchant categorization payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.CategorizeMerchantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.CategorizeMerchantResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Categorize all matching merchant transactions
+      tags:
+      - Transactions
+  /muted-merchants:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.MutedMerchantResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: List muted merchant patterns
+      tags:
+      - Transactions
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Merchant mute payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.MuteMerchantRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.MuteMerchantResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Mute transactions by merchant pattern
+      tags:
+      - Transactions
+  /muted-merchants/{id}:
+    delete:
+      parameters:
+      - description: Muted merchant ID
+        example: 00000000-0000-0000-0000-00000000c003
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Unmute existing transactions matching the merchant pattern
+        in: query
+        name: unmute
+        type: boolean
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Delete a muted merchant pattern
+      tags:
+      - Transactions
+  /muted-merchants/{id}/reason:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Muted merchant ID
+        example: 00000000-0000-0000-0000-00000000c003
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Muted merchant reason payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.MerchantReasonRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.MuteReasonResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Update a muted merchant reason
+      tags:
+      - Transactions
+  /plugins/readers:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.ReaderInfoResponse'
+            type: array
+      summary: List reader plugins
+      tags:
+      - Readers
+  /plugins/writers:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.WriterInfoResponse'
+            type: array
+      summary: List writer plugins
+      tags:
+      - Readers
+  /readers/{name}:
+    delete:
+      parameters:
+      - description: Reader name
+        enum:
+        - thunderbird
+        - gmail
+        example: thunderbird
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ReaderDisconnectResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Disconnect a reader
+      tags:
+      - Readers
+  /readers/{name}/auth/exchange:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Reader name
+        example: gmail
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: OAuth callback URL payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.AuthExchangeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AuthExchangeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Exchange a pasted reader OAuth callback URL
+      tags:
+      - Readers
+  /readers/{name}/auth/start:
+    post:
+      parameters:
+      - description: Reader name
+        example: gmail
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AuthStartResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "412":
+          description: Precondition Failed
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Start reader OAuth authorization
+      tags:
+      - Readers
+  /readers/{name}/auth/status:
+    get:
+      parameters:
+      - description: Reader name
+        example: gmail
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AuthStatusResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get reader auth status
+      tags:
+      - Readers
+  /readers/{name}/auth/token:
+    delete:
+      parameters:
+      - description: Reader name
+        example: gmail
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ReaderTokenRevokeResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Revoke a reader OAuth token
+      tags:
+      - Readers
+  /readers/{name}/config:
+    get:
+      parameters:
+      - description: Reader name
+        example: thunderbird
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ReaderConfigResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get reader runtime config
+      tags:
+      - Readers
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Reader name
+        example: thunderbird
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Reader config JSON
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.ReaderConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ReaderConfigSaveResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Save reader runtime config
+      tags:
+      - Readers
+  /readers/{name}/credentials:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Reader name
+        example: gmail
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: OAuth client credentials JSON
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.UploadCredentialsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Upload reader OAuth credentials
+      tags:
+      - Readers
+  /readers/{name}/credentials/status:
+    get:
+      parameters:
+      - description: Reader name
+        example: gmail
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.CredentialsStatusResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get reader credentials status
+      tags:
+      - Readers
+  /readers/{name}/guide:
+    get:
+      parameters:
+      - description: Reader name
+        example: thunderbird
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ReaderGuideResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get reader setup guide
+      tags:
+      - Readers
+  /readers/{name}/status:
+    get:
+      parameters:
+      - description: Reader name
+        example: thunderbird
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ReaderStatusResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get reader readiness status
+      tags:
+      - Readers
+  /readers/thunderbird/discover/mailboxes:
+    get:
+      parameters:
+      - description: Thunderbird profile path
+        in: query
+        name: profile
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ThunderbirdMailboxesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Discover Thunderbird mailboxes
+      tags:
+      - Readers
+  /readers/thunderbird/discover/profiles:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ThunderbirdProfilesResponse'
+      summary: Discover Thunderbird profiles
+      tags:
+      - Readers
+  /rules:
+    get:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.RuleResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: List rules
+      tags:
+      - Rules
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Rule payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.RuleMutationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.RuleResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Create a rule
+      tags:
+      - Rules
+  /rules/{id}:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: Rule ID
+        example: 00000000-0000-0000-0000-00000000c001
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Delete a rule
+      tags:
+      - Rules
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Rule ID
+        example: 00000000-0000-0000-0000-00000000c001
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Rule payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.RuleMutationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.RuleResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Update a rule
+      tags:
+      - Rules
+  /rules/export:
+    get:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.RuleDocumentResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Export rules
+      tags:
+      - Rules
+  /rules/import:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Rules document
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.RuleDocumentResponse'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.RuleImportResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Import rules
+      tags:
+      - Rules
+  /stats/charts:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ChartDataResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get chart data
+      tags:
+      - Stats
+  /stats/dashboard:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.DashboardDataResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get dashboard data
+      tags:
+      - Stats
+  /stats/heatmap:
+    get:
+      parameters:
+      - description: RFC3339 start timestamp
+        example: "2026-05-01T00:00:00Z"
+        in: query
+        name: from
+        type: string
+      - description: RFC3339 end timestamp
+        example: "2026-05-31T23:59:59Z"
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.HeatmapDataResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get spending heatmap
+      tags:
+      - Stats
+  /stats/heatmap/annual:
+    get:
+      parameters:
+      - description: Calendar year
+        example: 2026
+        in: query
+        name: year
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AnnualHeatmapResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get annual spending heatmap
+      tags:
+      - Stats
+  /stats/labels/monthly:
+    get:
+      parameters:
+      - default: labels
+        description: Breakdown dimension
+        enum:
+        - labels
+        - categories
+        - buckets
+        in: query
+        name: dimension
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.MonthlyBreakdownResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get label monthly spend
+      tags:
+      - Stats
   /status:
     get:
       produces:
@@ -1599,6 +3546,8 @@ paths:
     get:
       parameters:
       - description: Transaction ID
+        example: 00000000-0000-0000-0000-000000000001
+        format: uuid
         in: path
         name: id
         required: true
@@ -1634,6 +3583,8 @@ paths:
       - application/json
       parameters:
       - description: Transaction ID
+        example: 00000000-0000-0000-0000-000000000001
+        format: uuid
         in: path
         name: id
         required: true
@@ -1651,6 +3602,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.TransactionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -1676,6 +3631,8 @@ paths:
       - application/json
       parameters:
       - description: Transaction ID
+        example: 00000000-0000-0000-0000-000000000001
+        format: uuid
         in: path
         name: id
         required: true
@@ -1693,6 +3650,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.StatusOnlyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
@@ -1712,11 +3673,14 @@ paths:
     delete:
       parameters:
       - description: Transaction ID
+        example: 00000000-0000-0000-0000-000000000001
+        format: uuid
         in: path
         name: id
         required: true
         type: string
       - description: Label name
+        example: Online
         in: path
         name: label
         required: true
@@ -1728,6 +3692,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.StatusOnlyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -1749,6 +3717,8 @@ paths:
       - application/json
       parameters:
       - description: Transaction ID
+        example: 00000000-0000-0000-0000-000000000001
+        format: uuid
         in: path
         name: id
         required: true
@@ -1791,6 +3761,8 @@ paths:
       - application/json
       parameters:
       - description: Transaction ID
+        example: 00000000-0000-0000-0000-000000000001
+        format: uuid
         in: path
         name: id
         required: true
