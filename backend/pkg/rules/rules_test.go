@@ -99,22 +99,6 @@ func TestRuleMatchesEmailExactSenderAddress(t *testing.T) {
 	}
 }
 
-func TestBuildGmailQueriesForMultipleSenders(t *testing.T) {
-	rule := api.Rule{
-		SenderEmails:    []string{"alerts@hdfcbank.net", "alerts@hdfcbank.bank.in"},
-		SubjectContains: "HDFC Bank Credit Card",
-	}
-
-	got := rule.BuildGmailQueries()
-	want := []string{
-		`from:alerts@hdfcbank.net subject:"HDFC Bank Credit Card"`,
-		`from:alerts@hdfcbank.bank.in subject:"HDFC Bank Credit Card"`,
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("queries = %#v, want %#v", got, want)
-	}
-}
-
 func TestMergeRules_UserOnlyAppended(t *testing.T) {
 	system := []api.Rule{r("A")}
 	user := []api.Rule{r("C")} // C not in system

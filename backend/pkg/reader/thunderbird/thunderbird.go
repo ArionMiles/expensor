@@ -171,7 +171,7 @@ func (r *Reader) handleAcknowledgments(ctx context.Context, ackChan <-chan strin
 			}
 			// Mark as processed in state
 			if r.state != nil {
-				if err := r.state.MarkProcessed(msgKey); err != nil {
+				if err := r.state.MarkProcessed(ctx, msgKey); err != nil {
 					r.logger.Warn("failed to mark message as processed", "message_key", msgKey, "error", err)
 				} else {
 					r.logger.Debug("marked message as processed", "message_key", msgKey)
@@ -265,7 +265,7 @@ func (r *Reader) processMessage(
 	dateStr := msg.Header.Get("Date")
 	msgKey := state.GenerateKey(mailboxPath, messageID, dateStr)
 
-	if r.state != nil && r.state.IsProcessed(msgKey) {
+	if r.state != nil && r.state.IsProcessed(ctx, msgKey) {
 		return false, nil
 	}
 	if r.isBeforeCheckpoint(dateStr) {

@@ -18,14 +18,17 @@ func testLogger() *slog.Logger {
 
 type fakeProcessedMessageStore struct {
 	processed map[string]time.Time
+	lastCtx   context.Context
 }
 
-func (f *fakeProcessedMessageStore) IsMessageProcessed(_ context.Context, key string) (bool, error) {
+func (f *fakeProcessedMessageStore) IsMessageProcessed(ctx context.Context, key string) (bool, error) {
+	f.lastCtx = ctx
 	_, ok := f.processed[key]
 	return ok, nil
 }
 
-func (f *fakeProcessedMessageStore) MarkMessageProcessed(_ context.Context, key string, at time.Time) error {
+func (f *fakeProcessedMessageStore) MarkMessageProcessed(ctx context.Context, key string, at time.Time) error {
+	f.lastCtx = ctx
 	f.processed[key] = at
 	return nil
 }
@@ -34,14 +37,42 @@ func TestDBManagerMarksProcessedMessages(t *testing.T) {
 	store := &fakeProcessedMessageStore{processed: map[string]time.Time{}}
 	m := NewDBManager(store, testLogger())
 
-	if m.IsProcessed("msg-1") {
+	if m.IsProcessed(context.Background(), "msg-1") {
 		t.Fatal("message should not start processed")
 	}
-	if err := m.MarkProcessed("msg-1"); err != nil {
+	if err := m.MarkProcessed(context.Background(), "msg-1"); err != nil {
 		t.Fatalf("MarkProcessed: %v", err)
 	}
-	if !m.IsProcessed("msg-1") {
+	if !m.IsProcessed(context.Background(), "msg-1") {
 		t.Fatal("message should be processed")
+	}
+}
+
+func TestDBManagerUsesCallerContext(t *testing.T) {
+	store := &fakeProcessedMessageStore{processed: map[string]time.Time{}}
+	m := NewDBManager(store, testLogger())
+	ctx := context.WithValue(context.Background(), testContextKey{}, "caller")
+
+	if m.IsProcessed(ctx, "msg-1") {
+		t.Fatal("message should not start processed")
+	}
+	assertStoreContext(store.lastCtx, t)
+
+	if err := m.MarkProcessed(ctx, "msg-1"); err != nil {
+		t.Fatalf("MarkProcessed: %v", err)
+	}
+	assertStoreContext(store.lastCtx, t)
+}
+
+type testContextKey struct{}
+
+func assertStoreContext(ctx context.Context, t *testing.T) {
+	t.Helper()
+	if ctx == nil {
+		t.Fatal("store context was nil")
+	}
+	if got := ctx.Value(testContextKey{}); got != "caller" {
+		t.Fatalf("store context marker = %v, want caller context", got)
 	}
 }
 
@@ -146,7 +177,7 @@ func TestIsProcessed(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := m.IsProcessed(tt.msgKey)
+			got := m.IsProcessed(context.Background(), tt.msgKey)
 			if got != tt.want {
 				t.Errorf("IsProcessed(%q) = %v, want %v", tt.msgKey, got, tt.want)
 			}
@@ -166,11 +197,11 @@ func TestMarkProcessed(t *testing.T) {
 	msgKey := "test-message"
 	before := time.Now()
 
-	if err := m.MarkProcessed(msgKey); err != nil {
+	if err := m.MarkProcessed(context.Background(), msgKey); err != nil {
 		t.Fatalf("MarkProcessed failed: %v", err)
 	}
 
-	if !m.IsProcessed(msgKey) {
+	if !m.IsProcessed(context.Background(), msgKey) {
 		t.Error("message should be marked as processed")
 	}
 
@@ -202,7 +233,7 @@ func TestSaveLoad(t *testing.T) {
 	m1.ProcessedMessages["msg1"] = time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
 	m1.ProcessedMessages["msg2"] = time.Date(2024, 1, 2, 11, 0, 0, 0, time.UTC)
 
-	if err := m1.MarkProcessed("msg3"); err != nil {
+	if err := m1.MarkProcessed(context.Background(), "msg3"); err != nil {
 		t.Fatalf("MarkProcessed failed: %v", err)
 	}
 
@@ -218,7 +249,7 @@ func TestSaveLoad(t *testing.T) {
 	}
 
 	for _, key := range []string{"msg1", "msg2", "msg3"} {
-		if !m2.IsProcessed(key) {
+		if !m2.IsProcessed(context.Background(), key) {
 			t.Errorf("message %q should be processed", key)
 		}
 	}
@@ -249,11 +280,11 @@ func TestPrune(t *testing.T) {
 		t.Errorf("expected 1 remaining message, got %d", m.Count())
 	}
 
-	if !m.IsProcessed("recent") {
+	if !m.IsProcessed(context.Background(), "recent") {
 		t.Error("recent message should still be processed")
 	}
 
-	if m.IsProcessed("old1") || m.IsProcessed("old2") {
+	if m.IsProcessed(context.Background(), "old1") || m.IsProcessed(context.Background(), "old2") {
 		t.Error("old messages should be pruned")
 	}
 }
@@ -301,7 +332,7 @@ func TestConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < opsPerGoroutine; j++ {
 				msgKey := fmt.Sprintf("msg-%d-%d", id, j)
-				_ = m.MarkProcessed(msgKey)
+				_ = m.MarkProcessed(context.Background(), msgKey)
 			}
 		}(i)
 	}
@@ -325,7 +356,7 @@ func TestConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < opsPerGoroutine; j++ {
 				msgKey := fmt.Sprintf("msg-%d-%d", id, j)
-				m.IsProcessed(msgKey)
+				m.IsProcessed(context.Background(), msgKey)
 			}
 		}(i)
 
@@ -334,7 +365,7 @@ func TestConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < opsPerGoroutine; j++ {
 				msgKey := fmt.Sprintf("new-msg-%d-%d", id, j)
-				_ = m.MarkProcessed(msgKey)
+				_ = m.MarkProcessed(context.Background(), msgKey)
 			}
 		}(i)
 	}
@@ -358,7 +389,7 @@ func TestAtomicWrite(t *testing.T) {
 	}
 
 	// Mark processed (which triggers save)
-	if err := m.MarkProcessed("msg1"); err != nil {
+	if err := m.MarkProcessed(context.Background(), "msg1"); err != nil {
 		t.Fatalf("MarkProcessed failed: %v", err)
 	}
 

@@ -84,9 +84,9 @@ func GenerateKey(source, messageID, date string) string {
 }
 
 // IsProcessed checks if a message has been processed.
-func (m *Manager) IsProcessed(msgKey string) bool {
+func (m *Manager) IsProcessed(ctx context.Context, msgKey string) bool {
 	if m.store != nil {
-		processed, err := m.store.IsMessageProcessed(context.Background(), msgKey)
+		processed, err := m.store.IsMessageProcessed(ctx, msgKey)
 		if err != nil {
 			m.logger.Warn("failed to check processed message state", "key", msgKey, "error", err)
 			return false
@@ -102,10 +102,10 @@ func (m *Manager) IsProcessed(msgKey string) bool {
 }
 
 // MarkProcessed marks a message as processed and persists to disk.
-func (m *Manager) MarkProcessed(msgKey string) error {
+func (m *Manager) MarkProcessed(ctx context.Context, msgKey string) error {
 	now := time.Now()
 	if m.store != nil {
-		if err := m.store.MarkMessageProcessed(context.Background(), msgKey, now); err != nil {
+		if err := m.store.MarkMessageProcessed(ctx, msgKey, now); err != nil {
 			return fmt.Errorf("marking message processed in DB: %w", err)
 		}
 		return nil
