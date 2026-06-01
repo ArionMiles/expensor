@@ -11,7 +11,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
-	"github.com/ArionMiles/expensor/backend/pkg/state"
 )
 
 func TestPlugin_Metadata(t *testing.T) {
@@ -53,13 +52,6 @@ func TestPlugin_NewReader(t *testing.T) {
 		t.Fatalf("failed to create inbox: %v", err)
 	}
 
-	// Create state file in tmpDir
-	stateFile := filepath.Join(tmpDir, "state.json")
-	stateManager, err := state.New(stateFile, slog.Default())
-	if err != nil {
-		t.Fatalf("failed to create state manager: %v", err)
-	}
-
 	// Create config
 	cfg := &config.Config{
 		ScanInterval: 10,
@@ -86,10 +78,9 @@ func TestPlugin_NewReader(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	reader, err := plugin.NewReader(plugins.ReaderInput{
-		AppConfig:    cfg,
-		Rules:        rules,
-		StateManager: stateManager,
-		Logger:       logger,
+		AppConfig: cfg,
+		Rules:     rules,
+		Logger:    logger,
 	})
 	if err != nil {
 		t.Fatalf("NewReader() failed: %v", err)
@@ -105,12 +96,6 @@ func TestPlugin_NewReader_MissingMailbox(t *testing.T) {
 
 	// Don't create the mailbox - it should fail
 
-	stateFile := filepath.Join(tmpDir, "state.json")
-	stateManager, err := state.New(stateFile, slog.Default())
-	if err != nil {
-		t.Fatalf("failed to create state manager: %v", err)
-	}
-
 	cfg := &config.Config{
 		ScanInterval: 10,
 		Thunderbird: config.ThunderbirdConfig{
@@ -122,11 +107,10 @@ func TestPlugin_NewReader_MissingMailbox(t *testing.T) {
 	plugin := &Plugin{}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	_, err = plugin.NewReader(plugins.ReaderInput{
-		AppConfig:    cfg,
-		Rules:        []api.Rule{},
-		StateManager: stateManager,
-		Logger:       logger,
+	_, err := plugin.NewReader(plugins.ReaderInput{
+		AppConfig: cfg,
+		Rules:     []api.Rule{},
+		Logger:    logger,
 	})
 	if err == nil {
 		t.Error("expected error for missing mailbox, got nil")
@@ -147,12 +131,6 @@ func TestPlugin_NewReader_DefaultInterval(t *testing.T) {
 		t.Fatalf("failed to create inbox: %v", err)
 	}
 
-	stateFile := filepath.Join(tmpDir, "state.json")
-	stateManager, err := state.New(stateFile, slog.Default())
-	if err != nil {
-		t.Fatalf("failed to create state manager: %v", err)
-	}
-
 	// ScanInterval of 0 will be treated as zero duration; plugin uses it directly.
 	cfg := &config.Config{
 		ScanInterval: 0,
@@ -166,10 +144,9 @@ func TestPlugin_NewReader_DefaultInterval(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	reader, err := plugin.NewReader(plugins.ReaderInput{
-		AppConfig:    cfg,
-		Rules:        []api.Rule{},
-		StateManager: stateManager,
-		Logger:       logger,
+		AppConfig: cfg,
+		Rules:     []api.Rule{},
+		Logger:    logger,
 	})
 	if err != nil {
 		t.Fatalf("NewReader() failed: %v", err)
@@ -192,17 +169,10 @@ func TestPlugin_NewReader_UsesPersistedReaderConfig(t *testing.T) {
 		}
 	}
 
-	stateFile := filepath.Join(tmpDir, "state.json")
-	stateManager, err := state.New(stateFile, slog.Default())
-	if err != nil {
-		t.Fatalf("failed to create state manager: %v", err)
-	}
-
 	plugin := &Plugin{}
 	reader, err := plugin.NewReader(plugins.ReaderInput{
 		AppConfig:    &config.Config{},
 		ReaderConfig: []byte(`{"config":{"profilePath":"` + tmpDir + `","mailboxes":"Inbox,Sent"}}`),
-		StateManager: stateManager,
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
 	if err != nil {

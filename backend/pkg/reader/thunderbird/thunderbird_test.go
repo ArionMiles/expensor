@@ -52,6 +52,29 @@ func (s *recordingDiagnosticSink) waitForDiagnostic(t *testing.T) api.Extraction
 	return s.diagnostics[0]
 }
 
+type fakeProcessedMessageStore struct {
+	mu        sync.Mutex
+	processed map[string]time.Time
+}
+
+func newTestStateManager() *state.Manager {
+	return state.NewDBManager(&fakeProcessedMessageStore{processed: map[string]time.Time{}}, slog.Default())
+}
+
+func (f *fakeProcessedMessageStore) IsMessageProcessed(_ context.Context, key string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_, ok := f.processed[key]
+	return ok, nil
+}
+
+func (f *fakeProcessedMessageStore) MarkMessageProcessed(_ context.Context, key string, at time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.processed[key] = at
+	return nil
+}
+
 type blockingDiagnosticSink struct {
 	started chan struct{}
 	release chan struct{}
@@ -116,13 +139,7 @@ func TestNew(t *testing.T) {
 				t.Helper()
 				cfg.ProfilePath = tmpDir
 
-				// Create state manager
-				stateFile := filepath.Join(tmpDir, "state.json")
-				stateManager, err := state.New(stateFile, slog.Default())
-				if err != nil {
-					t.Fatalf("failed to create state manager: %v", err)
-				}
-				cfg.State = stateManager
+				cfg.State = newTestStateManager()
 
 				// Create mock mailbox
 				mailDir := filepath.Join(tmpDir, "Mail", "Local Folders")
@@ -150,12 +167,7 @@ func TestNew(t *testing.T) {
 				t.Helper()
 				cfg.ProfilePath = tmpDir
 
-				stateFile := filepath.Join(tmpDir, "state.json")
-				stateManager, err := state.New(stateFile, slog.Default())
-				if err != nil {
-					t.Fatalf("failed to create state manager: %v", err)
-				}
-				cfg.State = stateManager
+				cfg.State = newTestStateManager()
 			},
 		},
 		{
@@ -173,12 +185,7 @@ func TestNew(t *testing.T) {
 				t.Helper()
 				cfg.ProfilePath = tmpDir
 
-				stateFile := filepath.Join(tmpDir, "state.json")
-				stateManager, err := state.New(stateFile, slog.Default())
-				if err != nil {
-					t.Fatalf("failed to create state manager: %v", err)
-				}
-				cfg.State = stateManager
+				cfg.State = newTestStateManager()
 
 				mailDir := filepath.Join(tmpDir, "Mail", "Local Folders")
 				if err := os.MkdirAll(mailDir, 0o755); err != nil {
@@ -362,12 +369,7 @@ func TestScanMailbox(t *testing.T) {
 
 	createTestMbox(t, mboxPath, messages)
 
-	// Create state manager
-	stateFile := filepath.Join(tmpDir, "state.json")
-	stateManager, err := state.New(stateFile, slog.Default())
-	if err != nil {
-		t.Fatalf("failed to create state manager: %v", err)
-	}
+	stateManager := newTestStateManager()
 
 	// Create reader with rules
 	amountRegex := regexp.MustCompile(`Rs\.\s*([\d,]+\.?\d*)`)
@@ -402,7 +404,7 @@ func TestScanMailbox(t *testing.T) {
 		close(done)
 	}()
 
-	err = reader.scanMailbox(ctx, "test", mboxPath, out)
+	err := reader.scanMailbox(ctx, "test", mboxPath, out)
 	close(out)
 	<-done
 
@@ -738,12 +740,7 @@ func TestReadWithContext(t *testing.T) {
 	}
 	createTestMbox(t, mboxPath, messages)
 
-	// Create state manager
-	stateFile := filepath.Join(tmpDir, "state.json")
-	stateManager, err := state.New(stateFile, slog.Default())
-	if err != nil {
-		t.Fatalf("failed to create state manager: %v", err)
-	}
+	stateManager := newTestStateManager()
 
 	amountRegex := regexp.MustCompile(`Rs\.\s*([\d,]+\.?\d*)`)
 	merchantRegex := regexp.MustCompile(`at\s+(\w+)`)
@@ -777,7 +774,7 @@ func TestReadWithContext(t *testing.T) {
 	}()
 
 	// Wait for context to cancel
-	err = <-errChan
+	err := <-errChan
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("expected context.DeadlineExceeded, got %v", err)
 	}

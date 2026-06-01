@@ -52,7 +52,6 @@ type Handlers struct {
 	version            string // set at build time via ldflags
 	baseURL            string // e.g. "http://localhost:8080"
 	frontendURL        string // e.g. "http://localhost:5173" — used for OAuth redirects
-	dataDir            string
 	thunderbirdDataDir string
 	scanInterval       int                 // default scan interval in seconds
 	lookbackDays       int                 // default lookback in days
@@ -76,7 +75,6 @@ type HandlersConfig struct {
 	Version            string
 	BaseURL            string
 	FrontendURL        string
-	DataDir            string
 	ThunderbirdDataDir string
 	ScanInterval       int
 	LookbackDays       int
@@ -95,9 +93,6 @@ func NewHandlers(cfg HandlersConfig) *Handlers {
 	if cfg.FrontendURL == "" {
 		cfg.FrontendURL = cfg.BaseURL
 	}
-	if cfg.DataDir == "" {
-		cfg.DataDir = "data"
-	}
 	if cfg.ScanInterval <= 0 {
 		cfg.ScanInterval = 60
 	}
@@ -111,7 +106,6 @@ func NewHandlers(cfg HandlersConfig) *Handlers {
 		version:            cfg.Version,
 		baseURL:            strings.TrimRight(cfg.BaseURL, "/"),
 		frontendURL:        strings.TrimRight(cfg.FrontendURL, "/"),
-		dataDir:            cfg.DataDir,
 		thunderbirdDataDir: cfg.ThunderbirdDataDir,
 		scanInterval:       cfg.ScanInterval,
 		lookbackDays:       cfg.LookbackDays,
