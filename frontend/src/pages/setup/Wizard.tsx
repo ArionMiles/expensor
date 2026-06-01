@@ -1,6 +1,7 @@
 import { api } from '@/api/client'
 import {
   queryKeys,
+  useActiveReader,
   useDisconnectReader,
   useReaderAuthStatus,
   useReaderGuide,
@@ -8,7 +9,6 @@ import {
   useReaders,
   useRevokeToken,
   useSetupStatus,
-  useStatus,
 } from '@/api/queries'
 import type { PluginInfo, ReaderGuide } from '@/api/types'
 import { ConfirmModal } from '@/components/ConfirmModal'
@@ -18,25 +18,12 @@ import { cn, getReaderDisplayName } from '@/lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { Trash2, Unplug } from 'lucide-react'
 import { ConfigureStep } from './steps/ConfigureStep'
 import { OAuthStep } from './steps/OAuthStep'
 import { PreferencesStep } from './steps/PreferencesStep'
-import { ReviewAndStart } from './steps/ReviewAndStart'
-import { SelectReader } from './steps/SelectReader'
 import { UploadCredentials } from './steps/UploadCredentials'
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function formatExpiry(expiry: string): string {
-  const date = new Date(expiry)
-  const now = new Date()
-  const diffDays = Math.ceil((date.getTime() - now.getTime()) / 86_400_000)
-  if (diffDays <= 0) return 'token expired'
-  if (diffDays === 1) return 'expires tomorrow'
-  if (diffDays < 30) return `expires in ${diffDays}d`
-  if (diffDays < 365) return `expires in ${Math.floor(diffDays / 30)}mo`
-  return `expires ${date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
-}
+import { useTooltip } from '@/hooks/useTooltip'
 
 // ─── Reader guide panel ───────────────────────────────────────────────────────
 
@@ -70,7 +57,10 @@ function ReaderGuidePanel({ guide }: { guide: ReaderGuide }) {
   const [open, setOpen] = useState(true)
 
   return (
-    <div className="w-full min-w-0 self-start overflow-hidden rounded-lg border border-border bg-card shadow-sm lg:max-w-xs lg:flex-1">
+    <div
+      data-testid="setup-guide-panel"
+      className="w-full min-w-0 self-start overflow-hidden rounded-lg border border-border bg-card shadow-sm lg:w-[28rem] lg:max-w-md lg:flex-none xl:w-[32rem] xl:max-w-lg 2xl:w-[36rem] 2xl:max-w-xl"
+    >
       <button
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center justify-between px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
@@ -134,48 +124,63 @@ function ReaderGuidePanel({ guide }: { guide: ReaderGuide }) {
 
 // ─── Wizard step flow ────────────────────────────────────────────────────────
 
-type WizardStep = 'select' | 'credentials' | 'oauth' | 'configure' | 'review'
+type WizardStep = 'credentials' | 'oauth' | 'configure'
 
-function getSteps(reader: PluginInfo | null): WizardStep[] {
-  if (!reader) return ['select', 'review']
-  const steps: WizardStep[] = ['select']
+function getSteps(reader: PluginInfo): WizardStep[] {
+  const steps: WizardStep[] = []
   if (reader.requires_credentials_upload) steps.push('credentials')
   if (reader.auth_type === 'oauth') steps.push('oauth')
   if (reader.config_schema.length > 0 || reader.auth_type === 'config') steps.push('configure')
-  steps.push('review')
   return steps
 }
 
 const STEP_LABELS: Record<WizardStep, string> = {
-  select: 'Select reader',
   credentials: 'Credentials',
   oauth: 'Authorize',
   configure: 'Configure',
-  review: 'Review',
 }
 
-function WizardFlow({ initialReader }: { initialReader?: PluginInfo }) {
-  const [selectedReader, setSelectedReader] = useState<PluginInfo | null>(initialReader ?? null)
+const duplicateImportWarning =
+  'If this reader contains emails already imported by another reader, Expensor may double-count transactions. Continue only if this is the reader you want the daemon to import from.'
+
+function WizardFlow({
+  initialReader,
+  onCancel,
+  onComplete,
+  completionError,
+  isCompleting,
+}: {
+  initialReader: PluginInfo
+  onCancel: () => void
+  onComplete: (readerName: string) => void | Promise<void>
+  completionError: string | null
+  isCompleting: boolean
+}) {
   const [currentStep, setCurrentStep] = useState<WizardStep>(() => {
-    if (initialReader) {
-      const s = getSteps(initialReader)
-      return s[1] ?? 'select'
-    }
-    return 'select'
+    const s = getSteps(initialReader)
+    return s[0] ?? 'configure'
   })
 
-  const steps = getSteps(selectedReader)
+  const steps = getSteps(initialReader)
   const currentIndex = steps.indexOf(currentStep)
-  const { data: guide } = useReaderGuide(selectedReader?.name ?? '')
-  const showGuide = Boolean(guide && currentStep !== 'select')
+  const { data: guide } = useReaderGuide(initialReader.name)
+  const showGuide = Boolean(guide)
 
   const goNext = () => {
     const next = steps[currentIndex + 1]
-    if (next) setCurrentStep(next)
+    if (next) {
+      setCurrentStep(next)
+      return
+    }
+    void onComplete(initialReader.name)
   }
   const goBack = () => {
     const prev = steps[currentIndex - 1]
-    if (prev) setCurrentStep(prev)
+    if (prev) {
+      setCurrentStep(prev)
+      return
+    }
+    onCancel()
   }
 
   return (
@@ -183,68 +188,72 @@ function WizardFlow({ initialReader }: { initialReader?: PluginInfo }) {
       data-testid={showGuide ? 'reader-setup-guide' : undefined}
       className={cn(
         'mx-auto flex w-full flex-col items-stretch gap-6 lg:flex-row lg:items-start',
-        showGuide ? 'max-w-5xl' : 'max-w-2xl',
+        showGuide ? 'max-w-7xl' : 'max-w-2xl',
       )}
     >
       <div data-testid="setup-form-shell" className="w-full min-w-0 max-w-2xl">
         {/* Step progress */}
-        <div className="mb-8 flex items-center">
-          {steps.map((step, idx) => (
-            <div key={step} className="flex flex-1 items-center last:flex-none">
-              <div className="flex flex-col items-center gap-1">
-                <div
-                  className={cn(
-                    'flex h-6 w-6 items-center justify-center rounded-full border text-xs transition-colors',
-                    idx < currentIndex
-                      ? 'border-success bg-success/10 text-success'
-                      : idx === currentIndex
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border text-muted-foreground',
-                  )}
-                >
-                  {idx < currentIndex ? '✓' : idx + 1}
+        {steps.length > 1 && (
+          <div className="mb-8 flex items-center">
+            {steps.map((step, idx) => (
+              <div key={step} className="flex flex-1 items-center last:flex-none">
+                <div className="flex flex-col items-center gap-1">
+                  <div
+                    className={cn(
+                      'flex h-6 w-6 items-center justify-center rounded-full border text-xs transition-colors',
+                      idx < currentIndex
+                        ? 'border-success bg-success/10 text-success'
+                        : idx === currentIndex
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border text-muted-foreground',
+                    )}
+                  >
+                    {idx < currentIndex ? '✓' : idx + 1}
+                  </div>
+                  <span
+                    className={cn(
+                      'whitespace-nowrap text-[10px]',
+                      idx === currentIndex ? 'text-primary' : 'text-muted-foreground',
+                    )}
+                  >
+                    {STEP_LABELS[step]}
+                  </span>
                 </div>
-                <span
-                  className={cn(
-                    'whitespace-nowrap text-[10px]',
-                    idx === currentIndex ? 'text-primary' : 'text-muted-foreground',
-                  )}
-                >
-                  {STEP_LABELS[step]}
-                </span>
+                {idx < steps.length - 1 && (
+                  <div
+                    className={cn(
+                      'mx-2 mb-4 h-px flex-1 transition-colors',
+                      idx < currentIndex ? 'bg-success' : 'bg-border',
+                    )}
+                  />
+                )}
               </div>
-              {idx < steps.length - 1 && (
-                <div
-                  className={cn(
-                    'mx-2 mb-4 h-px flex-1 transition-colors',
-                    idx < currentIndex ? 'bg-success' : 'bg-border',
-                  )}
-                />
-              )}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
-          {currentStep === 'select' && (
-            <SelectReader selected={selectedReader} onSelect={setSelectedReader} onNext={goNext} />
+          {currentStep === 'credentials' && (
+            <UploadCredentials readerName={initialReader.name} onNext={goNext} onBack={goBack} />
           )}
-          {currentStep === 'credentials' && selectedReader && (
-            <UploadCredentials readerName={selectedReader.name} onNext={goNext} onBack={goBack} />
+          {currentStep === 'oauth' && (
+            <OAuthStep readerName={initialReader.name} onNext={goNext} onBack={goBack} />
           )}
-          {currentStep === 'oauth' && selectedReader && (
-            <OAuthStep readerName={selectedReader.name} onNext={goNext} onBack={goBack} />
-          )}
-          {currentStep === 'configure' && selectedReader && (
+          {currentStep === 'configure' && (
             <ConfigureStep
-              readerName={selectedReader.name}
-              configSchema={selectedReader.config_schema}
+              readerName={initialReader.name}
+              configSchema={initialReader.config_schema}
               onNext={goNext}
               onBack={goBack}
             />
           )}
-          {currentStep === 'review' && selectedReader && (
-            <ReviewAndStart reader={selectedReader} onBack={goBack} />
+          {isCompleting && (
+            <p className="mt-4 text-xs text-muted-foreground">Starting tracking...</p>
+          )}
+          {completionError && (
+            <p className="mt-4 text-xs text-destructive" role="alert">
+              {completionError}
+            </p>
           )}
         </div>
       </div>
@@ -257,37 +266,28 @@ function WizardFlow({ initialReader }: { initialReader?: PluginInfo }) {
 
 function InlineOAuthPanel({
   readerName,
+  authStarted,
+  redirectUri,
+  error,
+  polling,
+  onPollAgain,
   onSuccess,
 }: {
   readerName: string
+  authStarted: boolean
+  redirectUri: string
+  error: string | null
+  polling: boolean
+  onPollAgain: () => void
   onSuccess: () => void
 }) {
-  const [polling, setPolling] = useState(false)
-  const [authStarted, setAuthStarted] = useState(false)
-  const [redirectUri, setRedirectUri] = useState('')
-  const [error, setError] = useState<string | null>(null)
-
   const { data: authStatus } = useReaderAuthStatus(readerName, polling ? 2000 : undefined)
 
   useEffect(() => {
     if (authStatus?.authenticated) {
-      setPolling(false)
       onSuccess()
     }
   }, [authStatus?.authenticated, onSuccess])
-
-  const handleStart = async () => {
-    setError(null)
-    try {
-      const { data } = await api.readers.auth.start(readerName)
-      window.open(data.url, '_blank', 'noopener,noreferrer')
-      setRedirectUri(data.redirect_uri)
-      setAuthStarted(true)
-      setPolling(true)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start authorization')
-    }
-  }
 
   return (
     <div className="mt-4 space-y-3 border-t border-border pt-4">
@@ -301,12 +301,6 @@ function InlineOAuthPanel({
         </p>
       )}
       <div className="flex flex-wrap items-center gap-4">
-        <button
-          onClick={handleStart}
-          className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
-        >
-          {authStarted ? 'Reopen authorization tab →' : 'Open authorization tab →'}
-        </button>
         {polling ? (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" />
@@ -314,7 +308,7 @@ function InlineOAuthPanel({
           </span>
         ) : authStarted ? (
           <button
-            onClick={() => setPolling(true)}
+            onClick={onPollAgain}
             className="text-xs text-muted-foreground underline transition-colors hover:text-foreground"
           >
             Already authorized — check again
@@ -332,38 +326,50 @@ function InlineOAuthPanel({
   )
 }
 
-type ReaderState = 'unconfigured' | 'needs-auth' | 'connected'
+type ReaderState = 'unconfigured' | 'needs-auth' | 'refresh-pending' | 'connected'
 
 function ReaderCard({
   reader,
   onConfigure,
   justAuthorized,
+  isActive,
 }: {
   reader: PluginInfo
   onConfigure: (reader: PluginInfo) => void
   justAuthorized: boolean
+  isActive: boolean
 }) {
   const qc = useQueryClient()
   const { data: status, isLoading } = useReaderStatus(reader.name)
   const revokeToken = useRevokeToken()
   const removeAll = useDisconnectReader()
   const [showAuthPanel, setShowAuthPanel] = useState(false)
-  const [confirmAction, setConfirmAction] = useState<'disconnect' | 'removeAll' | null>(null)
+  const [authStarted, setAuthStarted] = useState(false)
+  const [authRedirectUri, setAuthRedirectUri] = useState('')
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [authPolling, setAuthPolling] = useState(false)
+  const [isStartingAuth, setIsStartingAuth] = useState(false)
+  const [confirmAction, setConfirmAction] = useState<
+    'disconnect' | 'removeAll' | 'makeActive' | null
+  >(null)
+  const { handlers: actionTipHandlers, tip: actionTip } = useTooltip()
+  const { handlers: activeTipHandlers, tip: activeTip } = useTooltip()
 
   const isOAuth = reader.auth_type === 'oauth'
   const ready = status?.ready ?? false
   const authenticated = status?.authenticated ?? false
+  const authState = status?.auth_state ?? 'reauthorization_required'
   const hasCredentials = isOAuth
     ? (status?.credentials_uploaded ?? false)
     : (status?.config_present ?? false)
 
   const readerState: ReaderState = ready
     ? 'connected'
-    : hasCredentials && isOAuth && !authenticated
-      ? 'needs-auth'
-      : 'unconfigured'
-
-  const { data: authDetails } = useReaderAuthStatus(reader.name, undefined, ready && isOAuth)
+    : hasCredentials && isOAuth && authState === 'refresh_pending'
+      ? 'refresh-pending'
+      : hasCredentials && isOAuth && !authenticated
+        ? 'needs-auth'
+        : 'unconfigured'
 
   const handleDisconnect = useCallback(() => {
     setConfirmAction('disconnect')
@@ -373,6 +379,10 @@ function ReaderCard({
     setConfirmAction('removeAll')
   }, [])
 
+  const handleMakeActive = useCallback(() => {
+    setConfirmAction('makeActive')
+  }, [])
+
   const executeConfirm = useCallback(async () => {
     if (confirmAction === 'disconnect') {
       await revokeToken.mutateAsync(reader.name)
@@ -380,36 +390,64 @@ function ReaderCard({
     } else if (confirmAction === 'removeAll') {
       await removeAll.mutateAsync(reader.name)
       setShowAuthPanel(false)
+    } else if (confirmAction === 'makeActive') {
+      setStartError(null)
+      try {
+        await api.daemon.start(reader.name)
+        qc.invalidateQueries({ queryKey: queryKeys.status })
+        qc.invalidateQueries({ queryKey: queryKeys.activeReader })
+      } catch (err) {
+        setStartError(err instanceof Error ? err.message : 'Failed to switch active reader')
+        return
+      }
     }
     setConfirmAction(null)
-  }, [confirmAction, reader.name, revokeToken, removeAll])
+  }, [confirmAction, reader.name, revokeToken, removeAll, qc])
 
-  const handleAuthSuccess = useCallback(() => {
-    setShowAuthPanel(false)
-    qc.invalidateQueries({ queryKey: queryKeys.readerStatus(reader.name) })
-    qc.invalidateQueries({ queryKey: queryKeys.readerAuthStatus(reader.name) })
-  }, [qc, reader.name])
-
-  const isBusy = revokeToken.isPending || removeAll.isPending
-
-  const { data: statusData } = useStatus()
-  const daemonRunning = statusData?.daemon?.running ?? false
-  const [isStarting, setIsStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
 
-  const handleStartDaemon = useCallback(async () => {
-    setIsStarting(true)
+  const handleAuthSuccess = useCallback(async () => {
+    setShowAuthPanel(false)
+    setAuthPolling(false)
     setStartError(null)
     try {
       await api.daemon.start(reader.name)
       qc.invalidateQueries({ queryKey: queryKeys.status })
+      qc.invalidateQueries({ queryKey: queryKeys.activeReader })
+      qc.invalidateQueries({ queryKey: queryKeys.readerStatus(reader.name) })
+      qc.invalidateQueries({ queryKey: queryKeys.readerAuthStatus(reader.name) })
     } catch (err) {
-      setStartError(err instanceof Error ? err.message : 'Failed to start daemon')
-    } finally {
-      setIsStarting(false)
+      setStartError(err instanceof Error ? err.message : 'Failed to start tracking')
     }
-  }, [reader.name, qc])
+  }, [qc, reader.name])
 
+  const handleStartOAuth = useCallback(async () => {
+    setIsStartingAuth(true)
+    setAuthError(null)
+    try {
+      const { data } = await api.readers.auth.start(reader.name)
+      window.open(data.url, '_blank', 'noopener,noreferrer')
+      setAuthRedirectUri(data.redirect_uri)
+      setAuthStarted(true)
+      setAuthPolling(true)
+      setShowAuthPanel(true)
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : 'Failed to start authorization')
+      setShowAuthPanel(true)
+    } finally {
+      setIsStartingAuth(false)
+    }
+  }, [reader.name])
+
+  const isBusy = revokeToken.isPending || removeAll.isPending
+  const showDisconnectAction = readerState === 'connected' && isOAuth
+  const showRemoveAllAction = readerState !== 'unconfigured'
+  const showMakeActiveAction = readerState === 'connected' && !isActive
+  const confirmDisconnectMessage =
+    'This removes the stored OAuth token pair, including the access token and refresh token. Your credentials file is kept, so you can re-authorize without re-uploading.'
+  const confirmRemoveAllMessage = isOAuth
+    ? 'This permanently deletes the OAuth client credentials file, stored token pair, and saved config. You will need to go through the full setup again.'
+    : 'This permanently deletes the mailbox configuration and saved config. You will need to go through the full setup again.'
   const stateBadge = {
     connected: (
       <span className="rounded-sm border border-success/50 bg-success/10 px-1.5 py-0.5 text-[10px] text-success">
@@ -419,6 +457,11 @@ function ReaderCard({
     'needs-auth': (
       <span className="rounded-sm border border-warning/50 bg-warning/10 px-1.5 py-0.5 text-[10px] text-warning">
         ○ Auth required
+      </span>
+    ),
+    'refresh-pending': (
+      <span className="rounded-sm border border-warning/50 bg-warning/10 px-1.5 py-0.5 text-[10px] text-warning">
+        ○ Refresh pending
       </span>
     ),
     unconfigured: (
@@ -431,9 +474,10 @@ function ReaderCard({
   return (
     <>
       <div
+        data-reader-card={reader.name}
         className={cn(
           'overflow-hidden rounded-lg border bg-card shadow-sm transition-colors',
-          justAuthorized ? 'border-success/50' : 'border-border',
+          justAuthorized || isActive ? 'border-success/50' : 'border-border',
         )}
       >
         {/* Colored left stripe */}
@@ -443,7 +487,7 @@ function ReaderCard({
               'w-0.5 flex-shrink-0',
               readerState === 'connected'
                 ? 'bg-success'
-                : readerState === 'needs-auth'
+                : readerState === 'needs-auth' || readerState === 'refresh-pending'
                   ? 'bg-warning'
                   : 'bg-border',
             )}
@@ -460,6 +504,16 @@ function ReaderCard({
                       {getReaderDisplayName(reader.name)}
                     </span>
                     {!isLoading && stateBadge}
+                    {isActive && (
+                      <span
+                        {...activeTipHandlers(
+                          'The background daemon imports new transactions from this reader.',
+                        )}
+                        className="cursor-help rounded-sm border border-primary/50 bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary"
+                      >
+                        Active
+                      </span>
+                    )}
                     {justAuthorized && (
                       <span className="text-[10px] text-success">✓ just authorized</span>
                     )}
@@ -467,11 +521,6 @@ function ReaderCard({
                   <p className="text-xs text-muted-foreground">{reader.description}</p>
                 </div>
               </div>
-              {readerState === 'connected' && isOAuth && authDetails?.expiry && (
-                <span className="mt-0.5 flex-shrink-0 text-[10px] text-muted-foreground">
-                  {formatExpiry(authDetails.expiry)}
-                </span>
-              )}
             </div>
 
             {/* Context message */}
@@ -479,6 +528,13 @@ function ReaderCard({
               <div className="px-5 pb-3">
                 <p className="text-xs text-warning/90">
                   Credentials uploaded. Complete OAuth authorization to grant read access to Gmail.
+                </p>
+              </div>
+            )}
+            {!isLoading && readerState === 'refresh-pending' && (
+              <div className="px-5 pb-3">
+                <p className="text-xs text-warning/90">
+                  Expensor will refresh Gmail authorization automatically once Google is reachable.
                 </p>
               </div>
             )}
@@ -495,7 +551,15 @@ function ReaderCard({
             {/* Inline OAuth panel */}
             {showAuthPanel && (
               <div className="px-5 pb-4">
-                <InlineOAuthPanel readerName={reader.name} onSuccess={handleAuthSuccess} />
+                <InlineOAuthPanel
+                  readerName={reader.name}
+                  authStarted={authStarted}
+                  redirectUri={authRedirectUri}
+                  error={authError}
+                  polling={authPolling}
+                  onPollAgain={() => setAuthPolling(true)}
+                  onSuccess={handleAuthSuccess}
+                />
               </div>
             )}
 
@@ -513,20 +577,10 @@ function ReaderCard({
                       </button>
                     )}
 
-                    {readerState === 'connected' && !daemonRunning && (
+                    {readerState === 'needs-auth' && isOAuth && (
                       <button
-                        onClick={handleStartDaemon}
-                        disabled={isStarting || isBusy}
-                        className="rounded-md bg-success px-3 py-1.5 text-xs text-success-foreground transition-colors hover:bg-success/90 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        {isStarting ? 'Starting...' : 'Start tracking →'}
-                      </button>
-                    )}
-
-                    {(readerState === 'needs-auth' || readerState === 'connected') && isOAuth && (
-                      <button
-                        onClick={() => setShowAuthPanel(!showAuthPanel)}
-                        disabled={isBusy}
+                        onClick={handleStartOAuth}
+                        disabled={isBusy || isStartingAuth}
                         className={cn(
                           'rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-40',
                           showAuthPanel
@@ -534,30 +588,49 @@ function ReaderCard({
                             : 'border-primary text-primary hover:bg-primary hover:text-primary-foreground',
                         )}
                       >
-                        {readerState === 'connected' ? 'Re-authorize' : 'Authorize →'}
+                        {isStartingAuth
+                          ? 'Opening...'
+                          : authStarted
+                            ? 'Reopen authorization tab →'
+                            : 'Authorize →'}
                       </button>
                     )}
 
-                    {readerState === 'connected' && isOAuth && (
+                    {showMakeActiveAction && (
                       <button
-                        onClick={handleDisconnect}
+                        onClick={handleMakeActive}
                         disabled={isBusy}
-                        className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:opacity-40"
+                        className="rounded-md border border-primary px-3 py-1.5 text-xs text-primary transition-colors hover:bg-primary hover:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
                       >
-                        {revokeToken.isPending ? '...' : 'Disconnect'}
+                        Make active
                       </button>
                     )}
                   </div>
 
-                  {readerState !== 'unconfigured' && (
-                    <button
-                      onClick={handleRemoveAll}
-                      disabled={isBusy}
-                      className="text-[10px] text-muted-foreground transition-colors hover:text-destructive disabled:opacity-40"
-                    >
-                      {removeAll.isPending ? 'Removing...' : 'Remove all data'}
-                    </button>
-                  )}
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {showDisconnectAction && (
+                      <button
+                        onClick={handleDisconnect}
+                        disabled={isBusy}
+                        aria-label="Disconnect"
+                        {...actionTipHandlers('Disconnect')}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <Unplug className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    )}
+                    {showRemoveAllAction && (
+                      <button
+                        onClick={handleRemoveAll}
+                        disabled={isBusy}
+                        aria-label="Remove all data"
+                        {...actionTipHandlers('Remove all data')}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {startError && <p className="px-5 pb-3 text-xs text-destructive">{startError}</p>}
               </>
@@ -565,11 +638,13 @@ function ReaderCard({
           </div>
         </div>
       </div>
+      {actionTip}
+      {activeTip}
 
       {confirmAction === 'disconnect' && (
         <ConfirmModal
           title={`Disconnect ${getReaderDisplayName(reader.name)}?`}
-          message="This revokes the OAuth token. Your credentials file is kept, so you can re-authorize without re-uploading."
+          message={confirmDisconnectMessage}
           confirmLabel="Disconnect"
           variant="destructive"
           onConfirm={executeConfirm}
@@ -579,9 +654,18 @@ function ReaderCard({
       {confirmAction === 'removeAll' && (
         <ConfirmModal
           title={`Remove all data for ${getReaderDisplayName(reader.name)}?`}
-          message="This permanently deletes the credentials file, token, and saved config. You will need to go through the full setup again."
+          message={confirmRemoveAllMessage}
           confirmLabel="Remove all data"
           variant="destructive"
+          onConfirm={executeConfirm}
+          onCancel={() => setConfirmAction(null)}
+        />
+      )}
+      {confirmAction === 'makeActive' && (
+        <ConfirmModal
+          title={`Make ${getReaderDisplayName(reader.name)} active?`}
+          message={duplicateImportWarning}
+          confirmLabel="Make active"
           onConfirm={executeConfirm}
           onCancel={() => setConfirmAction(null)}
         />
@@ -598,6 +682,7 @@ function SetupOverview({
   justAuthorizedReader: string | null
 }) {
   const { data: readers, isLoading, error } = useReaders()
+  const { data: activeReader = '' } = useActiveReader()
 
   return (
     <div className="w-full max-w-lg">
@@ -642,6 +727,7 @@ function SetupOverview({
                 reader={reader}
                 onConfigure={onConfigure}
                 justAuthorized={justAuthorizedReader === reader.name}
+                isActive={activeReader === reader.name}
               />
             ))}
         </div>
@@ -656,9 +742,13 @@ export function Wizard() {
   const [mode, setMode] = useState<'overview' | 'wizard'>('overview')
   const [configReader, setConfigReader] = useState<PluginInfo | null>(null)
   const [preferencesComplete, setPreferencesComplete] = useState(false)
+  const [completionError, setCompletionError] = useState<string | null>(null)
+  const [isCompleting, setIsCompleting] = useState(false)
+  const [pendingActivationReader, setPendingActivationReader] = useState<string | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const qc = useQueryClient()
   const { data: readers } = useReaders()
+  const { data: activeReader = '' } = useActiveReader()
   const { data: setupStatus, isLoading: setupLoading } = useSetupStatus()
 
   const authSuccess = searchParams.get('auth') === 'success'
@@ -685,8 +775,49 @@ export function Wizard() {
 
   const handleConfigure = (reader: PluginInfo) => {
     setConfigReader(reader)
+    setCompletionError(null)
     setMode('wizard')
   }
+
+  const handleWizardCancel = useCallback(() => {
+    setConfigReader(null)
+    setCompletionError(null)
+    setMode('overview')
+  }, [])
+
+  const finishSetupWithReader = useCallback(
+    async (readerName: string) => {
+      setIsCompleting(true)
+      setCompletionError(null)
+      try {
+        await api.daemon.start(readerName)
+        qc.invalidateQueries({ queryKey: queryKeys.status })
+        qc.invalidateQueries({ queryKey: queryKeys.activeReader })
+        qc.invalidateQueries({ queryKey: queryKeys.readerStatus(readerName) })
+        qc.invalidateQueries({ queryKey: queryKeys.readerAuthStatus(readerName) })
+        setPendingActivationReader(null)
+        setConfigReader(null)
+        setMode('overview')
+      } catch (err) {
+        setCompletionError(err instanceof Error ? err.message : 'Failed to start tracking')
+      } finally {
+        setIsCompleting(false)
+      }
+    },
+    [qc],
+  )
+
+  const handleSetupComplete = useCallback(
+    async (readerName: string) => {
+      setCompletionError(null)
+      if (activeReader && activeReader !== readerName) {
+        setPendingActivationReader(readerName)
+        return
+      }
+      await finishSetupWithReader(readerName)
+    },
+    [activeReader, finishSetupWithReader],
+  )
 
   return (
     <div className="flex flex-1 flex-col">
@@ -701,9 +832,29 @@ export function Wizard() {
             justAuthorizedReader={authSuccess ? authReader : null}
           />
         ) : (
-          <WizardFlow initialReader={configReader ?? undefined} />
+          configReader && (
+            <WizardFlow
+              initialReader={configReader}
+              onCancel={handleWizardCancel}
+              onComplete={handleSetupComplete}
+              completionError={completionError}
+              isCompleting={isCompleting}
+            />
+          )
         )}
       </div>
+      {pendingActivationReader && (
+        <ConfirmModal
+          title={`Make ${getReaderDisplayName(pendingActivationReader)} active?`}
+          message={duplicateImportWarning}
+          confirmLabel="Make active"
+          confirmDisabled={isCompleting}
+          onConfirm={() => {
+            void finishSetupWithReader(pendingActivationReader)
+          }}
+          onCancel={() => setPendingActivationReader(null)}
+        />
+      )}
     </div>
   )
 }

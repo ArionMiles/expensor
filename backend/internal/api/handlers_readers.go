@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/url"
@@ -181,6 +182,18 @@ func (h *Handlers) CredentialsStatus(w http.ResponseWriter, r *http.Request) {
 
 // --- OAuth flow ---
 
+const (
+	authStateConnected               = "connected"
+	authStateReauthorizationRequired = "reauthorization_required"
+	authStateRefreshPending          = "refresh_pending"
+)
+
+type oauthTokenState struct {
+	authenticated bool
+	authState     string
+	expiry        *time.Time
+}
+
 // AuthStart handles POST /api/readers/{name}/auth/start.
 // Returns a Google OAuth consent URL for the given reader.
 // @Summary Start reader OAuth authorization
@@ -266,7 +279,7 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 // exchangeAndSaveToken loads credentials for the named reader, exchanges the
 // authorization code for a token, and persists it to the runtime store. The
 // redirectURL must match the one used when building the authorization URL.
-func (h *Handlers) exchangeAndSaveToken(name, code, redirectURL string) error {
+func (h *Handlers) exchangeAndSaveToken(ctx context.Context, name, code, redirectURL string) error {
 	plugin, err := h.registry.GetReader(name)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errReaderNotRegistered, err)
@@ -275,7 +288,7 @@ func (h *Handlers) exchangeAndSaveToken(name, code, redirectURL string) error {
 	if h.store == nil {
 		return errors.New("database not connected")
 	}
-	secretJSON, ok, err := h.store.GetReaderSecret(context.Background(), name)
+	secretJSON, ok, err := h.store.GetReaderSecret(ctx, name)
 	if err != nil {
 		return fmt.Errorf("failed to load credentials: %w", err)
 	}
@@ -288,7 +301,7 @@ func (h *Handlers) exchangeAndSaveToken(name, code, redirectURL string) error {
 		return fmt.Errorf("failed to parse credentials: %w", err)
 	}
 
-	tok, err := oauthCfg.Exchange(context.Background(), code)
+	tok, err := oauthCfg.Exchange(ctx, code)
 	if err != nil {
 		return fmt.Errorf("token exchange failed: %w", err)
 	}
@@ -297,7 +310,7 @@ func (h *Handlers) exchangeAndSaveToken(name, code, redirectURL string) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal token: %w", err)
 	}
-	if err := h.store.SetReaderToken(context.Background(), name, tokenJSON); err != nil {
+	if err := h.store.SetReaderToken(ctx, name, tokenJSON); err != nil {
 		return fmt.Errorf("failed to save token: %w", err)
 	}
 	h.restartReaderDaemonAfterAuth(name)
@@ -314,10 +327,10 @@ func (h *Handlers) restartReaderDaemonAfterAuth(name string) {
 // This is the shared OAuth redirect target for all readers.
 // @Summary Handle reader OAuth callback
 // @Tags Readers
-// @Produce json
+// @Produce html
 // @Param state query string true "OAuth state"
 // @Param code query string true "OAuth authorization code"
-// @Success 302 "Found"
+// @Success 200 "OK"
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /auth/callback [get]
@@ -340,7 +353,7 @@ func (h *Handlers) AuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
-	if err := h.exchangeAndSaveToken(name, code, redirectURL); err != nil {
+	if err := h.exchangeAndSaveToken(r.Context(), name, code, redirectURL); err != nil {
 		h.logger.Error("OAuth token exchange failed", "reader", name, "error", err)
 		if errors.Is(err, errCredentialsMissing) || errors.Is(err, errReaderNotRegistered) {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -351,7 +364,33 @@ func (h *Handlers) AuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.logger.Info("OAuth token saved", "reader", name)
-	http.Redirect(w, r, h.frontendURL+"/setup?auth=success&reader="+url.QueryEscape(name), http.StatusFound)
+	h.writeOAuthClosePage(w, name)
+}
+
+func (h *Handlers) writeOAuthClosePage(w http.ResponseWriter, name string) {
+	setupURL := h.frontendURL + "/setup?auth=success&reader=" + url.QueryEscape(name)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprintf(w, `<!doctype html>
+<html lang="en" class="closing">
+<head>
+  <meta charset="utf-8">
+  <title>Expensor authorization complete</title>
+  <script>
+    window.close();
+    setTimeout(function () { document.documentElement.classList.remove('closing'); }, 300);
+  </script>
+  <style>
+    html.closing body { display: none; }
+    body { color: #0f172a; font-family: system-ui, sans-serif; margin: 2rem; }
+    a { color: #2563eb; }
+  </style>
+</head>
+<body>
+  <p>Authorization complete. You can close this tab and return to Expensor.</p>
+  <p><a href="%s">Return to Expensor</a></p>
+</body>
+</html>`, html.EscapeString(setupURL))
 }
 
 // AuthExchange handles POST /api/readers/{name}/auth/exchange.
@@ -410,7 +449,7 @@ func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
-	if err := h.exchangeAndSaveToken(name, code, redirectURL); err != nil {
+	if err := h.exchangeAndSaveToken(r.Context(), name, code, redirectURL); err != nil {
 		h.logger.Error("manual OAuth exchange failed", "reader", name, "error", err)
 		if errors.Is(err, errCredentialsMissing) || errors.Is(err, errReaderNotRegistered) {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -442,12 +481,19 @@ func (h *Handlers) AuthStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if plugin.Metadata().Auth.Type != plugins.AuthTypeOAuth {
 		// Config-only readers are always "authenticated" once configured.
-		writeJSON(w, http.StatusOK, map[string]any{"authenticated": true, "auth_type": plugins.AuthTypeConfig})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"authenticated": true,
+			"auth_type":     plugins.AuthTypeConfig,
+			"auth_state":    authStateConnected,
+		})
 		return
 	}
 
 	if h.store == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"authenticated": false})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"authenticated": false,
+			"auth_state":    authStateReauthorizationRequired,
+		})
 		return
 	}
 	tokenJSON, ok, err := h.store.GetReaderToken(r.Context(), name)
@@ -457,20 +503,99 @@ func (h *Handlers) AuthStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
-		writeJSON(w, http.StatusOK, map[string]any{"authenticated": false})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"authenticated": false,
+			"auth_state":    authStateReauthorizationRequired,
+		})
 		return
 	}
-	var tok oauth2.Token
-	if err := json.Unmarshal(tokenJSON, &tok); err != nil {
-		h.logger.Warn("failed to parse token", "reader", name, "error", err)
-		writeJSON(w, http.StatusOK, map[string]any{"authenticated": false})
+
+	tokenState, err := h.resolveOAuthTokenState(r.Context(), name, plugin.Metadata().Auth.RequiredScopes, tokenJSON)
+	if err != nil {
+		h.logger.Error("failed to resolve OAuth token state", "reader", name, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to resolve OAuth token state")
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"authenticated": tok.Valid(),
-		"expiry":        tok.Expiry,
+		"authenticated": tokenState.authenticated,
+		"auth_state":    tokenState.authState,
+		"expiry":        tokenState.expiry,
 	})
+}
+
+func (h *Handlers) resolveOAuthTokenState(ctx context.Context, name string, scopes []string, tokenJSON []byte) (oauthTokenState, error) {
+	var tok oauth2.Token
+	if err := json.Unmarshal(tokenJSON, &tok); err != nil {
+		h.logger.Warn("failed to parse token", "reader", name, "error", err)
+		return oauthTokenState{authState: authStateReauthorizationRequired}, nil
+	}
+	expiry := tokenExpiry(tok)
+	if tok.Valid() {
+		return oauthTokenState{authenticated: true, authState: authStateConnected, expiry: expiry}, nil
+	}
+	if tok.RefreshToken == "" {
+		return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, nil
+	}
+
+	secretJSON, ok, err := h.store.GetReaderSecret(ctx, name)
+	if err != nil {
+		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, fmt.Errorf("loading credentials for token refresh: %w", err)
+	}
+	if !ok {
+		return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, nil
+	}
+	oauthCfg, err := client.GetOAuthConfig(secretJSON, h.baseURL+"/api/auth/callback", scopes...)
+	if err != nil {
+		return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, fmt.Errorf("parsing credentials for token refresh: %w", err)
+	}
+	refreshed, err := oauthCfg.TokenSource(ctx, &tok).Token()
+	if err != nil {
+		if isInvalidOAuthGrant(err) {
+			return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, nil
+		}
+		h.logger.Warn("OAuth token refresh pending", "reader", name)
+		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, nil
+	}
+	refreshedJSON, err := json.Marshal(refreshed) //nolint:gosec // OAuth tokens are intentionally serialized into the runtime store.
+	if err != nil {
+		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, fmt.Errorf("marshaling refreshed token: %w", err)
+	}
+	if err := h.store.SetReaderToken(ctx, name, refreshedJSON); err != nil {
+		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, fmt.Errorf("saving refreshed token: %w", err)
+	}
+	return oauthTokenState{authenticated: true, authState: authStateConnected, expiry: tokenExpiry(*refreshed)}, nil
+}
+
+func tokenExpiry(tok oauth2.Token) *time.Time {
+	if tok.Expiry.IsZero() {
+		return nil
+	}
+	expiry := tok.Expiry
+	return &expiry
+}
+
+func isInvalidOAuthGrant(err error) bool {
+	var retrieveErr *oauth2.RetrieveError
+	return errors.As(err, &retrieveErr) && retrieveErr.ErrorCode == "invalid_grant"
+}
+
+func (h *Handlers) resolveReaderAuthStatus(ctx context.Context, name string, meta plugins.ReaderMetadata) (bool, string) {
+	if meta.Auth.Type != plugins.AuthTypeOAuth {
+		return true, authStateConnected
+	}
+	if h.store == nil {
+		return false, authStateReauthorizationRequired
+	}
+	tokenJSON, ok, err := h.store.GetReaderToken(ctx, name)
+	if err != nil || !ok {
+		return false, authStateReauthorizationRequired
+	}
+	tokenState, err := h.resolveOAuthTokenState(ctx, name, meta.Auth.RequiredScopes, tokenJSON)
+	if err != nil {
+		return false, authStateRefreshPending
+	}
+	return tokenState.authenticated, tokenState.authState
 }
 
 // DisconnectReader handles DELETE /api/readers/{name}.
@@ -495,10 +620,26 @@ func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
 	}
+	activeReader, err := h.store.GetActiveReader(r.Context())
+	if err != nil {
+		h.logger.Error("failed to read active reader before disconnect", "reader", name, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
+		return
+	}
 	if err := h.store.DeleteReaderRuntime(r.Context(), name); err != nil {
 		h.logger.Error("failed to disconnect reader", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
 		return
+	}
+	if activeReader == name {
+		if err := h.store.SetAppConfig(r.Context(), "active_reader", ""); err != nil {
+			h.logger.Error("failed to clear active reader", "reader", name, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
+			return
+		}
+		if h.daemon != nil && h.daemon.Status().Running && h.stopFn != nil {
+			h.stopFn()
+		}
 	}
 
 	h.logger.Info("reader disconnected", "reader", name)
@@ -653,6 +794,7 @@ func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 		Authenticated       bool             `json:"authenticated"`
 		ConfigPresent       bool             `json:"config_present"`
 		AuthType            plugins.AuthType `json:"auth_type"`
+		AuthState           string           `json:"auth_state"`
 		Ready               bool             `json:"ready"`
 	}
 
@@ -668,17 +810,7 @@ func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 		st.CredentialsUploaded = true
 	}
 
-	if meta.Auth.Type == plugins.AuthTypeOAuth {
-		if h.store != nil {
-			tokenJSON, ok, err := h.store.GetReaderToken(r.Context(), name)
-			if err == nil && ok {
-				var tok oauth2.Token
-				st.Authenticated = json.Unmarshal(tokenJSON, &tok) == nil && tok.Valid()
-			}
-		}
-	} else {
-		st.Authenticated = true
-	}
+	st.Authenticated, st.AuthState = h.resolveReaderAuthStatus(r.Context(), name, meta)
 
 	if len(meta.ConfigSchema) == 0 {
 		st.ConfigPresent = true

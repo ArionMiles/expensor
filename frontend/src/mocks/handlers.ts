@@ -145,6 +145,7 @@ export const handlers = [
       authenticated: true,
       config_present: true,
       auth_type: 'oauth',
+      auth_state: 'connected',
       ready: true,
     }),
   ),

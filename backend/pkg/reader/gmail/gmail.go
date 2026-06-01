@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
+	"golang.org/x/oauth2"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
@@ -608,6 +609,10 @@ func isAuthError(err error) bool {
 	}
 	var apiErr *googleapi.Error
 	if errors.As(err, &apiErr) && apiErr.Code == http.StatusUnauthorized {
+		return true
+	}
+	var retrieveErr *oauth2.RetrieveError
+	if errors.As(err, &retrieveErr) && retrieveErr.ErrorCode == "invalid_grant" {
 		return true
 	}
 	s := err.Error()

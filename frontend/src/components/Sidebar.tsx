@@ -76,7 +76,9 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
   const { data: gmailStatus, isSuccess: gmailStatusLoaded } = useReaderStatus('gmail')
   const { data: openDiagnostics } = useExtractionDiagnostics('open')
   const setupNeedsAttention =
-    gmailStatusLoaded && gmailStatus?.auth_type === 'oauth' && !gmailStatus.ready
+    gmailStatusLoaded &&
+    gmailStatus?.auth_type === 'oauth' &&
+    gmailStatus.auth_state === 'reauthorization_required'
   const openDiagnosticsCount = openDiagnostics?.length ?? 0
 
   const diagnosticsCountLabel =

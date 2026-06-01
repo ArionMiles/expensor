@@ -56,6 +56,7 @@ type Handlers struct {
 	scanInterval       int                 // default scan interval in seconds
 	lookbackDays       int                 // default lookback in days
 	startFn            func(reader string) // called by POST /api/daemon/start; may be nil
+	stopFn             func()              // called when active reader runtime is removed; may be nil
 	rescanFn           func(reader string) // called by POST /api/daemon/rescan; may be nil
 	restartFn          func(reader string) // called after checkpoint clear to reload from DB; may be nil
 	syncFn             func()              // called by POST /api/config/sync; may be nil
@@ -79,6 +80,7 @@ type HandlersConfig struct {
 	ScanInterval       int
 	LookbackDays       int
 	StartFn            func(reader string)
+	StopFn             func()
 	RescanFn           func(reader string)
 	RestartFn          func(reader string)
 	SyncFn             func()
@@ -110,6 +112,7 @@ func NewHandlers(cfg HandlersConfig) *Handlers {
 		scanInterval:       cfg.ScanInterval,
 		lookbackDays:       cfg.LookbackDays,
 		startFn:            cfg.StartFn,
+		stopFn:             cfg.StopFn,
 		rescanFn:           cfg.RescanFn,
 		restartFn:          cfg.RestartFn,
 		syncFn:             cfg.SyncFn,

@@ -241,6 +241,19 @@ func (c *daemonCoordinator) start(readerName string) {
 	c.mu.Unlock()
 }
 
+func (c *daemonCoordinator) stop() {
+	c.mu.Lock()
+	if c.dm.Status().Running {
+		c.stopCurrent()
+		c.activeReader = ""
+		c.mu.Unlock()
+		c.waitStopped()
+		return
+	}
+	c.activeReader = ""
+	c.mu.Unlock()
+}
+
 // rescan stops any running daemon and relaunches with forceRescan=true, bypassing
 // state deduplication and the checkpoint so the full lookback window is scanned.
 func (c *daemonCoordinator) rescan(readerName string) {
@@ -416,6 +429,7 @@ func run() int {
 		ScanInterval:       cfg.ScanInterval,
 		LookbackDays:       cfg.LookbackDays,
 		StartFn:            dc.start,
+		StopFn:             dc.stop,
 		RescanFn:           dc.rescan,
 		RestartFn:          dc.restart,
 		SyncFn:             syncFn,
