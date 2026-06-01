@@ -248,7 +248,7 @@ describe('Wizard guide layout', () => {
     await user.hover(activeBadge)
 
     const tooltip = await screen.findByText(
-      'Active means the background daemon imports new transactions from this reader.',
+      'The background daemon imports new transactions from this reader.',
     )
     expect(tooltip.parentElement).toBe(document.body)
   })

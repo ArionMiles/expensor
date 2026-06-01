@@ -486,7 +486,7 @@ function ReaderCard({
                     {isActive && (
                       <span
                         {...activeTipHandlers(
-                          'Active means the background daemon imports new transactions from this reader.',
+                          'The background daemon imports new transactions from this reader.',
                         )}
                         className="cursor-help rounded-sm border border-primary/50 bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary"
                       >
