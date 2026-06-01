@@ -1,6 +1,7 @@
 import { api } from '@/api/client'
 import {
   queryKeys,
+  useActiveReader,
   useDisconnectReader,
   useReaderAuthStatus,
   useReaderGuide,
@@ -326,10 +327,12 @@ function ReaderCard({
   reader,
   onConfigure,
   justAuthorized,
+  isActive,
 }: {
   reader: PluginInfo
   onConfigure: (reader: PluginInfo) => void
   justAuthorized: boolean
+  isActive: boolean
 }) {
   const qc = useQueryClient()
   const { data: status, isLoading } = useReaderStatus(reader.name)
@@ -343,6 +346,7 @@ function ReaderCard({
   const [isStartingAuth, setIsStartingAuth] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'disconnect' | 'removeAll' | null>(null)
   const { handlers: actionTipHandlers, tip: actionTip } = useTooltip()
+  const { handlers: activeTipHandlers, tip: activeTip } = useTooltip()
 
   const isOAuth = reader.auth_type === 'oauth'
   const ready = status?.ready ?? false
@@ -388,6 +392,7 @@ function ReaderCard({
     try {
       await api.daemon.start(reader.name)
       qc.invalidateQueries({ queryKey: queryKeys.status })
+      qc.invalidateQueries({ queryKey: queryKeys.activeReader })
       qc.invalidateQueries({ queryKey: queryKeys.readerStatus(reader.name) })
       qc.invalidateQueries({ queryKey: queryKeys.readerAuthStatus(reader.name) })
     } catch (err) {
@@ -448,9 +453,10 @@ function ReaderCard({
   return (
     <>
       <div
+        data-reader-card={reader.name}
         className={cn(
           'overflow-hidden rounded-lg border bg-card shadow-sm transition-colors',
-          justAuthorized ? 'border-success/50' : 'border-border',
+          justAuthorized || isActive ? 'border-success/50' : 'border-border',
         )}
       >
         {/* Colored left stripe */}
@@ -477,6 +483,16 @@ function ReaderCard({
                       {getReaderDisplayName(reader.name)}
                     </span>
                     {!isLoading && stateBadge}
+                    {isActive && (
+                      <span
+                        {...activeTipHandlers(
+                          'Active means the background daemon imports new transactions from this reader.',
+                        )}
+                        className="cursor-help rounded-sm border border-primary/50 bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary"
+                      >
+                        Active
+                      </span>
+                    )}
                     {justAuthorized && (
                       <span className="text-[10px] text-success">✓ just authorized</span>
                     )}
@@ -592,6 +608,7 @@ function ReaderCard({
         </div>
       </div>
       {actionTip}
+      {activeTip}
 
       {confirmAction === 'disconnect' && (
         <ConfirmModal
@@ -625,6 +642,7 @@ function SetupOverview({
   justAuthorizedReader: string | null
 }) {
   const { data: readers, isLoading, error } = useReaders()
+  const { data: activeReader = '' } = useActiveReader()
 
   return (
     <div className="w-full max-w-lg">
@@ -669,6 +687,7 @@ function SetupOverview({
                 reader={reader}
                 onConfigure={onConfigure}
                 justAuthorized={justAuthorizedReader === reader.name}
+                isActive={activeReader === reader.name}
               />
             ))}
         </div>
@@ -731,6 +750,7 @@ export function Wizard() {
       try {
         await api.daemon.start(readerName)
         qc.invalidateQueries({ queryKey: queryKeys.status })
+        qc.invalidateQueries({ queryKey: queryKeys.activeReader })
         qc.invalidateQueries({ queryKey: queryKeys.readerStatus(readerName) })
         qc.invalidateQueries({ queryKey: queryKeys.readerAuthStatus(readerName) })
         setConfigReader(null)

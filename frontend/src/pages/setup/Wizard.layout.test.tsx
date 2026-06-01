@@ -40,6 +40,7 @@ let authStatus: { authenticated: boolean; auth_state: string; expiry?: string } 
   authenticated: false,
   auth_state: 'reauthorization_required',
 }
+let activeReader = ''
 
 vi.mock('@/api/client', () => ({
   api: {
@@ -53,10 +54,12 @@ vi.mock('@/api/queries', () => ({
   queryKeys: {
     readerAuthStatus: (name: string) => ['readers', name, 'auth', 'status'],
     readerStatus: (name: string) => ['readers', name, 'status'],
+    activeReader: ['config', 'active-reader'],
     setupStatus: ['config', 'setup-status'],
     status: ['status'],
   },
   useDisconnectReader: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useActiveReader: () => ({ data: activeReader }),
   useReaderAuthStatus: () => ({ data: authStatus }),
   useReaderGuide: () => ({
     data: {
@@ -111,6 +114,7 @@ describe('Wizard guide layout', () => {
       auth_state: 'reauthorization_required',
     }
     authStatus = { authenticated: false, auth_state: 'reauthorization_required' }
+    activeReader = ''
   })
 
   it('renders the setup guide in a wider responsive panel', async () => {
@@ -220,6 +224,33 @@ describe('Wizard guide layout', () => {
     const tooltip = await screen.findByText('Disconnect')
     expect(tooltip.parentElement).toBe(document.body)
     expect(screen.getByRole('button', { name: 'Remove all data' })).toBeInTheDocument()
+  })
+
+  it('marks the active reader with an Active label and explanatory tooltip', async () => {
+    readers = [gmailReader, thunderbirdReader]
+    readerStatus = {
+      ready: true,
+      credentials_uploaded: true,
+      authenticated: true,
+      config_present: true,
+      auth_state: 'connected',
+    }
+    authStatus = { authenticated: true, auth_state: 'connected' }
+    activeReader = 'gmail'
+    const user = userEvent.setup()
+
+    renderWithProviders(<Wizard />, { route: '/setup' })
+
+    const activeBadge = await screen.findByText('Active')
+    expect(screen.getAllByText('Active')).toHaveLength(1)
+    expect(activeBadge.closest('[data-reader-card]')).toHaveAttribute('data-reader-card', 'gmail')
+
+    await user.hover(activeBadge)
+
+    const tooltip = await screen.findByText(
+      'Active means the background daemon imports new transactions from this reader.',
+    )
+    expect(tooltip.parentElement).toBe(document.body)
   })
 
   it('starts authorization from the overview action without a second open-tab step', async () => {

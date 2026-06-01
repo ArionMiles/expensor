@@ -37,6 +37,7 @@ export const queryKeys = {
   categories: ['config', 'categories'] as const,
   buckets: ['config', 'buckets'] as const,
   setupStatus: ['config', 'setup-status'] as const,
+  activeReader: ['config', 'active-reader'] as const,
 }
 
 export function useVersion() {
@@ -247,6 +248,7 @@ export function useDisconnectReader() {
       qc.invalidateQueries({ queryKey: queryKeys.readerCredentialsStatus(readerName) })
       qc.invalidateQueries({ queryKey: queryKeys.readerAuthStatus(readerName) })
       qc.invalidateQueries({ queryKey: queryKeys.status })
+      qc.invalidateQueries({ queryKey: queryKeys.activeReader })
     },
   })
 }
@@ -652,7 +654,7 @@ export function useSetTimeFormat() {
 
 export function useActiveReader() {
   return useQuery({
-    queryKey: ['config', 'active-reader'] as const,
+    queryKey: queryKeys.activeReader,
     queryFn: () => api.config.getActiveReader().then((r) => r.data.reader),
     staleTime: 60_000,
   })
