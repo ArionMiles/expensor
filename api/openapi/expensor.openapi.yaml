@@ -1193,10 +1193,10 @@ paths:
         required: true
         type: string
       produces:
-      - application/json
+      - text/html
       responses:
-        "302":
-          description: Found
+        "200":
+          description: OK
         "400":
           description: Bad Request
           schema:

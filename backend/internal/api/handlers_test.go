@@ -1977,6 +1977,61 @@ func TestAuthCallback_RejectsExpiredState(t *testing.T) {
 	}
 }
 
+func TestAuthCallback_ReturnsClosePageAfterTokenSaved(t *testing.T) {
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("token endpoint method = %s, want POST", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"access_token":"new-access","refresh_token":"new-refresh","token_type":"Bearer","expires_in":3600}`)
+	}))
+	defer tokenServer.Close()
+
+	secretJSON := fmt.Sprintf(`{
+		"installed": {
+			"client_id": "test-client-id.apps.googleusercontent.com",
+			"client_secret": "test-client-secret",
+			"auth_uri": "https://accounts.google.com/o/oauth2/auth",
+			"token_uri": %q,
+			"redirect_uris": ["http://localhost:8080/api/auth/callback"]
+		}
+	}`, tokenServer.URL)
+	st := &mockStore{readerSecrets: map[string][]byte{"gmail": []byte(secretJSON)}}
+	h := newTestHandlers(t, st, &mockDaemon{})
+
+	state := "reader:gmail:validtoken"
+	h.mu.Lock()
+	h.oauthStates[state] = oauthStateEntry{
+		readerName: "gmail",
+		expiresAt:  time.Now().Add(time.Minute),
+	}
+	h.mu.Unlock()
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/auth/callback?state="+state+"&code=4%2F0Acode", nil)
+	rr := httptest.NewRecorder()
+	h.AuthCallback(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	if got := rr.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
+		t.Fatalf("Content-Type = %q, want text/html", got)
+	}
+	if location := rr.Header().Get("Location"); location != "" {
+		t.Fatalf("Location header = %q, want no redirect", location)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "window.close()") {
+		t.Fatalf("body should close the OAuth tab, got: %s", body)
+	}
+	if !strings.Contains(body, "http://localhost:5173/setup?auth=success&amp;reader=gmail") {
+		t.Fatalf("body should include escaped fallback setup link, got: %s", body)
+	}
+	if !strings.Contains(string(st.readerTokens["gmail"]), "new-refresh") {
+		t.Fatalf("saved token = %s, want refresh token from re-grant", st.readerTokens["gmail"])
+	}
+}
+
 // --- app config / base currency ---
 
 func TestGetBaseCurrency_DefaultsToConfig(t *testing.T) {

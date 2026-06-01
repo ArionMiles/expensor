@@ -4,6 +4,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Wizard } from './Wizard'
 import { renderWithProviders } from '@/test/render'
 
+const apiMocks = vi.hoisted(() => ({
+  authStart: vi.fn(),
+  setBaseCurrency: vi.fn(),
+  daemonStart: vi.fn(),
+}))
+
 let setupStatus = { required: false, missing: [] as string[] }
 let readerStatus = {
   ready: false,
@@ -16,6 +22,14 @@ let authStatus: { authenticated: boolean; auth_state: string; expiry?: string } 
   authenticated: false,
   auth_state: 'reauthorization_required',
 }
+
+vi.mock('@/api/client', () => ({
+  api: {
+    config: { setBaseCurrency: apiMocks.setBaseCurrency },
+    daemon: { start: apiMocks.daemonStart },
+    readers: { auth: { start: apiMocks.authStart } },
+  },
+}))
 
 vi.mock('@/api/queries', () => ({
   queryKeys: {
@@ -73,6 +87,10 @@ vi.mock('@/lib/timezone', () => ({
 
 describe('Wizard guide layout', () => {
   beforeEach(() => {
+    apiMocks.authStart.mockReset()
+    apiMocks.setBaseCurrency.mockReset()
+    apiMocks.setBaseCurrency.mockResolvedValue({})
+    apiMocks.daemonStart.mockReset()
     setupStatus = { required: false, missing: [] }
     readerStatus = {
       ready: false,
@@ -153,5 +171,38 @@ describe('Wizard guide layout', () => {
     expect(screen.queryByRole('button', { name: 'Re-authorize' })).not.toBeInTheDocument()
     expect(screen.queryByText('expires tomorrow')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument()
+  })
+
+  it('starts authorization from the overview action without a second open-tab step', async () => {
+    readerStatus = {
+      ready: false,
+      credentials_uploaded: true,
+      authenticated: false,
+      config_present: true,
+      auth_state: 'reauthorization_required',
+    }
+    apiMocks.authStart.mockResolvedValue({
+      data: {
+        url: 'https://accounts.google.test/oauth',
+        redirect_uri: 'http://localhost:8080/api/auth/callback',
+      },
+    })
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    const user = userEvent.setup()
+
+    renderWithProviders(<Wizard />, { route: '/setup' })
+
+    await user.click(await screen.findByRole('button', { name: 'Authorize →' }))
+
+    expect(apiMocks.authStart).toHaveBeenCalledWith('gmail')
+    expect(openSpy).toHaveBeenCalledWith(
+      'https://accounts.google.test/oauth',
+      '_blank',
+      'noopener,noreferrer',
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Open authorization tab →' }),
+    ).not.toBeInTheDocument()
+    expect(await screen.findByText('Waiting for authorization...')).toBeInTheDocument()
   })
 })

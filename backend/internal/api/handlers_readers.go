@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/url"
@@ -278,7 +279,7 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 // exchangeAndSaveToken loads credentials for the named reader, exchanges the
 // authorization code for a token, and persists it to the runtime store. The
 // redirectURL must match the one used when building the authorization URL.
-func (h *Handlers) exchangeAndSaveToken(name, code, redirectURL string) error {
+func (h *Handlers) exchangeAndSaveToken(ctx context.Context, name, code, redirectURL string) error {
 	plugin, err := h.registry.GetReader(name)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errReaderNotRegistered, err)
@@ -287,7 +288,7 @@ func (h *Handlers) exchangeAndSaveToken(name, code, redirectURL string) error {
 	if h.store == nil {
 		return errors.New("database not connected")
 	}
-	secretJSON, ok, err := h.store.GetReaderSecret(context.Background(), name)
+	secretJSON, ok, err := h.store.GetReaderSecret(ctx, name)
 	if err != nil {
 		return fmt.Errorf("failed to load credentials: %w", err)
 	}
@@ -300,7 +301,7 @@ func (h *Handlers) exchangeAndSaveToken(name, code, redirectURL string) error {
 		return fmt.Errorf("failed to parse credentials: %w", err)
 	}
 
-	tok, err := oauthCfg.Exchange(context.Background(), code)
+	tok, err := oauthCfg.Exchange(ctx, code)
 	if err != nil {
 		return fmt.Errorf("token exchange failed: %w", err)
 	}
@@ -309,7 +310,7 @@ func (h *Handlers) exchangeAndSaveToken(name, code, redirectURL string) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal token: %w", err)
 	}
-	if err := h.store.SetReaderToken(context.Background(), name, tokenJSON); err != nil {
+	if err := h.store.SetReaderToken(ctx, name, tokenJSON); err != nil {
 		return fmt.Errorf("failed to save token: %w", err)
 	}
 	h.restartReaderDaemonAfterAuth(name)
@@ -326,10 +327,10 @@ func (h *Handlers) restartReaderDaemonAfterAuth(name string) {
 // This is the shared OAuth redirect target for all readers.
 // @Summary Handle reader OAuth callback
 // @Tags Readers
-// @Produce json
+// @Produce html
 // @Param state query string true "OAuth state"
 // @Param code query string true "OAuth authorization code"
-// @Success 302 "Found"
+// @Success 200 "OK"
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /auth/callback [get]
@@ -352,7 +353,7 @@ func (h *Handlers) AuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
-	if err := h.exchangeAndSaveToken(name, code, redirectURL); err != nil {
+	if err := h.exchangeAndSaveToken(r.Context(), name, code, redirectURL); err != nil {
 		h.logger.Error("OAuth token exchange failed", "reader", name, "error", err)
 		if errors.Is(err, errCredentialsMissing) || errors.Is(err, errReaderNotRegistered) {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -363,7 +364,33 @@ func (h *Handlers) AuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.logger.Info("OAuth token saved", "reader", name)
-	http.Redirect(w, r, h.frontendURL+"/setup?auth=success&reader="+url.QueryEscape(name), http.StatusFound)
+	h.writeOAuthClosePage(w, name)
+}
+
+func (h *Handlers) writeOAuthClosePage(w http.ResponseWriter, name string) {
+	setupURL := h.frontendURL + "/setup?auth=success&reader=" + url.QueryEscape(name)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprintf(w, `<!doctype html>
+<html lang="en" class="closing">
+<head>
+  <meta charset="utf-8">
+  <title>Expensor authorization complete</title>
+  <script>
+    window.close();
+    setTimeout(function () { document.documentElement.classList.remove('closing'); }, 300);
+  </script>
+  <style>
+    html.closing body { display: none; }
+    body { color: #0f172a; font-family: system-ui, sans-serif; margin: 2rem; }
+    a { color: #2563eb; }
+  </style>
+</head>
+<body>
+  <p>Authorization complete. You can close this tab and return to Expensor.</p>
+  <p><a href="%s">Return to Expensor</a></p>
+</body>
+</html>`, html.EscapeString(setupURL))
 }
 
 // AuthExchange handles POST /api/readers/{name}/auth/exchange.
@@ -422,7 +449,7 @@ func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
-	if err := h.exchangeAndSaveToken(name, code, redirectURL); err != nil {
+	if err := h.exchangeAndSaveToken(r.Context(), name, code, redirectURL); err != nil {
 		h.logger.Error("manual OAuth exchange failed", "reader", name, "error", err)
 		if errors.Is(err, errCredentialsMissing) || errors.Is(err, errReaderNotRegistered) {
 			writeError(w, http.StatusInternalServerError, err.Error())

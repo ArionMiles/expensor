@@ -244,37 +244,28 @@ function WizardFlow({ initialReader }: { initialReader?: PluginInfo }) {
 
 function InlineOAuthPanel({
   readerName,
+  authStarted,
+  redirectUri,
+  error,
+  polling,
+  onPollAgain,
   onSuccess,
 }: {
   readerName: string
+  authStarted: boolean
+  redirectUri: string
+  error: string | null
+  polling: boolean
+  onPollAgain: () => void
   onSuccess: () => void
 }) {
-  const [polling, setPolling] = useState(false)
-  const [authStarted, setAuthStarted] = useState(false)
-  const [redirectUri, setRedirectUri] = useState('')
-  const [error, setError] = useState<string | null>(null)
-
   const { data: authStatus } = useReaderAuthStatus(readerName, polling ? 2000 : undefined)
 
   useEffect(() => {
     if (authStatus?.authenticated) {
-      setPolling(false)
       onSuccess()
     }
   }, [authStatus?.authenticated, onSuccess])
-
-  const handleStart = async () => {
-    setError(null)
-    try {
-      const { data } = await api.readers.auth.start(readerName)
-      window.open(data.url, '_blank', 'noopener,noreferrer')
-      setRedirectUri(data.redirect_uri)
-      setAuthStarted(true)
-      setPolling(true)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start authorization')
-    }
-  }
 
   return (
     <div className="mt-4 space-y-3 border-t border-border pt-4">
@@ -288,12 +279,6 @@ function InlineOAuthPanel({
         </p>
       )}
       <div className="flex flex-wrap items-center gap-4">
-        <button
-          onClick={handleStart}
-          className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
-        >
-          {authStarted ? 'Reopen authorization tab →' : 'Open authorization tab →'}
-        </button>
         {polling ? (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" />
@@ -301,7 +286,7 @@ function InlineOAuthPanel({
           </span>
         ) : authStarted ? (
           <button
-            onClick={() => setPolling(true)}
+            onClick={onPollAgain}
             className="text-xs text-muted-foreground underline transition-colors hover:text-foreground"
           >
             Already authorized — check again
@@ -335,6 +320,11 @@ function ReaderCard({
   const revokeToken = useRevokeToken()
   const removeAll = useDisconnectReader()
   const [showAuthPanel, setShowAuthPanel] = useState(false)
+  const [authStarted, setAuthStarted] = useState(false)
+  const [authRedirectUri, setAuthRedirectUri] = useState('')
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [authPolling, setAuthPolling] = useState(false)
+  const [isStartingAuth, setIsStartingAuth] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'disconnect' | 'removeAll' | null>(null)
 
   const isOAuth = reader.auth_type === 'oauth'
@@ -374,9 +364,28 @@ function ReaderCard({
 
   const handleAuthSuccess = useCallback(() => {
     setShowAuthPanel(false)
+    setAuthPolling(false)
     qc.invalidateQueries({ queryKey: queryKeys.readerStatus(reader.name) })
     qc.invalidateQueries({ queryKey: queryKeys.readerAuthStatus(reader.name) })
   }, [qc, reader.name])
+
+  const handleStartOAuth = useCallback(async () => {
+    setIsStartingAuth(true)
+    setAuthError(null)
+    try {
+      const { data } = await api.readers.auth.start(reader.name)
+      window.open(data.url, '_blank', 'noopener,noreferrer')
+      setAuthRedirectUri(data.redirect_uri)
+      setAuthStarted(true)
+      setAuthPolling(true)
+      setShowAuthPanel(true)
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : 'Failed to start authorization')
+      setShowAuthPanel(true)
+    } finally {
+      setIsStartingAuth(false)
+    }
+  }, [reader.name])
 
   const isBusy = revokeToken.isPending || removeAll.isPending
 
@@ -490,7 +499,15 @@ function ReaderCard({
             {/* Inline OAuth panel */}
             {showAuthPanel && (
               <div className="px-5 pb-4">
-                <InlineOAuthPanel readerName={reader.name} onSuccess={handleAuthSuccess} />
+                <InlineOAuthPanel
+                  readerName={reader.name}
+                  authStarted={authStarted}
+                  redirectUri={authRedirectUri}
+                  error={authError}
+                  polling={authPolling}
+                  onPollAgain={() => setAuthPolling(true)}
+                  onSuccess={handleAuthSuccess}
+                />
               </div>
             )}
 
@@ -520,8 +537,8 @@ function ReaderCard({
 
                     {readerState === 'needs-auth' && isOAuth && (
                       <button
-                        onClick={() => setShowAuthPanel(!showAuthPanel)}
-                        disabled={isBusy}
+                        onClick={handleStartOAuth}
+                        disabled={isBusy || isStartingAuth}
                         className={cn(
                           'rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-40',
                           showAuthPanel
@@ -529,7 +546,11 @@ function ReaderCard({
                             : 'border-primary text-primary hover:bg-primary hover:text-primary-foreground',
                         )}
                       >
-                        Authorize →
+                        {isStartingAuth
+                          ? 'Opening...'
+                          : authStarted
+                            ? 'Reopen authorization tab →'
+                            : 'Authorize →'}
                       </button>
                     )}
 
