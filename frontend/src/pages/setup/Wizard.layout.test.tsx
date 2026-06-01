@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PluginInfo } from '@/api/types'
@@ -251,6 +251,34 @@ describe('Wizard guide layout', () => {
       'The background daemon imports new transactions from this reader.',
     )
     expect(tooltip.parentElement).toBe(document.body)
+  })
+
+  it('warns before switching a connected inactive reader to active', async () => {
+    readers = [gmailReader, thunderbirdReader]
+    readerStatus = {
+      ready: true,
+      credentials_uploaded: true,
+      authenticated: true,
+      config_present: true,
+      auth_state: 'connected',
+    }
+    authStatus = { authenticated: true, auth_state: 'connected' }
+    activeReader = 'gmail'
+    apiMocks.daemonStart.mockResolvedValue({})
+    const user = userEvent.setup()
+
+    renderWithProviders(<Wizard />, { route: '/setup' })
+
+    await user.click(await screen.findByRole('button', { name: 'Make active' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Make Thunderbird active?' })
+    expect(dialog).toBeInTheDocument()
+    expect(screen.getByText(/double-count transactions/i)).toBeInTheDocument()
+    expect(apiMocks.daemonStart).not.toHaveBeenCalled()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Make active' }))
+
+    await waitFor(() => expect(apiMocks.daemonStart).toHaveBeenCalledWith('thunderbird'))
   })
 
   it('starts authorization from the overview action without a second open-tab step', async () => {

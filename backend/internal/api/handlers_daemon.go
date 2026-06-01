@@ -10,13 +10,13 @@ import (
 
 // StartDaemon handles POST /api/daemon/start.
 // Body: {"reader": "gmail"}
-// Triggers the background daemon with the given reader if it is not already running.
+// Triggers the background daemon with the given reader. The daemon coordinator
+// no-ops when the requested reader is already active.
 // @Summary Start the daemon
 // @Tags Bootstrap
 // @Accept json
 // @Produce json
 // @Param request body DaemonReaderRequest true "Daemon start request"
-// @Success 200 {object} StatusOnlyResponse "Daemon already running"
 // @Success 202 {object} StatusOnlyResponse "Daemon starting"
 // @Failure 400 {object} ErrorResponse
 // @Failure 422 {object} ErrorResponse
@@ -25,10 +25,6 @@ import (
 func (h *Handlers) StartDaemon(w http.ResponseWriter, r *http.Request) {
 	if h.startFn == nil {
 		writeError(w, http.StatusNotImplemented, "daemon start not configured")
-		return
-	}
-	if h.daemon.Status().Running {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "already_running"})
 		return
 	}
 

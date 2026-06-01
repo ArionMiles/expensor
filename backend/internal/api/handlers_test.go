@@ -3510,6 +3510,26 @@ func TestGetReaderGuide_ReturnsMetadataGuide(t *testing.T) {
 
 // --- rescan ---
 
+func TestStartDaemon_DaemonRunning_CallsStartFnWithRequestedReader(t *testing.T) {
+	var started string
+	ms := &mockStore{}
+	dm := &mockDaemon{status: DaemonStatus{Running: true}}
+	h := newTestHandlers(t, ms, dm)
+	h.startFn = func(reader string) { started = reader }
+
+	body := `{"reader":"thunderbird"}`
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/daemon/start", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	h.StartDaemon(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	if started != "thunderbird" {
+		t.Fatalf("startFn reader = %q, want thunderbird", started)
+	}
+}
+
 func TestRescan_DaemonRunning_Returns202Rescanning(t *testing.T) {
 	called := false
 	ms := &mockStore{}

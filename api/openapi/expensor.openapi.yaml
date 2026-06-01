@@ -2287,10 +2287,6 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: Daemon already running
-          schema:
-            $ref: '#/definitions/api.StatusOnlyResponse'
         "202":
           description: Daemon starting
           schema:

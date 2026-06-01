@@ -344,7 +344,9 @@ function ReaderCard({
   const [authError, setAuthError] = useState<string | null>(null)
   const [authPolling, setAuthPolling] = useState(false)
   const [isStartingAuth, setIsStartingAuth] = useState(false)
-  const [confirmAction, setConfirmAction] = useState<'disconnect' | 'removeAll' | null>(null)
+  const [confirmAction, setConfirmAction] = useState<
+    'disconnect' | 'removeAll' | 'makeActive' | null
+  >(null)
   const { handlers: actionTipHandlers, tip: actionTip } = useTooltip()
   const { handlers: activeTipHandlers, tip: activeTip } = useTooltip()
 
@@ -372,6 +374,10 @@ function ReaderCard({
     setConfirmAction('removeAll')
   }, [])
 
+  const handleMakeActive = useCallback(() => {
+    setConfirmAction('makeActive')
+  }, [])
+
   const executeConfirm = useCallback(async () => {
     if (confirmAction === 'disconnect') {
       await revokeToken.mutateAsync(reader.name)
@@ -379,9 +385,19 @@ function ReaderCard({
     } else if (confirmAction === 'removeAll') {
       await removeAll.mutateAsync(reader.name)
       setShowAuthPanel(false)
+    } else if (confirmAction === 'makeActive') {
+      setStartError(null)
+      try {
+        await api.daemon.start(reader.name)
+        qc.invalidateQueries({ queryKey: queryKeys.status })
+        qc.invalidateQueries({ queryKey: queryKeys.activeReader })
+      } catch (err) {
+        setStartError(err instanceof Error ? err.message : 'Failed to switch active reader')
+        return
+      }
     }
     setConfirmAction(null)
-  }, [confirmAction, reader.name, revokeToken, removeAll])
+  }, [confirmAction, reader.name, revokeToken, removeAll, qc])
 
   const [startError, setStartError] = useState<string | null>(null)
 
@@ -421,11 +437,14 @@ function ReaderCard({
   const isBusy = revokeToken.isPending || removeAll.isPending
   const showDisconnectAction = readerState === 'connected' && isOAuth
   const showRemoveAllAction = readerState !== 'unconfigured'
+  const showMakeActiveAction = readerState === 'connected' && !isActive
   const confirmDisconnectMessage =
     'This removes the stored OAuth token pair, including the access token and refresh token. Your credentials file is kept, so you can re-authorize without re-uploading.'
   const confirmRemoveAllMessage = isOAuth
     ? 'This permanently deletes the OAuth client credentials file, stored token pair, and saved config. You will need to go through the full setup again.'
     : 'This permanently deletes the mailbox configuration and saved config. You will need to go through the full setup again.'
+  const confirmMakeActiveMessage =
+    'If this reader contains emails already imported by another reader, Expensor may double-count transactions. Continue only if this is the reader you want the daemon to import from.'
 
   const stateBadge = {
     connected: (
@@ -574,6 +593,16 @@ function ReaderCard({
                             : 'Authorize →'}
                       </button>
                     )}
+
+                    {showMakeActiveAction && (
+                      <button
+                        onClick={handleMakeActive}
+                        disabled={isBusy}
+                        className="rounded-md border border-primary px-3 py-1.5 text-xs text-primary transition-colors hover:bg-primary hover:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Make active
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap items-center justify-end gap-2">
@@ -626,6 +655,15 @@ function ReaderCard({
           message={confirmRemoveAllMessage}
           confirmLabel="Remove all data"
           variant="destructive"
+          onConfirm={executeConfirm}
+          onCancel={() => setConfirmAction(null)}
+        />
+      )}
+      {confirmAction === 'makeActive' && (
+        <ConfirmModal
+          title={`Make ${getReaderDisplayName(reader.name)} active?`}
+          message={confirmMakeActiveMessage}
+          confirmLabel="Make active"
           onConfirm={executeConfirm}
           onCancel={() => setConfirmAction(null)}
         />
