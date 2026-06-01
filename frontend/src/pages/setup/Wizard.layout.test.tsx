@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { PluginInfo } from '@/api/types'
 import { Wizard } from './Wizard'
 import { renderWithProviders } from '@/test/render'
 
@@ -10,7 +11,24 @@ const apiMocks = vi.hoisted(() => ({
   daemonStart: vi.fn(),
 }))
 
+const gmailReader: PluginInfo = {
+  name: 'gmail',
+  description: 'Read Gmail transaction emails',
+  auth_type: 'oauth',
+  requires_credentials_upload: true,
+  config_schema: [],
+}
+
+const thunderbirdReader: PluginInfo = {
+  name: 'thunderbird',
+  description: 'Read Thunderbird mailbox files',
+  auth_type: 'config',
+  requires_credentials_upload: false,
+  config_schema: [{ name: 'mailbox', label: 'Mailbox', type: 'string', required: true }],
+}
+
 let setupStatus = { required: false, missing: [] as string[] }
+let readers: PluginInfo[] = [gmailReader]
 let readerStatus = {
   ready: false,
   credentials_uploaded: false,
@@ -52,15 +70,7 @@ vi.mock('@/api/queries', () => ({
   }),
   useReaderStatus: () => ({ data: readerStatus, isLoading: false }),
   useReaders: () => ({
-    data: [
-      {
-        name: 'gmail',
-        description: 'Read Gmail transaction emails',
-        auth_type: 'oauth',
-        requires_credentials_upload: true,
-        config_schema: [],
-      },
-    ],
+    data: readers,
     isLoading: false,
     error: null,
   }),
@@ -92,6 +102,7 @@ describe('Wizard guide layout', () => {
     apiMocks.setBaseCurrency.mockResolvedValue({})
     apiMocks.daemonStart.mockReset()
     setupStatus = { required: false, missing: [] }
+    readers = [gmailReader]
     readerStatus = {
       ready: false,
       credentials_uploaded: false,
@@ -171,6 +182,28 @@ describe('Wizard guide layout', () => {
     expect(screen.queryByRole('button', { name: 'Re-authorize' })).not.toBeInTheDocument()
     expect(screen.queryByText('expires tomorrow')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove all data' })).toBeInTheDocument()
+  })
+
+  it('shows hover tooltips for the connected Gmail action icons', async () => {
+    readerStatus = {
+      ready: true,
+      credentials_uploaded: true,
+      authenticated: true,
+      config_present: true,
+      auth_state: 'connected',
+    }
+    authStatus = { authenticated: true, auth_state: 'connected' }
+    const user = userEvent.setup()
+
+    renderWithProviders(<Wizard />, { route: '/setup' })
+
+    const disconnect = screen.getByRole('button', { name: 'Disconnect' })
+    await user.hover(disconnect)
+
+    const tooltip = await screen.findByText('Disconnect')
+    expect(tooltip.parentElement).toBe(document.body)
+    expect(screen.getByRole('button', { name: 'Remove all data' })).toBeInTheDocument()
   })
 
   it('starts authorization from the overview action without a second open-tab step', async () => {
@@ -204,5 +237,33 @@ describe('Wizard guide layout', () => {
       screen.queryByRole('button', { name: 'Open authorization tab →' }),
     ).not.toBeInTheDocument()
     expect(await screen.findByText('Waiting for authorization...')).toBeInTheDocument()
+  })
+
+  it('shows Thunderbird remove-all data as a right-aligned action with reader-specific copy', async () => {
+    readers = [thunderbirdReader]
+    readerStatus = {
+      ready: true,
+      credentials_uploaded: true,
+      authenticated: true,
+      config_present: true,
+      auth_state: 'connected',
+    }
+    authStatus = { authenticated: true, auth_state: 'connected' }
+    const user = userEvent.setup()
+
+    renderWithProviders(<Wizard />, { route: '/setup' })
+
+    expect(screen.queryByRole('button', { name: 'Disconnect' })).not.toBeInTheDocument()
+    const removeAll = screen.getByRole('button', { name: 'Remove all data' })
+    await user.hover(removeAll)
+    expect(await screen.findByText('Remove all data')).toBeInTheDocument()
+
+    await user.click(removeAll)
+
+    expect(
+      screen.getByRole('dialog', { name: 'Remove all data for Thunderbird?' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/mailbox configuration/)).toBeInTheDocument()
+    expect(screen.getByText(/saved config/)).toBeInTheDocument()
   })
 })

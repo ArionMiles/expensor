@@ -18,12 +18,14 @@ import { cn, getReaderDisplayName } from '@/lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { Trash2, Unplug } from 'lucide-react'
 import { ConfigureStep } from './steps/ConfigureStep'
 import { OAuthStep } from './steps/OAuthStep'
 import { PreferencesStep } from './steps/PreferencesStep'
 import { ReviewAndStart } from './steps/ReviewAndStart'
 import { SelectReader } from './steps/SelectReader'
 import { UploadCredentials } from './steps/UploadCredentials'
+import { useTooltip } from '@/hooks/useTooltip'
 
 // ─── Reader guide panel ───────────────────────────────────────────────────────
 
@@ -326,6 +328,7 @@ function ReaderCard({
   const [authPolling, setAuthPolling] = useState(false)
   const [isStartingAuth, setIsStartingAuth] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'disconnect' | 'removeAll' | null>(null)
+  const { handlers: actionTipHandlers, tip: actionTip } = useTooltip()
 
   const isOAuth = reader.auth_type === 'oauth'
   const ready = status?.ready ?? false
@@ -388,6 +391,13 @@ function ReaderCard({
   }, [reader.name])
 
   const isBusy = revokeToken.isPending || removeAll.isPending
+  const showDisconnectAction = readerState === 'connected' && isOAuth
+  const showRemoveAllAction = readerState !== 'unconfigured'
+  const confirmDisconnectMessage =
+    'This removes the stored OAuth token pair, including the access token and refresh token. Your credentials file is kept, so you can re-authorize without re-uploading.'
+  const confirmRemoveAllMessage = isOAuth
+    ? 'This permanently deletes the OAuth client credentials file, stored token pair, and saved config. You will need to go through the full setup again.'
+    : 'This permanently deletes the mailbox configuration and saved config. You will need to go through the full setup again.'
 
   const { data: statusData } = useStatus()
   const daemonRunning = statusData?.daemon?.running ?? false
@@ -553,27 +563,32 @@ function ReaderCard({
                             : 'Authorize →'}
                       </button>
                     )}
+                  </div>
 
-                    {readerState === 'connected' && isOAuth && (
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {showDisconnectAction && (
                       <button
                         onClick={handleDisconnect}
                         disabled={isBusy}
-                        className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:opacity-40"
+                        aria-label="Disconnect"
+                        {...actionTipHandlers('Disconnect')}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40"
                       >
-                        {revokeToken.isPending ? '...' : 'Disconnect'}
+                        <Unplug className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    )}
+                    {showRemoveAllAction && (
+                      <button
+                        onClick={handleRemoveAll}
+                        disabled={isBusy}
+                        aria-label="Remove all data"
+                        {...actionTipHandlers('Remove all data')}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
                       </button>
                     )}
                   </div>
-
-                  {readerState !== 'unconfigured' && (
-                    <button
-                      onClick={handleRemoveAll}
-                      disabled={isBusy}
-                      className="text-[10px] text-muted-foreground transition-colors hover:text-destructive disabled:opacity-40"
-                    >
-                      {removeAll.isPending ? 'Removing...' : 'Remove all data'}
-                    </button>
-                  )}
                 </div>
                 {startError && <p className="px-5 pb-3 text-xs text-destructive">{startError}</p>}
               </>
@@ -581,11 +596,12 @@ function ReaderCard({
           </div>
         </div>
       </div>
+      {actionTip}
 
       {confirmAction === 'disconnect' && (
         <ConfirmModal
           title={`Disconnect ${getReaderDisplayName(reader.name)}?`}
-          message="This revokes the OAuth token. Your credentials file is kept, so you can re-authorize without re-uploading."
+          message={confirmDisconnectMessage}
           confirmLabel="Disconnect"
           variant="destructive"
           onConfirm={executeConfirm}
@@ -595,7 +611,7 @@ function ReaderCard({
       {confirmAction === 'removeAll' && (
         <ConfirmModal
           title={`Remove all data for ${getReaderDisplayName(reader.name)}?`}
-          message="This permanently deletes the credentials file, token, and saved config. You will need to go through the full setup again."
+          message={confirmRemoveAllMessage}
           confirmLabel="Remove all data"
           variant="destructive"
           onConfirm={executeConfirm}
