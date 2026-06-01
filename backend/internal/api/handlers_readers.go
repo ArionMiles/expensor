@@ -620,10 +620,26 @@ func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "database not connected")
 		return
 	}
+	activeReader, err := h.store.GetActiveReader(r.Context())
+	if err != nil {
+		h.logger.Error("failed to read active reader before disconnect", "reader", name, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
+		return
+	}
 	if err := h.store.DeleteReaderRuntime(r.Context(), name); err != nil {
 		h.logger.Error("failed to disconnect reader", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
 		return
+	}
+	if activeReader == name {
+		if err := h.store.SetAppConfig(r.Context(), "active_reader", ""); err != nil {
+			h.logger.Error("failed to clear active reader", "reader", name, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
+			return
+		}
+		if h.daemon != nil && h.daemon.Status().Running && h.stopFn != nil {
+			h.stopFn()
+		}
 	}
 
 	h.logger.Info("reader disconnected", "reader", name)

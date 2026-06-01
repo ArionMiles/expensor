@@ -246,6 +246,7 @@ export function useDisconnectReader() {
       qc.invalidateQueries({ queryKey: queryKeys.readerStatus(readerName) })
       qc.invalidateQueries({ queryKey: queryKeys.readerCredentialsStatus(readerName) })
       qc.invalidateQueries({ queryKey: queryKeys.readerAuthStatus(readerName) })
+      qc.invalidateQueries({ queryKey: queryKeys.status })
     },
   })
 }

@@ -8,7 +8,6 @@ import {
   useReaders,
   useRevokeToken,
   useSetupStatus,
-  useStatus,
 } from '@/api/queries'
 import type { PluginInfo, ReaderGuide } from '@/api/types'
 import { ConfirmModal } from '@/components/ConfirmModal'
@@ -22,8 +21,6 @@ import { Trash2, Unplug } from 'lucide-react'
 import { ConfigureStep } from './steps/ConfigureStep'
 import { OAuthStep } from './steps/OAuthStep'
 import { PreferencesStep } from './steps/PreferencesStep'
-import { ReviewAndStart } from './steps/ReviewAndStart'
-import { SelectReader } from './steps/SelectReader'
 import { UploadCredentials } from './steps/UploadCredentials'
 import { useTooltip } from '@/hooks/useTooltip'
 
@@ -59,7 +56,10 @@ function ReaderGuidePanel({ guide }: { guide: ReaderGuide }) {
   const [open, setOpen] = useState(true)
 
   return (
-    <div className="w-full min-w-0 self-start overflow-hidden rounded-lg border border-border bg-card shadow-sm lg:max-w-xs lg:flex-1">
+    <div
+      data-testid="setup-guide-panel"
+      className="w-full min-w-0 self-start overflow-hidden rounded-lg border border-border bg-card shadow-sm lg:w-[28rem] lg:max-w-md lg:flex-none xl:w-[32rem] xl:max-w-lg 2xl:w-[36rem] 2xl:max-w-xl"
+    >
       <button
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center justify-between px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
@@ -123,48 +123,60 @@ function ReaderGuidePanel({ guide }: { guide: ReaderGuide }) {
 
 // ─── Wizard step flow ────────────────────────────────────────────────────────
 
-type WizardStep = 'select' | 'credentials' | 'oauth' | 'configure' | 'review'
+type WizardStep = 'credentials' | 'oauth' | 'configure'
 
-function getSteps(reader: PluginInfo | null): WizardStep[] {
-  if (!reader) return ['select', 'review']
-  const steps: WizardStep[] = ['select']
+function getSteps(reader: PluginInfo): WizardStep[] {
+  const steps: WizardStep[] = []
   if (reader.requires_credentials_upload) steps.push('credentials')
   if (reader.auth_type === 'oauth') steps.push('oauth')
   if (reader.config_schema.length > 0 || reader.auth_type === 'config') steps.push('configure')
-  steps.push('review')
   return steps
 }
 
 const STEP_LABELS: Record<WizardStep, string> = {
-  select: 'Select reader',
   credentials: 'Credentials',
   oauth: 'Authorize',
   configure: 'Configure',
-  review: 'Review',
 }
 
-function WizardFlow({ initialReader }: { initialReader?: PluginInfo }) {
-  const [selectedReader, setSelectedReader] = useState<PluginInfo | null>(initialReader ?? null)
+function WizardFlow({
+  initialReader,
+  onCancel,
+  onComplete,
+  completionError,
+  isCompleting,
+}: {
+  initialReader: PluginInfo
+  onCancel: () => void
+  onComplete: (readerName: string) => void | Promise<void>
+  completionError: string | null
+  isCompleting: boolean
+}) {
   const [currentStep, setCurrentStep] = useState<WizardStep>(() => {
-    if (initialReader) {
-      const s = getSteps(initialReader)
-      return s[1] ?? 'select'
-    }
-    return 'select'
+    const s = getSteps(initialReader)
+    return s[0] ?? 'configure'
   })
 
-  const steps = getSteps(selectedReader)
+  const steps = getSteps(initialReader)
   const currentIndex = steps.indexOf(currentStep)
-  const { data: guide } = useReaderGuide(selectedReader?.name ?? '')
-  const showGuide = Boolean(guide && currentStep !== 'select')
+  const { data: guide } = useReaderGuide(initialReader.name)
+  const showGuide = Boolean(guide)
 
   const goNext = () => {
     const next = steps[currentIndex + 1]
-    if (next) setCurrentStep(next)
+    if (next) {
+      setCurrentStep(next)
+      return
+    }
+    void onComplete(initialReader.name)
   }
   const goBack = () => {
     const prev = steps[currentIndex - 1]
-    if (prev) setCurrentStep(prev)
+    if (prev) {
+      setCurrentStep(prev)
+      return
+    }
+    onCancel()
   }
 
   return (
@@ -172,7 +184,7 @@ function WizardFlow({ initialReader }: { initialReader?: PluginInfo }) {
       data-testid={showGuide ? 'reader-setup-guide' : undefined}
       className={cn(
         'mx-auto flex w-full flex-col items-stretch gap-6 lg:flex-row lg:items-start',
-        showGuide ? 'max-w-5xl' : 'max-w-2xl',
+        showGuide ? 'max-w-7xl' : 'max-w-2xl',
       )}
     >
       <div data-testid="setup-form-shell" className="w-full min-w-0 max-w-2xl">
@@ -215,25 +227,27 @@ function WizardFlow({ initialReader }: { initialReader?: PluginInfo }) {
         </div>
 
         <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
-          {currentStep === 'select' && (
-            <SelectReader selected={selectedReader} onSelect={setSelectedReader} onNext={goNext} />
+          {currentStep === 'credentials' && (
+            <UploadCredentials readerName={initialReader.name} onNext={goNext} onBack={goBack} />
           )}
-          {currentStep === 'credentials' && selectedReader && (
-            <UploadCredentials readerName={selectedReader.name} onNext={goNext} onBack={goBack} />
+          {currentStep === 'oauth' && (
+            <OAuthStep readerName={initialReader.name} onNext={goNext} onBack={goBack} />
           )}
-          {currentStep === 'oauth' && selectedReader && (
-            <OAuthStep readerName={selectedReader.name} onNext={goNext} onBack={goBack} />
-          )}
-          {currentStep === 'configure' && selectedReader && (
+          {currentStep === 'configure' && (
             <ConfigureStep
-              readerName={selectedReader.name}
-              configSchema={selectedReader.config_schema}
+              readerName={initialReader.name}
+              configSchema={initialReader.config_schema}
               onNext={goNext}
               onBack={goBack}
             />
           )}
-          {currentStep === 'review' && selectedReader && (
-            <ReviewAndStart reader={selectedReader} onBack={goBack} />
+          {isCompleting && (
+            <p className="mt-4 text-xs text-muted-foreground">Starting tracking...</p>
+          )}
+          {completionError && (
+            <p className="mt-4 text-xs text-destructive" role="alert">
+              {completionError}
+            </p>
           )}
         </div>
       </div>
@@ -365,11 +379,20 @@ function ReaderCard({
     setConfirmAction(null)
   }, [confirmAction, reader.name, revokeToken, removeAll])
 
-  const handleAuthSuccess = useCallback(() => {
+  const [startError, setStartError] = useState<string | null>(null)
+
+  const handleAuthSuccess = useCallback(async () => {
     setShowAuthPanel(false)
     setAuthPolling(false)
-    qc.invalidateQueries({ queryKey: queryKeys.readerStatus(reader.name) })
-    qc.invalidateQueries({ queryKey: queryKeys.readerAuthStatus(reader.name) })
+    setStartError(null)
+    try {
+      await api.daemon.start(reader.name)
+      qc.invalidateQueries({ queryKey: queryKeys.status })
+      qc.invalidateQueries({ queryKey: queryKeys.readerStatus(reader.name) })
+      qc.invalidateQueries({ queryKey: queryKeys.readerAuthStatus(reader.name) })
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : 'Failed to start tracking')
+    }
   }, [qc, reader.name])
 
   const handleStartOAuth = useCallback(async () => {
@@ -398,24 +421,6 @@ function ReaderCard({
   const confirmRemoveAllMessage = isOAuth
     ? 'This permanently deletes the OAuth client credentials file, stored token pair, and saved config. You will need to go through the full setup again.'
     : 'This permanently deletes the mailbox configuration and saved config. You will need to go through the full setup again.'
-
-  const { data: statusData } = useStatus()
-  const daemonRunning = statusData?.daemon?.running ?? false
-  const [isStarting, setIsStarting] = useState(false)
-  const [startError, setStartError] = useState<string | null>(null)
-
-  const handleStartDaemon = useCallback(async () => {
-    setIsStarting(true)
-    setStartError(null)
-    try {
-      await api.daemon.start(reader.name)
-      qc.invalidateQueries({ queryKey: queryKeys.status })
-    } catch (err) {
-      setStartError(err instanceof Error ? err.message : 'Failed to start daemon')
-    } finally {
-      setIsStarting(false)
-    }
-  }, [reader.name, qc])
 
   const stateBadge = {
     connected: (
@@ -532,16 +537,6 @@ function ReaderCard({
                         className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
                       >
                         Set up →
-                      </button>
-                    )}
-
-                    {readerState === 'connected' && !daemonRunning && (
-                      <button
-                        onClick={handleStartDaemon}
-                        disabled={isStarting || isBusy}
-                        className="rounded-md bg-success px-3 py-1.5 text-xs text-success-foreground transition-colors hover:bg-success/90 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        {isStarting ? 'Starting...' : 'Start tracking →'}
                       </button>
                     )}
 
@@ -688,6 +683,8 @@ export function Wizard() {
   const [mode, setMode] = useState<'overview' | 'wizard'>('overview')
   const [configReader, setConfigReader] = useState<PluginInfo | null>(null)
   const [preferencesComplete, setPreferencesComplete] = useState(false)
+  const [completionError, setCompletionError] = useState<string | null>(null)
+  const [isCompleting, setIsCompleting] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const qc = useQueryClient()
   const { data: readers } = useReaders()
@@ -717,8 +714,35 @@ export function Wizard() {
 
   const handleConfigure = (reader: PluginInfo) => {
     setConfigReader(reader)
+    setCompletionError(null)
     setMode('wizard')
   }
+
+  const handleWizardCancel = useCallback(() => {
+    setConfigReader(null)
+    setCompletionError(null)
+    setMode('overview')
+  }, [])
+
+  const handleSetupComplete = useCallback(
+    async (readerName: string) => {
+      setIsCompleting(true)
+      setCompletionError(null)
+      try {
+        await api.daemon.start(readerName)
+        qc.invalidateQueries({ queryKey: queryKeys.status })
+        qc.invalidateQueries({ queryKey: queryKeys.readerStatus(readerName) })
+        qc.invalidateQueries({ queryKey: queryKeys.readerAuthStatus(readerName) })
+        setConfigReader(null)
+        setMode('overview')
+      } catch (err) {
+        setCompletionError(err instanceof Error ? err.message : 'Failed to start tracking')
+      } finally {
+        setIsCompleting(false)
+      }
+    },
+    [qc],
+  )
 
   return (
     <div className="flex flex-1 flex-col">
@@ -733,7 +757,15 @@ export function Wizard() {
             justAuthorizedReader={authSuccess ? authReader : null}
           />
         ) : (
-          <WizardFlow initialReader={configReader ?? undefined} />
+          configReader && (
+            <WizardFlow
+              initialReader={configReader}
+              onCancel={handleWizardCancel}
+              onComplete={handleSetupComplete}
+              completionError={completionError}
+              isCompleting={isCompleting}
+            />
+          )
         )}
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PluginInfo } from '@/api/types'
@@ -117,8 +117,23 @@ describe('Wizard guide layout', () => {
     renderWithProviders(<Wizard />, { route: '/setup?step=guide&reader=gmail' })
 
     const guide = await screen.findByTestId('reader-setup-guide')
-    expect(guide).toHaveClass('max-w-5xl')
+    expect(guide).toHaveClass('max-w-7xl')
     expect(screen.getByTestId('setup-form-shell')).toHaveClass('max-w-2xl')
+    expect(screen.getByTestId('setup-guide-panel')).toHaveClass('2xl:max-w-xl')
+  })
+
+  it('returns from the first reader setup step to the overview instead of a duplicate reader select step', async () => {
+    const user = userEvent.setup()
+
+    renderWithProviders(<Wizard />, { route: '/setup' })
+
+    await user.click(await screen.findByRole('button', { name: 'Set up →' }))
+    expect(await screen.findByText('Upload credentials')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '← Back' }))
+
+    expect(await screen.findByText('Reader configuration')).toBeInTheDocument()
+    expect(screen.queryByText('Select a reader')).not.toBeInTheDocument()
   })
 
   it('shows preferences before reader setup when setup is incomplete', async () => {
@@ -181,6 +196,7 @@ describe('Wizard guide layout', () => {
     expect(await screen.findByText('● Connected')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Re-authorize' })).not.toBeInTheDocument()
     expect(screen.queryByText('expires tomorrow')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Start tracking →' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove all data' })).toBeInTheDocument()
   })
@@ -237,6 +253,32 @@ describe('Wizard guide layout', () => {
       screen.queryByRole('button', { name: 'Open authorization tab →' }),
     ).not.toBeInTheDocument()
     expect(await screen.findByText('Waiting for authorization...')).toBeInTheDocument()
+  })
+
+  it('starts tracking automatically when overview authorization succeeds', async () => {
+    readerStatus = {
+      ready: false,
+      credentials_uploaded: true,
+      authenticated: false,
+      config_present: true,
+      auth_state: 'reauthorization_required',
+    }
+    authStatus = { authenticated: true, auth_state: 'connected' }
+    apiMocks.authStart.mockResolvedValue({
+      data: {
+        url: 'https://accounts.google.test/oauth',
+        redirect_uri: 'http://localhost:8080/api/auth/callback',
+      },
+    })
+    apiMocks.daemonStart.mockResolvedValue({})
+    vi.spyOn(window, 'open').mockImplementation(() => null)
+    const user = userEvent.setup()
+
+    renderWithProviders(<Wizard />, { route: '/setup' })
+
+    await user.click(await screen.findByRole('button', { name: 'Authorize →' }))
+
+    await waitFor(() => expect(apiMocks.daemonStart).toHaveBeenCalledWith('gmail'))
   })
 
   it('shows Thunderbird remove-all data as a right-aligned action with reader-specific copy', async () => {

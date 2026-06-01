@@ -218,6 +218,9 @@ func (m *mockStore) SetAppConfig(_ context.Context, key, value string) error {
 		m.appConfig = make(map[string]string)
 	}
 	m.appConfig[key] = value
+	if key == "active_reader" {
+		m.activeReader = value
+	}
 	return nil
 }
 
@@ -1178,6 +1181,59 @@ func TestRevokeToken_DeletesStoreToken(t *testing.T) {
 	}
 	if _, ok := ms.readerTokens["gmail"]; ok {
 		t.Fatal("token was not deleted from store")
+	}
+}
+
+func TestDisconnectReader_StopsDaemonWhenActiveReaderIsRemoved(t *testing.T) {
+	ms := &mockStore{
+		activeReader:  "gmail",
+		readerSecrets: map[string][]byte{"gmail": []byte(`{"installed":{}}`)},
+		readerTokens:  map[string][]byte{"gmail": []byte(`{"access_token":"a"}`)},
+	}
+	var stopCalls int
+	h := newTestHandlers(t, ms, &mockDaemon{status: DaemonStatus{Running: true}})
+	h.stopFn = func() { stopCalls++ }
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/readers/gmail", nil)
+	req.SetPathValue("name", "gmail")
+	rr := httptest.NewRecorder()
+
+	h.DisconnectReader(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	if stopCalls != 1 {
+		t.Fatalf("stop calls = %d, want 1", stopCalls)
+	}
+	if ms.activeReader != "" {
+		t.Fatalf("active reader = %q, want cleared", ms.activeReader)
+	}
+}
+
+func TestDisconnectReader_DoesNotStopDaemonWhenInactiveReaderIsRemoved(t *testing.T) {
+	ms := &mockStore{
+		activeReader:  "gmail",
+		readerConfigs: map[string]json.RawMessage{"thunderbird": json.RawMessage(`{"mailbox":"Inbox"}`)},
+		readerSecrets: map[string][]byte{"gmail": []byte(`{"installed":{}}`)},
+		readerTokens:  map[string][]byte{"gmail": []byte(`{"access_token":"a"}`)},
+	}
+	var stopCalls int
+	h := newTestHandlers(t, ms, &mockDaemon{status: DaemonStatus{Running: true}})
+	h.stopFn = func() { stopCalls++ }
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/readers/thunderbird", nil)
+	req.SetPathValue("name", "thunderbird")
+	rr := httptest.NewRecorder()
+
+	h.DisconnectReader(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	if stopCalls != 0 {
+		t.Fatalf("stop calls = %d, want 0", stopCalls)
+	}
+	if ms.activeReader != "gmail" {
+		t.Fatalf("active reader = %q, want gmail", ms.activeReader)
 	}
 }
 
