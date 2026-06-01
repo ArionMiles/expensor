@@ -140,6 +140,9 @@ const STEP_LABELS: Record<WizardStep, string> = {
   configure: 'Configure',
 }
 
+const duplicateImportWarning =
+  'If this reader contains emails already imported by another reader, Expensor may double-count transactions. Continue only if this is the reader you want the daemon to import from.'
+
 function WizardFlow({
   initialReader,
   onCancel,
@@ -443,9 +446,6 @@ function ReaderCard({
   const confirmRemoveAllMessage = isOAuth
     ? 'This permanently deletes the OAuth client credentials file, stored token pair, and saved config. You will need to go through the full setup again.'
     : 'This permanently deletes the mailbox configuration and saved config. You will need to go through the full setup again.'
-  const confirmMakeActiveMessage =
-    'If this reader contains emails already imported by another reader, Expensor may double-count transactions. Continue only if this is the reader you want the daemon to import from.'
-
   const stateBadge = {
     connected: (
       <span className="rounded-sm border border-success/50 bg-success/10 px-1.5 py-0.5 text-[10px] text-success">
@@ -662,7 +662,7 @@ function ReaderCard({
       {confirmAction === 'makeActive' && (
         <ConfirmModal
           title={`Make ${getReaderDisplayName(reader.name)} active?`}
-          message={confirmMakeActiveMessage}
+          message={duplicateImportWarning}
           confirmLabel="Make active"
           onConfirm={executeConfirm}
           onCancel={() => setConfirmAction(null)}
@@ -742,9 +742,11 @@ export function Wizard() {
   const [preferencesComplete, setPreferencesComplete] = useState(false)
   const [completionError, setCompletionError] = useState<string | null>(null)
   const [isCompleting, setIsCompleting] = useState(false)
+  const [pendingActivationReader, setPendingActivationReader] = useState<string | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const qc = useQueryClient()
   const { data: readers } = useReaders()
+  const { data: activeReader = '' } = useActiveReader()
   const { data: setupStatus, isLoading: setupLoading } = useSetupStatus()
 
   const authSuccess = searchParams.get('auth') === 'success'
@@ -781,7 +783,7 @@ export function Wizard() {
     setMode('overview')
   }, [])
 
-  const handleSetupComplete = useCallback(
+  const finishSetupWithReader = useCallback(
     async (readerName: string) => {
       setIsCompleting(true)
       setCompletionError(null)
@@ -791,6 +793,7 @@ export function Wizard() {
         qc.invalidateQueries({ queryKey: queryKeys.activeReader })
         qc.invalidateQueries({ queryKey: queryKeys.readerStatus(readerName) })
         qc.invalidateQueries({ queryKey: queryKeys.readerAuthStatus(readerName) })
+        setPendingActivationReader(null)
         setConfigReader(null)
         setMode('overview')
       } catch (err) {
@@ -800,6 +803,18 @@ export function Wizard() {
       }
     },
     [qc],
+  )
+
+  const handleSetupComplete = useCallback(
+    async (readerName: string) => {
+      setCompletionError(null)
+      if (activeReader && activeReader !== readerName) {
+        setPendingActivationReader(readerName)
+        return
+      }
+      await finishSetupWithReader(readerName)
+    },
+    [activeReader, finishSetupWithReader],
   )
 
   return (
@@ -826,6 +841,18 @@ export function Wizard() {
           )
         )}
       </div>
+      {pendingActivationReader && (
+        <ConfirmModal
+          title={`Make ${getReaderDisplayName(pendingActivationReader)} active?`}
+          message={duplicateImportWarning}
+          confirmLabel="Make active"
+          confirmDisabled={isCompleting}
+          onConfirm={() => {
+            void finishSetupWithReader(pendingActivationReader)
+          }}
+          onCancel={() => setPendingActivationReader(null)}
+        />
+      )}
     </div>
   )
 }

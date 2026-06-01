@@ -9,6 +9,7 @@ const apiMocks = vi.hoisted(() => ({
   authStart: vi.fn(),
   setBaseCurrency: vi.fn(),
   daemonStart: vi.fn(),
+  saveReaderConfig: vi.fn(),
 }))
 
 const gmailReader: PluginInfo = {
@@ -78,6 +79,17 @@ vi.mock('@/api/queries', () => ({
     error: null,
   }),
   useRevokeToken: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useSaveReaderConfig: () => ({
+    mutate: (
+      payload: { readerName: string; config: Record<string, string> },
+      options?: { onSuccess?: () => void },
+    ) => {
+      apiMocks.saveReaderConfig(payload)
+      options?.onSuccess?.()
+    },
+    isPending: false,
+    error: null,
+  }),
   useSetupStatus: () => ({ data: setupStatus, isLoading: false }),
   useStatus: () => ({ data: { daemon: { running: false } } }),
   useSetTimeFormat: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -104,6 +116,7 @@ describe('Wizard guide layout', () => {
     apiMocks.setBaseCurrency.mockReset()
     apiMocks.setBaseCurrency.mockResolvedValue({})
     apiMocks.daemonStart.mockReset()
+    apiMocks.saveReaderConfig.mockReset()
     setupStatus = { required: false, missing: [] }
     readers = [gmailReader]
     readerStatus = {
@@ -270,6 +283,33 @@ describe('Wizard guide layout', () => {
     renderWithProviders(<Wizard />, { route: '/setup' })
 
     await user.click(await screen.findByRole('button', { name: 'Make active' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Make Thunderbird active?' })
+    expect(dialog).toBeInTheDocument()
+    expect(screen.getByText(/double-count transactions/i)).toBeInTheDocument()
+    expect(apiMocks.daemonStart).not.toHaveBeenCalled()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Make active' }))
+
+    await waitFor(() => expect(apiMocks.daemonStart).toHaveBeenCalledWith('thunderbird'))
+  })
+
+  it('warns before making a newly configured second reader active', async () => {
+    readers = [gmailReader, thunderbirdReader]
+    activeReader = 'gmail'
+    apiMocks.daemonStart.mockResolvedValue({})
+    const user = userEvent.setup()
+
+    renderWithProviders(<Wizard />, { route: '/setup' })
+
+    const thunderbirdCard = await screen.findByText('Thunderbird')
+    await user.click(
+      within(thunderbirdCard.closest('[data-reader-card]') as HTMLElement).getByRole('button', {
+        name: 'Set up →',
+      }),
+    )
+    await user.type(await screen.findByLabelText(/Mailbox/), 'INBOX')
+    await user.click(screen.getByRole('button', { name: 'Save & continue →' }))
 
     const dialog = screen.getByRole('dialog', { name: 'Make Thunderbird active?' })
     expect(dialog).toBeInTheDocument()
