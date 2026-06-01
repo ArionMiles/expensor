@@ -73,6 +73,11 @@ vi.mock('@/api/queries', () => ({
     },
   }),
   useReaderStatus: () => ({ data: readerStatus, isLoading: false }),
+  useThunderbirdMailboxes: () => ({ data: ['Inbox', 'Receipts'], isLoading: false }),
+  useThunderbirdProfiles: () => ({
+    data: ['/home/user/.thunderbird/default'],
+    isLoading: false,
+  }),
   useReaders: () => ({
     data: readers,
     isLoading: false,
@@ -164,6 +169,49 @@ describe('Wizard guide layout', () => {
     expect(await screen.findByText('Configure reader')).toBeInTheDocument()
     expect(screen.queryByText('1')).not.toBeInTheDocument()
     expect(screen.queryByText('Configure')).not.toBeInTheDocument()
+  })
+
+  it('renders Thunderbird discovery dropdowns in fixed body portals', async () => {
+    readers = [
+      {
+        ...thunderbirdReader,
+        config_schema: [
+          {
+            name: 'profile_path',
+            label: 'Profile path',
+            type: 'thunderbird-profile',
+            required: true,
+          },
+          {
+            name: 'mailboxes',
+            label: 'Mailboxes',
+            type: 'thunderbird-mailboxes',
+            required: true,
+            depends_on: 'profile_path',
+          },
+        ],
+      },
+    ]
+    const user = userEvent.setup()
+
+    renderWithProviders(<Wizard />, { route: '/setup' })
+
+    await user.click(await screen.findByRole('button', { name: 'Set up →' }))
+    const profileInput = await screen.findByPlaceholderText(
+      'e.g. /home/user/.thunderbird/abc.default',
+    )
+    await user.click(profileInput)
+
+    const profileList = screen.getByRole('listbox', { name: 'Thunderbird profiles' })
+    expect(profileList.parentElement).toBe(document.body)
+    expect(profileList).toHaveClass('fixed')
+
+    await user.click(screen.getByRole('option', { name: '/home/user/.thunderbird/default' }))
+    await user.click(screen.getByPlaceholderText('Add mailbox (e.g. INBOX)'))
+
+    const mailboxList = screen.getByRole('listbox', { name: 'Thunderbird mailboxes' })
+    expect(mailboxList.parentElement).toBe(document.body)
+    expect(mailboxList).toHaveClass('fixed')
   })
 
   it('shows preferences before reader setup when setup is incomplete', async () => {

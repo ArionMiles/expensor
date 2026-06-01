@@ -47,6 +47,7 @@ function SettingField({
 }
 
 function DaemonSettings() {
+  const { t } = useI18n()
   const { data: activeReader } = useActiveReader()
   const {
     mutate: rescan,
@@ -79,11 +80,11 @@ function DaemonSettings() {
     const interval = parseInt(intervalVal, 10)
     const lookback = parseInt(lookbackVal, 10)
     if (isNaN(interval) || interval < 10 || interval > 3600) {
-      setScanError('Scan interval must be between 10 and 3600 seconds.')
+      setScanError(t('settings.daemon.scanIntervalError'))
       return
     }
     if (isNaN(lookback) || lookback < 1 || lookback > 3650) {
-      setScanError('Lookback window must be between 1 and 3650 days.')
+      setScanError(t('settings.daemon.lookbackError'))
       return
     }
     if (interval !== scanInterval) setScanInterval(interval)
@@ -96,8 +97,8 @@ function DaemonSettings() {
       {/* Scan settings */}
       <div className="space-y-6">
         <SettingField
-          label="Scan interval"
-          hint="How often the daemon checks for new emails. Changes take effect on next daemon start."
+          label={t('settings.daemon.scanIntervalLabel')}
+          hint={t('settings.daemon.scanIntervalHint')}
         >
           <div className="flex items-center gap-2">
             <input
@@ -110,13 +111,15 @@ function DaemonSettings() {
               }}
               className="w-24 rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
             />
-            <span className="shrink-0 text-xs text-muted-foreground">seconds</span>
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {t('settings.daemon.scanUnit')}
+            </span>
           </div>
         </SettingField>
 
         <SettingField
-          label="Lookback window"
-          hint="How far back to scan on the first run (before a checkpoint exists)."
+          label={t('settings.daemon.lookbackLabel')}
+          hint={t('settings.daemon.lookbackHint')}
         >
           <div className="flex items-center gap-2">
             <input
@@ -129,7 +132,9 @@ function DaemonSettings() {
               }}
               className="w-24 rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
             />
-            <span className="shrink-0 text-xs text-muted-foreground">days</span>
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {t('settings.daemon.lookbackUnit')}
+            </span>
           </div>
         </SettingField>
 
@@ -138,28 +143,27 @@ function DaemonSettings() {
             onClick={handleScanSave}
             className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Save
+            {t('common.save')}
           </button>
-          {scanSaved && <p className="text-xs text-success">Saved.</p>}
+          {scanSaved && <p className="text-xs text-success">{t('settings.daemon.saved')}</p>}
           {scanError && <p className="text-xs text-destructive">{scanError}</p>}
         </div>
       </div>
 
       {/* Scanning checkpoint */}
       <div>
-        <h2 className="mb-1 text-sm font-medium text-foreground">Scanning checkpoint</h2>
-        <p className="mb-4 text-xs text-muted-foreground">
-          After each successful scan, a checkpoint is saved so the next scan only processes new
-          emails. Clear the checkpoint to force a full lookback scan on the next run.
-        </p>
+        <h2 className="mb-1 text-sm font-medium text-foreground">
+          {t('settings.daemon.checkpointTitle')}
+        </h2>
+        <p className="mb-4 text-xs text-muted-foreground">{t('settings.daemon.checkpointHint')}</p>
         <div className="rounded-lg border border-border p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground">Last scan</p>
+              <p className="text-xs text-muted-foreground">{t('settings.daemon.lastScan')}</p>
               <p className="font-mono text-sm text-foreground">
                 {checkpoint
                   ? formatDate(checkpoint, true, timezone, timeFormat)
-                  : 'No checkpoint — will scan full lookback'}
+                  : t('settings.daemon.noCheckpoint')}
               </p>
             </div>
             {checkpoint && (
@@ -173,7 +177,7 @@ function DaemonSettings() {
                     : 'text-muted-foreground hover:border-destructive hover:text-destructive',
                 )}
               >
-                {clearing ? 'Clearing…' : 'Clear checkpoint'}
+                {clearing ? t('settings.daemon.clearing') : t('settings.daemon.clearCheckpoint')}
               </button>
             )}
           </div>
@@ -182,11 +186,10 @@ function DaemonSettings() {
 
       {/* Force rescan */}
       <div>
-        <h2 className="mb-1 text-sm font-medium text-foreground">Force rescan</h2>
-        <p className="mb-4 text-xs text-muted-foreground">
-          Re-process all emails in the configured lookback window, bypassing the checkpoint. If the
-          daemon is currently running, the rescan will be queued.
-        </p>
+        <h2 className="mb-1 text-sm font-medium text-foreground">
+          {t('settings.daemon.forceRescanTitle')}
+        </h2>
+        <p className="mb-4 text-xs text-muted-foreground">{t('settings.daemon.forceRescanHint')}</p>
         <div className="flex items-center gap-4">
           <button
             onClick={() => {
@@ -201,15 +204,19 @@ function DaemonSettings() {
                 : 'bg-primary text-primary-foreground hover:bg-primary/90',
             )}
           >
-            {rescanning ? 'Requesting…' : 'Force rescan'}
+            {rescanning ? t('settings.daemon.requesting') : t('settings.daemon.forceRescan')}
           </button>
           {rescanResult && (
             <span className="text-xs text-muted-foreground">
-              {rescanResult.status === 'rescanning' ? '✓ Rescan started' : '✓ Rescan queued'}
+              {rescanResult.status === 'rescanning'
+                ? t('settings.daemon.rescanStarted')
+                : t('settings.daemon.rescanQueued')}
             </span>
           )}
           {!reader && (
-            <span className="text-xs text-muted-foreground">No active reader configured.</span>
+            <span className="text-xs text-muted-foreground">
+              {t('settings.daemon.noActiveReader')}
+            </span>
           )}
         </div>
       </div>

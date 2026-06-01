@@ -1,5 +1,7 @@
 import { cn } from '@/lib/utils'
+import { useFixedDropdownPosition } from '@/hooks/useFixedDropdownPosition'
 import { useEffect, useId, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 interface FilterComboboxProps {
   value: string
@@ -22,6 +24,8 @@ export function FilterCombobox({
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listboxId = useId()
+  const filtered = options.filter((o) => o.toLowerCase().includes(input.toLowerCase()))
+  const dropdownStyle = useFixedDropdownPosition(open && filtered.length > 0, inputRef)
 
   // Keep input in sync with controlled value
   useEffect(() => {
@@ -37,8 +41,6 @@ export function FilterCombobox({
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
-
-  const filtered = options.filter((o) => o.toLowerCase().includes(input.toLowerCase()))
 
   const select = (opt: string) => {
     onChange(opt)
@@ -124,31 +126,36 @@ export function FilterCombobox({
         )}
       </div>
 
-      {open && filtered.length > 0 && (
-        <ul
-          id={listboxId}
-          role="listbox"
-          aria-label={`${label} options`}
-          className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-border bg-card shadow-lg"
-        >
-          {filtered.map((opt, i) => (
-            <li
-              key={opt}
-              role="option"
-              aria-selected={opt === value}
-              onMouseDown={() => select(opt)}
-              className={cn(
-                'cursor-pointer px-2 py-1.5 text-xs',
-                i === highlighted && 'bg-accent text-accent-foreground',
-                opt === value && i !== highlighted && 'text-primary',
-                i !== highlighted && opt !== value && 'text-foreground hover:bg-accent/50',
-              )}
-            >
-              {opt}
-            </li>
-          ))}
-        </ul>
-      )}
+      {open &&
+        filtered.length > 0 &&
+        dropdownStyle &&
+        createPortal(
+          <ul
+            id={listboxId}
+            role="listbox"
+            aria-label={`${label} options`}
+            style={dropdownStyle}
+            className="fixed z-50 overflow-y-auto rounded-md border border-border bg-card shadow-lg"
+          >
+            {filtered.map((opt, i) => (
+              <li
+                key={opt}
+                role="option"
+                aria-selected={opt === value}
+                onMouseDown={() => select(opt)}
+                className={cn(
+                  'cursor-pointer px-2 py-1.5 text-xs',
+                  i === highlighted && 'bg-accent text-accent-foreground',
+                  opt === value && i !== highlighted && 'text-primary',
+                  i !== highlighted && opt !== value && 'text-foreground hover:bg-accent/50',
+                )}
+              >
+                {opt}
+              </li>
+            ))}
+          </ul>,
+          document.body,
+        )}
     </div>
   )
 }
