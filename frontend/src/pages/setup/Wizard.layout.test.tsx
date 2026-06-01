@@ -153,6 +153,19 @@ describe('Wizard guide layout', () => {
     expect(screen.queryByText('Select a reader')).not.toBeInTheDocument()
   })
 
+  it('does not render step progress for a single-step reader setup', async () => {
+    readers = [thunderbirdReader]
+    const user = userEvent.setup()
+
+    renderWithProviders(<Wizard />, { route: '/setup' })
+
+    await user.click(await screen.findByRole('button', { name: 'Set up →' }))
+
+    expect(await screen.findByText('Configure reader')).toBeInTheDocument()
+    expect(screen.queryByText('1')).not.toBeInTheDocument()
+    expect(screen.queryByText('Configure')).not.toBeInTheDocument()
+  })
+
   it('shows preferences before reader setup when setup is incomplete', async () => {
     setupStatus = { required: true, missing: ['base_currency', 'timezone', 'time_format'] }
 

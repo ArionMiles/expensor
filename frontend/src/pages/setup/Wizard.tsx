@@ -193,42 +193,44 @@ function WizardFlow({
     >
       <div data-testid="setup-form-shell" className="w-full min-w-0 max-w-2xl">
         {/* Step progress */}
-        <div className="mb-8 flex items-center">
-          {steps.map((step, idx) => (
-            <div key={step} className="flex flex-1 items-center last:flex-none">
-              <div className="flex flex-col items-center gap-1">
-                <div
-                  className={cn(
-                    'flex h-6 w-6 items-center justify-center rounded-full border text-xs transition-colors',
-                    idx < currentIndex
-                      ? 'border-success bg-success/10 text-success'
-                      : idx === currentIndex
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border text-muted-foreground',
-                  )}
-                >
-                  {idx < currentIndex ? '✓' : idx + 1}
+        {steps.length > 1 && (
+          <div className="mb-8 flex items-center">
+            {steps.map((step, idx) => (
+              <div key={step} className="flex flex-1 items-center last:flex-none">
+                <div className="flex flex-col items-center gap-1">
+                  <div
+                    className={cn(
+                      'flex h-6 w-6 items-center justify-center rounded-full border text-xs transition-colors',
+                      idx < currentIndex
+                        ? 'border-success bg-success/10 text-success'
+                        : idx === currentIndex
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border text-muted-foreground',
+                    )}
+                  >
+                    {idx < currentIndex ? '✓' : idx + 1}
+                  </div>
+                  <span
+                    className={cn(
+                      'whitespace-nowrap text-[10px]',
+                      idx === currentIndex ? 'text-primary' : 'text-muted-foreground',
+                    )}
+                  >
+                    {STEP_LABELS[step]}
+                  </span>
                 </div>
-                <span
-                  className={cn(
-                    'whitespace-nowrap text-[10px]',
-                    idx === currentIndex ? 'text-primary' : 'text-muted-foreground',
-                  )}
-                >
-                  {STEP_LABELS[step]}
-                </span>
+                {idx < steps.length - 1 && (
+                  <div
+                    className={cn(
+                      'mx-2 mb-4 h-px flex-1 transition-colors',
+                      idx < currentIndex ? 'bg-success' : 'bg-border',
+                    )}
+                  />
+                )}
               </div>
-              {idx < steps.length - 1 && (
-                <div
-                  className={cn(
-                    'mx-2 mb-4 h-px flex-1 transition-colors',
-                    idx < currentIndex ? 'bg-success' : 'bg-border',
-                  )}
-                />
-              )}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
           {currentStep === 'credentials' && (
