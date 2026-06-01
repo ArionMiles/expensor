@@ -291,6 +291,7 @@ export interface AuthStartResponse {
 
 export interface AuthStatus {
   authenticated: boolean
+  auth_state: 'connected' | 'reauthorization_required' | 'refresh_pending'
   expiry?: string // RFC3339 — present when a token exists
 }
 
@@ -299,6 +300,7 @@ export interface ReaderStatus {
   authenticated: boolean
   config_present: boolean
   auth_type: 'oauth' | 'config'
+  auth_state: 'connected' | 'reauthorization_required' | 'refresh_pending'
   ready: boolean
 }
 

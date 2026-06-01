@@ -169,6 +169,7 @@ type AuthExchangeResponse struct {
 type AuthStatusResponse struct {
 	Authenticated bool       `json:"authenticated"`
 	AuthType      string     `json:"auth_type,omitempty" example:"config"`
+	AuthState     string     `json:"auth_state" example:"connected"`
 	Expiry        *time.Time `json:"expiry,omitempty" extensions:"x-nullable"`
 }
 
@@ -200,6 +201,7 @@ type ReaderStatusResponse struct {
 	Authenticated       bool   `json:"authenticated"`
 	ConfigPresent       bool   `json:"config_present"`
 	AuthType            string `json:"auth_type" example:"config"`
+	AuthState           string `json:"auth_state" example:"connected"`
 	Ready               bool   `json:"ready"`
 }
 

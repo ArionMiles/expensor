@@ -25,19 +25,6 @@ import { ReviewAndStart } from './steps/ReviewAndStart'
 import { SelectReader } from './steps/SelectReader'
 import { UploadCredentials } from './steps/UploadCredentials'
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function formatExpiry(expiry: string): string {
-  const date = new Date(expiry)
-  const now = new Date()
-  const diffDays = Math.ceil((date.getTime() - now.getTime()) / 86_400_000)
-  if (diffDays <= 0) return 'token expired'
-  if (diffDays === 1) return 'expires tomorrow'
-  if (diffDays < 30) return `expires in ${diffDays}d`
-  if (diffDays < 365) return `expires in ${Math.floor(diffDays / 30)}mo`
-  return `expires ${date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
-}
-
 // ─── Reader guide panel ───────────────────────────────────────────────────────
 
 function noteStyle(type: string): string {
@@ -332,7 +319,7 @@ function InlineOAuthPanel({
   )
 }
 
-type ReaderState = 'unconfigured' | 'needs-auth' | 'connected'
+type ReaderState = 'unconfigured' | 'needs-auth' | 'refresh-pending' | 'connected'
 
 function ReaderCard({
   reader,
@@ -353,17 +340,18 @@ function ReaderCard({
   const isOAuth = reader.auth_type === 'oauth'
   const ready = status?.ready ?? false
   const authenticated = status?.authenticated ?? false
+  const authState = status?.auth_state ?? 'reauthorization_required'
   const hasCredentials = isOAuth
     ? (status?.credentials_uploaded ?? false)
     : (status?.config_present ?? false)
 
   const readerState: ReaderState = ready
     ? 'connected'
-    : hasCredentials && isOAuth && !authenticated
-      ? 'needs-auth'
-      : 'unconfigured'
-
-  const { data: authDetails } = useReaderAuthStatus(reader.name, undefined, ready && isOAuth)
+    : hasCredentials && isOAuth && authState === 'refresh_pending'
+      ? 'refresh-pending'
+      : hasCredentials && isOAuth && !authenticated
+        ? 'needs-auth'
+        : 'unconfigured'
 
   const handleDisconnect = useCallback(() => {
     setConfirmAction('disconnect')
@@ -421,6 +409,11 @@ function ReaderCard({
         ○ Auth required
       </span>
     ),
+    'refresh-pending': (
+      <span className="rounded-sm border border-warning/50 bg-warning/10 px-1.5 py-0.5 text-[10px] text-warning">
+        ○ Refresh pending
+      </span>
+    ),
     unconfigured: (
       <span className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
         ○ Not configured
@@ -443,7 +436,7 @@ function ReaderCard({
               'w-0.5 flex-shrink-0',
               readerState === 'connected'
                 ? 'bg-success'
-                : readerState === 'needs-auth'
+                : readerState === 'needs-auth' || readerState === 'refresh-pending'
                   ? 'bg-warning'
                   : 'bg-border',
             )}
@@ -467,11 +460,6 @@ function ReaderCard({
                   <p className="text-xs text-muted-foreground">{reader.description}</p>
                 </div>
               </div>
-              {readerState === 'connected' && isOAuth && authDetails?.expiry && (
-                <span className="mt-0.5 flex-shrink-0 text-[10px] text-muted-foreground">
-                  {formatExpiry(authDetails.expiry)}
-                </span>
-              )}
             </div>
 
             {/* Context message */}
@@ -479,6 +467,13 @@ function ReaderCard({
               <div className="px-5 pb-3">
                 <p className="text-xs text-warning/90">
                   Credentials uploaded. Complete OAuth authorization to grant read access to Gmail.
+                </p>
+              </div>
+            )}
+            {!isLoading && readerState === 'refresh-pending' && (
+              <div className="px-5 pb-3">
+                <p className="text-xs text-warning/90">
+                  Expensor will refresh Gmail authorization automatically once Google is reachable.
                 </p>
               </div>
             )}
@@ -523,7 +518,7 @@ function ReaderCard({
                       </button>
                     )}
 
-                    {(readerState === 'needs-auth' || readerState === 'connected') && isOAuth && (
+                    {readerState === 'needs-auth' && isOAuth && (
                       <button
                         onClick={() => setShowAuthPanel(!showAuthPanel)}
                         disabled={isBusy}
@@ -534,7 +529,7 @@ function ReaderCard({
                             : 'border-primary text-primary hover:bg-primary hover:text-primary-foreground',
                         )}
                       >
-                        {readerState === 'connected' ? 'Re-authorize' : 'Authorize →'}
+                        Authorize →
                       </button>
                     )}
 

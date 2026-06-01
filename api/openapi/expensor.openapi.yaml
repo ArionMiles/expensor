@@ -54,6 +54,9 @@ definitions:
     type: object
   api.AuthStatusResponse:
     properties:
+      auth_state:
+        example: connected
+        type: string
       auth_type:
         example: config
         type: string
@@ -665,6 +668,9 @@ definitions:
     type: object
   api.ReaderStatusResponse:
     properties:
+      auth_state:
+        example: connected
+        type: string
       auth_type:
         example: config
         type: string

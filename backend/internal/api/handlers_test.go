@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/oauth2"
 
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
@@ -33,6 +36,12 @@ type mockDaemon struct {
 }
 
 func (m *mockDaemon) Status() DaemonStatus { return m.status }
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
+}
 
 type mockStore struct {
 	transactions          []store.Transaction
@@ -931,6 +940,145 @@ func TestAuthStatus_UsesStoreToken(t *testing.T) {
 	decodeJSON(t, rr.Body.String(), &resp)
 	if resp["authenticated"] != true {
 		t.Fatalf("expected authenticated=true, got %v", resp)
+	}
+	if resp["auth_state"] != "connected" {
+		t.Fatalf("expected auth_state=connected, got %v", resp)
+	}
+}
+
+func TestAuthStatus_RefreshesExpiredAccessTokenWithRefreshToken(t *testing.T) {
+	tokenClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.Method != http.MethodPost {
+			return nil, fmt.Errorf("token endpoint method = %s, want POST", r.Method)
+		}
+		if err := r.ParseForm(); err != nil {
+			return nil, fmt.Errorf("ParseForm: %w", err)
+		}
+		if got := r.Form.Get("grant_type"); got != "refresh_token" {
+			return nil, fmt.Errorf("grant_type = %q, want refresh_token", got)
+		}
+		if got := r.Form.Get("refresh_token"); got != "old-refresh" {
+			return nil, fmt.Errorf("refresh_token = %q, want old-refresh", got)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"access_token":"new-access","token_type":"Bearer","expires_in":3600}`)),
+			Request:    r,
+		}, nil
+	})}
+
+	secretJSON := fmt.Sprintf(`{
+		"installed": {
+			"client_id": "test-client-id.apps.googleusercontent.com",
+			"client_secret": "test-client-secret",
+			"auth_uri": "https://accounts.google.com/o/oauth2/auth",
+			"token_uri": %q,
+			"redirect_uris": ["http://localhost:8080/api/auth/callback"]
+		}
+	}`, "https://oauth.test/token")
+	ms := &mockStore{
+		readerSecrets: map[string][]byte{"gmail": []byte(secretJSON)},
+		readerTokens: map[string][]byte{
+			"gmail": []byte(`{"access_token":"old-access","refresh_token":"old-refresh","token_type":"Bearer","expiry":"2000-01-01T00:00:00Z"}`),
+		},
+	}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, tokenClient)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/gmail/auth/status", nil)
+	req.SetPathValue("name", "gmail")
+	rr := httptest.NewRecorder()
+
+	h.AuthStatus(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp map[string]any
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp["authenticated"] != true {
+		t.Fatalf("expected authenticated=true, got %v", resp)
+	}
+	if resp["auth_state"] != "connected" {
+		t.Fatalf("expected auth_state=connected, got %v", resp)
+	}
+	if !strings.Contains(string(ms.readerTokens["gmail"]), "new-access") {
+		t.Fatalf("saved token = %s, want refreshed access token", ms.readerTokens["gmail"])
+	}
+	if !strings.Contains(string(ms.readerTokens["gmail"]), "old-refresh") {
+		t.Fatalf("saved token = %s, want refresh token preserved", ms.readerTokens["gmail"])
+	}
+}
+
+func TestAuthStatus_ExpiredAccessTokenWithoutRefreshTokenRequiresAuth(t *testing.T) {
+	ms := &mockStore{
+		readerTokens: map[string][]byte{
+			"gmail": []byte(`{"access_token":"old-access","token_type":"Bearer","expiry":"2000-01-01T00:00:00Z"}`),
+		},
+	}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/gmail/auth/status", nil)
+	req.SetPathValue("name", "gmail")
+	rr := httptest.NewRecorder()
+
+	h.AuthStatus(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var resp map[string]any
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp["authenticated"] != false {
+		t.Fatalf("expected authenticated=false, got %v", resp)
+	}
+	if resp["auth_state"] != "reauthorization_required" {
+		t.Fatalf("expected auth_state=reauthorization_required, got %v", resp)
+	}
+}
+
+func TestAuthStatus_InvalidRefreshTokenRequiresAuth(t *testing.T) {
+	tokenClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"error":"invalid_grant","error_description":"Token has been expired or revoked."}`)),
+			Request:    r,
+		}, nil
+	})}
+
+	secretJSON := fmt.Sprintf(`{
+		"installed": {
+			"client_id": "test-client-id.apps.googleusercontent.com",
+			"client_secret": "test-client-secret",
+			"auth_uri": "https://accounts.google.com/o/oauth2/auth",
+			"token_uri": %q,
+			"redirect_uris": ["http://localhost:8080/api/auth/callback"]
+		}
+	}`, "https://oauth.test/token")
+	ms := &mockStore{
+		readerSecrets: map[string][]byte{"gmail": []byte(secretJSON)},
+		readerTokens: map[string][]byte{
+			"gmail": []byte(`{"access_token":"old-access","refresh_token":"old-refresh","token_type":"Bearer","expiry":"2000-01-01T00:00:00Z"}`),
+		},
+	}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, tokenClient)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/gmail/auth/status", nil)
+	req.SetPathValue("name", "gmail")
+	rr := httptest.NewRecorder()
+
+	h.AuthStatus(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var resp map[string]any
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp["authenticated"] != false {
+		t.Fatalf("expected authenticated=false, got %v", resp)
+	}
+	if resp["auth_state"] != "reauthorization_required" {
+		t.Fatalf("expected auth_state=reauthorization_required, got %v", resp)
 	}
 }
 

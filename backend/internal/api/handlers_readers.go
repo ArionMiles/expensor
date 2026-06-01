@@ -181,6 +181,18 @@ func (h *Handlers) CredentialsStatus(w http.ResponseWriter, r *http.Request) {
 
 // --- OAuth flow ---
 
+const (
+	authStateConnected               = "connected"
+	authStateReauthorizationRequired = "reauthorization_required"
+	authStateRefreshPending          = "refresh_pending"
+)
+
+type oauthTokenState struct {
+	authenticated bool
+	authState     string
+	expiry        *time.Time
+}
+
 // AuthStart handles POST /api/readers/{name}/auth/start.
 // Returns a Google OAuth consent URL for the given reader.
 // @Summary Start reader OAuth authorization
@@ -442,12 +454,19 @@ func (h *Handlers) AuthStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if plugin.Metadata().Auth.Type != plugins.AuthTypeOAuth {
 		// Config-only readers are always "authenticated" once configured.
-		writeJSON(w, http.StatusOK, map[string]any{"authenticated": true, "auth_type": plugins.AuthTypeConfig})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"authenticated": true,
+			"auth_type":     plugins.AuthTypeConfig,
+			"auth_state":    authStateConnected,
+		})
 		return
 	}
 
 	if h.store == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"authenticated": false})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"authenticated": false,
+			"auth_state":    authStateReauthorizationRequired,
+		})
 		return
 	}
 	tokenJSON, ok, err := h.store.GetReaderToken(r.Context(), name)
@@ -457,20 +476,99 @@ func (h *Handlers) AuthStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
-		writeJSON(w, http.StatusOK, map[string]any{"authenticated": false})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"authenticated": false,
+			"auth_state":    authStateReauthorizationRequired,
+		})
 		return
 	}
-	var tok oauth2.Token
-	if err := json.Unmarshal(tokenJSON, &tok); err != nil {
-		h.logger.Warn("failed to parse token", "reader", name, "error", err)
-		writeJSON(w, http.StatusOK, map[string]any{"authenticated": false})
+
+	tokenState, err := h.resolveOAuthTokenState(r.Context(), name, plugin.Metadata().Auth.RequiredScopes, tokenJSON)
+	if err != nil {
+		h.logger.Error("failed to resolve OAuth token state", "reader", name, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to resolve OAuth token state")
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"authenticated": tok.Valid(),
-		"expiry":        tok.Expiry,
+		"authenticated": tokenState.authenticated,
+		"auth_state":    tokenState.authState,
+		"expiry":        tokenState.expiry,
 	})
+}
+
+func (h *Handlers) resolveOAuthTokenState(ctx context.Context, name string, scopes []string, tokenJSON []byte) (oauthTokenState, error) {
+	var tok oauth2.Token
+	if err := json.Unmarshal(tokenJSON, &tok); err != nil {
+		h.logger.Warn("failed to parse token", "reader", name, "error", err)
+		return oauthTokenState{authState: authStateReauthorizationRequired}, nil
+	}
+	expiry := tokenExpiry(tok)
+	if tok.Valid() {
+		return oauthTokenState{authenticated: true, authState: authStateConnected, expiry: expiry}, nil
+	}
+	if tok.RefreshToken == "" {
+		return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, nil
+	}
+
+	secretJSON, ok, err := h.store.GetReaderSecret(ctx, name)
+	if err != nil {
+		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, fmt.Errorf("loading credentials for token refresh: %w", err)
+	}
+	if !ok {
+		return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, nil
+	}
+	oauthCfg, err := client.GetOAuthConfig(secretJSON, h.baseURL+"/api/auth/callback", scopes...)
+	if err != nil {
+		return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, fmt.Errorf("parsing credentials for token refresh: %w", err)
+	}
+	refreshed, err := oauthCfg.TokenSource(ctx, &tok).Token()
+	if err != nil {
+		if isInvalidOAuthGrant(err) {
+			return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, nil
+		}
+		h.logger.Warn("OAuth token refresh pending", "reader", name)
+		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, nil
+	}
+	refreshedJSON, err := json.Marshal(refreshed) //nolint:gosec // OAuth tokens are intentionally serialized into the runtime store.
+	if err != nil {
+		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, fmt.Errorf("marshaling refreshed token: %w", err)
+	}
+	if err := h.store.SetReaderToken(ctx, name, refreshedJSON); err != nil {
+		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, fmt.Errorf("saving refreshed token: %w", err)
+	}
+	return oauthTokenState{authenticated: true, authState: authStateConnected, expiry: tokenExpiry(*refreshed)}, nil
+}
+
+func tokenExpiry(tok oauth2.Token) *time.Time {
+	if tok.Expiry.IsZero() {
+		return nil
+	}
+	expiry := tok.Expiry
+	return &expiry
+}
+
+func isInvalidOAuthGrant(err error) bool {
+	var retrieveErr *oauth2.RetrieveError
+	return errors.As(err, &retrieveErr) && retrieveErr.ErrorCode == "invalid_grant"
+}
+
+func (h *Handlers) resolveReaderAuthStatus(ctx context.Context, name string, meta plugins.ReaderMetadata) (bool, string) {
+	if meta.Auth.Type != plugins.AuthTypeOAuth {
+		return true, authStateConnected
+	}
+	if h.store == nil {
+		return false, authStateReauthorizationRequired
+	}
+	tokenJSON, ok, err := h.store.GetReaderToken(ctx, name)
+	if err != nil || !ok {
+		return false, authStateReauthorizationRequired
+	}
+	tokenState, err := h.resolveOAuthTokenState(ctx, name, meta.Auth.RequiredScopes, tokenJSON)
+	if err != nil {
+		return false, authStateRefreshPending
+	}
+	return tokenState.authenticated, tokenState.authState
 }
 
 // DisconnectReader handles DELETE /api/readers/{name}.
@@ -653,6 +751,7 @@ func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 		Authenticated       bool             `json:"authenticated"`
 		ConfigPresent       bool             `json:"config_present"`
 		AuthType            plugins.AuthType `json:"auth_type"`
+		AuthState           string           `json:"auth_state"`
 		Ready               bool             `json:"ready"`
 	}
 
@@ -668,17 +767,7 @@ func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 		st.CredentialsUploaded = true
 	}
 
-	if meta.Auth.Type == plugins.AuthTypeOAuth {
-		if h.store != nil {
-			tokenJSON, ok, err := h.store.GetReaderToken(r.Context(), name)
-			if err == nil && ok {
-				var tok oauth2.Token
-				st.Authenticated = json.Unmarshal(tokenJSON, &tok) == nil && tok.Valid()
-			}
-		}
-	} else {
-		st.Authenticated = true
-	}
+	st.Authenticated, st.AuthState = h.resolveReaderAuthStatus(r.Context(), name, meta)
 
 	if len(meta.ConfigSchema) == 0 {
 		st.ConfigPresent = true

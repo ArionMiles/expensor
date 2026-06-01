@@ -5,6 +5,17 @@ import { Wizard } from './Wizard'
 import { renderWithProviders } from '@/test/render'
 
 let setupStatus = { required: false, missing: [] as string[] }
+let readerStatus = {
+  ready: false,
+  credentials_uploaded: false,
+  authenticated: false,
+  config_present: false,
+  auth_state: 'reauthorization_required',
+}
+let authStatus: { authenticated: boolean; auth_state: string; expiry?: string } = {
+  authenticated: false,
+  auth_state: 'reauthorization_required',
+}
 
 vi.mock('@/api/queries', () => ({
   queryKeys: {
@@ -14,7 +25,7 @@ vi.mock('@/api/queries', () => ({
     status: ['status'],
   },
   useDisconnectReader: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useReaderAuthStatus: () => ({ data: { authenticated: false } }),
+  useReaderAuthStatus: () => ({ data: authStatus }),
   useReaderGuide: () => ({
     data: {
       sections: [
@@ -25,15 +36,7 @@ vi.mock('@/api/queries', () => ({
       ],
     },
   }),
-  useReaderStatus: () => ({
-    data: {
-      ready: false,
-      credentials_uploaded: false,
-      authenticated: false,
-      config_present: false,
-    },
-    isLoading: false,
-  }),
+  useReaderStatus: () => ({ data: readerStatus, isLoading: false }),
   useReaders: () => ({
     data: [
       {
@@ -71,6 +74,14 @@ vi.mock('@/lib/timezone', () => ({
 describe('Wizard guide layout', () => {
   beforeEach(() => {
     setupStatus = { required: false, missing: [] }
+    readerStatus = {
+      ready: false,
+      credentials_uploaded: false,
+      authenticated: false,
+      config_present: false,
+      auth_state: 'reauthorization_required',
+    }
+    authStatus = { authenticated: false, auth_state: 'reauthorization_required' }
   })
 
   it('renders the setup guide in a wider responsive panel', async () => {
@@ -120,5 +131,27 @@ describe('Wizard guide layout', () => {
     await user.click(await screen.findByRole('button', { name: 'Continue' }))
 
     expect(await screen.findByText('Reader configuration')).toBeInTheDocument()
+  })
+
+  it('does not offer reauthorization or access-token expiry details while connected', async () => {
+    readerStatus = {
+      ready: true,
+      credentials_uploaded: true,
+      authenticated: true,
+      config_present: true,
+      auth_state: 'connected',
+    }
+    authStatus = {
+      authenticated: true,
+      auth_state: 'connected',
+      expiry: new Date(Date.now() + 86_400_000).toISOString(),
+    }
+
+    renderWithProviders(<Wizard />, { route: '/setup' })
+
+    expect(await screen.findByText('● Connected')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Re-authorize' })).not.toBeInTheDocument()
+    expect(screen.queryByText('expires tomorrow')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument()
   })
 })

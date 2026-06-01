@@ -24,6 +24,7 @@ describe('Sidebar', () => {
         authenticated: false,
         config_present: true,
         auth_type: 'oauth',
+        auth_state: 'reauthorization_required',
         ready: false,
       },
       isSuccess: true,
@@ -76,6 +77,24 @@ describe('Sidebar', () => {
     renderWithProviders(<Sidebar collapsed={true} onToggle={() => undefined} />)
 
     expect(screen.getByTestId('setup-attention-dot')).toBeInTheDocument()
+  })
+
+  it('does not show setup attention while authorization refresh is pending', () => {
+    mockUseReaderStatus.mockReturnValue({
+      data: {
+        credentials_uploaded: true,
+        authenticated: false,
+        config_present: true,
+        auth_type: 'oauth',
+        auth_state: 'refresh_pending',
+        ready: false,
+      },
+      isSuccess: true,
+    } as ReturnType<typeof useReaderStatus>)
+
+    renderWithProviders(<Sidebar collapsed={false} onToggle={() => undefined} />)
+
+    expect(screen.queryByTestId('setup-attention-dot')).not.toBeInTheDocument()
   })
 
   it('shows the open diagnostics count in expanded mode', () => {
