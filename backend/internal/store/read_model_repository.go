@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/sync/errgroup"
 )
 
 type ReadModelRepository interface {
@@ -24,6 +24,24 @@ type pgReadModelRepository struct {
 	pool    *pgxpool.Pool
 	runtime RuntimeRepository
 	now     func() time.Time
+}
+
+type chartQueryRequest struct {
+	Label string
+	Query string
+	Args  []any
+}
+
+type chartDataLoadRequest struct {
+	Monthly           chartQueryRequest
+	Daily             chartQueryRequest
+	Category          chartQueryRequest
+	Bucket            chartQueryRequest
+	Label             chartQueryRequest
+	Source            chartQueryRequest
+	SourceType        chartQueryRequest
+	Bank              chartQueryRequest
+	CategoryMonthlyFn func(context.Context) (map[string]CategoryMonthlyEntry, error)
 }
 
 func NewReadModelRepository(deps repositoryDependencies, runtime RuntimeRepository) ReadModelRepository {
@@ -112,37 +130,11 @@ func (r *pgReadModelRepository) chartDataReadModel(ctx context.Context) (*ChartD
 }
 
 func (r *pgReadModelRepository) getChartDataAt(ctx context.Context, now time.Time) (*ChartData, error) {
-	cd := &ChartData{
-		MonthlySpend:      []TimeBucket{},
-		DailySpend:        []TimeBucket{},
-		ByCategory:        make(map[string]float64),
-		ByBucket:          make(map[string]float64),
-		ByLabel:           make(map[string]float64),
-		BySource:          make(map[string]float64),
-		BySourceType:      make(map[string]float64),
-		ByBank:            make(map[string]float64),
-		ByCategoryMonthly: make(map[string]CategoryMonthlyEntry),
-	}
-
-	var mu sync.Mutex
-	var firstErr error
-
-	recordErr := func(err error) {
-		mu.Lock()
-		if firstErr == nil {
-			firstErr = err
-		}
-		mu.Unlock()
-	}
-
 	tz := r.appTimezone(ctx)
-
-	var wg sync.WaitGroup
-	wg.Add(9)
-
-	go func() {
-		defer wg.Done()
-		buckets, err := r.queryTimeBuckets(ctx, `
+	return r.loadChartData(ctx, chartDataLoadRequest{
+		Monthly: chartQueryRequest{
+			Label: "monthly spend",
+			Query: `
 			SELECT TO_CHAR(timestamp AT TIME ZONE $1, 'YYYY-MM') AS period,
 			       COALESCE(SUM(amount), 0)                     AS amount,
 			       COUNT(*)                                     AS cnt
@@ -150,19 +142,12 @@ func (r *pgReadModelRepository) getChartDataAt(ctx context.Context, now time.Tim
 			WHERE muted = false AND timestamp >= $2
 			GROUP BY period
 			ORDER BY period
-		`, tz, now.AddDate(-1, 0, 0))
-		if err != nil {
-			recordErr(fmt.Errorf("fetching monthly spend: %w", err))
-			return
-		}
-		mu.Lock()
-		cd.MonthlySpend = buckets
-		mu.Unlock()
-	}()
-
-	go func() {
-		defer wg.Done()
-		buckets, err := r.queryTimeBuckets(ctx, `
+		`,
+			Args: []any{tz, now.AddDate(-1, 0, 0)},
+		},
+		Daily: chartQueryRequest{
+			Label: "daily spend",
+			Query: `
 			SELECT TO_CHAR(timestamp AT TIME ZONE $1, 'YYYY-MM-DD') AS period,
 			       COALESCE(SUM(amount), 0)                        AS amount,
 			       COUNT(*)                                        AS cnt
@@ -170,33 +155,32 @@ func (r *pgReadModelRepository) getChartDataAt(ctx context.Context, now time.Tim
 			WHERE muted = false AND timestamp >= $2
 			GROUP BY period
 			ORDER BY period
-		`, tz, now.AddDate(0, 0, -30))
-		if err != nil {
-			recordErr(fmt.Errorf("fetching daily spend: %w", err))
-			return
-		}
-		mu.Lock()
-		cd.DailySpend = buckets
-		mu.Unlock()
-	}()
-
-	r.loadStringFloatChart(ctx, &wg, &mu, recordErr, chartLoadRequest{Target: &cd.ByCategory, Label: "category", Query: `
+		`,
+			Args: []any{tz, now.AddDate(0, 0, -30)},
+		},
+		Category: chartQueryRequest{
+			Label: "category chart data",
+			Query: `
 			SELECT COALESCE(NULLIF(category, ''), 'Uncategorized'), COALESCE(SUM(amount), 0)
 			FROM transactions
 			WHERE muted = false
 			GROUP BY COALESCE(NULLIF(category, ''), 'Uncategorized')
 			ORDER BY SUM(amount) DESC
-		`})
-
-	r.loadStringFloatChart(ctx, &wg, &mu, recordErr, chartLoadRequest{Target: &cd.ByBucket, Label: "bucket", Query: `
+		`,
+		},
+		Bucket: chartQueryRequest{
+			Label: "bucket chart data",
+			Query: `
 			SELECT COALESCE(NULLIF(bucket, ''), 'Uncategorized'), COALESCE(SUM(amount), 0)
 			FROM transactions
 			WHERE muted = false
 			GROUP BY COALESCE(NULLIF(bucket, ''), 'Uncategorized')
 			ORDER BY SUM(amount) DESC
-		`})
-
-	r.loadStringFloatChart(ctx, &wg, &mu, recordErr, chartLoadRequest{Target: &cd.ByLabel, Label: "label", Query: `
+		`,
+		},
+		Label: chartQueryRequest{
+			Label: "label chart data",
+			Query: `
 			SELECT COALESCE(tl.label, 'Uncategorized'), COALESCE(SUM(t.amount), 0)
 			FROM transactions t
 			LEFT JOIN transaction_labels tl ON tl.transaction_id = t.id
@@ -204,50 +188,42 @@ func (r *pgReadModelRepository) getChartDataAt(ctx context.Context, now time.Tim
 			GROUP BY COALESCE(tl.label, 'Uncategorized')
 			ORDER BY SUM(t.amount) DESC
 			LIMIT 20
-		`})
-
-	r.loadStringFloatChart(ctx, &wg, &mu, recordErr, chartLoadRequest{Target: &cd.BySource, Label: "source", Query: `
+		`,
+		},
+		Source: chartQueryRequest{
+			Label: "source chart data",
+			Query: `
 			SELECT COALESCE(source, ''), COALESCE(SUM(amount), 0)
 			FROM transactions
 			WHERE muted = false AND source IS NOT NULL AND source != ''
 			GROUP BY source
 			ORDER BY SUM(amount) DESC
-		`})
-
-	r.loadStringFloatChart(ctx, &wg, &mu, recordErr, chartLoadRequest{Target: &cd.BySourceType, Label: "source type", Query: `
+		`,
+		},
+		SourceType: chartQueryRequest{
+			Label: "source type chart data",
+			Query: `
 			SELECT COALESCE(source_type, ''), COALESCE(SUM(amount), 0)
 			FROM transactions
 			WHERE muted = false AND source_type IS NOT NULL AND source_type != ''
 			GROUP BY source_type
 			ORDER BY SUM(amount) DESC
-		`})
-
-	r.loadStringFloatChart(ctx, &wg, &mu, recordErr, chartLoadRequest{Target: &cd.ByBank, Label: "bank", Query: `
+		`,
+		},
+		Bank: chartQueryRequest{
+			Label: "bank chart data",
+			Query: `
 			SELECT COALESCE(bank, ''), COALESCE(SUM(amount), 0)
 			FROM transactions
 			WHERE muted = false AND bank IS NOT NULL AND bank != ''
 			GROUP BY bank
 			ORDER BY SUM(amount) DESC
-		`})
-
-	go func() {
-		defer wg.Done()
-		m, err := r.queryCategoryMonthlyAt(ctx, now)
-		if err != nil {
-			recordErr(err)
-			return
-		}
-		mu.Lock()
-		cd.ByCategoryMonthly = m
-		mu.Unlock()
-	}()
-
-	wg.Wait()
-
-	if firstErr != nil {
-		return nil, firstErr
-	}
-	return cd, nil
+		`,
+		},
+		CategoryMonthlyFn: func(ctx context.Context) (map[string]CategoryMonthlyEntry, error) {
+			return r.queryCategoryMonthlyAt(ctx, now)
+		},
+	})
 }
 
 func (r *pgReadModelRepository) dashboardDataReadModel(ctx context.Context) (*DashboardData, error) {
@@ -335,22 +311,11 @@ func (r *pgReadModelRepository) getStatsBetween(ctx context.Context, baseCurrenc
 }
 
 func (r *pgReadModelRepository) getChartDataBetween(ctx context.Context, loc *time.Location, startUTC, endUTC time.Time) (*ChartData, error) {
-	cd := &ChartData{
-		MonthlySpend:      []TimeBucket{},
-		DailySpend:        []TimeBucket{},
-		ByCategory:        make(map[string]float64),
-		ByBucket:          make(map[string]float64),
-		ByLabel:           make(map[string]float64),
-		BySource:          make(map[string]float64),
-		BySourceType:      make(map[string]float64),
-		ByBank:            make(map[string]float64),
-		ByCategoryMonthly: make(map[string]CategoryMonthlyEntry),
-	}
-
 	tz := loc.String()
-
-	var err error
-	if cd.MonthlySpend, err = r.queryTimeBuckets(ctx, `
+	return r.loadChartData(ctx, chartDataLoadRequest{
+		Monthly: chartQueryRequest{
+			Label: "range monthly spend",
+			Query: `
 		SELECT TO_CHAR(timestamp AT TIME ZONE $1, 'YYYY-MM') AS period,
 		       COALESCE(SUM(amount), 0)                    AS amount,
 		       COUNT(*)                                    AS cnt
@@ -358,11 +323,12 @@ func (r *pgReadModelRepository) getChartDataBetween(ctx context.Context, loc *ti
 		WHERE muted = false AND timestamp >= $2 AND timestamp < $3
 		GROUP BY period
 		ORDER BY period
-	`, tz, startUTC, endUTC); err != nil {
-		return nil, fmt.Errorf("fetching range monthly spend: %w", err)
-	}
-
-	if cd.DailySpend, err = r.queryTimeBuckets(ctx, `
+	`,
+			Args: []any{tz, startUTC, endUTC},
+		},
+		Daily: chartQueryRequest{
+			Label: "range daily spend",
+			Query: `
 		SELECT TO_CHAR(timestamp AT TIME ZONE $1, 'YYYY-MM-DD') AS period,
 		       COALESCE(SUM(amount), 0)                        AS amount,
 		       COUNT(*)                                        AS cnt
@@ -370,31 +336,34 @@ func (r *pgReadModelRepository) getChartDataBetween(ctx context.Context, loc *ti
 		WHERE muted = false AND timestamp >= $2 AND timestamp < $3
 		GROUP BY period
 		ORDER BY period
-	`, tz, startUTC, endUTC); err != nil {
-		return nil, fmt.Errorf("fetching range daily spend: %w", err)
-	}
-
-	if err := r.queryStringFloat(ctx, `
+	`,
+			Args: []any{tz, startUTC, endUTC},
+		},
+		Category: chartQueryRequest{
+			Label: "range category chart data",
+			Query: `
 		SELECT COALESCE(NULLIF(category, ''), 'Uncategorized'), COALESCE(SUM(amount), 0)
 		FROM transactions
 		WHERE muted = false AND timestamp >= $1 AND timestamp < $2
 		GROUP BY COALESCE(NULLIF(category, ''), 'Uncategorized')
 		ORDER BY SUM(amount) DESC
-	`, cd.ByCategory, startUTC, endUTC); err != nil {
-		return nil, fmt.Errorf("fetching range category chart data: %w", err)
-	}
-
-	if err := r.queryStringFloat(ctx, `
+	`,
+			Args: []any{startUTC, endUTC},
+		},
+		Bucket: chartQueryRequest{
+			Label: "range bucket chart data",
+			Query: `
 		SELECT COALESCE(NULLIF(bucket, ''), 'Uncategorized'), COALESCE(SUM(amount), 0)
 		FROM transactions
 		WHERE muted = false AND timestamp >= $1 AND timestamp < $2
 		GROUP BY COALESCE(NULLIF(bucket, ''), 'Uncategorized')
 		ORDER BY SUM(amount) DESC
-	`, cd.ByBucket, startUTC, endUTC); err != nil {
-		return nil, fmt.Errorf("fetching range bucket chart data: %w", err)
-	}
-
-	if err := r.queryStringFloat(ctx, `
+	`,
+			Args: []any{startUTC, endUTC},
+		},
+		Label: chartQueryRequest{
+			Label: "range label chart data",
+			Query: `
 		SELECT COALESCE(tl.label, 'Uncategorized'), COALESCE(SUM(t.amount), 0)
 		FROM transactions t
 		LEFT JOIN transaction_labels tl ON tl.transaction_id = t.id
@@ -402,48 +371,49 @@ func (r *pgReadModelRepository) getChartDataBetween(ctx context.Context, loc *ti
 		GROUP BY COALESCE(tl.label, 'Uncategorized')
 		ORDER BY SUM(t.amount) DESC
 		LIMIT 20
-	`, cd.ByLabel, startUTC, endUTC); err != nil {
-		return nil, fmt.Errorf("fetching range label chart data: %w", err)
-	}
-
-	if err := r.queryStringFloat(ctx, `
+	`,
+			Args: []any{startUTC, endUTC},
+		},
+		Source: chartQueryRequest{
+			Label: "range source chart data",
+			Query: `
 		SELECT COALESCE(source, ''), COALESCE(SUM(amount), 0)
 		FROM transactions
 		WHERE muted = false AND timestamp >= $1 AND timestamp < $2
 		  AND source IS NOT NULL AND source != ''
 		GROUP BY source
 		ORDER BY SUM(amount) DESC
-	`, cd.BySource, startUTC, endUTC); err != nil {
-		return nil, fmt.Errorf("fetching range source chart data: %w", err)
-	}
-
-	if err := r.queryStringFloat(ctx, `
+	`,
+			Args: []any{startUTC, endUTC},
+		},
+		SourceType: chartQueryRequest{
+			Label: "range source type chart data",
+			Query: `
 		SELECT COALESCE(source_type, ''), COALESCE(SUM(amount), 0)
 		FROM transactions
 		WHERE muted = false AND timestamp >= $1 AND timestamp < $2
 		  AND source_type IS NOT NULL AND source_type != ''
 		GROUP BY source_type
 		ORDER BY SUM(amount) DESC
-	`, cd.BySourceType, startUTC, endUTC); err != nil {
-		return nil, fmt.Errorf("fetching range source type chart data: %w", err)
-	}
-
-	if err := r.queryStringFloat(ctx, `
+	`,
+			Args: []any{startUTC, endUTC},
+		},
+		Bank: chartQueryRequest{
+			Label: "range bank chart data",
+			Query: `
 		SELECT COALESCE(bank, ''), COALESCE(SUM(amount), 0)
 		FROM transactions
 		WHERE muted = false AND timestamp >= $1 AND timestamp < $2
 		  AND bank IS NOT NULL AND bank != ''
 		GROUP BY bank
 		ORDER BY SUM(amount) DESC
-	`, cd.ByBank, startUTC, endUTC); err != nil {
-		return nil, fmt.Errorf("fetching range bank chart data: %w", err)
-	}
-
-	if cd.ByCategoryMonthly, err = r.queryCategoryMonthlyBetween(ctx, loc, startUTC, endUTC); err != nil {
-		return nil, err
-	}
-
-	return cd, nil
+	`,
+			Args: []any{startUTC, endUTC},
+		},
+		CategoryMonthlyFn: func(ctx context.Context) (map[string]CategoryMonthlyEntry, error) {
+			return r.queryCategoryMonthlyBetween(ctx, loc, startUTC, endUTC)
+		},
+	})
 }
 
 // queryCategoryMonthly returns per-category spend totals for the current and prior calendar month.
@@ -672,24 +642,71 @@ func (r *pgReadModelRepository) queryStringFloat(ctx context.Context, q string, 
 	return rows.Err()
 }
 
-func (r *pgReadModelRepository) loadStringFloatChart(
-	ctx context.Context,
-	wg *sync.WaitGroup,
-	mu *sync.Mutex,
-	recordErr func(error),
-	request chartLoadRequest,
-) {
-	go func() {
-		defer wg.Done()
-		values := make(map[string]float64)
-		if err := r.queryStringFloat(ctx, request.Query, values, request.Args...); err != nil {
-			recordErr(fmt.Errorf("fetching %s chart data: %w", request.Label, err))
-			return
+func (r *pgReadModelRepository) loadChartData(ctx context.Context, request chartDataLoadRequest) (*ChartData, error) {
+	cd := newChartData()
+	g, groupCtx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		buckets, err := r.queryTimeBuckets(groupCtx, request.Monthly.Query, request.Monthly.Args...)
+		if err != nil {
+			return fmt.Errorf("fetching %s: %w", request.Monthly.Label, err)
 		}
-		mu.Lock()
-		*request.Target = values
-		mu.Unlock()
-	}()
+		cd.MonthlySpend = buckets
+		return nil
+	})
+
+	g.Go(func() error {
+		buckets, err := r.queryTimeBuckets(groupCtx, request.Daily.Query, request.Daily.Args...)
+		if err != nil {
+			return fmt.Errorf("fetching %s: %w", request.Daily.Label, err)
+		}
+		cd.DailySpend = buckets
+		return nil
+	})
+
+	loadStringFloat := func(request chartQueryRequest, dest map[string]float64) {
+		g.Go(func() error {
+			if err := r.queryStringFloat(groupCtx, request.Query, dest, request.Args...); err != nil {
+				return fmt.Errorf("fetching %s: %w", request.Label, err)
+			}
+			return nil
+		})
+	}
+
+	loadStringFloat(request.Category, cd.ByCategory)
+	loadStringFloat(request.Bucket, cd.ByBucket)
+	loadStringFloat(request.Label, cd.ByLabel)
+	loadStringFloat(request.Source, cd.BySource)
+	loadStringFloat(request.SourceType, cd.BySourceType)
+	loadStringFloat(request.Bank, cd.ByBank)
+
+	g.Go(func() error {
+		m, err := request.CategoryMonthlyFn(groupCtx)
+		if err != nil {
+			return err
+		}
+		cd.ByCategoryMonthly = m
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	return cd, nil
+}
+
+func newChartData() *ChartData {
+	return &ChartData{
+		MonthlySpend:      []TimeBucket{},
+		DailySpend:        []TimeBucket{},
+		ByCategory:        make(map[string]float64),
+		ByBucket:          make(map[string]float64),
+		ByLabel:           make(map[string]float64),
+		BySource:          make(map[string]float64),
+		BySourceType:      make(map[string]float64),
+		ByBank:            make(map[string]float64),
+		ByCategoryMonthly: make(map[string]CategoryMonthlyEntry),
+	}
 }
 
 // initAppConfig creates the app_config table and seeds operational defaults.
