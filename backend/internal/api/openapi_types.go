@@ -4,7 +4,7 @@ import "time"
 
 // ErrorResponse is the standard JSON error payload for OpenAPI generation.
 type ErrorResponse struct {
-	Error string `json:"error" example:"database not connected"`
+	Error string `json:"error" example:"internal server error"`
 }
 
 // HealthResponse is the health check payload.

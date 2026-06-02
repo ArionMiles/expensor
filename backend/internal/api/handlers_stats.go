@@ -16,11 +16,7 @@ import (
 // @Failure 503 {object} ErrorResponse
 // @Router /stats/charts [get]
 func (h *Handlers) GetChartData(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	cd, err := h.store.GetChartData(r.Context())
+	cd, err := h.analyticsStore.GetChartData(r.Context())
 	if err != nil {
 		h.logger.Error("get chart data", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch chart data")
@@ -38,12 +34,7 @@ func (h *Handlers) GetChartData(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /stats/dashboard [get]
 func (h *Handlers) GetDashboardData(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-
-	data, err := h.store.GetDashboardData(r.Context())
+	data, err := h.analyticsStore.GetDashboardData(r.Context())
 	if err != nil {
 		h.logger.Error("get dashboard data", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch dashboard data")
@@ -67,18 +58,13 @@ func (h *Handlers) GetDashboardData(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /stats/heatmap [get]
 func (h *Handlers) GetHeatmap(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-
 	from, to, err := parseHeatmapRange(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	data, err := h.store.GetSpendingHeatmap(r.Context(), from, to)
+	data, err := h.analyticsStore.GetSpendingHeatmap(r.Context(), from, to)
 	if err != nil {
 		h.logger.Error("get heatmap", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch heatmap data")
@@ -99,18 +85,13 @@ func (h *Handlers) GetHeatmap(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /stats/heatmap/annual [get]
 func (h *Handlers) GetAnnualHeatmap(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-
 	yearStr := r.URL.Query().Get("year")
 	year, err := strconv.Atoi(yearStr)
 	if err != nil || year < 1 {
 		year = time.Now().Year()
 	}
 
-	buckets, err := h.store.GetAnnualSpend(r.Context(), year)
+	buckets, err := h.analyticsStore.GetAnnualSpend(r.Context(), year)
 	if err != nil {
 		h.logger.Error("get annual heatmap", "error", err, "year", year)
 		writeError(w, http.StatusInternalServerError, "failed to fetch annual heatmap data")

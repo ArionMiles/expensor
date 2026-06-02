@@ -13,10 +13,8 @@ import (
 
 // currentBaseCurrency returns the base currency from the DB, falling back to INR.
 func (h *Handlers) currentBaseCurrency(ctx context.Context) string {
-	if h.store != nil {
-		if val, err := h.store.GetAppConfig(ctx, "base_currency"); err == nil && val != "" {
-			return val
-		}
+	if val, err := h.settingsStore.GetAppConfig(ctx, "base_currency"); err == nil && val != "" {
+		return val
 	}
 	return defaultBaseCurrency
 }

@@ -137,11 +137,7 @@ func (h *Handlers) UploadCredentials(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	if err := h.store.SetReaderSecret(r.Context(), name, body); err != nil {
+	if err := h.readerRuntimeStore.SetReaderSecret(r.Context(), name, body); err != nil {
 		h.logger.Error("failed to save credentials", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to save credentials")
 		return
@@ -167,11 +163,7 @@ func (h *Handlers) CredentialsStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.store == nil {
-		writeJSON(w, http.StatusOK, map[string]bool{"exists": false})
-		return
-	}
-	_, exists, err := h.store.GetReaderSecret(r.Context(), name)
+	_, exists, err := h.readerRuntimeStore.GetReaderSecret(r.Context(), name)
 	if err != nil {
 		h.logger.Error("failed to load credentials status", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to load credentials status")
@@ -219,12 +211,8 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	h.logger.Debug("reading credentials from store", "reader", name)
-	secretJSON, ok, err := h.store.GetReaderSecret(r.Context(), name)
+	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(r.Context(), name)
 	if err != nil {
 		h.logger.Error("failed to load credentials", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to load credentials")
@@ -285,10 +273,7 @@ func (h *Handlers) exchangeAndSaveToken(ctx context.Context, name, code, redirec
 		return fmt.Errorf("%w: %w", errReaderNotRegistered, err)
 	}
 
-	if h.store == nil {
-		return errors.New("database not connected")
-	}
-	secretJSON, ok, err := h.store.GetReaderSecret(ctx, name)
+	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(ctx, name)
 	if err != nil {
 		return fmt.Errorf("failed to load credentials: %w", err)
 	}
@@ -310,7 +295,7 @@ func (h *Handlers) exchangeAndSaveToken(ctx context.Context, name, code, redirec
 	if err != nil {
 		return fmt.Errorf("failed to marshal token: %w", err)
 	}
-	if err := h.store.SetReaderToken(ctx, name, tokenJSON); err != nil {
+	if err := h.readerRuntimeStore.SetReaderToken(ctx, name, tokenJSON); err != nil {
 		return fmt.Errorf("failed to save token: %w", err)
 	}
 	h.restartReaderDaemonAfterAuth(name)
@@ -489,14 +474,7 @@ func (h *Handlers) AuthStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.store == nil {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"authenticated": false,
-			"auth_state":    authStateReauthorizationRequired,
-		})
-		return
-	}
-	tokenJSON, ok, err := h.store.GetReaderToken(r.Context(), name)
+	tokenJSON, ok, err := h.readerRuntimeStore.GetReaderToken(r.Context(), name)
 	if err != nil {
 		h.logger.Error("failed to load token", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to load token")
@@ -538,7 +516,7 @@ func (h *Handlers) resolveOAuthTokenState(ctx context.Context, name string, scop
 		return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, nil
 	}
 
-	secretJSON, ok, err := h.store.GetReaderSecret(ctx, name)
+	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(ctx, name)
 	if err != nil {
 		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, fmt.Errorf("loading credentials for token refresh: %w", err)
 	}
@@ -561,7 +539,7 @@ func (h *Handlers) resolveOAuthTokenState(ctx context.Context, name string, scop
 	if err != nil {
 		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, fmt.Errorf("marshaling refreshed token: %w", err)
 	}
-	if err := h.store.SetReaderToken(ctx, name, refreshedJSON); err != nil {
+	if err := h.readerRuntimeStore.SetReaderToken(ctx, name, refreshedJSON); err != nil {
 		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, fmt.Errorf("saving refreshed token: %w", err)
 	}
 	return oauthTokenState{authenticated: true, authState: authStateConnected, expiry: tokenExpiry(*refreshed)}, nil
@@ -584,10 +562,7 @@ func (h *Handlers) resolveReaderAuthStatus(ctx context.Context, name string, met
 	if meta.Auth.Type != plugins.AuthTypeOAuth {
 		return true, authStateConnected
 	}
-	if h.store == nil {
-		return false, authStateReauthorizationRequired
-	}
-	tokenJSON, ok, err := h.store.GetReaderToken(ctx, name)
+	tokenJSON, ok, err := h.readerRuntimeStore.GetReaderToken(ctx, name)
 	if err != nil || !ok {
 		return false, authStateReauthorizationRequired
 	}
@@ -616,23 +591,19 @@ func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	activeReader, err := h.store.GetActiveReader(r.Context())
+	activeReader, err := h.readerRuntimeStore.GetActiveReader(r.Context())
 	if err != nil {
 		h.logger.Error("failed to read active reader before disconnect", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
 		return
 	}
-	if err := h.store.DeleteReaderRuntime(r.Context(), name); err != nil {
+	if err := h.readerRuntimeStore.DeleteReaderRuntime(r.Context(), name); err != nil {
 		h.logger.Error("failed to disconnect reader", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
 		return
 	}
 	if activeReader == name {
-		if err := h.store.SetAppConfig(r.Context(), "active_reader", ""); err != nil {
+		if err := h.readerRuntimeStore.SetActiveReader(r.Context(), ""); err != nil {
 			h.logger.Error("failed to clear active reader", "reader", name, "error", err)
 			writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
 			return
@@ -663,11 +634,7 @@ func (h *Handlers) RevokeToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	if _, ok, err := h.store.GetReaderToken(r.Context(), name); err != nil {
+	if _, ok, err := h.readerRuntimeStore.GetReaderToken(r.Context(), name); err != nil {
 		h.logger.Error("failed to load token", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to remove token")
 		return
@@ -675,7 +642,7 @@ func (h *Handlers) RevokeToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "no token found")
 		return
 	}
-	if err := h.store.DeleteReaderToken(r.Context(), name); err != nil {
+	if err := h.readerRuntimeStore.DeleteReaderToken(r.Context(), name); err != nil {
 		h.logger.Error("failed to remove token", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to remove token")
 		return
@@ -703,11 +670,7 @@ func (h *Handlers) GetReaderConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.store == nil {
-		writeJSON(w, http.StatusOK, map[string]any{})
-		return
-	}
-	data, ok, err := h.store.GetReaderConfig(r.Context(), name)
+	data, ok, err := h.readerRuntimeStore.GetReaderConfig(r.Context(), name)
 	if err != nil {
 		h.logger.Error("failed to read config", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to read config")
@@ -758,11 +721,7 @@ func (h *Handlers) SaveReaderConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	if err := h.store.SetReaderConfig(r.Context(), name, json.RawMessage(body)); err != nil {
+	if err := h.readerRuntimeStore.SetReaderConfig(r.Context(), name, json.RawMessage(body)); err != nil {
 		h.logger.Error("failed to save config", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to save config")
 		return
@@ -802,10 +761,13 @@ func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 	st := readerStatus{AuthType: meta.Auth.Type}
 
 	if meta.Auth.RequiresCredentialsUpload {
-		if h.store != nil {
-			_, ok, err := h.store.GetReaderSecret(r.Context(), name)
-			st.CredentialsUploaded = err == nil && ok
+		_, ok, err := h.readerRuntimeStore.GetReaderSecret(r.Context(), name)
+		if err != nil {
+			h.logger.Error("failed to load credentials status", "reader", name, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to load credentials status")
+			return
 		}
+		st.CredentialsUploaded = ok
 	} else {
 		st.CredentialsUploaded = true
 	}
@@ -814,9 +776,14 @@ func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 
 	if len(meta.ConfigSchema) == 0 {
 		st.ConfigPresent = true
-	} else if h.store != nil {
-		_, ok, err := h.store.GetReaderConfig(r.Context(), name)
-		st.ConfigPresent = err == nil && ok
+	} else {
+		_, ok, err := h.readerRuntimeStore.GetReaderConfig(r.Context(), name)
+		if err != nil {
+			h.logger.Error("failed to load reader config status", "reader", name, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to load reader config status")
+			return
+		}
+		st.ConfigPresent = ok
 	}
 
 	st.Ready = st.CredentialsUploaded && st.Authenticated && st.ConfigPresent

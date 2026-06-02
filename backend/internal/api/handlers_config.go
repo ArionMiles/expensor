@@ -36,10 +36,6 @@ func (h *Handlers) ListBanks(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/base-currency [get]
 func (h *Handlers) GetBaseCurrency(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	writeJSON(w, http.StatusOK, map[string]string{"base_currency": h.currentBaseCurrency(r.Context())})
 }
 
@@ -57,10 +53,6 @@ func (h *Handlers) GetBaseCurrency(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/base-currency [put]
 func (h *Handlers) SetBaseCurrency(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	var body struct {
 		BaseCurrency string `json:"base_currency"`
 	}
@@ -79,7 +71,7 @@ func (h *Handlers) SetBaseCurrency(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := h.store.SetAppConfig(r.Context(), "base_currency", currency); err != nil {
+	if err := h.settingsStore.SetAppConfig(r.Context(), "base_currency", currency); err != nil {
 		h.logger.Error("set base currency", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to update base currency")
 		return
@@ -95,12 +87,8 @@ func (h *Handlers) SetBaseCurrency(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/scan-interval [get]
 func (h *Handlers) GetScanInterval(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	val := strconv.Itoa(h.scanInterval)
-	if dbVal, err := h.store.GetAppConfig(r.Context(), "scan_interval"); err == nil && dbVal != "" {
+	if dbVal, err := h.settingsStore.GetAppConfig(r.Context(), "scan_interval"); err == nil && dbVal != "" {
 		val = dbVal
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"scan_interval": val})
@@ -119,29 +107,16 @@ func (h *Handlers) GetScanInterval(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/scan-interval [put]
-func (h *Handlers) SetScanInterval(w http.ResponseWriter, r *http.Request) { //nolint:dupl // same shape as SetLookbackDays; different key and bounds
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	var body struct {
-		ScanInterval string `json:"scan_interval"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ScanInterval == "" {
-		writeError(w, http.StatusUnprocessableEntity, "body must be {\"scan_interval\": \"<seconds>\"}")
-		return
-	}
-	n, err := strconv.Atoi(body.ScanInterval)
-	if err != nil || n < 10 || n > 3600 {
-		writeError(w, http.StatusBadRequest, "scan_interval must be an integer between 10 and 3600 seconds")
-		return
-	}
-	if err := h.store.SetAppConfig(r.Context(), "scan_interval", body.ScanInterval); err != nil {
-		h.logger.Error("set scan interval", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update scan interval")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"scan_interval": body.ScanInterval})
+func (h *Handlers) SetScanInterval(w http.ResponseWriter, r *http.Request) {
+	h.setNumericAppConfig(w, r, numericConfigSpec{
+		key:         "scan_interval",
+		min:         10,
+		max:         3600,
+		bodyMessage: "body must be {\"scan_interval\": \"<seconds>\"}",
+		rangeMsg:    "scan_interval must be an integer between 10 and 3600 seconds",
+		logMessage:  "set scan interval",
+		errorMsg:    "failed to update scan interval",
+	})
 }
 
 // GetLookbackDays handles GET /api/config/lookback-days.
@@ -152,12 +127,8 @@ func (h *Handlers) SetScanInterval(w http.ResponseWriter, r *http.Request) { //n
 // @Failure 503 {object} ErrorResponse
 // @Router /config/lookback-days [get]
 func (h *Handlers) GetLookbackDays(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	val := strconv.Itoa(h.lookbackDays)
-	if dbVal, err := h.store.GetAppConfig(r.Context(), "lookback_days"); err == nil && dbVal != "" {
+	if dbVal, err := h.settingsStore.GetAppConfig(r.Context(), "lookback_days"); err == nil && dbVal != "" {
 		val = dbVal
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"lookback_days": val})
@@ -176,29 +147,46 @@ func (h *Handlers) GetLookbackDays(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/lookback-days [put]
-func (h *Handlers) SetLookbackDays(w http.ResponseWriter, r *http.Request) { //nolint:dupl // same shape as SetScanInterval; different key and bounds
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
+func (h *Handlers) SetLookbackDays(w http.ResponseWriter, r *http.Request) {
+	h.setNumericAppConfig(w, r, numericConfigSpec{
+		key:         "lookback_days",
+		min:         1,
+		max:         3650,
+		bodyMessage: "body must be {\"lookback_days\": \"<days>\"}",
+		rangeMsg:    "lookback_days must be an integer between 1 and 3650",
+		logMessage:  "set lookback days",
+		errorMsg:    "failed to update lookback days",
+	})
+}
+
+type numericConfigSpec struct {
+	key         string
+	min         int
+	max         int
+	bodyMessage string
+	rangeMsg    string
+	logMessage  string
+	errorMsg    string
+}
+
+func (h *Handlers) setNumericAppConfig(w http.ResponseWriter, r *http.Request, spec numericConfigSpec) {
+	var body map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body[spec.key] == "" {
+		writeError(w, http.StatusUnprocessableEntity, spec.bodyMessage)
 		return
 	}
-	var body struct {
-		LookbackDays string `json:"lookback_days"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.LookbackDays == "" {
-		writeError(w, http.StatusUnprocessableEntity, "body must be {\"lookback_days\": \"<days>\"}")
+	value := body[spec.key]
+	n, err := strconv.Atoi(value)
+	if err != nil || n < spec.min || n > spec.max {
+		writeError(w, http.StatusBadRequest, spec.rangeMsg)
 		return
 	}
-	n, err := strconv.Atoi(body.LookbackDays)
-	if err != nil || n < 1 || n > 3650 {
-		writeError(w, http.StatusBadRequest, "lookback_days must be an integer between 1 and 3650")
+	if err := h.settingsStore.SetAppConfig(r.Context(), spec.key, value); err != nil {
+		h.logger.Error(spec.logMessage, "error", err)
+		writeError(w, http.StatusInternalServerError, spec.errorMsg)
 		return
 	}
-	if err := h.store.SetAppConfig(r.Context(), "lookback_days", body.LookbackDays); err != nil {
-		h.logger.Error("set lookback days", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update lookback days")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"lookback_days": body.LookbackDays})
+	writeJSON(w, http.StatusOK, map[string]string{spec.key: value})
 }
 
 // validTimeFormats is the set of accepted time_format values.
@@ -217,12 +205,8 @@ var validTimeFormats = map[string]bool{
 // @Failure 503 {object} ErrorResponse
 // @Router /config/timezone [get]
 func (h *Handlers) GetTimezone(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	tz := ""
-	if dbVal, err := h.store.GetAppConfig(r.Context(), "app.timezone"); err == nil && dbVal != "" {
+	if dbVal, err := h.settingsStore.GetAppConfig(r.Context(), "app.timezone"); err == nil && dbVal != "" {
 		tz = dbVal
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"timezone": tz})
@@ -242,10 +226,6 @@ func (h *Handlers) GetTimezone(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/timezone [put]
 func (h *Handlers) SetTimezone(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	var body struct {
 		Timezone string `json:"timezone"`
 	}
@@ -258,7 +238,7 @@ func (h *Handlers) SetTimezone(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid IANA timezone string")
 		return
 	}
-	if err := h.store.SetAppConfig(r.Context(), "app.timezone", tz); err != nil {
+	if err := h.settingsStore.SetAppConfig(r.Context(), "app.timezone", tz); err != nil {
 		h.logger.Error("set timezone", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to update timezone")
 		return
@@ -274,12 +254,8 @@ func (h *Handlers) SetTimezone(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/time-format [get]
 func (h *Handlers) GetTimeFormat(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	tf := "HH:mm"
-	if dbVal, err := h.store.GetAppConfig(r.Context(), "app.time_format"); err == nil && dbVal != "" {
+	if dbVal, err := h.settingsStore.GetAppConfig(r.Context(), "app.time_format"); err == nil && dbVal != "" {
 		tf = dbVal
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"time_format": tf})
@@ -299,10 +275,6 @@ func (h *Handlers) GetTimeFormat(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/time-format [put]
 func (h *Handlers) SetTimeFormat(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	var body struct {
 		TimeFormat string `json:"time_format"`
 	}
@@ -315,7 +287,7 @@ func (h *Handlers) SetTimeFormat(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid time_format; accepted: HH:mm, HH:mm:ss, h:mm a, h:mm:ss a")
 		return
 	}
-	if err := h.store.SetAppConfig(r.Context(), "app.time_format", tf); err != nil {
+	if err := h.settingsStore.SetAppConfig(r.Context(), "app.time_format", tf); err != nil {
 		h.logger.Error("set time format", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to update time format")
 		return
@@ -334,7 +306,7 @@ func (h *Handlers) missingSetupPreferences(ctx context.Context) []string {
 	}
 	missing := make([]string, 0, len(required))
 	for _, pref := range required {
-		value, err := h.store.GetAppConfig(ctx, pref.key)
+		value, err := h.settingsStore.GetAppConfig(ctx, pref.key)
 		if err != nil || strings.TrimSpace(value) == "" {
 			missing = append(missing, pref.field)
 		}
@@ -350,10 +322,6 @@ func (h *Handlers) missingSetupPreferences(ctx context.Context) []string {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/setup-status [get]
 func (h *Handlers) GetSetupStatus(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	missing := h.missingSetupPreferences(r.Context())
 	writeJSON(w, http.StatusOK, map[string]any{
 		"required": len(missing) > 0,
@@ -371,12 +339,8 @@ func (h *Handlers) GetSetupStatus(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/readers/{name}/checkpoint [get]
 func (h *Handlers) GetReaderCheckpoint(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	name := r.PathValue("name")
-	val, err := h.store.GetAppConfig(r.Context(), "reader."+name+".last_scan_at")
+	val, err := h.settingsStore.GetAppConfig(r.Context(), "reader."+name+".last_scan_at")
 	if err != nil || val == "" {
 		writeJSON(w, http.StatusOK, map[string]any{"last_scan_at": nil})
 		return
@@ -396,12 +360,8 @@ func (h *Handlers) GetReaderCheckpoint(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/readers/{name}/checkpoint [delete]
 func (h *Handlers) ClearReaderCheckpoint(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	name := r.PathValue("name")
-	if err := h.store.SetAppConfig(r.Context(), "reader."+name+".last_scan_at", ""); err != nil {
+	if err := h.settingsStore.SetAppConfig(r.Context(), "reader."+name+".last_scan_at", ""); err != nil {
 		h.logger.Error("clear reader checkpoint", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to clear checkpoint")
 		return
@@ -423,11 +383,9 @@ func (h *Handlers) resolveTimezone(ctx context.Context, requested string) string
 			return requested
 		}
 	}
-	if h.store != nil {
-		if configured, err := h.store.GetAppConfig(ctx, "app.timezone"); err == nil && configured != "" {
-			if _, err := time.LoadLocation(configured); err == nil {
-				return configured
-			}
+	if configured, err := h.settingsStore.GetAppConfig(ctx, "app.timezone"); err == nil && configured != "" {
+		if _, err := time.LoadLocation(configured); err == nil {
+			return configured
 		}
 	}
 	return fallback

@@ -21,11 +21,7 @@ import (
 // @Failure 503 {object} ErrorResponse
 // @Router /config/labels [get]
 func (h *Handlers) ListLabels(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	labels, err := h.store.ListLabels(r.Context())
+	labels, err := h.taxonomyStore.ListLabels(r.Context())
 	if err != nil {
 		h.logger.Error("list labels", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list labels")
@@ -47,10 +43,6 @@ func (h *Handlers) ListLabels(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/labels [post]
 func (h *Handlers) CreateLabel(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	var body struct {
 		Name  string `json:"name"`
 		Color string `json:"color"`
@@ -62,7 +54,7 @@ func (h *Handlers) CreateLabel(w http.ResponseWriter, r *http.Request) {
 	if body.Color == "" {
 		body.Color = "#6366f1"
 	}
-	if err := h.store.CreateLabel(r.Context(), body.Name, body.Color); err != nil {
+	if err := h.taxonomyStore.CreateLabel(r.Context(), body.Name, body.Color); err != nil {
 		h.logger.Error("create label", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create label")
 		return
@@ -85,10 +77,6 @@ func (h *Handlers) CreateLabel(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/labels/{name} [put]
 func (h *Handlers) UpdateLabel(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	name := r.PathValue("name")
 	var body struct {
 		Color string `json:"color"`
@@ -97,7 +85,7 @@ func (h *Handlers) UpdateLabel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "body must be {\"color\": \"<hex>\"}")
 		return
 	}
-	if err := h.store.UpdateLabel(r.Context(), name, body.Color); err != nil {
+	if err := h.taxonomyStore.UpdateLabel(r.Context(), name, body.Color); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "label not found")
 			return
@@ -119,16 +107,12 @@ func (h *Handlers) UpdateLabel(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/labels/{name} [delete]
 func (h *Handlers) DeleteLabel(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	name := r.PathValue("name")
 	removeFromTransactions, ok := taxonomyCleanupFlag(w, r)
 	if !ok {
 		return
 	}
-	if err := h.store.DeleteLabel(r.Context(), name, removeFromTransactions); err != nil {
+	if err := h.taxonomyStore.DeleteLabel(r.Context(), name, removeFromTransactions); err != nil {
 		h.logger.Error("delete label", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to delete label")
 		return
@@ -150,10 +134,6 @@ func (h *Handlers) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/labels/{name}/apply [post]
 func (h *Handlers) ApplyLabel(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	name := r.PathValue("name")
 	var body struct {
 		MerchantPattern string `json:"merchant_pattern"`
@@ -162,7 +142,7 @@ func (h *Handlers) ApplyLabel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "body must be {\"merchant_pattern\": \"<pattern>\"}")
 		return
 	}
-	affected, err := h.store.ApplyLabelByMerchant(r.Context(), name, body.MerchantPattern)
+	affected, err := h.taxonomyStore.ApplyLabelByMerchant(r.Context(), name, body.MerchantPattern)
 	if err != nil {
 		h.logger.Error("apply label", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to apply label")
@@ -185,10 +165,6 @@ func (h *Handlers) ApplyLabel(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/labels/{name}/merchant [delete]
 func (h *Handlers) RemoveLabelByMerchant(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	name := r.PathValue("name")
 	var body struct {
 		MerchantPattern string `json:"merchant_pattern"`
@@ -197,7 +173,7 @@ func (h *Handlers) RemoveLabelByMerchant(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusUnprocessableEntity, "body must be {\"merchant_pattern\": \"<pattern>\"}")
 		return
 	}
-	removed, err := h.store.RemoveLabelByMerchant(r.Context(), name, body.MerchantPattern)
+	removed, err := h.taxonomyStore.RemoveLabelByMerchant(r.Context(), name, body.MerchantPattern)
 	if err != nil {
 		h.logger.Error("remove label by merchant", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to remove label")
@@ -221,11 +197,6 @@ func (h *Handlers) RemoveLabelByMerchant(w http.ResponseWriter, r *http.Request)
 // @Failure 503 {object} ErrorResponse
 // @Router /stats/labels/monthly [get]
 func (h *Handlers) GetLabelMonthlySpend(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-
 	dimension := strings.TrimSpace(r.URL.Query().Get("dimension"))
 	if dimension == "" {
 		dimension = "labels"
@@ -237,7 +208,7 @@ func (h *Handlers) GetLabelMonthlySpend(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	data, err := h.store.GetMonthlyBreakdownSpend(r.Context(), dimension, 12)
+	data, err := h.analyticsStore.GetMonthlyBreakdownSpend(r.Context(), dimension, 12)
 	if err != nil {
 		h.logger.Error("get monthly breakdown spend", "dimension", dimension, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch monthly breakdown spend")
@@ -256,11 +227,7 @@ func (h *Handlers) GetLabelMonthlySpend(w http.ResponseWriter, r *http.Request) 
 // @Failure 503 {object} ErrorResponse
 // @Router /config/labels/mappings [get]
 func (h *Handlers) GetLabelMappings(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	mappings, err := h.store.GetLabelMappings(r.Context())
+	mappings, err := h.taxonomyStore.GetLabelMappings(r.Context())
 	if err != nil {
 		h.logger.Error("get label mappings", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to get label mappings")
@@ -279,17 +246,13 @@ func (h *Handlers) GetLabelMappings(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/labels/export [get]
 func (h *Handlers) ExportLabels(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	labels, err := h.store.ListLabels(r.Context())
+	labels, err := h.taxonomyStore.ListLabels(r.Context())
 	if err != nil {
 		h.logger.Error("export labels", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list labels")
 		return
 	}
-	mappings, err := h.store.GetLabelMappings(r.Context())
+	mappings, err := h.taxonomyStore.GetLabelMappings(r.Context())
 	if err != nil {
 		h.logger.Error("export label mappings", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list label mappings")
@@ -329,9 +292,9 @@ func (h *Handlers) ExportCategories(w http.ResponseWriter, r *http.Request) {
 		singular: "category",
 		plural:   "categories",
 		filename: "expensor-categories.json",
-		list:     func(ctx context.Context) ([]store.Category, error) { return h.store.ListCategories(ctx) },
+		list:     func(ctx context.Context) ([]store.Category, error) { return h.taxonomyStore.ListCategories(ctx) },
 		getMappings: func(ctx context.Context) (map[string][]string, error) {
-			return h.store.GetCategoryMappings(ctx)
+			return h.taxonomyStore.GetCategoryMappings(ctx)
 		},
 		nameOf: func(item store.Category) string { return item.Name },
 	})
@@ -346,11 +309,7 @@ func (h *Handlers) ExportCategories(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/categories/mappings [get]
 func (h *Handlers) GetCategoryMappings(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	mappings, err := h.store.GetCategoryMappings(r.Context())
+	mappings, err := h.taxonomyStore.GetCategoryMappings(r.Context())
 	if err != nil {
 		h.logger.Error("get category mappings", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to get category mappings")
@@ -368,11 +327,7 @@ func (h *Handlers) GetCategoryMappings(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/categories [get]
 func (h *Handlers) ListCategories(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	cats, err := h.store.ListCategories(r.Context())
+	cats, err := h.taxonomyStore.ListCategories(r.Context())
 	if err != nil {
 		h.logger.Error("list categories", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list categories")
@@ -393,10 +348,6 @@ func (h *Handlers) ListCategories(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/categories [post]
 func (h *Handlers) CreateCategory(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	var body struct {
 		Name        string `json:"name"`
 		Description string `json:"description"`
@@ -405,7 +356,7 @@ func (h *Handlers) CreateCategory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "body must include \"name\"")
 		return
 	}
-	if err := h.store.CreateCategory(r.Context(), body.Name, body.Description); err != nil {
+	if err := h.taxonomyStore.CreateCategory(r.Context(), body.Name, body.Description); err != nil {
 		h.logger.Error("create category", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create category")
 		return
@@ -423,16 +374,12 @@ func (h *Handlers) CreateCategory(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/categories/{name} [delete]
 func (h *Handlers) DeleteCategory(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	name := r.PathValue("name")
 	removeFromTransactions, ok := taxonomyCleanupFlag(w, r)
 	if !ok {
 		return
 	}
-	if err := h.store.DeleteCategory(r.Context(), name, removeFromTransactions); err != nil {
+	if err := h.taxonomyStore.DeleteCategory(r.Context(), name, removeFromTransactions); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "category not found")
 			return
@@ -458,7 +405,7 @@ func (h *Handlers) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 // @Router /config/categories/{name}/apply [post]
 func (h *Handlers) ApplyCategoryByMerchant(w http.ResponseWriter, r *http.Request) {
 	h.handleApplyTaxonomyMerchant(w, r, "category", func(ctx context.Context, category, pattern string) (int64, error) {
-		return h.store.ApplyCategoryByMerchant(ctx, category, pattern)
+		return h.taxonomyStore.ApplyCategoryByMerchant(ctx, category, pattern)
 	})
 }
 
@@ -476,7 +423,7 @@ func (h *Handlers) ApplyCategoryByMerchant(w http.ResponseWriter, r *http.Reques
 // @Router /config/categories/{name}/merchant [delete]
 func (h *Handlers) RemoveCategoryByMerchant(w http.ResponseWriter, r *http.Request) {
 	h.handleRemoveTaxonomyMerchant(w, r, "category", func(ctx context.Context, category, pattern string) (int64, error) {
-		return h.store.RemoveCategoryByMerchant(ctx, category, pattern)
+		return h.taxonomyStore.RemoveCategoryByMerchant(ctx, category, pattern)
 	})
 }
 
@@ -489,11 +436,7 @@ func (h *Handlers) RemoveCategoryByMerchant(w http.ResponseWriter, r *http.Reque
 // @Failure 503 {object} ErrorResponse
 // @Router /config/buckets [get]
 func (h *Handlers) ListBuckets(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	bkts, err := h.store.ListBuckets(r.Context())
+	bkts, err := h.taxonomyStore.ListBuckets(r.Context())
 	if err != nil {
 		h.logger.Error("list buckets", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list buckets")
@@ -514,10 +457,6 @@ func (h *Handlers) ListBuckets(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/buckets [post]
 func (h *Handlers) CreateBucket(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	var body struct {
 		Name        string `json:"name"`
 		Description string `json:"description"`
@@ -526,7 +465,7 @@ func (h *Handlers) CreateBucket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "body must include \"name\"")
 		return
 	}
-	if err := h.store.CreateBucket(r.Context(), body.Name, body.Description); err != nil {
+	if err := h.taxonomyStore.CreateBucket(r.Context(), body.Name, body.Description); err != nil {
 		h.logger.Error("create bucket", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create bucket")
 		return
@@ -544,16 +483,12 @@ func (h *Handlers) CreateBucket(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/buckets/{name} [delete]
 func (h *Handlers) DeleteBucket(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	name := r.PathValue("name")
 	removeFromTransactions, ok := taxonomyCleanupFlag(w, r)
 	if !ok {
 		return
 	}
-	if err := h.store.DeleteBucket(r.Context(), name, removeFromTransactions); err != nil {
+	if err := h.taxonomyStore.DeleteBucket(r.Context(), name, removeFromTransactions); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "bucket not found")
 			return
@@ -579,9 +514,9 @@ func (h *Handlers) ExportBuckets(w http.ResponseWriter, r *http.Request) {
 		singular: "bucket",
 		plural:   "buckets",
 		filename: "expensor-buckets.json",
-		list:     func(ctx context.Context) ([]store.Bucket, error) { return h.store.ListBuckets(ctx) },
+		list:     func(ctx context.Context) ([]store.Bucket, error) { return h.taxonomyStore.ListBuckets(ctx) },
 		getMappings: func(ctx context.Context) (map[string][]string, error) {
-			return h.store.GetBucketMappings(ctx)
+			return h.taxonomyStore.GetBucketMappings(ctx)
 		},
 		nameOf: func(item store.Bucket) string { return item.Name },
 	})
@@ -596,11 +531,7 @@ func (h *Handlers) ExportBuckets(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/buckets/mappings [get]
 func (h *Handlers) GetBucketMappings(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	mappings, err := h.store.GetBucketMappings(r.Context())
+	mappings, err := h.taxonomyStore.GetBucketMappings(r.Context())
 	if err != nil {
 		h.logger.Error("get bucket mappings", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to get bucket mappings")
@@ -623,7 +554,7 @@ func (h *Handlers) GetBucketMappings(w http.ResponseWriter, r *http.Request) {
 // @Router /config/buckets/{name}/apply [post]
 func (h *Handlers) ApplyBucketByMerchant(w http.ResponseWriter, r *http.Request) {
 	h.handleApplyTaxonomyMerchant(w, r, "bucket", func(ctx context.Context, bucket, pattern string) (int64, error) {
-		return h.store.ApplyBucketByMerchant(ctx, bucket, pattern)
+		return h.taxonomyStore.ApplyBucketByMerchant(ctx, bucket, pattern)
 	})
 }
 
@@ -641,7 +572,7 @@ func (h *Handlers) ApplyBucketByMerchant(w http.ResponseWriter, r *http.Request)
 // @Router /config/buckets/{name}/merchant [delete]
 func (h *Handlers) RemoveBucketByMerchant(w http.ResponseWriter, r *http.Request) {
 	h.handleRemoveTaxonomyMerchant(w, r, "bucket", func(ctx context.Context, bucket, pattern string) (int64, error) {
-		return h.store.RemoveBucketByMerchant(ctx, bucket, pattern)
+		return h.taxonomyStore.RemoveBucketByMerchant(ctx, bucket, pattern)
 	})
 }
 
@@ -680,10 +611,6 @@ func handleExportNamedTaxonomy[T any](
 	config taxonomyExportConfig[T],
 ) {
 	h := config.handlers
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	items, err := config.list(r.Context())
 	if err != nil {
 		h.logger.Error("export taxonomy", "kind", config.singular, "error", err)
@@ -747,10 +674,6 @@ func (h *Handlers) handleTaxonomyMerchant(
 	r *http.Request,
 	action taxonomyMerchantAction,
 ) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	name := r.PathValue("name")
 	var body struct {
 		MerchantPattern string `json:"merchant_pattern"`
@@ -783,11 +706,6 @@ func (h *Handlers) handleTaxonomyMerchant(
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions/{id}/labels [post]
 func (h *Handlers) AddLabels(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-
 	id, ok := uuidPathValue(w, r, "id", "transaction")
 	if !ok {
 		return
@@ -800,7 +718,7 @@ func (h *Handlers) AddLabels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.store.AddLabels(r.Context(), id, body.Labels); err != nil {
+	if err := h.transactionStore.AddLabels(r.Context(), id, body.Labels); err != nil {
 		h.logger.Error("add labels", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to add labels")
 		return
@@ -822,18 +740,13 @@ func (h *Handlers) AddLabels(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions/{id}/labels/{label} [delete]
 func (h *Handlers) RemoveLabel(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-
 	id, ok := uuidPathValue(w, r, "id", "transaction")
 	if !ok {
 		return
 	}
 	label := r.PathValue("label")
 
-	if err := h.store.RemoveLabel(r.Context(), id, label); err != nil {
+	if err := h.transactionStore.RemoveLabel(r.Context(), id, label); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "label not found on transaction")
 			return

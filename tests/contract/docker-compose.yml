@@ -14,7 +14,7 @@ services:
       retries: 20
 
   backend:
-    image: golang:1.26.3-alpine
+    image: golang:1.26.4-alpine
     working_dir: /workspace/backend
     volumes:
       - ../..:/workspace

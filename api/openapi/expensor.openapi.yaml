@@ -301,7 +301,7 @@ definitions:
   api.ErrorResponse:
     properties:
       error:
-        example: database not connected
+        example: internal server error
         type: string
     type: object
   api.ExtractionDiagnosticResponse:

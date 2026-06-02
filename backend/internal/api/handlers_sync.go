@@ -30,11 +30,7 @@ func (h *Handlers) TriggerSync(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/sync/status [get]
 func (h *Handlers) GetSyncStatus(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	status, err := h.store.GetSyncStatus(r.Context())
+	status, err := h.syncStore.GetSyncStatus(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

@@ -250,11 +250,7 @@ func validateRuleRow(row store.RuleRow) error {
 // @Failure 503 {object} ErrorResponse
 // @Router /rules [get]
 func (h *Handlers) ListRules(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	rules, err := h.store.ListRules(r.Context())
+	rules, err := h.ruleStore.ListRules(r.Context())
 	if err != nil {
 		h.logger.Error("list rules", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list rules")
@@ -277,10 +273,6 @@ func (h *Handlers) ListRules(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /rules [post]
 func (h *Handlers) CreateRule(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	var body ruleHTTPJSON
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
@@ -291,7 +283,7 @@ func (h *Handlers) CreateRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	created, err := h.store.CreateRule(r.Context(), row)
+	created, err := h.ruleStore.CreateRule(r.Context(), row)
 	if err != nil {
 		if errors.Is(err, store.ErrRuleNameConflict) {
 			writeError(w, http.StatusConflict, "rule name already exists")
@@ -307,11 +299,11 @@ func (h *Handlers) CreateRule(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) clearActiveReaderCheckpointForNewRule(ctx context.Context) {
 	reader, err := h.readActiveReader(ctx)
-	if err != nil || strings.TrimSpace(reader) == "" || h.store == nil {
+	if err != nil || strings.TrimSpace(reader) == "" {
 		return
 	}
 	reader = strings.TrimSpace(reader)
-	if err := h.store.SetAppConfig(ctx, "reader."+reader+".last_scan_at", ""); err != nil {
+	if err := h.settingsStore.SetAppConfig(ctx, "reader."+reader+".last_scan_at", ""); err != nil {
 		h.logger.Warn("failed to clear checkpoint after rule creation", "reader", reader, "error", err)
 		return
 	}
@@ -321,10 +313,7 @@ func (h *Handlers) clearActiveReaderCheckpointForNewRule(ctx context.Context) {
 }
 
 func (h *Handlers) readActiveReader(ctx context.Context) (string, error) {
-	if h.store == nil {
-		return "", nil
-	}
-	return h.store.GetActiveReader(ctx)
+	return h.readerRuntimeStore.GetActiveReader(ctx)
 }
 
 // UpdateRule handles PUT /api/rules/{id}.
@@ -345,10 +334,6 @@ func (h *Handlers) readActiveReader(ctx context.Context) (string, error) {
 // @Failure 503 {object} ErrorResponse
 // @Router /rules/{id} [put]
 func (h *Handlers) UpdateRule(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	id, ok := uuidPathValue(w, r, "id", "rule")
 	if !ok {
 		return
@@ -363,7 +348,7 @@ func (h *Handlers) UpdateRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	updated, err := h.store.UpdateRule(r.Context(), id, row)
+	updated, err := h.ruleStore.UpdateRule(r.Context(), id, row)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "rule not found")
@@ -395,15 +380,11 @@ func (h *Handlers) UpdateRule(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /rules/{id} [delete]
 func (h *Handlers) DeleteRule(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	id, ok := uuidPathValue(w, r, "id", "rule")
 	if !ok {
 		return
 	}
-	existing, err := h.store.GetRule(r.Context(), id)
+	existing, err := h.ruleStore.GetRule(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "rule not found")
@@ -416,7 +397,7 @@ func (h *Handlers) DeleteRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "predefined rules cannot be deleted")
 		return
 	}
-	if err := h.store.DeleteRule(r.Context(), id); err != nil {
+	if err := h.ruleStore.DeleteRule(r.Context(), id); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "rule not found")
 			return
@@ -440,11 +421,7 @@ func (h *Handlers) DeleteRule(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /rules/export [get]
 func (h *Handlers) ExportRules(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	all, err := h.store.ListRules(r.Context())
+	all, err := h.ruleStore.ListRules(r.Context())
 	if err != nil {
 		h.logger.Error("export rules", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch rules")
@@ -477,10 +454,6 @@ func (h *Handlers) ExportRules(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /rules/import [post]
 func (h *Handlers) ImportRules(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	r.Body = http.MaxBytesReader(w, r.Body, 5<<20)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -496,7 +469,7 @@ func (h *Handlers) ImportRules(w http.ResponseWriter, r *http.Request) {
 	for _, rule := range doc.Rules {
 		rows = append(rows, ruleToRow(rule))
 	}
-	if err := h.store.ImportUserRules(r.Context(), rows); err != nil {
+	if err := h.ruleStore.ImportUserRules(r.Context(), rows); err != nil {
 		h.logger.Error("import rules", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to import rules")
 		return
