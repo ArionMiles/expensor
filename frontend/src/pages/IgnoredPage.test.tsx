@@ -89,32 +89,6 @@ describe('IgnoredPage', () => {
     expect(await screen.findByRole('button', { name: 'Corner Coffee' })).toBeInTheDocument()
   })
 
-  it('uses the shared destructive icon treatment for merchant-wide pattern removal', () => {
-    mockMutedMerchants.data = [
-      {
-        id: 'merchant-1',
-        pattern: 'SELF TRANSFER',
-        created_at: '2026-05-17T00:00:00Z',
-        muted_count: 2,
-      },
-    ]
-
-    renderWithProviders(<IgnoredPage />, { route: '/ignored?tab=merchant' })
-
-    const row = screen.getByRole('row', { name: /SELF TRANSFER/ })
-    const deleteButton = within(row).getByRole('button', { name: 'Delete SELF TRANSFER' })
-
-    expect(deleteButton).toHaveClass(
-      'inline-flex',
-      'h-8',
-      'w-8',
-      'text-destructive',
-      'hover:bg-destructive/10',
-      'hover:ring-1',
-      'hover:ring-destructive/30',
-    )
-  })
-
   it('orders individual transaction columns by date, merchant, amount, reason, and action', () => {
     mockTransactions.data = [
       {

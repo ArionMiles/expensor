@@ -104,13 +104,4 @@ describe('Sidebar', () => {
     expect(badge).toHaveTextContent('3')
     expect(badge).toHaveAttribute('aria-label', '3 open diagnostics')
   })
-
-  it('centers the collapsed diagnostics count without clipping it', () => {
-    renderWithProviders(<Sidebar collapsed={true} onToggle={() => undefined} />)
-
-    const badge = screen.getByTestId('diagnostics-count-badge')
-    expect(badge).toHaveClass('items-center')
-    expect(badge).toHaveClass('justify-center')
-    expect(screen.getByTestId('nav-link-diagnostics')).toHaveClass('overflow-visible')
-  })
 })

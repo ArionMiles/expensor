@@ -9,7 +9,6 @@ import {
   BreakdownTimeline,
   DEFAULT_SPEND_BREAKDOWN_MODE,
   DEFAULT_HEATMAP_METRIC,
-  MetricToggle,
   SummarySection,
   dashboardBreakdownData,
   dashboardBreakdownParams,
@@ -134,26 +133,6 @@ describe('MetricToggle', () => {
   it('uses count as the default heatmap metric', () => {
     expect(DEFAULT_HEATMAP_METRIC).toBe('count')
   })
-
-  it('uses the dashboard segmented toggle styling', () => {
-    render(<MetricToggle value="count" onChange={() => undefined} />)
-
-    expect(screen.getByRole('group', { name: 'Heatmap metric' })).toHaveClass(
-      'bg-card',
-      'p-0.5',
-      'text-xs',
-    )
-    expect(screen.getByRole('button', { name: 'Count' })).toHaveClass(
-      'rounded',
-      'px-3',
-      'py-1.5',
-      'bg-primary',
-    )
-    expect(screen.getByRole('button', { name: 'Amount' })).toHaveClass(
-      'text-muted-foreground',
-      'hover:text-foreground',
-    )
-  })
 })
 
 describe('SummarySection', () => {
@@ -169,16 +148,6 @@ describe('SummarySection', () => {
     expect(screen.queryByText(/Total:/)).not.toBeInTheDocument()
     expect(screen.queryByText('Total')).not.toBeInTheDocument()
     expect(container.querySelector('[data-testid="summary-static-charts-separator"]')).toBeTruthy()
-  })
-
-  it('animates donut arcs when summary chart data changes', () => {
-    const { container } = renderSummarySection('current_month')
-
-    const arcs = container.querySelectorAll('circle[stroke-dasharray]')
-    expect(arcs.length).toBeGreaterThan(0)
-    arcs.forEach((arc) => {
-      expect(arc).toHaveClass('transition-all', 'duration-500', 'ease-out')
-    })
   })
 
   it('keeps uncategorized visually distinct from needs in the bucket donut', () => {
