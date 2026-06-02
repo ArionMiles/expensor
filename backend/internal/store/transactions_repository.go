@@ -37,6 +37,13 @@ type pgTransactionsRepository struct {
 	pool *pgxpool.Pool
 }
 
+type transactionQueryRequest struct {
+	filter     ListFilter
+	search     string
+	countError string
+	dataError  string
+}
+
 func NewTransactionsRepository(deps repositoryDependencies) TransactionsRepository {
 	return newPGTransactionsRepository(deps)
 }
@@ -52,31 +59,37 @@ func (r *pgTransactionsRepository) ListTransactions(ctx context.Context, f ListF
 }
 
 func (r *pgTransactionsRepository) listTransactionsQuery(ctx context.Context, f ListFilter) ([]Transaction, TransactionListResult, error) {
-	if f.Page < 1 {
-		f.Page = 1
-	}
-	if f.PageSize < 1 {
-		f.PageSize = 20
-	}
+	return r.queryTransactions(ctx, transactionQueryRequest{
+		filter:     f,
+		countError: "counting transactions",
+		dataError:  "listing transactions",
+	})
+}
+
+func (r *pgTransactionsRepository) queryTransactions(
+	ctx context.Context,
+	request transactionQueryRequest,
+) ([]Transaction, TransactionListResult, error) {
+	f := normalizeTransactionListFilter(request.filter)
+	query := strings.TrimSpace(request.search)
 
 	where, args := buildListWhere(f)
+	if query != "" {
+		searchCond := buildSearchCondition(query, &args)
+		where = combineWhere(searchCond, where)
+	}
+
 	offset := (f.Page - 1) * f.PageSize
 	join := joinLabel(f.Label)
 
 	result, err := r.queryTransactionTotals(ctx, join, where, args)
 	if err != nil {
-		return nil, TransactionListResult{}, fmt.Errorf("counting transactions: %w", err)
+		return nil, TransactionListResult{}, fmt.Errorf("%s: %w", request.countError, err)
 	}
 
 	args = append(args, f.PageSize, offset)
 	limitArg := len(args) - 1
 	offsetArg := len(args)
-
-	orderClause := "t.timestamp DESC"
-	if strings.ToLower(f.SortDir) == "asc" {
-		orderClause = "t.timestamp ASC"
-	}
-
 	dataSQL := fmt.Sprintf(`
 		SELECT DISTINCT t.id, t.message_id, t.amount, t.currency,
 		       t.original_amount, t.original_currency, t.exchange_rate,
@@ -87,11 +100,11 @@ func (r *pgTransactionsRepository) listTransactionsQuery(ctx context.Context, f 
 		FROM transactions t%s%s
 		ORDER BY %s
 		LIMIT $%d OFFSET $%d
-	`, join, where, orderClause, limitArg, offsetArg)
+	`, join, where, transactionOrderClause(f), limitArg, offsetArg)
 
 	rows, err := r.pool.Query(ctx, dataSQL, args...)
 	if err != nil {
-		return nil, TransactionListResult{}, fmt.Errorf("listing transactions: %w", err)
+		return nil, TransactionListResult{}, fmt.Errorf("%s: %w", request.dataError, err)
 	}
 	defer rows.Close()
 
@@ -105,6 +118,23 @@ func (r *pgTransactionsRepository) listTransactionsQuery(ctx context.Context, f 
 	}
 
 	return txns, result, nil
+}
+
+func normalizeTransactionListFilter(f ListFilter) ListFilter {
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.PageSize < 1 {
+		f.PageSize = 20
+	}
+	return f
+}
+
+func transactionOrderClause(f ListFilter) string {
+	if strings.ToLower(f.SortDir) == "asc" {
+		return "t.timestamp ASC"
+	}
+	return "t.timestamp DESC"
 }
 
 func (r *pgTransactionsRepository) GetTransaction(ctx context.Context, id string) (*Transaction, error) {
@@ -265,59 +295,16 @@ func (r *pgTransactionsRepository) searchTransactionsQuery(
 	query string,
 	f ListFilter,
 ) ([]Transaction, TransactionListResult, error) {
-	if f.Page < 1 {
-		f.Page = 1
-	}
-	if f.PageSize < 1 {
-		f.PageSize = 20
-	}
-
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return r.listTransactionsQuery(ctx, f)
 	}
-
-	where, args := buildListWhere(f)
-	searchCond := buildSearchCondition(query, &args)
-	fullWhere := combineWhere(searchCond, where)
-	offset := (f.Page - 1) * f.PageSize
-
-	join := joinLabel(f.Label)
-	result, err := r.queryTransactionTotals(ctx, join, fullWhere, args)
-	if err != nil {
-		return nil, TransactionListResult{}, fmt.Errorf("counting search results: %w", err)
-	}
-
-	args = append(args, f.PageSize, offset)
-	limitArg := len(args) - 1
-	offsetArg := len(args)
-
-	dataSQL := fmt.Sprintf(`
-		SELECT DISTINCT t.id, t.message_id, t.amount, t.currency,
-		       t.original_amount, t.original_currency, t.exchange_rate,
-		       t.timestamp, t.merchant_info,
-		       COALESCE(t.category, ''), COALESCE(t.bucket, ''),
-		       t.source, COALESCE(t.source_type, ''), COALESCE(t.source_label, ''), COALESCE(t.bank, ''),
-		       COALESCE(t.description, ''), t.muted, t.muted_by_merchant, COALESCE(t.mute_reason,''), t.created_at, t.updated_at
-		FROM transactions t%s%s
-		ORDER BY t.timestamp DESC
-		LIMIT $%d OFFSET $%d
-	`, join, fullWhere, limitArg, offsetArg)
-
-	rows, err := r.pool.Query(ctx, dataSQL, args...)
-	if err != nil {
-		return nil, TransactionListResult{}, fmt.Errorf("searching transactions: %w", err)
-	}
-	defer rows.Close()
-
-	txns, err := scanTransactions(rows)
-	if err != nil {
-		return nil, TransactionListResult{}, err
-	}
-	if err := r.loadLabels(ctx, txns); err != nil {
-		return nil, TransactionListResult{}, err
-	}
-	return txns, result, nil
+	return r.queryTransactions(ctx, transactionQueryRequest{
+		filter:     f,
+		search:     query,
+		countError: "counting search results",
+		dataError:  "searching transactions",
+	})
 }
 
 func (r *pgTransactionsRepository) GetFacets(ctx context.Context) (*Facets, error) {

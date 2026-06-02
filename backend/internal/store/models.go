@@ -78,13 +78,6 @@ type ChartData struct {
 	ByCategoryMonthly map[string]CategoryMonthlyEntry `json:"by_category_monthly"`
 }
 
-type chartLoadRequest struct {
-	Target *map[string]float64
-	Label  string
-	Query  string
-	Args   []any
-}
-
 // DashboardSection is one dashboard slice with a label, summary stats, and charts.
 type DashboardSection struct {
 	Label  string    `json:"label"`

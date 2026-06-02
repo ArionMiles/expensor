@@ -1150,6 +1150,46 @@ func TestSearchTransactions(t *testing.T) {
 	}
 }
 
+func TestSearchTransactions_HonorsAscendingSort(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+
+	for _, p := range []store.InsertParams{
+		{
+			MessageID:    "srch-sort-new",
+			Amount:       200,
+			Currency:     "INR",
+			MerchantInfo: "Coffee New",
+			Category:     "Food",
+			Timestamp:    time.Date(2026, time.March, 2, 9, 0, 0, 0, time.UTC),
+		},
+		{
+			MessageID:    "srch-sort-old",
+			Amount:       100,
+			Currency:     "INR",
+			MerchantInfo: "Coffee Old",
+			Category:     "Food",
+			Timestamp:    time.Date(2026, time.March, 1, 9, 0, 0, 0, time.UTC),
+		},
+	} {
+		if _, err := ts.InsertForTest(ctx, p); err != nil {
+			t.Fatalf("InsertForTest: %v", err)
+		}
+	}
+
+	txns, _, err := ts.SearchTransactions(ctx, "Coffee", store.ListFilter{PageSize: 10, SortDir: "asc"})
+	if err != nil {
+		t.Fatalf("SearchTransactions: %v", err)
+	}
+	if len(txns) != 2 {
+		t.Fatalf("expected 2 search results, got %d", len(txns))
+	}
+	if txns[0].MessageID != "srch-sort-old" || txns[1].MessageID != "srch-sort-new" {
+		t.Fatalf("expected ascending search order, got %q then %q", txns[0].MessageID, txns[1].MessageID)
+	}
+}
+
 func TestSearchTransactions_EmptyQuery(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
