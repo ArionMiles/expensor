@@ -1,57 +1,97 @@
 import { useRef, useState } from 'react'
 import { useSaveReaderConfig, useThunderbirdMailboxes, useThunderbirdProfiles } from '@/api/queries'
 import type { ConfigField } from '@/api/types'
+import { ComboboxListbox, comboboxOptionClass, useComboboxNavigation } from '@/components/Combobox'
+import { useI18n } from '@/i18n/I18nProvider'
 import { cn } from '@/lib/utils'
 
 // ─── Thunderbird profile combobox ─────────────────────────────────────────────
 
 function ThunderbirdProfileField({
+  id,
+  label,
   value,
   onChange,
   disabled,
 }: {
+  id: string
+  label: string
   value: string
   onChange: (v: string) => void
   disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const { data: profiles = [], isLoading } = useThunderbirdProfiles()
+  const { t } = useI18n()
 
   const filtered = profiles.filter((p) => p.toLowerCase().includes(value.toLowerCase()))
+  const navigation = useComboboxNavigation({
+    open,
+    optionCount: filtered.length,
+    onOpenChange: setOpen,
+    onSelectIndex: (index) => {
+      const selected = filtered[index]
+      if (!selected) return
+      onChange(selected)
+      setOpen(false)
+      navigation.resetHighlight()
+    },
+  })
+  const highlighted = navigation.highlightedIndex
 
   return (
     <div ref={containerRef} className="relative">
       <input
+        id={id}
+        ref={inputRef}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          onChange(e.target.value)
+          setOpen(true)
+          navigation.resetHighlight()
+        }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         disabled={disabled}
+        aria-label={label}
+        {...navigation.getComboboxProps({ listboxVisible: open && filtered.length > 0 })}
         placeholder={
-          isLoading ? 'Scanning for profiles…' : 'e.g. /home/user/.thunderbird/abc.default'
+          isLoading
+            ? t('setup.configure.scanningProfiles')
+            : t('setup.configure.profilePlaceholder')
         }
         className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
       />
-      {open && filtered.length > 0 && (
-        <ul className="absolute left-0 top-full z-50 mt-0.5 max-h-48 w-full overflow-y-auto rounded-md border border-border bg-card shadow-lg">
-          {filtered.map((p) => (
-            <li
-              key={p}
-              onMouseDown={() => {
+      <ComboboxListbox
+        open={open && filtered.length > 0}
+        anchorRef={inputRef}
+        containerRef={containerRef}
+        listboxId={navigation.listboxId}
+        label={t('setup.configure.profileOptions')}
+        onOpenChange={setOpen}
+      >
+        {filtered.map((p, index) => (
+          <li
+            key={p}
+            {...navigation.getOptionProps(index, {
+              selected: p === value,
+              onMouseDown: () => {
                 onChange(p)
                 setOpen(false)
-              }}
-              className="cursor-pointer truncate px-3 py-1.5 text-xs text-foreground hover:bg-accent"
-            >
-              {p}
-            </li>
-          ))}
-        </ul>
-      )}
+                navigation.resetHighlight()
+              },
+            })}
+            className={comboboxOptionClass(index === highlighted, p === value, 'truncate px-3')}
+          >
+            {p}
+          </li>
+        ))}
+      </ComboboxListbox>
       {!isLoading && profiles.length === 0 && (
         <p className="mt-0.5 text-xs text-muted-foreground">
-          No profiles found automatically — enter the path manually.
+          {t('setup.configure.noProfilesFound')}
         </p>
       )}
     </div>
@@ -61,11 +101,15 @@ function ThunderbirdProfileField({
 // ─── Thunderbird mailboxes multi-select ───────────────────────────────────────
 
 function ThunderbirdMailboxesField({
+  id,
+  label,
   value,
   onChange,
   profilePath,
   disabled,
 }: {
+  id: string
+  label: string
   value: string
   onChange: (v: string) => void
   profilePath: string
@@ -73,7 +117,10 @@ function ThunderbirdMailboxesField({
 }) {
   const [input, setInput] = useState('')
   const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const { data: available = [], isLoading } = useThunderbirdMailboxes(profilePath)
+  const { t } = useI18n()
 
   const selected = value
     ? value
@@ -97,9 +144,20 @@ function ThunderbirdMailboxesField({
   const filtered = available.filter(
     (m) => !selected.includes(m) && m.toLowerCase().includes(input.toLowerCase()),
   )
+  const navigation = useComboboxNavigation({
+    open,
+    optionCount: filtered.length,
+    onOpenChange: setOpen,
+    onSelectIndex: (index) => {
+      const selectedMailbox = filtered[index]
+      if (selectedMailbox) addMailbox(selectedMailbox)
+    },
+    onEnterWithoutSelection: () => addMailbox(input),
+  })
+  const highlighted = navigation.highlightedIndex
 
   return (
-    <div className="space-y-1.5">
+    <div ref={containerRef} className="space-y-1.5">
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {selected.map((s) => (
@@ -112,7 +170,7 @@ function ThunderbirdMailboxesField({
                 type="button"
                 onClick={() => removeMailbox(s)}
                 className="text-muted-foreground hover:text-foreground"
-                aria-label={`Remove ${s}`}
+                aria-label={t('setup.configure.removeMailbox', { mailbox: s })}
               >
                 ✕
               </button>
@@ -122,47 +180,52 @@ function ThunderbirdMailboxesField({
       )}
       <div className="relative">
         <input
+          id={id}
+          ref={inputRef}
           value={input}
           onChange={(e) => {
             setInput(e.target.value)
             setOpen(true)
+            navigation.resetHighlight()
           }}
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              addMailbox(input)
-            }
-          }}
           disabled={disabled || !profilePath}
+          aria-label={label}
+          {...navigation.getComboboxProps({ listboxVisible: open && filtered.length > 0 })}
           placeholder={
             !profilePath
-              ? 'Select a profile first'
+              ? t('setup.configure.selectProfileFirst')
               : isLoading
-                ? 'Loading mailboxes…'
-                : 'Add mailbox (e.g. INBOX)'
+                ? t('setup.configure.loadingMailboxes')
+                : t('setup.configure.mailboxPlaceholder')
           }
           className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
         />
-        {open && filtered.length > 0 && (
-          <ul className="absolute left-0 top-full z-50 mt-0.5 max-h-40 w-full overflow-y-auto rounded-md border border-border bg-card shadow-lg">
-            {filtered.map((m) => (
-              <li
-                key={m}
-                onMouseDown={() => addMailbox(m)}
-                className="cursor-pointer px-3 py-1.5 text-xs text-foreground hover:bg-accent"
-              >
-                {m}
-              </li>
-            ))}
-          </ul>
-        )}
+        <ComboboxListbox
+          open={open && filtered.length > 0}
+          anchorRef={inputRef}
+          containerRef={containerRef}
+          listboxId={navigation.listboxId}
+          label={t('setup.configure.mailboxOptions')}
+          onOpenChange={setOpen}
+        >
+          {filtered.map((m, index) => (
+            <li
+              key={m}
+              {...navigation.getOptionProps(index, {
+                selected: selected.includes(m),
+                onMouseDown: () => addMailbox(m),
+              })}
+              className={comboboxOptionClass(index === highlighted, selected.includes(m), 'px-3')}
+            >
+              {m}
+            </li>
+          ))}
+        </ComboboxListbox>
       </div>
       {profilePath && !isLoading && available.length === 0 && (
-        <p className="text-xs text-muted-foreground">
-          No mailboxes found — type names manually and press Enter.
-        </p>
+        <p className="text-xs text-muted-foreground">{t('setup.configure.noMailboxesFound')}</p>
       )}
     </div>
   )
@@ -178,6 +241,7 @@ interface ConfigureStepProps {
 }
 
 export function ConfigureStep({ readerName, configSchema, onNext, onBack }: ConfigureStepProps) {
+  const { t } = useI18n()
   const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {}
     configSchema.forEach((field) => {
@@ -196,7 +260,7 @@ export function ConfigureStep({ readerName, configSchema, onNext, onBack }: Conf
   const handleSubmit = () => {
     for (const field of configSchema) {
       if (field.required && !values[field.name]?.trim()) {
-        setValidationError(`"${field.label}" is required`)
+        setValidationError(t('setup.configure.fieldRequired', { field: field.label }))
         return
       }
     }
@@ -213,23 +277,23 @@ export function ConfigureStep({ readerName, configSchema, onNext, onBack }: Conf
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="mb-1 text-base font-semibold text-foreground">Configure reader</h2>
-          <p className="text-sm text-muted-foreground">
-            No configuration required for this reader.
-          </p>
+          <h2 className="mb-1 text-base font-semibold text-foreground">
+            {t('setup.configure.title')}
+          </h2>
+          <p className="text-sm text-muted-foreground">{t('setup.configure.noneRequired')}</p>
         </div>
         <div className="flex items-center justify-between">
           <button
             onClick={onBack}
             className="px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
-            ← Back
+            {t('common.back')}
           </button>
           <button
             onClick={onNext}
             className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Next →
+            {t('common.next')}
           </button>
         </div>
       </div>
@@ -239,10 +303,13 @@ export function ConfigureStep({ readerName, configSchema, onNext, onBack }: Conf
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="mb-1 text-base font-semibold text-foreground">Configure reader</h2>
+        <h2 className="mb-1 text-base font-semibold text-foreground">
+          {t('setup.configure.title')}
+        </h2>
         <p className="text-sm text-muted-foreground">
-          Set the required options for the{' '}
-          <span className="font-mono text-primary">{readerName}</span> reader.
+          {t('setup.configure.summaryPrefix')}{' '}
+          <span className="font-mono text-primary">{readerName}</span>{' '}
+          {t('setup.configure.summarySuffix')}
         </p>
       </div>
 
@@ -259,11 +326,15 @@ export function ConfigureStep({ readerName, configSchema, onNext, onBack }: Conf
 
             {field.type === 'thunderbird-profile' ? (
               <ThunderbirdProfileField
+                id={`config-${field.name}`}
+                label={field.label}
                 value={values[field.name] ?? ''}
                 onChange={(v) => handleChange(field.name, v)}
               />
             ) : field.type === 'thunderbird-mailboxes' ? (
               <ThunderbirdMailboxesField
+                id={`config-${field.name}`}
+                label={field.label}
                 value={values[field.name] ?? ''}
                 onChange={(v) => handleChange(field.name, v)}
                 profilePath={field.depends_on ? (values[field.depends_on] ?? '') : ''}
@@ -295,7 +366,8 @@ export function ConfigureStep({ readerName, configSchema, onNext, onBack }: Conf
 
       {(validationError || error) && (
         <p className="text-xs text-destructive" role="alert">
-          {validationError ?? (error instanceof Error ? error.message : 'Save failed')}
+          {validationError ??
+            (error instanceof Error ? error.message : t('setup.configure.saveFailed'))}
         </p>
       )}
 
@@ -304,7 +376,7 @@ export function ConfigureStep({ readerName, configSchema, onNext, onBack }: Conf
           onClick={onBack}
           className="px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
-          ← Back
+          {t('common.back')}
         </button>
         <button
           onClick={handleSubmit}
@@ -316,7 +388,7 @@ export function ConfigureStep({ readerName, configSchema, onNext, onBack }: Conf
               : 'bg-primary text-primary-foreground hover:bg-primary/90',
           )}
         >
-          {isPending ? 'Saving...' : 'Save & continue →'}
+          {isPending ? t('common.saving') : t('setup.configure.saveAndContinue')}
         </button>
       </div>
     </div>

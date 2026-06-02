@@ -298,11 +298,12 @@ func TestRun_SuccessfulRun(t *testing.T) {
 
 func TestRun_ReaderError(t *testing.T) {
 	ctx := context.Background()
+	wantErr := errors.New("reader failed")
 
 	reader := &mockReader{
 		readFunc: func(ctx context.Context, out chan<- *api.TransactionDetails, ackChan <-chan string) error {
 			close(out)
-			return errors.New("reader failed")
+			return wantErr
 		},
 	}
 
@@ -336,15 +337,15 @@ func TestRun_ReaderError(t *testing.T) {
 		StateManager: nil,
 	}
 
-	// Run should complete without returning error (errors are logged)
 	err := runner.Run(ctx, runCfg)
-	if err != nil {
-		t.Errorf("Run should not return error, got: %v", err)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Run() error = %v, want %v", err, wantErr)
 	}
 }
 
 func TestRun_WriterError(t *testing.T) {
 	ctx := context.Background()
+	wantErr := errors.New("writer failed")
 
 	reader := &mockReader{
 		readFunc: func(ctx context.Context, out chan<- *api.TransactionDetails, ackChan <-chan string) error {
@@ -357,7 +358,7 @@ func TestRun_WriterError(t *testing.T) {
 		writeFunc: func(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error {
 			for range in {
 			}
-			return errors.New("writer failed")
+			return wantErr
 		},
 	}
 
@@ -383,10 +384,9 @@ func TestRun_WriterError(t *testing.T) {
 		StateManager: nil,
 	}
 
-	// Run should complete without returning error (errors are logged)
 	err := runner.Run(ctx, runCfg)
-	if err != nil {
-		t.Errorf("Run should not return error, got: %v", err)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Run() error = %v, want %v", err, wantErr)
 	}
 }
 

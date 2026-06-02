@@ -92,7 +92,7 @@ describe('Rules', () => {
       { route: '/rules' },
     )
 
-    await user.click(screen.getByRole('button', { name: 'Type: All' }))
+    await user.click(screen.getByRole('combobox', { name: 'Type: All' }))
     await user.click(screen.getByRole('option', { name: 'Credit Card' }))
 
     expect(screen.getByTestId('location')).toHaveTextContent('/rules?type=Credit+Card')
@@ -132,7 +132,7 @@ describe('Rules', () => {
 
     renderWithProviders(<Rules />, { route: '/rules' })
 
-    await user.click(screen.getByRole('button', { name: 'Type: All' }))
+    await user.click(screen.getByRole('combobox', { name: 'Type: All' }))
 
     expect(screen.getByRole('listbox', { name: 'Type filter options' })).toHaveClass('bg-card')
   })
@@ -142,10 +142,10 @@ describe('Rules', () => {
 
     renderWithProviders(<Rules />, { route: '/rules' })
 
-    await user.click(screen.getByRole('button', { name: 'Type: All' }))
+    await user.click(screen.getByRole('combobox', { name: 'Type: All' }))
     expect(screen.getByRole('listbox', { name: 'Type filter options' })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Bank: All' }))
+    await user.click(screen.getByRole('combobox', { name: 'Bank: All' }))
     expect(screen.queryByRole('listbox', { name: 'Type filter options' })).not.toBeInTheDocument()
     expect(screen.getByRole('listbox', { name: 'Bank filter options' })).toBeInTheDocument()
 

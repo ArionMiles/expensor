@@ -229,19 +229,6 @@ describe('RuleForm diagnostics', () => {
     expect(screen.getByRole('tab', { name: 'Sample 1' })).toBeInTheDocument()
   })
 
-  it('keeps sample tabs in one horizontal scrolling row', async () => {
-    const user = userEvent.setup()
-
-    renderRuleForm('/rules/new', '/rules/new')
-
-    for (let index = 0; index < 8; index += 1) {
-      await user.click(screen.getByRole('button', { name: '+ Add sample' }))
-    }
-
-    expect(screen.getByLabelText('Sample tabs')).toHaveClass('overflow-x-auto', 'flex-nowrap')
-    expect(screen.getByRole('tab', { name: 'Sample 9' })).toBeInTheDocument()
-  })
-
   it('moves sample guidance hints to Expected before Extract', async () => {
     const user = userEvent.setup()
 

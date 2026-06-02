@@ -170,6 +170,15 @@ func TestRuntimeState_ActiveReader(t *testing.T) {
 	}
 }
 
+func TestRuntimeState_BaseCurrencyStartsUnset(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+
+	if got, err := ts.GetAppConfig(context.Background(), "base_currency"); err == nil {
+		t.Fatalf("base_currency = %q, want missing", got)
+	}
+}
+
 func TestRuntimeState_ReaderBlobAndConfig(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
@@ -1385,6 +1394,61 @@ func TestHeatmapBucketMatchesListTransactionsForWeekdayHour_AllTime(t *testing.T
 	}
 }
 
+func TestGetSpendingHeatmapSupportsSingleSidedBounds(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+
+	ctx := context.Background()
+	timestamps := []struct {
+		messageID string
+		at        time.Time
+	}{
+		{
+			messageID: "heatmap-single-bound-before",
+			at:        time.Date(2026, time.April, 1, 9, 0, 0, 0, time.UTC),
+		},
+		{
+			messageID: "heatmap-single-bound-inside",
+			at:        time.Date(2026, time.April, 15, 9, 0, 0, 0, time.UTC),
+		},
+		{
+			messageID: "heatmap-single-bound-after",
+			at:        time.Date(2026, time.May, 1, 9, 0, 0, 0, time.UTC),
+		},
+	}
+	for _, txn := range timestamps {
+		if _, err := ts.InsertForTest(ctx, store.InsertParams{
+			MessageID:    txn.messageID,
+			Amount:       100,
+			Currency:     "INR",
+			MerchantInfo: "Single Bound Merchant",
+			Category:     "Food",
+			Timestamp:    txn.at,
+		}); err != nil {
+			t.Fatalf("InsertForTest(%s): %v", txn.messageID, err)
+		}
+	}
+
+	from := time.Date(2026, time.April, 10, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, time.April, 20, 0, 0, 0, 0, time.UTC)
+
+	fromOnly, err := ts.GetSpendingHeatmap(ctx, &from, nil)
+	if err != nil {
+		t.Fatalf("GetSpendingHeatmap from only: %v", err)
+	}
+	if got := heatmapWeekdayHourTotal(fromOnly); got != 2 {
+		t.Fatalf("from-only heatmap count = %d, want 2", got)
+	}
+
+	toOnly, err := ts.GetSpendingHeatmap(ctx, nil, &to)
+	if err != nil {
+		t.Fatalf("GetSpendingHeatmap to only: %v", err)
+	}
+	if got := heatmapWeekdayHourTotal(toOnly); got != 2 {
+		t.Fatalf("to-only heatmap count = %d, want 2", got)
+	}
+}
+
 func TestGetSpendingHeatmap_DayOfMonthUsesLocalTimezone(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
@@ -1425,6 +1489,14 @@ func TestGetSpendingHeatmap_DayOfMonthUsesLocalTimezone(t *testing.T) {
 	if localDayCount != 1 {
 		t.Fatalf("expected local day 1 count 1, got %d", localDayCount)
 	}
+}
+
+func heatmapWeekdayHourTotal(heatmap *store.HeatmapData) int {
+	var total int
+	for _, bucket := range heatmap.ByWeekdayHour {
+		total += bucket.Count
+	}
+	return total
 }
 
 func TestGetAnnualSpend_EmptyDB(t *testing.T) {

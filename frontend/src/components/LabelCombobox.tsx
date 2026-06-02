@@ -6,11 +6,12 @@ import {
   useRemoveLabel,
 } from '@/api/queries'
 import type { Transaction } from '@/api/types'
+import { ComboboxListbox, comboboxOptionClass, useComboboxNavigation } from '@/components/Combobox'
 import { LabelChip } from '@/components/LabelChip'
 import { SlideNotification } from '@/components/SlideNotification'
 import { useI18n } from '@/i18n/I18nProvider'
 import { LABEL_SWATCH_COLORS, cn } from '@/lib/utils'
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 interface LabelComboboxProps {
@@ -23,13 +24,6 @@ export function LabelCombobox({ tx, maxVisibleLabels = 2 }: LabelComboboxProps) 
   const [open, setOpen] = useState(false)
   const [overflowOpen, setOverflowOpen] = useState(false)
   const [input, setInput] = useState('')
-  const [highlighted, setHighlighted] = useState(-1)
-  const [dropdownPos, setDropdownPos] = useState<{
-    top: number
-    left: number
-    minWidth: number
-    maxHeight: number
-  } | null>(null)
   const [overflowPos, setOverflowPos] = useState<{ top: number; left: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -37,8 +31,6 @@ export function LabelCombobox({ tx, maxVisibleLabels = 2 }: LabelComboboxProps) 
   const overflowButtonRef = useRef<HTMLButtonElement>(null)
   const overflowPortalRef = useRef<HTMLDivElement>(null)
   const optionRefs = useRef<Record<number, HTMLLIElement | null>>({})
-  const escapeClosedRef = useRef(false)
-  const listboxId = useId()
   const { data: labels = [] } = useLabels()
   const { mutate: addLabels } = useAddLabels()
   const { mutate: removeLabel } = useRemoveLabel()
@@ -47,32 +39,8 @@ export function LabelCombobox({ tx, maxVisibleLabels = 2 }: LabelComboboxProps) 
   const [propagatePrompt, setPropagatePrompt] = useState<{ label: string } | null>(null)
 
   useEffect(() => {
-    if (!open) {
-      escapeClosedRef.current = false
-      return
-    }
-    escapeClosedRef.current = false
-    inputRef.current?.focus()
-  }, [open])
-
-  useEffect(() => {
     if (!open) return
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      event.stopPropagation()
-      if (escapeClosedRef.current) return
-      escapeClosedRef.current = true
-      closeInput({ restoreFocus: true })
-    }
-
-    window.addEventListener('keydown', handleEscape, true)
-    window.addEventListener('keyup', handleEscape, true)
-    return () => {
-      window.removeEventListener('keydown', handleEscape, true)
-      window.removeEventListener('keyup', handleEscape, true)
-    }
+    inputRef.current?.focus()
   }, [open])
 
   useEffect(() => {
@@ -117,58 +85,6 @@ export function LabelCombobox({ tx, maxVisibleLabels = 2 }: LabelComboboxProps) 
     return () => document.removeEventListener('mousedown', handler)
   }, [overflowOpen])
 
-  useEffect(() => {
-    if (!open) return
-
-    const updateDropdownPos = () => {
-      const rect = containerRef.current?.getBoundingClientRect()
-      if (!rect) return
-
-      const viewportPadding = 8
-      const dropdownGap = 4
-      const preferredMaxHeight = 160
-      const spaceBelow = window.innerHeight - rect.bottom - viewportPadding
-      const spaceAbove = rect.top - viewportPadding
-      const openUpward = spaceBelow < 120 && spaceAbove > spaceBelow
-      const maxHeight = Math.max(
-        96,
-        Math.min(
-          preferredMaxHeight,
-          openUpward ? spaceAbove - dropdownGap : spaceBelow - dropdownGap,
-        ),
-      )
-
-      setDropdownPos({
-        top: openUpward
-          ? Math.max(viewportPadding, rect.top - maxHeight - dropdownGap)
-          : rect.bottom + dropdownGap,
-        left: Math.max(viewportPadding, rect.left),
-        minWidth: Math.max(140, rect.width),
-        maxHeight,
-      })
-    }
-
-    updateDropdownPos()
-    window.addEventListener('resize', updateDropdownPos)
-    window.addEventListener('scroll', updateDropdownPos, true)
-    return () => {
-      window.removeEventListener('resize', updateDropdownPos)
-      window.removeEventListener('scroll', updateDropdownPos, true)
-    }
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) {
-        setOpen(false)
-        setInput('')
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
   const filtered = labels.filter((l) => l.name.toLowerCase().includes(input.toLowerCase()))
 
   const handleToggle = (name: string) => {
@@ -208,8 +124,21 @@ export function LabelCombobox({ tx, maxVisibleLabels = 2 }: LabelComboboxProps) 
 
   const showCreate = input.trim().length > 0 && !labels.some((l) => l.name === input.trim())
   const optionCount = filtered.length + (showCreate ? 1 : 0)
-  const activeOptionId =
-    highlighted >= 0 && dropdownPos ? `${listboxId}-option-${highlighted}` : undefined
+  const navigation = useComboboxNavigation({
+    open,
+    optionCount,
+    onOpenChange: setOpen,
+    onSelectIndex: (index) => {
+      const selected = filtered[index]
+      if (selected) handleToggle(selected.name)
+      else if (showCreate && index === filtered.length) handleCreate()
+    },
+    onEnterWithoutSelection: () => {
+      if (showCreate) handleCreate()
+    },
+    onEscape: () => closeInput({ restoreFocus: true }),
+  })
+  const highlighted = navigation.highlightedIndex
   const visibleLabels = tx.labels.slice(0, maxVisibleLabels)
   const hiddenLabels = tx.labels.slice(visibleLabels.length)
   const hiddenLabelCount = hiddenLabels.length
@@ -222,7 +151,7 @@ export function LabelCombobox({ tx, maxVisibleLabels = 2 }: LabelComboboxProps) 
   const closeInput = ({ restoreFocus = false } = {}) => {
     setOpen(false)
     setInput('')
-    setHighlighted(-1)
+    navigation.resetHighlight()
     if (restoreFocus) {
       window.setTimeout(() => addButtonRef.current?.focus(), 0)
     }
@@ -295,113 +224,79 @@ export function LabelCombobox({ tx, maxVisibleLabels = 2 }: LabelComboboxProps) 
             value={input}
             onChange={(e) => {
               setInput(e.target.value)
-              setHighlighted(-1)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                e.preventDefault()
-                e.stopPropagation()
-                closeInput({ restoreFocus: true })
-                return
-              }
-              if (e.key === 'ArrowDown') {
-                e.preventDefault()
-                setHighlighted((current) => Math.min(current + 1, optionCount - 1))
-                return
-              }
-              if (e.key === 'ArrowUp') {
-                e.preventDefault()
-                setHighlighted((current) => Math.max(current - 1, 0))
-                return
-              }
-              if (e.key === 'Enter' && highlighted >= 0) {
-                e.preventDefault()
-                const selected = filtered[highlighted]
-                if (selected) handleToggle(selected.name)
-                else if (showCreate && highlighted === filtered.length) handleCreate()
-                return
-              }
-              if (e.key === 'Enter' && showCreate) handleCreate()
+              navigation.resetHighlight()
             }}
             placeholder="label..."
-            role="combobox"
             aria-label="Add transaction label"
             autoComplete="off"
             spellCheck={false}
-            aria-expanded={Boolean((filtered.length > 0 || showCreate) && dropdownPos)}
-            aria-controls={
-              (filtered.length > 0 || showCreate) && dropdownPos ? listboxId : undefined
-            }
-            aria-activedescendant={activeOptionId}
             aria-autocomplete="list"
+            {...navigation.getComboboxProps({
+              listboxVisible: open && (filtered.length > 0 || showCreate),
+            })}
             className="w-24 rounded-sm border border-primary bg-accent px-1.5 py-0.5 text-xs text-foreground focus:outline-none"
           />
-          {(filtered.length > 0 || showCreate) &&
-            dropdownPos &&
-            createPortal(
-              <ul
-                id={listboxId}
-                role="listbox"
-                aria-label="Label options"
-                style={{
-                  position: 'fixed',
-                  top: dropdownPos.top,
-                  left: dropdownPos.left,
-                  minWidth: dropdownPos.minWidth,
-                  maxHeight: dropdownPos.maxHeight,
+          <ComboboxListbox
+            open={open && (filtered.length > 0 || showCreate)}
+            anchorRef={inputRef}
+            containerRef={containerRef}
+            listboxId={navigation.listboxId}
+            label="Label options"
+            maxHeight={160}
+            onOpenChange={(nextOpen) => {
+              setOpen(nextOpen)
+              if (!nextOpen) {
+                setInput('')
+                navigation.resetHighlight()
+              }
+            }}
+          >
+            {filtered.map((l, index) => (
+              <li
+                key={l.name}
+                {...navigation.getOptionProps(index, {
+                  selected: tx.labels.includes(l.name),
+                  onMouseDown: () => handleToggle(l.name),
+                })}
+                ref={(element) => {
+                  optionRefs.current[index] = element
+                  if (index === highlighted) element?.scrollIntoView({ block: 'nearest' })
                 }}
-                className="z-50 overflow-y-auto rounded-md border border-border bg-card shadow-lg"
-              >
-                {filtered.map((l, index) => (
-                  <li
-                    key={l.name}
-                    id={`${listboxId}-option-${index}`}
-                    ref={(element) => {
-                      optionRefs.current[index] = element
-                      if (index === highlighted) element?.scrollIntoView({ block: 'nearest' })
-                    }}
-                    role="option"
-                    aria-selected={tx.labels.includes(l.name)}
-                    onMouseDown={() => handleToggle(l.name)}
-                    onMouseEnter={() => setHighlighted(index)}
-                    className={cn(
-                      'flex cursor-pointer items-center gap-2 px-2 py-1.5 text-xs hover:bg-accent',
-                      index === highlighted && 'bg-accent text-accent-foreground',
-                    )}
-                  >
-                    <span
-                      className="h-2 w-2 flex-shrink-0 rounded-full"
-                      style={{ background: l.color }}
-                    />
-                    <span className="flex-1">{l.name}</span>
-                    {tx.labels.includes(l.name) && <span className="text-success">&#10003;</span>}
-                  </li>
-                ))}
-                {showCreate && (
-                  <li
-                    id={`${listboxId}-option-${filtered.length}`}
-                    ref={(element) => {
-                      optionRefs.current[filtered.length] = element
-                      if (filtered.length === highlighted) {
-                        element?.scrollIntoView({ block: 'nearest' })
-                      }
-                    }}
-                    role="option"
-                    aria-selected={false}
-                    onMouseDown={handleCreate}
-                    onMouseEnter={() => setHighlighted(filtered.length)}
-                    className={cn(
-                      'cursor-pointer px-2 py-1.5 text-xs text-primary hover:bg-accent',
-                      filtered.length > 0 && 'border-t border-border',
-                      highlighted === filtered.length && 'bg-accent',
-                    )}
-                  >
-                    + Create &quot;{input.trim()}&quot;
-                  </li>
+                className={cn(
+                  comboboxOptionClass(index === highlighted, tx.labels.includes(l.name)),
+                  'flex items-center gap-2',
                 )}
-              </ul>,
-              document.body,
+              >
+                <span
+                  className="h-2 w-2 flex-shrink-0 rounded-full"
+                  style={{ background: l.color }}
+                />
+                <span className="flex-1">{l.name}</span>
+                {tx.labels.includes(l.name) && <span className="text-success">&#10003;</span>}
+              </li>
+            ))}
+            {showCreate && (
+              <li
+                {...navigation.getOptionProps(filtered.length, {
+                  selected: false,
+                  onMouseDown: handleCreate,
+                })}
+                ref={(element) => {
+                  optionRefs.current[filtered.length] = element
+                  if (filtered.length === highlighted) {
+                    element?.scrollIntoView({ block: 'nearest' })
+                  }
+                }}
+                className={cn(
+                  comboboxOptionClass(highlighted === filtered.length, false),
+                  'text-primary',
+                  filtered.length > 0 && 'border-t border-border',
+                )}
+              >
+                + Create &quot;{input.trim()}&quot;
+              </li>
             )}
+          </ComboboxListbox>
         </div>
       ) : (
         <button

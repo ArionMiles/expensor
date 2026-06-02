@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   useActiveReader,
@@ -10,6 +9,7 @@ import {
   useRules,
   useUpdateRule,
 } from '@/api/queries'
+import { ComboboxListbox, comboboxOptionClass, useComboboxNavigation } from '@/components/Combobox'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { useI18n } from '@/i18n/I18nProvider'
 import type { ReactNode } from 'react'
@@ -295,7 +295,7 @@ function SourceValueCombobox({
 }: ComboboxProps) {
   const [open, setOpen] = useState(false)
   const [readOnly, setReadOnly] = useState(true)
-  const [rect, setRect] = useState<DOMRect | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const allOptions = uniqueSorted([...options, ...customValues])
@@ -304,16 +304,17 @@ function SourceValueCombobox({
     (option) => option.toLowerCase() === value.trim().toLowerCase(),
   )
   const canAdd = value.trim() !== '' && filtered.length === 0 && !exactMatch
+  const optionCount = filtered.length + (canAdd ? 1 : 0)
 
   const openMenu = () => {
-    const nextRect = inputRef.current?.getBoundingClientRect()
-    if (nextRect) setRect(nextRect)
     setOpen(true)
+    navigation.resetHighlight()
   }
 
   const select = (nextValue: string) => {
     onChange(nextValue)
     setOpen(false)
+    navigation.resetHighlight()
   }
 
   const add = () => {
@@ -322,17 +323,25 @@ function SourceValueCombobox({
     onAdd(nextValue)
     onChange(nextValue)
     setOpen(false)
+    navigation.resetHighlight()
   }
-
-  const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter' && canAdd) {
-      event.preventDefault()
-      add()
-    }
-  }
+  const navigation = useComboboxNavigation({
+    open,
+    optionCount,
+    onOpenChange: setOpen,
+    onSelectIndex: (index) => {
+      const selected = filtered[index]
+      if (selected) select(selected)
+      else if (canAdd && index === filtered.length) add()
+    },
+    onEnterWithoutSelection: () => {
+      if (canAdd) add()
+    },
+  })
+  const highlighted = navigation.highlightedIndex
 
   return (
-    <div>
+    <div ref={containerRef}>
       <label className="mb-1 block text-sm text-muted-foreground" htmlFor={`${label}-input`}>
         {label}
       </label>
@@ -350,12 +359,13 @@ function SourceValueCombobox({
             openMenu()
           }}
           onBlur={() => window.setTimeout(() => setOpen(false), 120)}
-          onKeyDown={onKeyDown}
           readOnly={readOnly}
           autoComplete="off"
           data-1p-ignore="true"
           data-lpignore="true"
           data-form-type="other"
+          aria-autocomplete="list"
+          {...navigation.getComboboxProps({ listboxVisible: open && optionCount > 0 })}
           className="w-full rounded-lg border border-border bg-input px-3 py-2 pr-8 text-sm text-foreground outline-none transition-colors focus:border-primary"
         />
         <span
@@ -363,43 +373,47 @@ function SourceValueCombobox({
           className="pointer-events-none absolute right-3 top-1/2 h-2 w-2 -translate-y-1/2 rotate-45 border-b-2 border-r-2 border-muted-foreground"
         />
       </div>
-      {open &&
-        rect &&
-        createPortal(
-          <div
-            role="listbox"
-            aria-label={listboxLabel}
-            className="fixed z-50 rounded-lg border border-border bg-card p-1 text-sm text-card-foreground shadow-xl"
-            style={{ left: rect.left, top: rect.bottom + 6, width: rect.width }}
-          >
-            {filtered.map((option) => (
-              <button
-                key={option}
-                type="button"
-                role="option"
-                aria-selected={value === option}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => select(option)}
-                className="block w-full rounded-md px-3 py-2 text-left text-muted-foreground hover:bg-secondary hover:text-foreground"
-              >
-                {option}
-              </button>
-            ))}
-            {canAdd && (
-              <button
-                type="button"
-                role="option"
-                aria-selected={false}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={add}
-                className="block w-full rounded-md px-3 py-2 text-left font-medium text-primary hover:bg-secondary"
-              >
-                {addLabel(value.trim())}
-              </button>
+      <ComboboxListbox
+        open={open && optionCount > 0}
+        anchorRef={inputRef}
+        containerRef={containerRef}
+        listboxId={navigation.listboxId}
+        label={listboxLabel}
+        onOpenChange={setOpen}
+        className="rounded-lg p-1 text-sm text-card-foreground shadow-xl"
+      >
+        {filtered.map((option, index) => (
+          <li
+            key={option}
+            {...navigation.getOptionProps(index, {
+              selected: value === option,
+              onMouseDown: () => select(option),
+            })}
+            className={comboboxOptionClass(
+              index === highlighted,
+              value === option,
+              'rounded-md px-3 py-2 text-sm',
             )}
-          </div>,
-          document.body,
+          >
+            {option}
+          </li>
+        ))}
+        {canAdd && (
+          <li
+            {...navigation.getOptionProps(filtered.length, {
+              selected: false,
+              onMouseDown: add,
+            })}
+            className={comboboxOptionClass(
+              highlighted === filtered.length,
+              false,
+              'rounded-md px-3 py-2 text-sm font-medium text-primary',
+            )}
+          >
+            {addLabel(value.trim())}
+          </li>
         )}
+      </ComboboxListbox>
     </div>
   )
 }

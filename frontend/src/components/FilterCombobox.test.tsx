@@ -27,6 +27,8 @@ describe('FilterCombobox', () => {
     const listbox = screen.getByRole('listbox', { name: 'Category filter options' })
     expect(input).toHaveAttribute('aria-expanded', 'true')
     expect(input).toHaveAttribute('aria-controls', listbox.id)
+    expect(listbox.parentElement).toBe(document.body)
+    expect(listbox).toHaveClass('fixed')
     expect(screen.getByRole('option', { name: 'Food' })).toBeInTheDocument()
   })
 

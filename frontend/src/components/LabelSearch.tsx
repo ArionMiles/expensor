@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { ComboboxListbox, comboboxOptionClass, useComboboxNavigation } from '@/components/Combobox'
 import { useEffect, useRef, useState } from 'react'
 
 interface LabelSearchProps {
@@ -10,68 +10,52 @@ interface LabelSearchProps {
 export function LabelSearch({ value, onChange, options }: LabelSearchProps) {
   const [input, setInput] = useState(value)
   const [open, setOpen] = useState(false)
-  const [highlighted, setHighlighted] = useState(-1)
   const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setInput(value)
   }, [value])
 
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
   const filtered =
     input.length > 0 ? options.filter((o) => o.toLowerCase().includes(input.toLowerCase())) : []
+  const navigation = useComboboxNavigation({
+    open,
+    optionCount: filtered.length,
+    onOpenChange: setOpen,
+    onSelectIndex: (index) => {
+      const selected = filtered[index]
+      if (selected) select(selected)
+    },
+    onEnterWithoutSelection: () => {
+      onChange(input)
+      setOpen(false)
+    },
+  })
+  const highlighted = navigation.highlightedIndex
 
   const select = (opt: string) => {
     onChange(opt)
     setInput(opt)
     setOpen(false)
-    setHighlighted(-1)
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      setOpen(false)
-      return
-    }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setHighlighted((h) => Math.min(h + 1, filtered.length - 1))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setHighlighted((h) => Math.max(h - 1, 0))
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      if (highlighted >= 0 && filtered[highlighted]) {
-        select(filtered[highlighted])
-      } else {
-        onChange(input)
-        setOpen(false)
-      }
-    }
+    navigation.resetHighlight()
   }
 
   return (
     <div ref={containerRef} className="relative">
       <div className="relative">
         <input
+          ref={inputRef}
           type="text"
           value={input}
           onChange={(e) => {
             setInput(e.target.value)
             setOpen(e.target.value.length > 0)
-            setHighlighted(-1)
+            navigation.resetHighlight()
           }}
-          onKeyDown={handleKeyDown}
           placeholder="Label"
           aria-label="Filter by label"
+          {...navigation.getComboboxProps({ listboxVisible: open && filtered.length > 0 })}
           className="w-full rounded-md border border-border bg-secondary py-1.5 pl-2 pr-6 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         />
         {input && (
@@ -80,6 +64,7 @@ export function LabelSearch({ value, onChange, options }: LabelSearchProps) {
               onChange('')
               setInput('')
               setOpen(false)
+              navigation.resetHighlight()
             }}
             className="absolute right-1.5 top-1/2 -translate-y-1/2 text-sm leading-none text-muted-foreground hover:text-foreground"
             aria-label="Clear label filter"
@@ -90,29 +75,27 @@ export function LabelSearch({ value, onChange, options }: LabelSearchProps) {
         )}
       </div>
 
-      {open && filtered.length > 0 && (
-        <ul
-          role="listbox"
-          className="absolute z-50 mt-1 max-h-40 w-full overflow-y-auto rounded-md border border-border bg-card shadow-lg"
-        >
-          {filtered.map((opt, i) => (
-            <li
-              key={opt}
-              role="option"
-              aria-selected={opt === value}
-              onMouseDown={() => select(opt)}
-              className={cn(
-                'cursor-pointer px-2 py-1.5 text-xs',
-                i === highlighted && 'bg-accent text-accent-foreground',
-                opt === value && i !== highlighted && 'text-primary',
-                i !== highlighted && opt !== value && 'text-foreground hover:bg-accent/50',
-              )}
-            >
-              {opt}
-            </li>
-          ))}
-        </ul>
-      )}
+      <ComboboxListbox
+        open={open && filtered.length > 0}
+        anchorRef={inputRef}
+        containerRef={containerRef}
+        listboxId={navigation.listboxId}
+        label="Label options"
+        onOpenChange={setOpen}
+      >
+        {filtered.map((opt, i) => (
+          <li
+            key={opt}
+            {...navigation.getOptionProps(i, {
+              selected: opt === value,
+              onMouseDown: () => select(opt),
+            })}
+            className={comboboxOptionClass(i === highlighted, opt === value)}
+          >
+            {opt}
+          </li>
+        ))}
+      </ComboboxListbox>
     </div>
   )
 }

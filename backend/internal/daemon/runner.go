@@ -155,7 +155,7 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 	}
 
 	r.logger.Info("daemon stopped")
-	return nil
+	return runErr
 }
 
 func (r *Runner) loadReaderConfig(ctx context.Context, readerName string, store ReaderRuntimeStore) json.RawMessage {

@@ -69,9 +69,7 @@ export function UploadCredentials({ readerName, onNext, onBack }: UploadCredenti
           <div className="space-y-2">
             <div className="flex min-w-0 items-center justify-center gap-1.5">
               <span className="flex-shrink-0 text-sm text-success">✓</span>
-              <span className="truncate font-mono text-sm text-success" title={file.name}>
-                {file.name}
-              </span>
+              <span className="truncate font-mono text-sm text-success">{file.name}</span>
             </div>
             <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</p>
             <button
