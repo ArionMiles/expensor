@@ -1,6 +1,6 @@
+import { FloatingDropdown } from '@/components/Combobox'
 import { cn } from '@/lib/utils'
-import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useRef, useState } from 'react'
 
 interface PaginationProps {
   page: number
@@ -11,84 +11,22 @@ interface PaginationProps {
 }
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100] as const
-const MENU_ESTIMATED_HEIGHT = 112
-
-type PageSizeMenuPosition = {
-  top?: number
-  bottom?: number
-  left: number
-  minWidth: number
-  maxHeight: number
-}
-
-export function pageSizeMenuPosition(
-  rect: Pick<DOMRect, 'top' | 'bottom' | 'left' | 'right' | 'width'>,
-  viewport: { width: number; height: number },
-): PageSizeMenuPosition {
-  const viewportPadding = 8
-  const menuGap = 4
-  const spaceBelow = viewport.height - rect.bottom - viewportPadding
-  const spaceAbove = rect.top - viewportPadding
-  const openUpward = spaceBelow < MENU_ESTIMATED_HEIGHT && spaceAbove > spaceBelow
-  const maxHeight = Math.max(
-    80,
-    Math.min(MENU_ESTIMATED_HEIGHT, openUpward ? spaceAbove - menuGap : spaceBelow - menuGap),
-  )
-  const minWidth = Math.max(72, rect.width)
-  const left = Math.min(
-    Math.max(viewportPadding, rect.left),
-    Math.max(viewportPadding, viewport.width - minWidth - viewportPadding),
-  )
-
-  return {
-    ...(openUpward
-      ? { bottom: Math.max(viewportPadding, viewport.height - rect.top + menuGap) }
-      : { top: rect.bottom + menuGap }),
-    left,
-    minWidth,
-    maxHeight,
-  }
-}
 
 export function Pagination({ page, pageSize, total, onPage, onPageSize }: PaginationProps) {
   const [open, setOpen] = useState(false)
-  const [menuPos, setMenuPos] = useState<PageSizeMenuPosition | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const totalPages = Math.ceil(total / pageSize)
   const start = (page - 1) * pageSize + 1
   const end = Math.min(page * pageSize, total)
 
-  useEffect(() => {
-    if (!open) return
-    const update = () => {
-      const rect = buttonRef.current?.getBoundingClientRect()
-      if (!rect) return
-      setMenuPos(
-        pageSizeMenuPosition(rect, { width: window.innerWidth, height: window.innerHeight }),
-      )
-    }
-    update()
-    window.addEventListener('resize', update)
-    window.addEventListener('scroll', update, true)
-    return () => {
-      window.removeEventListener('resize', update)
-      window.removeEventListener('scroll', update, true)
-    }
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    const close = (event: MouseEvent) => {
-      if (!buttonRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [open])
-
   if (total <= 0) return null
 
   return (
-    <div className="flex items-center justify-between border-t border-border px-4 py-3">
+    <div
+      ref={containerRef}
+      className="flex items-center justify-between border-t border-border px-4 py-3"
+    >
       <div className="text-xs text-muted-foreground">
         {start}-{end} of {total.toLocaleString('en-IN')}
         {onPageSize && (
@@ -138,20 +76,21 @@ export function Pagination({ page, pageSize, total, onPage, onPageSize }: Pagina
           next →
         </button>
       </div>
-      {open &&
-        menuPos &&
-        createPortal(
+      <FloatingDropdown
+        open={open}
+        anchorRef={buttonRef}
+        containerRef={containerRef}
+        onOpenChange={setOpen}
+        minWidth={72}
+        maxHeight={112}
+      >
+        {(style, setPortalNode) => (
           <div
+            ref={setPortalNode}
             role="menu"
             aria-label="Rows per page"
             className="fixed z-50 rounded-md border border-border bg-card py-1 shadow-lg"
-            style={{
-              top: menuPos.top,
-              bottom: menuPos.bottom,
-              left: menuPos.left,
-              minWidth: menuPos.minWidth,
-              maxHeight: menuPos.maxHeight,
-            }}
+            style={style}
           >
             {PAGE_SIZE_OPTIONS.map((option) => (
               <button
@@ -170,9 +109,9 @@ export function Pagination({ page, pageSize, total, onPage, onPageSize }: Pagina
                 {option}
               </button>
             ))}
-          </div>,
-          document.body,
+          </div>
         )}
+      </FloatingDropdown>
     </div>
   )
 }

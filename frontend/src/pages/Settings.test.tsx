@@ -64,6 +64,6 @@ describe('Settings', () => {
     renderSettings('/settings')
 
     expect(await screen.findByText('Timezone')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Asia\/Calcutta/ })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: /Asia\/Calcutta/ })).toBeInTheDocument()
   })
 })

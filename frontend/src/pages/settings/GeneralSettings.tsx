@@ -7,10 +7,10 @@ import {
   useVersion,
 } from '@/api/queries'
 import { TIME_FORMATS, type TimeFormatValue } from '@/contexts/DisplayContext'
+import { FloatingDropdown, comboboxOptionClass, useComboboxNavigation } from '@/components/Combobox'
 import { getBrowserTimezone, getTimezoneOptions, normalizeTimezone } from '@/lib/timezone'
 import { cn } from '@/lib/utils'
 import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 
 export const COMMON_CURRENCIES = [
   { code: 'INR', name: 'Indian Rupee', symbol: '₹' },
@@ -56,7 +56,7 @@ export function CurrencyCombobox({
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
 
   const allOptions = COMMON_CURRENCIES
@@ -69,30 +69,36 @@ export function CurrencyCombobox({
     : allOptions
 
   const selected = allOptions.find((c) => c.code === value)
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      const portal = document.getElementById('currency-portal')
-      if (!portal?.contains(e.target as Node) && !btnRef.current?.contains(e.target as Node))
-        setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
+  const navigation = useComboboxNavigation({
+    open,
+    optionCount: filtered.length,
+    onOpenChange: setOpen,
+    onSelectIndex: (index) => {
+      const selectedCurrency = filtered[index]
+      if (!selectedCurrency) return
+      onChange(selectedCurrency.code)
+      setOpen(false)
+    },
+  })
+  const highlighted = navigation.highlightedIndex
 
   const openDropdown = () => {
-    const rect = btnRef.current?.getBoundingClientRect()
-    if (rect) setPos({ x: rect.left, y: rect.bottom + 4 })
     setQuery('')
     setOpen(true)
+    navigation.resetHighlight()
   }
 
   return (
-    <>
+    <div ref={containerRef}>
       <button
         ref={btnRef}
         onClick={() => (open ? setOpen(false) : openDropdown())}
+        {...navigation.getComboboxProps({
+          'aria-label': selected?.name
+            ? `Base currency ${value} ${selected.name}`
+            : `Base currency ${value}`,
+          listboxVisible: open,
+        })}
         className="flex w-full items-center justify-between rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
       >
         <span>
@@ -105,34 +111,46 @@ export function CurrencyCombobox({
         <span className="text-xs text-muted-foreground">▾</span>
       </button>
 
-      {open &&
-        pos &&
-        createPortal(
+      <FloatingDropdown
+        open={open}
+        anchorRef={btnRef}
+        containerRef={containerRef}
+        onOpenChange={setOpen}
+        minWidth={256}
+      >
+        {(style, setPortalNode) => (
           <div
-            id="currency-portal"
+            ref={setPortalNode}
             className="fixed z-50 w-64 rounded-lg border border-border bg-card shadow-xl"
-            style={{ left: pos.x, top: pos.y }}
+            style={style}
           >
             <div className="border-b border-border px-3 py-2">
               <input
                 autoFocus
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  setQuery(e.target.value)
+                  navigation.resetHighlight()
+                }}
+                onKeyDown={navigation.handleKeyDown}
                 placeholder="Search currency…"
                 className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
               />
             </div>
-            <ul className="max-h-48 overflow-y-auto py-1">
-              {filtered.map((c) => (
+            <ul id={navigation.listboxId} role="listbox" className="max-h-48 overflow-y-auto py-1">
+              {filtered.map((c, index) => (
                 <li
                   key={c.code}
-                  onMouseDown={() => {
-                    onChange(c.code)
-                    setOpen(false)
-                  }}
+                  {...navigation.getOptionProps(index, {
+                    selected: c.code === value,
+                    onMouseDown: () => {
+                      onChange(c.code)
+                      setOpen(false)
+                    },
+                  })}
                   className={cn(
-                    'cursor-pointer px-3 py-1.5 text-sm hover:bg-accent',
-                    c.code === value && 'text-primary',
+                    comboboxOptionClass(index === highlighted, c.code === value),
+                    'px-3 text-sm',
                   )}
                 >
                   <span className="mr-1.5 font-mono text-muted-foreground">{c.symbol}</span>
@@ -144,10 +162,10 @@ export function CurrencyCombobox({
                 <li className="px-3 py-2 text-xs text-muted-foreground">No match</li>
               )}
             </ul>
-          </div>,
-          document.body,
+          </div>
         )}
-    </>
+      </FloatingDropdown>
+    </div>
   )
 }
 
@@ -160,72 +178,90 @@ export function TimezoneCombobox({
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const normalizedValue = normalizeTimezone(value)
 
   const filtered = query
     ? ALL_TIMEZONES.filter((tz) => tz.toLowerCase().includes(query.toLowerCase()))
     : ALL_TIMEZONES
+  const visibleOptions = filtered.slice(0, 100)
   const selected = ALL_TIMEZONES.find((tz) => tz === normalizedValue)
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      const portal = document.getElementById('timezone-portal')
-      if (!portal?.contains(e.target as Node) && !btnRef.current?.contains(e.target as Node))
-        setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
+  const navigation = useComboboxNavigation({
+    open,
+    optionCount: visibleOptions.length,
+    onOpenChange: setOpen,
+    onSelectIndex: (index) => {
+      const selectedTimezone = visibleOptions[index]
+      if (!selectedTimezone) return
+      onChange(selectedTimezone)
+      setOpen(false)
+    },
+  })
+  const highlighted = navigation.highlightedIndex
 
   const openDropdown = () => {
-    const rect = btnRef.current?.getBoundingClientRect()
-    if (rect) setPos({ x: rect.left, y: rect.bottom + 4 })
     setQuery('')
     setOpen(true)
+    navigation.resetHighlight()
   }
 
   return (
-    <>
+    <div ref={containerRef}>
       <button
         ref={btnRef}
         onClick={() => (open ? setOpen(false) : openDropdown())}
+        {...navigation.getComboboxProps({
+          'aria-label': `Timezone ${selected ?? normalizedValue}`,
+          listboxVisible: open,
+        })}
         className="flex w-full items-center justify-between rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
       >
         <span className="font-mono">{selected ?? normalizedValue}</span>
         <span className="text-xs text-muted-foreground">▾</span>
       </button>
 
-      {open &&
-        pos &&
-        createPortal(
+      <FloatingDropdown
+        open={open}
+        anchorRef={btnRef}
+        containerRef={containerRef}
+        onOpenChange={setOpen}
+        minWidth={288}
+        maxHeight={224}
+      >
+        {(style, setPortalNode) => (
           <div
-            id="timezone-portal"
+            ref={setPortalNode}
             className="fixed z-50 w-72 rounded-lg border border-border bg-card shadow-xl"
-            style={{ left: pos.x, top: pos.y }}
+            style={style}
           >
             <div className="border-b border-border px-3 py-2">
               <input
                 autoFocus
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  setQuery(e.target.value)
+                  navigation.resetHighlight()
+                }}
+                onKeyDown={navigation.handleKeyDown}
                 placeholder="Search timezone…"
                 className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
               />
             </div>
-            <ul className="max-h-56 overflow-y-auto py-1">
-              {filtered.slice(0, 100).map((tz) => (
+            <ul id={navigation.listboxId} role="listbox" className="max-h-56 overflow-y-auto py-1">
+              {visibleOptions.map((tz, index) => (
                 <li
                   key={tz}
-                  onMouseDown={() => {
-                    onChange(tz)
-                    setOpen(false)
-                  }}
+                  {...navigation.getOptionProps(index, {
+                    selected: tz === normalizedValue,
+                    onMouseDown: () => {
+                      onChange(tz)
+                      setOpen(false)
+                    },
+                  })}
                   className={cn(
-                    'cursor-pointer px-3 py-1.5 text-sm hover:bg-accent',
-                    tz === normalizedValue && 'text-primary',
+                    comboboxOptionClass(index === highlighted, tz === normalizedValue),
+                    'px-3 text-sm',
                   )}
                 >
                   {tz}
@@ -240,10 +276,10 @@ export function TimezoneCombobox({
                 <li className="px-3 py-2 text-xs text-muted-foreground">No match</li>
               )}
             </ul>
-          </div>,
-          document.body,
+          </div>
         )}
-    </>
+      </FloatingDropdown>
+    </div>
   )
 }
 
@@ -255,68 +291,80 @@ export function TimeFormatSelect({
   onChange: (v: TimeFormatValue) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
 
   const selected = TIME_FORMATS.find((f) => f.value === value) ?? TIME_FORMATS[0]
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      const portal = document.getElementById('timeformat-portal')
-      if (!portal?.contains(e.target as Node) && !btnRef.current?.contains(e.target as Node))
-        setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
+  const navigation = useComboboxNavigation({
+    open,
+    optionCount: TIME_FORMATS.length,
+    onOpenChange: setOpen,
+    onSelectIndex: (index) => {
+      const selectedFormat = TIME_FORMATS[index]
+      if (!selectedFormat) return
+      onChange(selectedFormat.value)
+      setOpen(false)
+    },
+  })
+  const highlighted = navigation.highlightedIndex
 
   const openDropdown = () => {
-    const rect = btnRef.current?.getBoundingClientRect()
-    if (rect) setPos({ x: rect.left, y: rect.bottom + 4 })
     setOpen(true)
+    navigation.resetHighlight()
   }
 
   return (
-    <>
+    <div ref={containerRef}>
       <button
         ref={btnRef}
         onClick={() => (open ? setOpen(false) : openDropdown())}
+        {...navigation.getComboboxProps({
+          'aria-label': `Time format ${selected.label}`,
+          listboxVisible: open,
+        })}
         className="flex w-full items-center justify-between rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
       >
         <span className="font-mono">{selected.label}</span>
         <span className="text-xs text-muted-foreground">▾</span>
       </button>
 
-      {open &&
-        pos &&
-        createPortal(
+      <FloatingDropdown
+        open={open}
+        anchorRef={btnRef}
+        containerRef={containerRef}
+        onOpenChange={setOpen}
+        minWidth={288}
+      >
+        {(style, setPortalNode) => (
           <div
-            id="timeformat-portal"
+            ref={setPortalNode}
             className="fixed z-50 w-72 rounded-lg border border-border bg-card shadow-xl"
-            style={{ left: pos.x, top: pos.y }}
+            style={style}
           >
-            <ul className="py-1">
-              {TIME_FORMATS.map((f) => (
+            <ul id={navigation.listboxId} role="listbox" className="py-1">
+              {TIME_FORMATS.map((f, index) => (
                 <li
                   key={f.value}
-                  onMouseDown={() => {
-                    onChange(f.value)
-                    setOpen(false)
-                  }}
+                  {...navigation.getOptionProps(index, {
+                    selected: f.value === value,
+                    onMouseDown: () => {
+                      onChange(f.value)
+                      setOpen(false)
+                    },
+                  })}
                   className={cn(
-                    'cursor-pointer px-3 py-1.5 text-sm hover:bg-accent',
-                    f.value === value && 'text-primary',
+                    comboboxOptionClass(index === highlighted, f.value === value),
+                    'px-3 text-sm',
                   )}
                 >
                   <span className="font-mono">{f.label}</span>
                 </li>
               ))}
             </ul>
-          </div>,
-          document.body,
+          </div>
         )}
-    </>
+      </FloatingDropdown>
+    </div>
   )
 }
 

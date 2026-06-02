@@ -1,7 +1,5 @@
-import { cn } from '@/lib/utils'
-import { useFixedDropdownPosition } from '@/hooks/useFixedDropdownPosition'
-import { useEffect, useId, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { ComboboxListbox, comboboxOptionClass, useComboboxNavigation } from '@/components/Combobox'
+import { useEffect, useRef, useState } from 'react'
 
 interface FilterComboboxProps {
   value: string
@@ -20,64 +18,42 @@ export function FilterCombobox({
 }: FilterComboboxProps) {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState(value)
-  const [highlighted, setHighlighted] = useState(-1)
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const listboxId = useId()
   const filtered = options.filter((o) => o.toLowerCase().includes(input.toLowerCase()))
-  const dropdownStyle = useFixedDropdownPosition(open && filtered.length > 0, inputRef)
+  const navigation = useComboboxNavigation({
+    open,
+    optionCount: filtered.length,
+    onOpenChange: setOpen,
+    onSelectIndex: (index) => {
+      const selected = filtered[index]
+      if (selected) select(selected)
+    },
+    onEnterWithoutSelection: () => {
+      onChange(input)
+      setOpen(false)
+    },
+  })
+  const highlighted = navigation.highlightedIndex
 
   // Keep input in sync with controlled value
   useEffect(() => {
     setInput(value)
   }, [value])
 
-  // Close on outside click
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
   const select = (opt: string) => {
     onChange(opt)
     setInput(opt)
     setOpen(false)
-    setHighlighted(-1)
+    navigation.resetHighlight()
   }
 
   const clear = () => {
     onChange('')
     setInput('')
     setOpen(false)
+    navigation.resetHighlight()
     inputRef.current?.focus()
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      e.stopPropagation()
-      setOpen(false)
-      return
-    }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setHighlighted((h) => Math.min(h + 1, filtered.length - 1))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setHighlighted((h) => Math.max(h - 1, 0))
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      if (highlighted >= 0 && filtered[highlighted]) {
-        select(filtered[highlighted])
-      } else {
-        onChange(input)
-        setOpen(false)
-      }
-    }
   }
 
   return (
@@ -99,19 +75,16 @@ export function FilterCombobox({
             const v = e.target.value
             setInput(v)
             setOpen(true)
-            setHighlighted(-1)
+            navigation.resetHighlight()
             onChange(v)
           }}
           onFocus={() => setOpen(true)}
-          onKeyDown={handleKeyDown}
           placeholder={placeholder}
           aria-label={label}
           autoComplete="off"
           spellCheck={false}
-          role="combobox"
-          aria-expanded={open}
-          aria-controls={open && filtered.length > 0 ? listboxId : undefined}
           aria-autocomplete="list"
+          {...navigation.getComboboxProps({ listboxVisible: open && filtered.length > 0 })}
           className="w-full rounded-md border border-border bg-secondary py-1.5 pl-2 pr-6 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         />
         {(input || value) && (
@@ -126,36 +99,27 @@ export function FilterCombobox({
         )}
       </div>
 
-      {open &&
-        filtered.length > 0 &&
-        dropdownStyle &&
-        createPortal(
-          <ul
-            id={listboxId}
-            role="listbox"
-            aria-label={`${label} options`}
-            style={dropdownStyle}
-            className="fixed z-50 overflow-y-auto rounded-md border border-border bg-card shadow-lg"
+      <ComboboxListbox
+        open={open && filtered.length > 0}
+        anchorRef={inputRef}
+        containerRef={containerRef}
+        listboxId={navigation.listboxId}
+        label={`${label} options`}
+        onOpenChange={setOpen}
+      >
+        {filtered.map((opt, i) => (
+          <li
+            key={opt}
+            {...navigation.getOptionProps(i, {
+              selected: opt === value,
+              onMouseDown: () => select(opt),
+            })}
+            className={comboboxOptionClass(i === highlighted, opt === value)}
           >
-            {filtered.map((opt, i) => (
-              <li
-                key={opt}
-                role="option"
-                aria-selected={opt === value}
-                onMouseDown={() => select(opt)}
-                className={cn(
-                  'cursor-pointer px-2 py-1.5 text-xs',
-                  i === highlighted && 'bg-accent text-accent-foreground',
-                  opt === value && i !== highlighted && 'text-primary',
-                  i !== highlighted && opt !== value && 'text-foreground hover:bg-accent/50',
-                )}
-              >
-                {opt}
-              </li>
-            ))}
-          </ul>,
-          document.body,
-        )}
+            {opt}
+          </li>
+        ))}
+      </ComboboxListbox>
     </div>
   )
 }

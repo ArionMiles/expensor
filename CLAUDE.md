@@ -109,6 +109,8 @@ New frontend changes must be i18n-friendly by default. When touching existing fr
 
 **Slide-in notifications:** Use `SlideNotification` from `@/components/SlideNotification` for any transient action prompts that offer 2 choices and auto-dismiss after a timeout. Do not use inline absolute-positioned prompts inside table cells — they are clipped by overflow containers.
 
+**Combobox/listbox reuse:** Do not implement custom combobox, dropdown, autocomplete, or listbox mechanics from scratch. Use `frontend/src/components/Combobox.tsx` for fixed body-portal rendering, dropdown positioning, outside-click closing, Escape/ArrowUp/ArrowDown/Enter handling, highlighted option state, and ARIA combobox/listbox/option wiring. Page components may own filtering, labels, API calls, create-option behavior, and domain-specific rendering. Before adding a new dropdown-like control, grep for the shared combobox primitive and extend it only when the behavior is broadly reusable; document any one-off exception in the PR.
+
 See `frontend/README.md` for the full color system, component patterns, and spacing rules.
 
 ## Lint Rules to Know

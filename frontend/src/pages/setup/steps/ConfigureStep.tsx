@@ -1,8 +1,7 @@
 import { useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { useSaveReaderConfig, useThunderbirdMailboxes, useThunderbirdProfiles } from '@/api/queries'
 import type { ConfigField } from '@/api/types'
-import { useFixedDropdownPosition } from '@/hooks/useFixedDropdownPosition'
+import { ComboboxListbox, comboboxOptionClass, useComboboxNavigation } from '@/components/Combobox'
 import { useI18n } from '@/i18n/I18nProvider'
 import { cn } from '@/lib/utils'
 
@@ -28,7 +27,19 @@ function ThunderbirdProfileField({
   const { t } = useI18n()
 
   const filtered = profiles.filter((p) => p.toLowerCase().includes(value.toLowerCase()))
-  const dropdownStyle = useFixedDropdownPosition(open && filtered.length > 0, inputRef)
+  const navigation = useComboboxNavigation({
+    open,
+    optionCount: filtered.length,
+    onOpenChange: setOpen,
+    onSelectIndex: (index) => {
+      const selected = filtered[index]
+      if (!selected) return
+      onChange(selected)
+      setOpen(false)
+      navigation.resetHighlight()
+    },
+  })
+  const highlighted = navigation.highlightedIndex
 
   return (
     <div ref={containerRef} className="relative">
@@ -36,14 +47,16 @@ function ThunderbirdProfileField({
         id={id}
         ref={inputRef}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          onChange(e.target.value)
+          setOpen(true)
+          navigation.resetHighlight()
+        }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         disabled={disabled}
-        role="combobox"
         aria-label={label}
-        aria-expanded={open}
-        aria-haspopup="listbox"
+        {...navigation.getComboboxProps({ listboxVisible: open && filtered.length > 0 })}
         placeholder={
           isLoading
             ? t('setup.configure.scanningProfiles')
@@ -51,33 +64,31 @@ function ThunderbirdProfileField({
         }
         className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
       />
-      {open &&
-        filtered.length > 0 &&
-        dropdownStyle &&
-        createPortal(
-          <ul
-            role="listbox"
-            aria-label={t('setup.configure.profileOptions')}
-            style={dropdownStyle}
-            className="fixed z-50 overflow-y-auto rounded-md border border-border bg-card shadow-lg"
+      <ComboboxListbox
+        open={open && filtered.length > 0}
+        anchorRef={inputRef}
+        containerRef={containerRef}
+        listboxId={navigation.listboxId}
+        label={t('setup.configure.profileOptions')}
+        onOpenChange={setOpen}
+      >
+        {filtered.map((p, index) => (
+          <li
+            key={p}
+            {...navigation.getOptionProps(index, {
+              selected: p === value,
+              onMouseDown: () => {
+                onChange(p)
+                setOpen(false)
+                navigation.resetHighlight()
+              },
+            })}
+            className={comboboxOptionClass(index === highlighted, p === value, 'truncate px-3')}
           >
-            {filtered.map((p) => (
-              <li
-                key={p}
-                role="option"
-                aria-selected={p === value}
-                onMouseDown={() => {
-                  onChange(p)
-                  setOpen(false)
-                }}
-                className="cursor-pointer truncate px-3 py-1.5 text-xs text-foreground hover:bg-accent"
-              >
-                {p}
-              </li>
-            ))}
-          </ul>,
-          document.body,
-        )}
+            {p}
+          </li>
+        ))}
+      </ComboboxListbox>
       {!isLoading && profiles.length === 0 && (
         <p className="mt-0.5 text-xs text-muted-foreground">
           {t('setup.configure.noProfilesFound')}
@@ -106,6 +117,7 @@ function ThunderbirdMailboxesField({
 }) {
   const [input, setInput] = useState('')
   const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const { data: available = [], isLoading } = useThunderbirdMailboxes(profilePath)
   const { t } = useI18n()
@@ -132,10 +144,20 @@ function ThunderbirdMailboxesField({
   const filtered = available.filter(
     (m) => !selected.includes(m) && m.toLowerCase().includes(input.toLowerCase()),
   )
-  const dropdownStyle = useFixedDropdownPosition(open && filtered.length > 0, inputRef)
+  const navigation = useComboboxNavigation({
+    open,
+    optionCount: filtered.length,
+    onOpenChange: setOpen,
+    onSelectIndex: (index) => {
+      const selectedMailbox = filtered[index]
+      if (selectedMailbox) addMailbox(selectedMailbox)
+    },
+    onEnterWithoutSelection: () => addMailbox(input),
+  })
+  const highlighted = navigation.highlightedIndex
 
   return (
-    <div className="space-y-1.5">
+    <div ref={containerRef} className="space-y-1.5">
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {selected.map((s) => (
@@ -164,20 +186,13 @@ function ThunderbirdMailboxesField({
           onChange={(e) => {
             setInput(e.target.value)
             setOpen(true)
+            navigation.resetHighlight()
           }}
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              addMailbox(input)
-            }
-          }}
           disabled={disabled || !profilePath}
-          role="combobox"
           aria-label={label}
-          aria-expanded={open}
-          aria-haspopup="listbox"
+          {...navigation.getComboboxProps({ listboxVisible: open && filtered.length > 0 })}
           placeholder={
             !profilePath
               ? t('setup.configure.selectProfileFirst')
@@ -187,30 +202,27 @@ function ThunderbirdMailboxesField({
           }
           className="w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
         />
-        {open &&
-          filtered.length > 0 &&
-          dropdownStyle &&
-          createPortal(
-            <ul
-              role="listbox"
-              aria-label={t('setup.configure.mailboxOptions')}
-              style={dropdownStyle}
-              className="fixed z-50 overflow-y-auto rounded-md border border-border bg-card shadow-lg"
+        <ComboboxListbox
+          open={open && filtered.length > 0}
+          anchorRef={inputRef}
+          containerRef={containerRef}
+          listboxId={navigation.listboxId}
+          label={t('setup.configure.mailboxOptions')}
+          onOpenChange={setOpen}
+        >
+          {filtered.map((m, index) => (
+            <li
+              key={m}
+              {...navigation.getOptionProps(index, {
+                selected: selected.includes(m),
+                onMouseDown: () => addMailbox(m),
+              })}
+              className={comboboxOptionClass(index === highlighted, selected.includes(m), 'px-3')}
             >
-              {filtered.map((m) => (
-                <li
-                  key={m}
-                  role="option"
-                  aria-selected={selected.includes(m)}
-                  onMouseDown={() => addMailbox(m)}
-                  className="cursor-pointer px-3 py-1.5 text-xs text-foreground hover:bg-accent"
-                >
-                  {m}
-                </li>
-              ))}
-            </ul>,
-            document.body,
-          )}
+              {m}
+            </li>
+          ))}
+        </ComboboxListbox>
       </div>
       {profilePath && !isLoading && available.length === 0 && (
         <p className="text-xs text-muted-foreground">{t('setup.configure.noMailboxesFound')}</p>

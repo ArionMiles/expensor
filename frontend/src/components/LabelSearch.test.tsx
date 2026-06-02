@@ -12,7 +12,7 @@ describe('LabelSearch', () => {
       <LabelSearch value="" onChange={vi.fn()} options={['Groceries', 'Gas', 'Travel']} />,
     )
 
-    await user.type(screen.getByRole('textbox', { name: 'Filter by label' }), 'gro')
+    await user.type(screen.getByRole('combobox', { name: 'Filter by label' }), 'gro')
 
     const listbox = screen.getByRole('listbox')
     expect(listbox.parentElement).toBe(document.body)

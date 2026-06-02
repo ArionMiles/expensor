@@ -231,8 +231,8 @@ describe('Wizard guide layout', () => {
 
     renderWithProviders(<Wizard />, { route: '/setup' })
 
-    expect(await screen.findByRole('button', { name: /Asia\/Calcutta/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /02 Jan 2006, 02:30 PM/ })).toBeInTheDocument()
+    expect(await screen.findByRole('combobox', { name: /Asia\/Calcutta/ })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: /02 Jan 2006, 02:30 PM/ })).toBeInTheDocument()
   })
 
   it('gates reader-focused setup urls behind preferences when setup is incomplete', async () => {

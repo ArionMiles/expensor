@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useDeleteRule, useImportRules, useRules } from '@/api/queries'
 import type { Rule, RuleDocument, RuleImport } from '@/api/types'
+import { ComboboxListbox, comboboxOptionClass, useComboboxNavigation } from '@/components/Combobox'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { useI18n } from '@/i18n/I18nProvider'
 import { Trash2 } from 'lucide-react'
@@ -42,59 +42,46 @@ function FilterButton({
   onChange,
   onOpenChange,
 }: FilterButtonProps) {
-  const [rect, setRect] = useState<DOMRect | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const open = openFilter === id && rect !== null
+  const open = openFilter === id
+  const menuOptions = ['', ...options]
+  const navigation = useComboboxNavigation({
+    open,
+    optionCount: menuOptions.length,
+    onOpenChange: (nextOpen) => onOpenChange(nextOpen ? id : null),
+    onSelectIndex: (index) => {
+      const selected = menuOptions[index]
+      if (selected !== undefined) selectValue(selected)
+    },
+  })
+  const highlighted = navigation.highlightedIndex
 
   const toggle = () => {
     if (open) {
-      setRect(null)
       onOpenChange(null)
       return
     }
-    const nextRect = buttonRef.current?.getBoundingClientRect()
-    if (nextRect) {
-      setRect(nextRect)
-      onOpenChange(id)
-    }
+    navigation.resetHighlight()
+    onOpenChange(id)
   }
 
   const selectValue = (nextValue: string) => {
     onChange(nextValue)
-    setRect(null)
+    navigation.resetHighlight()
     onOpenChange(null)
   }
 
-  useEffect(() => {
-    if (!open) return
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node
-      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) return
-      setRect(null)
-      onOpenChange(null)
-    }
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      setRect(null)
-      onOpenChange(null)
-    }
-    document.addEventListener('mousedown', handlePointerDown)
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [onOpenChange, open])
-
   return (
-    <>
+    <div ref={containerRef} className="inline-flex">
       <button
         ref={buttonRef}
         type="button"
-        aria-haspopup="listbox"
-        aria-expanded={open}
         onClick={toggle}
+        {...navigation.getComboboxProps({
+          'aria-label': `${label}: ${value ? optionLabel(value) : allLabel}`,
+          listboxVisible: open,
+        })}
         className="inline-flex min-w-36 items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-left text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
       >
         <span>
@@ -106,41 +93,34 @@ function FilterButton({
         />
       </button>
 
-      {open &&
-        rect &&
-        createPortal(
-          <div
-            ref={menuRef}
-            role="listbox"
-            aria-label={listboxLabel}
-            className="fixed z-50 min-w-44 rounded-lg border border-border bg-card p-1 text-sm text-card-foreground shadow-xl"
-            style={{ top: rect.bottom + 6, left: rect.left, width: Math.max(rect.width, 176) }}
+      <ComboboxListbox
+        open={open}
+        anchorRef={buttonRef}
+        containerRef={containerRef}
+        listboxId={navigation.listboxId}
+        label={listboxLabel}
+        onOpenChange={(nextOpen) => onOpenChange(nextOpen ? id : null)}
+        className="min-w-44 rounded-lg p-1 text-sm text-card-foreground shadow-xl"
+        minWidth={176}
+      >
+        {menuOptions.map((option, index) => (
+          <li
+            key={option || '__all'}
+            {...navigation.getOptionProps(index, {
+              selected: value === option,
+              onMouseDown: () => selectValue(option),
+            })}
+            className={comboboxOptionClass(
+              index === highlighted,
+              value === option,
+              'rounded-md px-3 py-2 text-sm',
+            )}
           >
-            <button
-              type="button"
-              role="option"
-              aria-selected={value === ''}
-              onClick={() => selectValue('')}
-              className={`block w-full rounded-md px-3 py-2 text-left hover:bg-secondary ${value === '' ? 'bg-secondary text-foreground' : 'text-muted-foreground'}`}
-            >
-              {allLabel}
-            </button>
-            {options.map((option) => (
-              <button
-                key={option}
-                type="button"
-                role="option"
-                aria-selected={value === option}
-                onClick={() => selectValue(option)}
-                className={`block w-full rounded-md px-3 py-2 text-left hover:bg-secondary ${value === option ? 'bg-secondary text-foreground' : 'text-muted-foreground'}`}
-              >
-                {optionLabel(option)}
-              </button>
-            ))}
-          </div>,
-          document.body,
-        )}
-    </>
+            {option ? optionLabel(option) : allLabel}
+          </li>
+        ))}
+      </ComboboxListbox>
+    </div>
   )
 }
 
