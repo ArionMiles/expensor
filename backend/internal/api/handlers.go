@@ -47,7 +47,15 @@ type DaemonStatusProvider interface {
 // Handlers holds all dependencies for HTTP endpoint handlers.
 type Handlers struct {
 	registry           *plugins.Registry
-	store              Storer
+	settingsStore      settingsStore
+	analyticsStore     analyticsStore
+	transactionStore   transactionStore
+	muteStore          muteStore
+	taxonomyStore      taxonomyStore
+	readerRuntimeStore readerRuntimeStore
+	ruleStore          ruleStore
+	syncStore          syncStore
+	diagnosticStore    diagnosticStore
 	daemon             DaemonStatusProvider
 	version            string // set at build time via ldflags
 	baseURL            string // e.g. "http://localhost:8080"
@@ -89,7 +97,6 @@ type HandlersConfig struct {
 }
 
 // NewHandlers creates a Handlers instance.
-// Pass nil Store when no database is configured; transaction endpoints will return 503.
 // Pass nil StartFn to disable the daemon start endpoint.
 func NewHandlers(cfg HandlersConfig) *Handlers {
 	if cfg.FrontendURL == "" {
@@ -103,7 +110,15 @@ func NewHandlers(cfg HandlersConfig) *Handlers {
 	}
 	return &Handlers{
 		registry:           cfg.Registry,
-		store:              cfg.Store,
+		settingsStore:      cfg.Store,
+		analyticsStore:     cfg.Store,
+		transactionStore:   cfg.Store,
+		muteStore:          cfg.Store,
+		taxonomyStore:      cfg.Store,
+		readerRuntimeStore: cfg.Store,
+		ruleStore:          cfg.Store,
+		syncStore:          cfg.Store,
+		diagnosticStore:    cfg.Store,
 		daemon:             cfg.Daemon,
 		version:            cfg.Version,
 		baseURL:            strings.TrimRight(cfg.BaseURL, "/"),
@@ -159,12 +174,14 @@ func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := statusResponse{Daemon: ds}
 
-	if h.store != nil {
-		currency := h.currentBaseCurrency(r.Context())
-		if stats, err := h.store.GetStats(r.Context(), currency); err == nil {
-			resp.Stats = stats
-		}
+	currency := h.currentBaseCurrency(r.Context())
+	stats, err := h.analyticsStore.GetStats(r.Context(), currency)
+	if err != nil {
+		h.logger.Error("get status stats", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to fetch stats")
+		return
 	}
+	resp.Stats = stats
 
 	writeJSON(w, http.StatusOK, resp)
 }

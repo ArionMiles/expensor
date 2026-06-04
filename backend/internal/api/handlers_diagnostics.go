@@ -23,11 +23,6 @@ import (
 // @Failure 503 {object} ErrorResponse
 // @Router /extraction-diagnostics [get]
 func (h *Handlers) ListExtractionDiagnostics(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-
 	status := r.URL.Query().Get("status")
 	if status == "" {
 		status = store.DiagnosticStatusOpen
@@ -47,7 +42,7 @@ func (h *Handlers) ListExtractionDiagnostics(w http.ResponseWriter, r *http.Requ
 		filter.Limit = limit
 	}
 
-	rows, err := h.store.ListExtractionDiagnostics(r.Context(), filter)
+	rows, err := h.diagnosticStore.ListExtractionDiagnostics(r.Context(), filter)
 	if err != nil {
 		h.logger.Error("list extraction diagnostics", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list extraction diagnostics")
@@ -71,18 +66,13 @@ func (h *Handlers) ListExtractionDiagnostics(w http.ResponseWriter, r *http.Requ
 // @Failure 503 {object} ErrorResponse
 // @Router /extraction-diagnostics/{id} [get]
 func (h *Handlers) GetExtractionDiagnostic(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-
 	id := r.PathValue("id")
 	if _, err := uuid.Parse(id); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid extraction diagnostic id")
 		return
 	}
 
-	row, err := h.store.GetExtractionDiagnostic(r.Context(), id)
+	row, err := h.diagnosticStore.GetExtractionDiagnostic(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "extraction diagnostic not found")
@@ -111,11 +101,6 @@ func (h *Handlers) GetExtractionDiagnostic(w http.ResponseWriter, r *http.Reques
 // @Failure 503 {object} ErrorResponse
 // @Router /extraction-diagnostics/{id}/status [put]
 func (h *Handlers) UpdateExtractionDiagnosticStatus(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-
 	id := r.PathValue("id")
 	if _, err := uuid.Parse(id); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid extraction diagnostic id")
@@ -132,7 +117,7 @@ func (h *Handlers) UpdateExtractionDiagnosticStatus(w http.ResponseWriter, r *ht
 		return
 	}
 
-	row, err := h.store.UpdateExtractionDiagnosticStatus(r.Context(), id, body.Status)
+	row, err := h.diagnosticStore.UpdateExtractionDiagnosticStatus(r.Context(), id, body.Status)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "extraction diagnostic not found")

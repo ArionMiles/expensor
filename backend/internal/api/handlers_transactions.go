@@ -48,10 +48,6 @@ import (
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions [get]
 func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	if invalidKey, ok := firstInvalidFilterParam(
 		r,
 		"merchant",
@@ -119,7 +115,7 @@ func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
 	f.SortBy = r.URL.Query().Get("sort_by")
 	f.SortDir = r.URL.Query().Get("sort_dir")
 
-	txns, result, err := h.store.ListTransactions(r.Context(), f)
+	txns, result, err := h.transactionStore.ListTransactions(r.Context(), f)
 	if err != nil {
 		h.logger.Error("list transactions", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list transactions")
@@ -188,16 +184,11 @@ func containsControlChars(value string) bool {
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions/{id} [get]
 func (h *Handlers) GetTransaction(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-
 	id, ok := uuidPathValue(w, r, "id", "transaction")
 	if !ok {
 		return
 	}
-	txn, err := h.store.GetTransaction(r.Context(), id)
+	txn, err := h.transactionStore.GetTransaction(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "transaction not found")
@@ -213,7 +204,7 @@ func (h *Handlers) GetTransaction(w http.ResponseWriter, r *http.Request) {
 // validateCategory checks that the given category name exists in the store.
 // Returns false and writes an error response if validation fails.
 func (h *Handlers) validateCategory(w http.ResponseWriter, r *http.Request, name string) bool {
-	cats, err := h.store.ListCategories(r.Context())
+	cats, err := h.taxonomyStore.ListCategories(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to validate category")
 		return false
@@ -230,7 +221,7 @@ func (h *Handlers) validateCategory(w http.ResponseWriter, r *http.Request, name
 // validateBucket checks that the given bucket name exists in the store.
 // Returns false and writes an error response if validation fails.
 func (h *Handlers) validateBucket(w http.ResponseWriter, r *http.Request, name string) bool {
-	bkts, err := h.store.ListBuckets(r.Context())
+	bkts, err := h.taxonomyStore.ListBuckets(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to validate bucket")
 		return false
@@ -261,10 +252,6 @@ func (h *Handlers) validateBucket(w http.ResponseWriter, r *http.Request, name s
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions/{id} [put]
 func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	id, ok := uuidPathValue(w, r, "id", "transaction")
 	if !ok {
 		return
@@ -291,7 +278,7 @@ func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 		Category:    body.Category,
 		Bucket:      body.Bucket,
 	}
-	if err := h.store.UpdateTransaction(r.Context(), id, u); err != nil {
+	if err := h.transactionStore.UpdateTransaction(r.Context(), id, u); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "transaction not found")
 			return
@@ -301,7 +288,7 @@ func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := h.store.GetTransaction(r.Context(), id)
+	tx, err := h.transactionStore.GetTransaction(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "transaction not found")
@@ -330,10 +317,6 @@ func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions/{id}/mute [put]
 func (h *Handlers) MuteTransaction(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	id, ok := uuidPathValue(w, r, "id", "transaction")
 	if !ok {
 		return
@@ -346,7 +329,7 @@ func (h *Handlers) MuteTransaction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if err := h.store.MuteTransaction(r.Context(), id, body.Muted, body.Reason); err != nil {
+	if err := h.muteStore.MuteTransaction(r.Context(), id, body.Muted, body.Reason); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "transaction not found")
 			return
@@ -373,13 +356,7 @@ func (h *Handlers) MuteTransaction(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions/{id}/mute-reason [put]
-//
-//nolint:dupl // structurally similar to UpdateMerchantReason but calls a different store method
 func (h *Handlers) UpdateMuteReason(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	id, ok := uuidPathValue(w, r, "id", "transaction")
 	if !ok {
 		return
@@ -391,7 +368,7 @@ func (h *Handlers) UpdateMuteReason(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if err := h.store.UpdateMuteReason(r.Context(), id, body.Reason); err != nil {
+	if err := h.muteStore.UpdateMuteReason(r.Context(), id, body.Reason); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "transaction not found or not muted")
 			return
@@ -413,11 +390,7 @@ func (h *Handlers) UpdateMuteReason(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /muted-merchants [get]
 func (h *Handlers) ListMutedMerchants(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	merchants, err := h.store.GetMutedMerchantsWithCount(r.Context())
+	merchants, err := h.muteStore.GetMutedMerchantsWithCount(r.Context())
 	if err != nil {
 		h.logger.Error("list muted merchants", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list muted merchants")
@@ -440,10 +413,6 @@ func (h *Handlers) ListMutedMerchants(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /muted-merchants [post]
 func (h *Handlers) MuteByMerchant(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	var body struct {
 		Pattern string `json:"pattern"`
 		Reason  string `json:"reason"`
@@ -452,7 +421,7 @@ func (h *Handlers) MuteByMerchant(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "request body must be JSON with a non-empty \"pattern\" field")
 		return
 	}
-	if err := h.store.MuteByMerchant(r.Context(), body.Pattern, body.Reason); err != nil {
+	if err := h.muteStore.MuteByMerchant(r.Context(), body.Pattern, body.Reason); err != nil {
 		h.logger.Error("mute by merchant", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to mute merchant")
 		return
@@ -475,13 +444,7 @@ func (h *Handlers) MuteByMerchant(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /muted-merchants/{id}/reason [put]
-//
-//nolint:dupl // structurally similar to UpdateMuteReason but calls a different store method
 func (h *Handlers) UpdateMerchantReason(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	id, ok := uuidPathValue(w, r, "id", "muted merchant")
 	if !ok {
 		return
@@ -493,7 +456,7 @@ func (h *Handlers) UpdateMerchantReason(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if err := h.store.UpdateMerchantReason(r.Context(), id, body.Reason); err != nil {
+	if err := h.muteStore.UpdateMerchantReason(r.Context(), id, body.Reason); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "muted merchant not found")
 			return
@@ -520,10 +483,6 @@ func (h *Handlers) UpdateMerchantReason(w http.ResponseWriter, r *http.Request) 
 // @Failure 503 {object} ErrorResponse
 // @Router /muted-merchants/{id} [delete]
 func (h *Handlers) DeleteMutedMerchant(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	id, ok := uuidPathValue(w, r, "id", "muted merchant")
 	if !ok {
 		return
@@ -531,9 +490,9 @@ func (h *Handlers) DeleteMutedMerchant(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	if r.URL.Query().Get("unmute") == queryValueTrue {
-		err = h.store.DeleteMutedMerchantAndUnmute(r.Context(), id)
+		err = h.muteStore.DeleteMutedMerchantAndUnmute(r.Context(), id)
 	} else {
-		err = h.store.DeleteMutedMerchant(r.Context(), id)
+		err = h.muteStore.DeleteMutedMerchant(r.Context(), id)
 	}
 
 	if err != nil {
@@ -564,10 +523,6 @@ func (h *Handlers) DeleteMutedMerchant(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /merchants/categorize [post]
 func (h *Handlers) CategorizeMerchant(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
 	var body struct {
 		Merchant string `json:"merchant"`
 		Category string `json:"category"`
@@ -581,7 +536,7 @@ func (h *Handlers) CategorizeMerchant(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "\"merchant\" must not be empty")
 		return
 	}
-	n, err := h.store.CategorizeMerchant(r.Context(), body.Merchant, body.Category, body.Bucket)
+	n, err := h.muteStore.CategorizeMerchant(r.Context(), body.Merchant, body.Category, body.Bucket)
 	if err != nil {
 		h.logger.Error("categorize merchant", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to categorize merchant")
@@ -604,11 +559,6 @@ func (h *Handlers) CategorizeMerchant(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions/search [get]
 func (h *Handlers) SearchTransactions(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-
 	q := r.URL.Query().Get("q")
 	if containsControlChars(q) {
 		writeError(w, http.StatusBadRequest, "invalid q filter")
@@ -622,7 +572,7 @@ func (h *Handlers) SearchTransactions(w http.ResponseWriter, r *http.Request) {
 		IndividualOnly: r.URL.Query().Get("individual_only") == "1",
 	}
 
-	txns, result, err := h.store.SearchTransactions(r.Context(), q, f)
+	txns, result, err := h.transactionStore.SearchTransactions(r.Context(), q, f)
 	if err != nil {
 		h.logger.Error("search transactions", "error", err)
 		writeError(w, http.StatusInternalServerError, "search failed")
@@ -654,11 +604,7 @@ func (h *Handlers) SearchTransactions(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions/facets [get]
 func (h *Handlers) GetFacets(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "database not connected")
-		return
-	}
-	facets, err := h.store.GetFacets(r.Context())
+	facets, err := h.transactionStore.GetFacets(r.Context())
 	if err != nil {
 		h.logger.Error("get facets", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch facets")

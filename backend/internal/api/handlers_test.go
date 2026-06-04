@@ -51,7 +51,6 @@ type mockStore struct {
 	getResult             *store.Transaction
 	getErr                error
 	updateErr             error
-	addLabelErr           error
 	addLabelsErr          error
 	removeLblErr          error
 	searchResult          []store.Transaction
@@ -64,7 +63,6 @@ type mockStore struct {
 	dashboardErr          error
 	appConfig             map[string]string
 	setConfigErr          error
-	processedMessages     map[string]time.Time
 	activeReader          string
 	readerSecrets         map[string][]byte
 	readerTokens          map[string][]byte
@@ -119,14 +117,6 @@ func (m *mockStore) ListTransactions(
 
 func (m *mockStore) GetTransaction(_ context.Context, _ string) (*store.Transaction, error) {
 	return m.getResult, m.getErr
-}
-
-func (m *mockStore) UpdateDescription(_ context.Context, _, _ string) error {
-	return m.updateErr
-}
-
-func (m *mockStore) AddLabel(_ context.Context, _, _ string) error {
-	return m.addLabelErr
 }
 
 func (m *mockStore) AddLabels(_ context.Context, _ string, _ []string) error {
@@ -221,19 +211,6 @@ func (m *mockStore) SetAppConfig(_ context.Context, key, value string) error {
 	if key == "active_reader" {
 		m.activeReader = value
 	}
-	return nil
-}
-
-func (m *mockStore) IsMessageProcessed(_ context.Context, key string) (bool, error) {
-	_, ok := m.processedMessages[key]
-	return ok, nil
-}
-
-func (m *mockStore) MarkMessageProcessed(_ context.Context, key string, at time.Time) error {
-	if m.processedMessages == nil {
-		m.processedMessages = make(map[string]time.Time)
-	}
-	m.processedMessages[key] = at
 	return nil
 }
 
@@ -478,10 +455,6 @@ func (m *mockStore) DeleteRule(_ context.Context, _ string) error {
 	return m.ruleErr
 }
 
-func (m *mockStore) SeedPredefinedRules(_ context.Context, _ []store.RuleRow) error {
-	return nil
-}
-
 func (m *mockStore) ImportUserRules(_ context.Context, rows []store.RuleRow) error {
 	m.importedRules = rows
 	return m.importErr
@@ -499,7 +472,6 @@ func (m *mockStore) GetMutedMerchantsWithCount(_ context.Context) ([]store.Muted
 	return []store.MutedMerchantWithCount{}, nil
 }
 func (m *mockStore) DeleteMutedMerchant(_ context.Context, _ string) error          { return nil }
-func (m *mockStore) UnmuteByPattern(_ context.Context, _ string) error              { return nil }
 func (m *mockStore) DeleteMutedMerchantAndUnmute(_ context.Context, _ string) error { return nil }
 func (m *mockStore) CategorizeMerchant(_ context.Context, _, _, _ string) (int, error) {
 	if m.categorizeMerchantN != 0 {
@@ -667,22 +639,6 @@ func TestHealth(t *testing.T) {
 
 // --- status ---
 
-func TestStatus_NilStore(t *testing.T) {
-	dm := &mockDaemon{status: DaemonStatus{Running: true}}
-	h := newTestHandlers(t, nil, dm)
-	rr := get(h.Status, "/api/status")
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
-	}
-	var resp map[string]any
-	decodeJSON(t, rr.Body.String(), &resp)
-	daemon := resp["daemon"].(map[string]any)
-	if daemon["running"] != true {
-		t.Errorf("expected daemon.running=true")
-	}
-}
-
 func TestStatus_WithStats(t *testing.T) {
 	st := &mockStore{stats: &store.Stats{TotalCount: 42, TotalBase: 99999, BaseCurrency: "INR"}}
 	h := newTestHandlers(t, st, &mockDaemon{})
@@ -696,6 +652,21 @@ func TestStatus_WithStats(t *testing.T) {
 	stats := resp["stats"].(map[string]any)
 	if stats["total_count"] != float64(42) {
 		t.Errorf("expected stats.total_count=42, got %v", stats["total_count"])
+	}
+}
+
+func TestStatus_StatsError(t *testing.T) {
+	st := &mockStore{statsErr: errors.New("stats failed")}
+	h := newTestHandlers(t, st, &mockDaemon{})
+	rr := get(h.Status, "/api/status")
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rr.Code)
+	}
+	var resp map[string]string
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp["error"] != "failed to fetch stats" {
+		t.Errorf("expected failed to fetch stats error, got %q", resp["error"])
 	}
 }
 
@@ -775,7 +746,7 @@ func TestListWriters(t *testing.T) {
 // --- credentials status ---
 
 func TestCredentialsStatus_Missing(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/gmail/credentials/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
@@ -890,7 +861,7 @@ func TestAuthStart_UsesMetadataScopes(t *testing.T) {
 // --- auth status ---
 
 func TestAuthStatus_NoToken(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/gmail/auth/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
@@ -1088,7 +1059,7 @@ func TestAuthStatus_InvalidRefreshTokenRequiresAuth(t *testing.T) {
 // --- reader status ---
 
 func TestReaderStatus_Thunderbird_NotConfigured(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/thunderbird/status", nil)
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
@@ -1238,14 +1209,6 @@ func TestDisconnectReader_DoesNotStopDaemonWhenInactiveReaderIsRemoved(t *testin
 }
 
 // --- transactions ---
-
-func TestListTransactions_NilStore(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-	rr := get(h.ListTransactions, "/api/transactions")
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d", rr.Code)
-	}
-}
 
 func TestListTransactions_Empty(t *testing.T) {
 	st := &mockStore{transactions: []store.Transaction{}, listResult: store.TransactionListResult{Total: 0}}
@@ -1580,19 +1543,6 @@ func TestGetExtractionDiagnostic_InvalidID(t *testing.T) {
 	}
 }
 
-func TestGetExtractionDiagnostic_NilStore(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/extraction-diagnostics/11111111-1111-1111-1111-111111111111", nil)
-	req.SetPathValue("id", "11111111-1111-1111-1111-111111111111")
-	rr := httptest.NewRecorder()
-	h.GetExtractionDiagnostic(rr, req)
-
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d", rr.Code)
-	}
-}
-
 func TestUpdateExtractionDiagnosticStatus_InvalidStatus(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 
@@ -1662,36 +1612,6 @@ func TestUpdateExtractionDiagnosticStatus_Conflict(t *testing.T) {
 
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d", rr.Code)
-	}
-}
-
-func TestUpdateExtractionDiagnosticStatus_NilStore(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-
-	req := httptest.NewRequestWithContext(
-		context.Background(),
-		http.MethodPut,
-		"/api/extraction-diagnostics/11111111-1111-1111-1111-111111111111/status",
-		strings.NewReader(`{"status":"resolved"}`),
-	)
-	req.SetPathValue("id", "11111111-1111-1111-1111-111111111111")
-	rr := httptest.NewRecorder()
-	h.UpdateExtractionDiagnosticStatus(rr, req)
-
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d", rr.Code)
-	}
-}
-
-func TestListExtractionDiagnostics_NilStore(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/extraction-diagnostics", nil)
-	rr := httptest.NewRecorder()
-	h.ListExtractionDiagnostics(rr, req)
-
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d", rr.Code)
 	}
 }
 
@@ -1894,14 +1814,6 @@ func TestSearchTransactions_NilSliceReturnsEmptyArray(t *testing.T) {
 	}
 	if len(txns) != 0 {
 		t.Fatalf("expected empty transactions array, got %d entries", len(txns))
-	}
-}
-
-func TestSearchTransactions_NilStore(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-	rr := get(h.SearchTransactions, "/api/transactions/search?q=foo")
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d", rr.Code)
 	}
 }
 
@@ -2280,28 +2192,6 @@ func TestSetBaseCurrency_InvalidCode(t *testing.T) {
 	}
 }
 
-func TestSetBaseCurrency_NoStore(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/base-currency", strings.NewReader(`{"base_currency":"USD"}`))
-	rr := httptest.NewRecorder()
-	h.SetBaseCurrency(rr, req)
-
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d", rr.Code)
-	}
-}
-
-func TestGetFacets_NoStore(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/facets", nil)
-	rr := httptest.NewRecorder()
-	h.GetFacets(rr, req)
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d", rr.Code)
-	}
-}
-
 func TestGetFacets_ReturnsEmptySlices(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/facets", nil)
@@ -2370,14 +2260,6 @@ func TestGetFacets_StoreError(t *testing.T) {
 }
 
 // --- labels ---
-
-func TestListLabels_NoStore(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-	rr := get(h.ListLabels, "/api/config/labels")
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d", rr.Code)
-	}
-}
 
 func TestListLabels_Success(t *testing.T) {
 	ms := &mockStore{labels: []store.Label{{Name: "food", Color: "#f59e0b"}}}
@@ -2566,58 +2448,6 @@ func TestExportCategories_IncludesMerchants(t *testing.T) {
 	}
 }
 
-func TestExportCategories_NilStoreReturns503(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-	rr := get(h.ExportCategories, "/api/config/categories/export")
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
-}
-
-func TestApplyCategoryByMerchant_NilStoreReturns503(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-	body := strings.NewReader(`{"merchant_pattern":"swiggy"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/config/categories/Food/apply", body)
-	req.SetPathValue("name", "Food")
-	rr := httptest.NewRecorder()
-
-	h.ApplyCategoryByMerchant(rr, req)
-
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
-}
-
-func TestRemoveCategoryByMerchant_NilStoreReturns503(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-	body := strings.NewReader(`{"merchant_pattern":"swiggy"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/config/categories/Food/merchant", body)
-	req.SetPathValue("name", "Food")
-	rr := httptest.NewRecorder()
-
-	h.RemoveCategoryByMerchant(rr, req)
-
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
-}
-
-// --- buckets ---
-
-func TestListBuckets_Success(t *testing.T) {
-	ms := &mockStore{buckets: []store.Bucket{{Name: "needs", IsDefault: true}}}
-	h := newTestHandlers(t, ms, &mockDaemon{})
-	rr := get(h.ListBuckets, "/api/config/buckets")
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
-	}
-	var resp []store.Bucket
-	decodeJSON(t, rr.Body.String(), &resp)
-	if len(resp) != 1 || resp[0].Name != "needs" {
-		t.Errorf("unexpected response: %v", resp)
-	}
-}
-
 func TestGetBucketMappings_Success(t *testing.T) {
 	ms := &mockStore{bucketMappings: map[string][]string{"Needs": {"rent"}}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
@@ -2687,77 +2517,6 @@ func TestExportBuckets_IncludesMerchants(t *testing.T) {
 	merchants, ok := resp[0]["merchants"].([]any)
 	if !ok || len(merchants) != 1 || merchants[0] != "rent" {
 		t.Fatalf("expected merchants in export, got %#v", resp)
-	}
-}
-
-func TestExportBuckets_NilStoreReturns503(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-	rr := get(h.ExportBuckets, "/api/config/buckets/export")
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
-}
-
-func TestApplyBucketByMerchant_NilStoreReturns503(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-	body := strings.NewReader(`{"merchant_pattern":"rent"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/config/buckets/Needs/apply", body)
-	req.SetPathValue("name", "Needs")
-	rr := httptest.NewRecorder()
-
-	h.ApplyBucketByMerchant(rr, req)
-
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
-}
-
-func TestRemoveBucketByMerchant_NilStoreReturns503(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-	body := strings.NewReader(`{"merchant_pattern":"rent"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/config/buckets/Needs/merchant", body)
-	req.SetPathValue("name", "Needs")
-	rr := httptest.NewRecorder()
-
-	h.RemoveBucketByMerchant(rr, req)
-
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
-}
-
-// --- extended update transaction ---
-
-func TestUpdateTransaction_InvalidCategory(t *testing.T) {
-	// Store returns empty category list, so any category name is invalid.
-	ms := &mockStore{categories: []store.Category{}}
-	h := newTestHandlers(t, ms, &mockDaemon{})
-	body := strings.NewReader(`{"category":"nonexistent"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/11111111-1111-1111-1111-111111111111", body)
-	req.SetPathValue("id", testTransactionID)
-	rr := httptest.NewRecorder()
-	h.UpdateTransaction(rr, req)
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
-}
-
-// --- scan interval ---
-
-func TestGetScanInterval_Default(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/scan-interval", nil)
-	rr := httptest.NewRecorder()
-	h.GetScanInterval(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
-	}
-	var resp map[string]string
-	decodeJSON(t, rr.Body.String(), &resp)
-	if resp["scan_interval"] != "60" {
-		t.Errorf("expected scan_interval=60, got %q", resp["scan_interval"])
 	}
 }
 
@@ -2876,18 +2635,6 @@ func TestGetHeatmap_StoreError_Returns500(t *testing.T) {
 	}
 }
 
-func TestGetHeatmap_NoStore_Returns503(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap", nil)
-	rr := httptest.NewRecorder()
-	h.GetHeatmap(rr, req)
-
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
-}
-
 func TestGetHeatmap_WithFromTo_Returns200(t *testing.T) {
 	ms := &mockStore{
 		heatmapData: &store.HeatmapData{
@@ -2975,44 +2722,6 @@ func TestGetAnnualHeatmap_StoreError_Returns500(t *testing.T) {
 	}
 }
 
-func TestGetAnnualHeatmap_NoStore_Returns503(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap/annual?year=2026", nil)
-	rr := httptest.NewRecorder()
-	h.GetAnnualHeatmap(rr, req)
-
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
-}
-
-// --- rules ---
-
-const validRuleBody = `{
-	"name":"New Rule",
-	"sender_emails":["alerts@example.com"],
-	"amount_regex":"Rs\\.([\\d.]+)",
-	"merchant_regex":"at (.*?) on",
-	"source":{"type":"Credit Card","label":"Example Credit Card","bank":"Example Bank"}
-}`
-
-func TestListRules_Success(t *testing.T) {
-	ms := &mockStore{rules: []store.RuleRow{{ID: "1", Name: "test", AmountRegex: `\d+`, MerchantRegex: `.+`}}}
-	h := newTestHandlers(t, ms, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/rules", nil)
-	rr := httptest.NewRecorder()
-	h.ListRules(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
-	var resp []store.RuleRow
-	decodeJSON(t, rr.Body.String(), &resp)
-	if len(resp) != 1 {
-		t.Errorf("expected 1 rule, got %d", len(resp))
-	}
-}
-
 func TestListRules_ReturnsSourceObjectAndSenderEmails(t *testing.T) {
 	ms := &mockStore{rules: []store.RuleRow{{
 		ID:              "1",
@@ -3051,15 +2760,14 @@ func TestListRules_ReturnsSourceObjectAndSenderEmails(t *testing.T) {
 	}
 }
 
-func TestListRules_NilStore_Returns503(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/rules", nil)
-	rr := httptest.NewRecorder()
-	h.ListRules(rr, req)
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d", rr.Code)
-	}
-}
+const validRuleBody = `{
+	"name":"New Rule",
+	"sender_emails":["alerts@example.com"],
+	"amount_regex":"Rs\\.([\\d.]+)",
+	"merchant_regex":"at (.*?) on",
+	"currency_regex":"(INR)",
+	"source":{"type":"Credit Card","label":"Example Card","bank":"Example Bank"}
+}`
 
 func TestCreateRule_Success(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
@@ -3970,38 +3678,11 @@ func TestListBanks(t *testing.T) {
 	}
 }
 
-func (m *mockStore) SeedMCCCodes(_ context.Context, _ []store.MCCEntry) error { return nil }
-func (m *mockStore) SeedMerchantCategories(_ context.Context, _ []store.MerchantCategoryEntry) (int, error) {
-	return 0, nil
-}
-
-func (m *mockStore) LoadCategorySnapshot(_ context.Context) (pkgapi.CategoryResolver, error) {
-	return func(_ string) (string, string) { return "", "" }, nil
-}
-func (m *mockStore) SeedMCCCategories(_ context.Context, _ []string) error { return nil }
 func (m *mockStore) GetSyncStatus(_ context.Context) (store.SyncStatus, error) {
 	if m.syncStatusErr != nil {
 		return store.SyncStatus{}, m.syncStatusErr
 	}
 	return m.syncStatus, nil
-}
-func (m *mockStore) SetSyncStatus(_ context.Context, _ store.SyncStatus) error { return nil }
-
-func TestGetSyncStatus_NoStore(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/sync/status", nil)
-	rr := httptest.NewRecorder()
-	h.GetSyncStatus(rr, req)
-
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d", rr.Code)
-	}
-	var resp map[string]string
-	decodeJSON(t, rr.Body.String(), &resp)
-	if resp["error"] != "database not connected" {
-		t.Fatalf("expected standard error payload, got %#v", resp)
-	}
 }
 
 func TestCategorizeMerchant_OK(t *testing.T) {

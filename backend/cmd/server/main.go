@@ -94,6 +94,25 @@ type daemonManager struct {
 	lastError string
 }
 
+type categorySnapshotStore interface {
+	LoadCategorySnapshot(ctx context.Context) (api.CategoryResolver, error)
+}
+
+type communitySyncStore interface {
+	SeedMCCCodes(ctx context.Context, entries []store.MCCEntry) error
+	SeedMerchantCategories(ctx context.Context, entries []store.MerchantCategoryEntry) (int, error)
+	SetSyncStatus(ctx context.Context, status store.SyncStatus) error
+}
+
+type daemonRuntimeStore interface {
+	GetReaderSecret(ctx context.Context, reader string) ([]byte, bool, error)
+	GetReaderToken(ctx context.Context, reader string) ([]byte, bool, error)
+	SetReaderToken(ctx context.Context, reader string, token []byte) error
+	GetReaderConfig(ctx context.Context, reader string) (json.RawMessage, bool, error)
+	IsMessageProcessed(ctx context.Context, key string) (bool, error)
+	MarkMessageProcessed(ctx context.Context, key string, at time.Time) error
+}
+
 func (m *daemonManager) setRunning(t time.Time) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -126,18 +145,20 @@ func (m *daemonManager) Status() httpapi.DaemonStatus {
 // It exposes start and rescan as plain methods so they can be passed as func(string)
 // values without adding closure complexity to main.
 type daemonCoordinator struct {
-	mu           sync.Mutex
-	ctx          context.Context
-	cancelFn     context.CancelFunc // cancels the current daemon run; nil when idle
-	activeReader string             // reader name currently running or last launched
-	registry     *plugins.Registry
-	cfg          config.Config
-	systemRules  []api.Rule
-	resolver     api.CategoryResolver
-	st           httpapi.Storer
-	diagnostics  api.DiagnosticSink
-	dm           *daemonManager
-	logger       *slog.Logger
+	mu            sync.Mutex
+	ctx           context.Context
+	cancelFn      context.CancelFunc // cancels the current daemon run; nil when idle
+	activeReader  string             // reader name currently running or last launched
+	registry      *plugins.Registry
+	cfg           config.Config
+	systemRules   []api.Rule
+	resolver      api.CategoryResolver
+	st            httpapi.Storer
+	runtimeStore  daemonRuntimeStore
+	resolverStore categorySnapshotStore
+	diagnostics   api.DiagnosticSink
+	dm            *daemonManager
+	logger        *slog.Logger
 }
 
 // launch builds runtime config and merged rules then spawns runDaemon in a goroutine.
@@ -170,7 +191,7 @@ func (c *daemonCoordinator) launch(readerName string, forceRescan bool) {
 	merged := pkgrules.MergeRules(c.systemRules, loadUserRules(c.ctx, c.st, c.logger))
 	go func() {
 		defer cancel()
-		runDaemon(runCtx, c.registry, readerName, runtimeCfg, merged, c.resolver, c.diagnostics, c.st, c.dm, c.logger, forceRescan)
+		runDaemon(runCtx, c.registry, readerName, runtimeCfg, merged, c.resolver, c.diagnostics, c.runtimeStore, c.dm, c.logger, forceRescan)
 	}()
 }
 
@@ -294,7 +315,7 @@ func (c *daemonCoordinator) restart(readerName string) {
 // refreshResolver reloads the CategoryResolver from the DB snapshot and, if
 // the daemon is running, restarts it so the new mappings take effect immediately.
 func (c *daemonCoordinator) refreshResolver(ctx context.Context) {
-	resolver, err := c.st.LoadCategorySnapshot(ctx)
+	resolver, err := c.resolverStore.LoadCategorySnapshot(ctx)
 	if err != nil {
 		c.logger.Warn("failed to reload category snapshot after sync", "error", err)
 		return
@@ -408,7 +429,7 @@ func run() int {
 	dc := &daemonCoordinator{
 		ctx: ctx, registry: registry, cfg: cfg,
 		systemRules: content.rules, resolver: resolver,
-		st: st, diagnostics: instrumentedStore, dm: dm, logger: logger,
+		st: st, runtimeStore: instrumentedStore, resolverStore: instrumentedStore, diagnostics: instrumentedStore, dm: dm, logger: logger,
 	}
 
 	// Auto-start daemon if a previous reader selection was persisted.
@@ -417,7 +438,7 @@ func run() int {
 		dc.start(savedReader)
 	}
 
-	syncFn := startCommunitySync(ctx, pgStore, st, dc, logger)
+	syncFn := startCommunitySync(ctx, pgStore, instrumentedStore, dc, logger)
 	handlers := httpapi.NewHandlers(httpapi.HandlersConfig{
 		Registry:           registry,
 		Store:              st,
@@ -455,7 +476,7 @@ func runDaemon( //nolint:revive // all parameters are required; splitting furthe
 	rules []api.Rule,
 	resolver api.CategoryResolver,
 	diagnosticSink api.DiagnosticSink,
-	runtimeStore httpapi.Storer,
+	runtimeStore daemonRuntimeStore,
 	dm *daemonManager,
 	logger *slog.Logger,
 	forceRescan bool,
@@ -779,7 +800,7 @@ func loadAppConfig() (config.Config, error) {
 // startCommunitySync seeds the default community URL (if absent), launches the
 // initial sync, and starts the background ticker goroutine. It returns a syncFn
 // that triggers a manual sync + resolver refresh.
-func startCommunitySync(ctx context.Context, pgStore *store.Store, st httpapi.Storer, dc *daemonCoordinator, logger *slog.Logger) func() {
+func startCommunitySync(ctx context.Context, pgStore *store.Store, st communitySyncStore, dc *daemonCoordinator, logger *slog.Logger) func() {
 	syncInterval := 24 * time.Hour
 	if v := os.Getenv("EXPENSOR_CONTENT_SYNC_INTERVAL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
@@ -863,7 +884,7 @@ func applyScanOverrides(cfg config.Config, st httpapi.Storer) config.Config {
 // syncCommunityContent fetches mcc.json and categories.json from the community URL,
 // upserts them into the DB, and updates the sync status in app_config.
 // Non-fatal: errors are logged and stored as sync status; caller continues.
-func syncCommunityContent(ctx context.Context, st httpapi.Storer, baseURL string, logger *slog.Logger) {
+func syncCommunityContent(ctx context.Context, st communitySyncStore, baseURL string, logger *slog.Logger) {
 	if baseURL == "" {
 		return
 	}
@@ -932,7 +953,7 @@ func syncCommunityContent(ctx context.Context, st httpapi.Storer, baseURL string
 	logger.Info("community sync complete", "entries_updated", updated)
 }
 
-func recordSyncError(ctx context.Context, st httpapi.Storer, syncErr error, logger *slog.Logger) {
+func recordSyncError(ctx context.Context, st communitySyncStore, syncErr error, logger *slog.Logger) {
 	logger.Warn("community sync failed", "error", syncErr)
 	errStr := syncErr.Error()
 	status := store.SyncStatus{Error: &errStr}
