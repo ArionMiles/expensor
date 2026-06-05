@@ -18,57 +18,14 @@ const (
 	readerRuntimeConfig       = "config"
 )
 
-type RuntimeRepository interface {
-	InitAppConfig(ctx context.Context) error
-	GetAppConfig(ctx context.Context, key string) (string, error)
-	SetAppConfig(ctx context.Context, key, value string) error
-	SetActiveReader(ctx context.Context, reader string) error
-	GetActiveReader(ctx context.Context) (string, error)
-	SetReaderSecret(ctx context.Context, reader string, secret []byte) error
-	GetReaderSecret(ctx context.Context, reader string) ([]byte, bool, error)
-	SetReaderToken(ctx context.Context, reader string, token []byte) error
-	GetReaderToken(ctx context.Context, reader string) ([]byte, bool, error)
-	DeleteReaderToken(ctx context.Context, reader string) error
-	SetReaderConfig(ctx context.Context, reader string, readerConfig json.RawMessage) error
-	GetReaderConfig(ctx context.Context, reader string) (json.RawMessage, bool, error)
-	DeleteReaderRuntime(ctx context.Context, reader string) error
-	IsMessageProcessed(ctx context.Context, key string) (bool, error)
-	MarkMessageProcessed(ctx context.Context, key string, at time.Time) error
-	GetSyncStatus(ctx context.Context) (SyncStatus, error)
-	SetSyncStatus(ctx context.Context, status SyncStatus) error
-	GetCommunityURL(ctx context.Context) (string, error)
-	SetCommunityURL(ctx context.Context, url string) error
-}
-
 type pgRuntimeRepository struct {
 	pool *pgxpool.Pool
-}
-
-func NewRuntimeRepository(deps repositoryDependencies) RuntimeRepository {
-	return newPGRuntimeRepository(deps)
 }
 
 func newPGRuntimeRepository(deps repositoryDependencies) *pgRuntimeRepository {
 	return &pgRuntimeRepository{
 		pool: deps.pool,
 	}
-}
-
-func (r *pgRuntimeRepository) InitAppConfig(ctx context.Context) error {
-	_, err := r.pool.Exec(ctx, `
-			CREATE TABLE IF NOT EXISTS app_config (
-			    key   TEXT PRIMARY KEY,
-			    value TEXT NOT NULL
-			);
-			INSERT INTO app_config (key, value) VALUES
-			    ('scan_interval', '60'),
-			    ('lookback_days', '180')
-			ON CONFLICT (key) DO NOTHING;
-		`)
-	if err != nil {
-		return fmt.Errorf("initializing app config: executing app config initialization: %w", err)
-	}
-	return nil
 }
 
 func (r *pgRuntimeRepository) GetAppConfig(ctx context.Context, key string) (string, error) {

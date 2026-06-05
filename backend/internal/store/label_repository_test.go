@@ -2,7 +2,6 @@ package store_test
 
 import (
 	"context"
-	"log/slog"
 	"testing"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
@@ -13,36 +12,34 @@ func TestLabelRepositoryCRUD(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	repo := store.NewLabelRepository(ts.PoolForTest(), slog.Default())
-
-	if err := repo.Create(ctx, "custom-test", "#38bdf8"); err != nil {
-		t.Fatalf("Create: %v", err)
+	if err := ts.CreateLabel(ctx, "custom-test", "#38bdf8"); err != nil {
+		t.Fatalf("CreateLabel: %v", err)
 	}
-	labels, err := repo.List(ctx)
+	labels, err := ts.ListLabels(ctx)
 	if err != nil {
-		t.Fatalf("List: %v", err)
+		t.Fatalf("ListLabels: %v", err)
 	}
 	if !containsLabel(labels, "custom-test", "#38bdf8") {
 		t.Fatalf("expected custom-test label after create, got %#v", labels)
 	}
 
-	if err := repo.Update(ctx, "custom-test", "#f97316"); err != nil {
-		t.Fatalf("Update: %v", err)
+	if err := ts.UpdateLabel(ctx, "custom-test", "#f97316"); err != nil {
+		t.Fatalf("UpdateLabel: %v", err)
 	}
-	labels, err = repo.List(ctx)
+	labels, err = ts.ListLabels(ctx)
 	if err != nil {
-		t.Fatalf("List after update: %v", err)
+		t.Fatalf("ListLabels after update: %v", err)
 	}
 	if !containsLabel(labels, "custom-test", "#f97316") {
 		t.Fatalf("expected custom-test label color update, got %#v", labels)
 	}
 
-	if err := repo.Delete(ctx, "custom-test"); err != nil {
-		t.Fatalf("Delete: %v", err)
+	if err := ts.DeleteLabel(ctx, "custom-test", false); err != nil {
+		t.Fatalf("DeleteLabel: %v", err)
 	}
-	labels, err = repo.List(ctx)
+	labels, err = ts.ListLabels(ctx)
 	if err != nil {
-		t.Fatalf("List after delete: %v", err)
+		t.Fatalf("ListLabels after delete: %v", err)
 	}
 	if containsLabel(labels, "custom-test", "#f97316") {
 		t.Fatalf("expected custom-test label to be deleted, got %#v", labels)

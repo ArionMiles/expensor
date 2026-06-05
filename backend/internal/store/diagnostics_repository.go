@@ -9,19 +9,8 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
-type DiagnosticsRepository interface {
-	RecordExtractionDiagnostic(ctx context.Context, diagnostic api.ExtractionDiagnostic) error
-	ListExtractionDiagnostics(ctx context.Context, f DiagnosticFilter) ([]ExtractionDiagnosticRow, error)
-	GetExtractionDiagnostic(ctx context.Context, id string) (*ExtractionDiagnosticRow, error)
-	UpdateExtractionDiagnosticStatus(ctx context.Context, id, status string) (*ExtractionDiagnosticRow, error)
-}
-
 type pgDiagnosticsRepository struct {
 	pool *pgxpool.Pool
-}
-
-func NewDiagnosticsRepository(deps repositoryDependencies) DiagnosticsRepository {
-	return newPGDiagnosticsRepository(deps)
 }
 
 func newPGDiagnosticsRepository(deps repositoryDependencies) *pgDiagnosticsRepository {

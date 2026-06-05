@@ -10,20 +10,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
-type CommunityRepository interface {
-	CategorizeMerchant(ctx context.Context, merchant, category, bucket string) (int, error)
-	ApplyCategoryByMerchant(ctx context.Context, category, merchant string) (int64, error)
-	ApplyBucketByMerchant(ctx context.Context, bucket, merchant string) (int64, error)
-	RemoveCategoryByMerchant(ctx context.Context, category, merchant string) (int64, error)
-	RemoveBucketByMerchant(ctx context.Context, bucket, merchant string) (int64, error)
-	GetCategoryMappings(ctx context.Context) (map[string][]string, error)
-	GetBucketMappings(ctx context.Context) (map[string][]string, error)
-	SeedMCCCodes(ctx context.Context, entries []MCCEntry) error
-	SeedMerchantCategories(ctx context.Context, entries []MerchantCategoryEntry) (int, error)
-	LoadCategorySnapshot(ctx context.Context) (api.CategoryResolver, error)
-	SeedMCCCategories(ctx context.Context, names []string) error
-}
-
 type pgCommunityRepository struct {
 	pool *pgxpool.Pool
 }
@@ -32,10 +18,6 @@ type categorySnapshotEntry struct {
 	fragment string
 	category string
 	bucket   string
-}
-
-func NewCommunityRepository(deps repositoryDependencies) CommunityRepository {
-	return newPGCommunityRepository(deps)
 }
 
 func newPGCommunityRepository(deps repositoryDependencies) *pgCommunityRepository {
