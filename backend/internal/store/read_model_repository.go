@@ -11,18 +11,9 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type ReadModelRepository interface {
-	GetStats(ctx context.Context, baseCurrency string) (*Stats, error)
-	GetChartData(ctx context.Context) (*ChartData, error)
-	GetDashboardData(ctx context.Context) (*DashboardData, error)
-	GetSpendingHeatmap(ctx context.Context, from, to *time.Time) (*HeatmapData, error)
-	GetAnnualSpend(ctx context.Context, year int) ([]DailyBucket, error)
-	GetMonthlyBreakdownSpend(ctx context.Context, dimension string, months int) (*MonthlyBreakdownData, error)
-}
-
 type pgReadModelRepository struct {
 	pool    *pgxpool.Pool
-	runtime RuntimeRepository
+	runtime *pgRuntimeRepository
 	now     func() time.Time
 }
 
@@ -44,11 +35,7 @@ type chartDataLoadRequest struct {
 	CategoryMonthlyFn func(context.Context) (map[string]CategoryMonthlyEntry, error)
 }
 
-func NewReadModelRepository(deps repositoryDependencies, runtime RuntimeRepository) ReadModelRepository {
-	return newPGReadModelRepository(deps, runtime)
-}
-
-func newPGReadModelRepository(deps repositoryDependencies, runtime RuntimeRepository) *pgReadModelRepository {
+func newPGReadModelRepository(deps repositoryDependencies, runtime *pgRuntimeRepository) *pgReadModelRepository {
 	return &pgReadModelRepository{
 		pool:    deps.pool,
 		runtime: runtime,
@@ -709,8 +696,6 @@ func newChartData() *ChartData {
 	}
 }
 
-// initAppConfig creates the app_config table and seeds operational defaults.
-// It is called once from New and is idempotent.
 func (r *pgReadModelRepository) monthlyBreakdownSpendReadModel(ctx context.Context, dimension string, months int) (*MonthlyBreakdownData, error) {
 	if months <= 0 {
 		return &MonthlyBreakdownData{

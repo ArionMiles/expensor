@@ -7,23 +7,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type RulesRepository interface {
-	InitRules(ctx context.Context) error
-	ListRules(ctx context.Context) ([]RuleRow, error)
-	GetRule(ctx context.Context, id string) (*RuleRow, error)
-	CreateRule(ctx context.Context, r RuleRow) (*RuleRow, error)
-	UpdateRule(ctx context.Context, id string, r RuleRow) (*RuleRow, error)
-	DeleteRule(ctx context.Context, id string) error
-	SeedPredefinedRules(ctx context.Context, rules []RuleRow) error
-	ImportUserRules(ctx context.Context, rules []RuleRow) error
-}
-
 type pgRulesRepository struct {
 	pool *pgxpool.Pool
-}
-
-func NewRulesRepository(deps repositoryDependencies) RulesRepository {
-	return newPGRulesRepository(deps)
 }
 
 func newPGRulesRepository(deps repositoryDependencies) *pgRulesRepository {
@@ -57,55 +42,6 @@ func ruleSourceLabel(rule RuleRow) string {
 		return rule.SourceLabel
 	}
 	return rule.TransactionSource
-}
-
-func (r *pgRulesRepository) InitRules(ctx context.Context) error {
-	_, err := r.pool.Exec(ctx, `
-			-- Fresh-install path: create the table with the correct final schema.
-			CREATE TABLE IF NOT EXISTS rules (
-				id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-				name               TEXT NOT NULL,
-				sender_email       TEXT NOT NULL DEFAULT '',
-				subject_contains   TEXT NOT NULL DEFAULT '',
-				amount_regex       TEXT NOT NULL,
-				merchant_regex     TEXT NOT NULL,
-				currency_regex     TEXT NOT NULL DEFAULT '',
-				transaction_source TEXT NOT NULL DEFAULT '',
-				predefined         BOOLEAN NOT NULL DEFAULT false,
-				created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-				updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
-			);
-
-			-- Upgrade path: add columns that may be missing on older installs.
-			ALTER TABLE rules ADD COLUMN IF NOT EXISTS transaction_source TEXT NOT NULL DEFAULT '';
-			ALTER TABLE rules ADD COLUMN IF NOT EXISTS sender_emails TEXT[] NOT NULL DEFAULT '{}';
-			ALTER TABLE rules ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT '';
-			ALTER TABLE rules ADD COLUMN IF NOT EXISTS source_label TEXT NOT NULL DEFAULT '';
-			ALTER TABLE rules ADD COLUMN IF NOT EXISTS bank TEXT NOT NULL DEFAULT '';
-			ALTER TABLE rules ADD COLUMN IF NOT EXISTS predefined BOOLEAN NOT NULL DEFAULT false;
-
-			UPDATE rules
-			SET sender_emails = ARRAY[sender_email]
-			WHERE cardinality(sender_emails) = 0 AND sender_email <> '';
-
-			UPDATE rules
-			SET source_label = transaction_source
-			WHERE source_label = '' AND transaction_source <> '';
-
-			-- Ensure UNIQUE (name) constraint exists (idempotent).
-			DO $$ BEGIN
-				IF NOT EXISTS (
-					SELECT 1 FROM information_schema.table_constraints
-					WHERE table_name = 'rules' AND constraint_name = 'rules_name_key'
-				) THEN
-					ALTER TABLE rules ADD CONSTRAINT rules_name_key UNIQUE (name);
-				END IF;
-			END $$;
-		`)
-	if err != nil {
-		return fmt.Errorf("initializing rules: executing rules initialization: %w", err)
-	}
-	return nil
 }
 
 func (r *pgRulesRepository) ListRules(ctx context.Context) ([]RuleRow, error) {

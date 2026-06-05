@@ -11,28 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type TransactionsRepository interface {
-	ListTransactions(ctx context.Context, f ListFilter) ([]Transaction, TransactionListResult, error)
-	GetTransaction(ctx context.Context, id string) (*Transaction, error)
-	UpdateDescription(ctx context.Context, id, description string) error
-	AddLabel(ctx context.Context, transactionID, label string) error
-	AddLabels(ctx context.Context, transactionID string, labels []string) error
-	RemoveLabel(ctx context.Context, transactionID, label string) error
-	SearchTransactions(ctx context.Context, query string, f ListFilter) ([]Transaction, TransactionListResult, error)
-	GetFacets(ctx context.Context) (*Facets, error)
-	UpdateTransaction(ctx context.Context, id string, u TransactionUpdate) error
-	MuteTransaction(ctx context.Context, id string, muted bool, reason string) error
-	UpdateMuteReason(ctx context.Context, id, reason string) error
-	UpdateMerchantReason(ctx context.Context, id, reason string) error
-	MuteByMerchant(ctx context.Context, pattern, reason string) error
-	ListMutedMerchants(ctx context.Context) ([]MutedMerchant, error)
-	GetMutedMerchantsWithCount(ctx context.Context) ([]MutedMerchantWithCount, error)
-	DeleteMutedMerchant(ctx context.Context, id string) error
-	UnmuteByPattern(ctx context.Context, pattern string) error
-	DeleteMutedMerchantAndUnmute(ctx context.Context, id string) error
-	GetMutedMerchantPatterns(ctx context.Context) ([]string, error)
-}
-
 type pgTransactionsRepository struct {
 	pool *pgxpool.Pool
 }
@@ -42,10 +20,6 @@ type transactionQueryRequest struct {
 	search     string
 	countError string
 	dataError  string
-}
-
-func NewTransactionsRepository(deps repositoryDependencies) TransactionsRepository {
-	return newPGTransactionsRepository(deps)
 }
 
 func newPGTransactionsRepository(deps repositoryDependencies) *pgTransactionsRepository {

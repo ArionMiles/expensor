@@ -3,39 +3,10 @@ package store
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-// TaxonomyRepository owns label, category, and bucket taxonomy persistence.
-type TaxonomyRepository interface {
-	InitLabels(ctx context.Context) error
-	InitCategoriesBuckets(ctx context.Context) error
-	ListLabels(ctx context.Context) ([]Label, error)
-	CreateLabel(ctx context.Context, name, color string) error
-	UpdateLabel(ctx context.Context, name, color string) error
-	DeleteLabel(ctx context.Context, name string, removeFromTransactions bool) error
-	ApplyLabelByMerchant(ctx context.Context, label, pattern string) (int64, error)
-	RemoveLabelByMerchant(ctx context.Context, label, pattern string) (int64, error)
-	GetLabelMappings(ctx context.Context) (map[string][]string, error)
-	ListCategories(ctx context.Context) ([]Category, error)
-	CreateCategory(ctx context.Context, name, description string) error
-	DeleteCategory(ctx context.Context, name string, removeFromTransactions bool) error
-	ListBuckets(ctx context.Context) ([]Bucket, error)
-	CreateBucket(ctx context.Context, name, description string) error
-	DeleteBucket(ctx context.Context, name string, removeFromTransactions bool) error
-
-	// Compatibility methods retained for label repository callers.
-	List(ctx context.Context) ([]Label, error)
-	Create(ctx context.Context, name, color string) error
-	Update(ctx context.Context, name, color string) error
-	Delete(ctx context.Context, name string) error
-}
-
-// LabelRepository is retained as a compatibility alias while the taxonomy repository grows.
-type LabelRepository = TaxonomyRepository
 
 type pgTaxonomyRepository struct {
 	pool *pgxpool.Pool
@@ -47,99 +18,10 @@ type taxonomyItem struct {
 	IsDefault   bool
 }
 
-// NewTaxonomyRepository returns a PostgreSQL-backed taxonomy repository.
-func NewTaxonomyRepository(deps repositoryDependencies) TaxonomyRepository {
-	return newPGTaxonomyRepository(deps)
-}
-
 func newPGTaxonomyRepository(deps repositoryDependencies) *pgTaxonomyRepository {
 	return &pgTaxonomyRepository{
 		pool: deps.pool,
 	}
-}
-
-// NewLabelRepository returns a PostgreSQL-backed label repository.
-func NewLabelRepository(pool *pgxpool.Pool, logger *slog.Logger) LabelRepository {
-	_ = logger
-	return &pgTaxonomyRepository{
-		pool: pool,
-	}
-}
-
-func (r *pgTaxonomyRepository) List(ctx context.Context) ([]Label, error) {
-	return r.ListLabels(ctx)
-}
-
-func (r *pgTaxonomyRepository) Create(ctx context.Context, name, color string) error {
-	return r.CreateLabel(ctx, name, color)
-}
-
-func (r *pgTaxonomyRepository) Update(ctx context.Context, name, color string) error {
-	return r.UpdateLabel(ctx, name, color)
-}
-
-func (r *pgTaxonomyRepository) Delete(ctx context.Context, name string) error {
-	return r.DeleteLabel(ctx, name, false)
-}
-
-func (r *pgTaxonomyRepository) InitLabels(ctx context.Context) error {
-	_, err := r.pool.Exec(ctx, `
-			CREATE TABLE IF NOT EXISTS labels (
-				name        TEXT PRIMARY KEY,
-				color       TEXT NOT NULL DEFAULT '#6366f1',
-				created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-			);
-			CREATE TABLE IF NOT EXISTS label_merchants (
-				id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-				label            TEXT NOT NULL REFERENCES labels(name) ON DELETE CASCADE,
-				merchant_pattern TEXT NOT NULL,
-				created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-				UNIQUE(label, merchant_pattern)
-			);
-			CREATE TABLE IF NOT EXISTS transaction_label_sources (
-				id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-				transaction_id   UUID NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
-				label            TEXT NOT NULL,
-				source_type      TEXT NOT NULL,
-				merchant_pattern TEXT NOT NULL DEFAULT '',
-				created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-				CHECK (source_type IN ('manual', 'merchant')),
-				UNIQUE(transaction_id, label, source_type, merchant_pattern)
-			);
-		`)
-	if err != nil {
-		return fmt.Errorf("initializing labels: executing labels initialization: %w", err)
-	}
-	return nil
-}
-
-func (r *pgTaxonomyRepository) InitCategoriesBuckets(ctx context.Context) error {
-	_, err := r.pool.Exec(ctx, `
-			CREATE TABLE IF NOT EXISTS categories (
-				name        TEXT PRIMARY KEY,
-				description TEXT,
-				is_default  BOOLEAN NOT NULL DEFAULT false,
-				created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-			);
-			CREATE TABLE IF NOT EXISTS buckets (
-				name        TEXT PRIMARY KEY,
-				description TEXT,
-				is_default  BOOLEAN NOT NULL DEFAULT false,
-				created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-			);
-			INSERT INTO categories (name, is_default) VALUES
-				('Food & Dining', true),('Transport', true),('Shopping', true),
-				('Utilities', true),('Healthcare', true),('Entertainment', true),
-				('Travel', true),('Finance', true)
-			ON CONFLICT (name) DO NOTHING;
-			INSERT INTO buckets (name, is_default) VALUES
-				('Needs', true),('Wants', true),('Investments', true),('Income', true)
-			ON CONFLICT (name) DO NOTHING;
-		`)
-	if err != nil {
-		return fmt.Errorf("initializing categories and buckets: executing categories and buckets initialization: %w", err)
-	}
-	return nil
 }
 
 func (r *pgTaxonomyRepository) ListLabels(ctx context.Context) ([]Label, error) {

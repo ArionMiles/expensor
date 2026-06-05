@@ -156,4 +156,6 @@ Always leverage the existing test infrastructure instead of inventing ad hoc che
 
 Choose the narrowest test that proves the behavior, then run the broader relevant suite before finishing. For UI behavior, prefer a component test for isolated state/rendering logic and a Playwright test for user-visible flows, routing, persistence, or backend integration.
 
+Do not create tests just to satisfy TDD for mechanical refactors, dead-code removal, interface cleanup, constructor signature cleanup, or other changes whose correctness is already proven by compilation, linting, and existing behavior tests. In those cases, use the existing suite as the safety net. Add a new test only when the refactor exposes or preserves a meaningful public behavior, contract, parsing rule, persistence rule, routing behavior, or accessible user flow that is not already covered.
+
 Unit tests mock the store via `mockStore`. Integration tests hit a real container — run them explicitly when changing `store/` or `writer/postgres/`.

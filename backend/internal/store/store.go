@@ -70,22 +70,6 @@ func New(cfg config.PostgresConfig, logger *slog.Logger) (*Store, error) {
 
 	s := &Store{pool: pool, logger: logger, now: time.Now}
 	s.initRepositories()
-	if err := s.initAppConfig(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("initializing app_config table: %w", err)
-	}
-	if err := s.initLabels(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("initializing labels table: %w", err)
-	}
-	if err := s.initCategoriesBuckets(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("initializing categories/buckets tables: %w", err)
-	}
-	if err := s.initRules(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("initializing rules table: %w", err)
-	}
 	logger.Info("store connected to PostgreSQL", "host", cfg.Host, "database", cfg.Database)
 	return s, nil
 }
@@ -192,10 +176,6 @@ func (s *Store) GetFacets(ctx context.Context) (*Facets, error) {
 	return s.txns.GetFacets(ctx)
 }
 
-func (s *Store) initAppConfig(ctx context.Context) error {
-	return s.runtime.InitAppConfig(ctx)
-}
-
 // GetAppConfig retrieves a configuration value by key.
 // Returns an error if the key does not exist.
 func (s *Store) GetAppConfig(ctx context.Context, key string) (string, error) {
@@ -265,23 +245,6 @@ func (s *Store) IsMessageProcessed(ctx context.Context, key string) (bool, error
 // MarkMessageProcessed records a processed message key at the supplied time.
 func (s *Store) MarkMessageProcessed(ctx context.Context, key string, at time.Time) error {
 	return s.runtime.MarkMessageProcessed(ctx, key, at)
-}
-
-// initLabels creates the labels table and supporting label automation tables. Idempotent.
-func (s *Store) initLabels(ctx context.Context) error {
-	return s.taxonomy.InitLabels(ctx)
-}
-
-// initCategoriesBuckets creates the categories and buckets tables and seeds defaults. Idempotent.
-func (s *Store) initCategoriesBuckets(ctx context.Context) error {
-	return s.taxonomy.InitCategoriesBuckets(ctx)
-}
-
-// initRules creates the rules table with the current schema. Idempotent.
-// For databases upgraded from an older schema, the numbered migration
-// The initial migration and this initializer both preserve idempotent upgrade guards.
-func (s *Store) initRules(ctx context.Context) error {
-	return s.rules.InitRules(ctx)
 }
 
 // --- Labels ---
