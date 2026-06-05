@@ -19,8 +19,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/knadh/koanf/providers/env"
-	"github.com/knadh/koanf/v2"
 
 	httpapi "github.com/ArionMiles/expensor/backend/internal/api"
 	"github.com/ArionMiles/expensor/backend/internal/daemon"
@@ -37,20 +35,6 @@ import (
 	postgresplugin "github.com/ArionMiles/expensor/backend/pkg/plugins/writers/postgres"
 	pkgrules "github.com/ArionMiles/expensor/backend/pkg/rules"
 	"github.com/ArionMiles/expensor/backend/pkg/state"
-)
-
-// Version is set at build time via -ldflags="-X main.Version=<version>".
-// Defaults to "dev" when built without the flag (e.g. go run ./cmd/server).
-var Version = "dev"
-
-const (
-	pgConnectTimeout = 30 * time.Second
-	pgRetryInterval  = 2 * time.Second
-
-	// defaultCommunityURL is the canonical source for community-maintained MCC and
-	// merchant category data. It is seeded into app_config on first startup and is
-	// not user-configurable.
-	defaultCommunityURL = "https://raw.githubusercontent.com/ArionMiles/expensor/main/content"
 )
 
 var (
@@ -102,6 +86,14 @@ type communitySyncStore interface {
 	SeedMCCCodes(ctx context.Context, entries []store.MCCEntry) error
 	SeedMerchantCategories(ctx context.Context, entries []store.MerchantCategoryEntry) (int, error)
 	SetSyncStatus(ctx context.Context, status store.SyncStatus) error
+}
+
+type communitySyncDependencies struct {
+	config      config.CommunityConfig
+	store       communitySyncStore
+	pgStore     *store.Store
+	coordinator *daemonCoordinator
+	logger      *slog.Logger
 }
 
 type daemonRuntimeStore interface {
@@ -167,7 +159,7 @@ func (c *daemonCoordinator) launch(readerName string, forceRescan bool) {
 	runCtx, cancel := context.WithCancel(c.ctx)
 	c.cancelFn = cancel
 	c.activeReader = readerName
-	runtimeCfg := applyScanOverrides(c.cfg, c.st)
+	runtimeCfg := applyScanOverrides(runCtx, c.cfg, c.st)
 
 	// Load scanning checkpoint from DB.
 	if !forceRescan {
@@ -360,18 +352,13 @@ func run() int {
 		"writers", len(registry.ListWriters()),
 	)
 
-	cfg, err := loadAppConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		logger.Error("failed to load config", "error", err)
 		return 1
 	}
-	cfg.ApplyDefaults()
 
-	// Validate and wait for postgres connectivity — fatal if unavailable after timeout.
-	if err := cfg.ValidatePostgres(); err != nil {
-		logger.Error("postgres configuration incomplete", "error", err)
-		return 1
-	}
+	// Wait for postgres connectivity — fatal if unavailable after timeout.
 	if err := waitForPostgres(cfg.Postgres, logger); err != nil {
 		logger.Error("postgres not reachable at startup", "error", err)
 		return 1
@@ -438,12 +425,18 @@ func run() int {
 		dc.start(savedReader)
 	}
 
-	syncFn := startCommunitySync(ctx, pgStore, instrumentedStore, dc, logger)
+	syncFn := startCommunitySync(ctx, communitySyncDependencies{
+		config:      cfg.Community,
+		store:       instrumentedStore,
+		pgStore:     pgStore,
+		coordinator: dc,
+		logger:      logger,
+	})
 	handlers := httpapi.NewHandlers(httpapi.HandlersConfig{
 		Registry:           registry,
 		Store:              st,
 		Daemon:             dm,
-		Version:            Version,
+		Version:            config.Version,
 		BaseURL:            cfg.BaseURL,
 		FrontendURL:        cfg.FrontendURL,
 		ThunderbirdDataDir: cfg.Thunderbird.DataDir,
@@ -657,7 +650,7 @@ func waitForPostgres(pgCfg config.PostgresConfig, logger *slog.Logger) error {
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s pool_max_conns=1",
 		pgCfg.Host, pgCfg.Port, pgCfg.User, pgCfg.Password, pgCfg.Database, pgCfg.SSLMode,
 	)
-	deadline := time.Now().Add(pgConnectTimeout)
+	deadline := time.Now().Add(pgCfg.ConnectTimeout)
 	for attempt := 1; ; attempt++ {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		pool, err := pgxpool.New(ctx, connStr)
@@ -673,10 +666,10 @@ func waitForPostgres(pgCfg config.PostgresConfig, logger *slog.Logger) error {
 			}
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("postgres not ready after %s: %w", pgConnectTimeout, err)
+			return fmt.Errorf("postgres not ready after %s: %w", pgCfg.ConnectTimeout, err)
 		}
 		logger.Info("waiting for postgres", "attempt", attempt, "error", err)
-		time.Sleep(pgRetryInterval)
+		time.Sleep(pgCfg.RetryInterval)
 	}
 }
 
@@ -770,67 +763,46 @@ func registerPlugins(registry *plugins.Registry, fs embed.FS, logger *slog.Logge
 	return nil
 }
 
-// loadAppConfig reads all environment variables and returns a populated Config.
-// Prefix-based loads cover the majority of config; a separate pass picks up
-// the small set of prefix-less server vars (PORT, BASE_URL, FRONTEND_URL).
-func loadAppConfig() (config.Config, error) {
-	k := koanf.New(".")
-	for _, prefix := range []string{"EXPENSOR_", "POSTGRES_"} {
-		if err := k.Load(env.Provider(prefix, ".", func(s string) string { return s }), nil); err != nil {
-			return config.Config{}, fmt.Errorf("loading env prefix %s: %w", prefix, err)
-		}
-	}
-	// Load prefix-less server vars by allowlist to avoid ingesting PATH, HOME, etc.
-	serverVars := map[string]bool{"PORT": true, "BASE_URL": true, "FRONTEND_URL": true, "THUNDERBIRD_DATA_DIR": true}
-	if err := k.Load(env.Provider("", ".", func(s string) string {
-		if serverVars[s] {
-			return s
-		}
-		return ""
-	}), nil); err != nil {
-		return config.Config{}, fmt.Errorf("loading server env vars: %w", err)
-	}
-	var cfg config.Config
-	if err := k.UnmarshalWithConf("", &cfg, koanf.UnmarshalConf{Tag: "koanf", FlatPaths: true}); err != nil {
-		return config.Config{}, fmt.Errorf("unmarshaling config: %w", err)
-	}
-	return cfg, nil
-}
-
 // startCommunitySync seeds the default community URL (if absent), launches the
 // initial sync, and starts the background ticker goroutine. It returns a syncFn
 // that triggers a manual sync + resolver refresh.
-func startCommunitySync(ctx context.Context, pgStore *store.Store, st communitySyncStore, dc *daemonCoordinator, logger *slog.Logger) func() {
-	syncInterval := 24 * time.Hour
-	if v := os.Getenv("EXPENSOR_CONTENT_SYNC_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			syncInterval = d
+func startCommunitySync(ctx context.Context, deps communitySyncDependencies) func() {
+	if existing, err := deps.pgStore.GetCommunityURL(ctx); err != nil || existing == "" {
+		if setErr := deps.pgStore.SetCommunityURL(ctx, deps.config.URL); setErr != nil {
+			deps.logger.Warn("failed to seed default community URL", "error", setErr)
 		}
 	}
-	if existing, err := pgStore.GetCommunityURL(ctx); err != nil || existing == "" {
-		if setErr := pgStore.SetCommunityURL(ctx, defaultCommunityURL); setErr != nil {
-			logger.Warn("failed to seed default community URL", "error", setErr)
-		}
-	}
-	syncLog := logger.With("component", "sync")
-	go syncCommunityContent(ctx, st, defaultCommunityURL, syncLog)
+	syncLog := deps.logger.With("component", "sync")
 	go func() {
-		ticker := time.NewTicker(syncInterval)
+		syncCtx, syncCancel := communitySyncContext(ctx, deps.config.SyncTimeout)
+		defer syncCancel()
+		syncCommunityContent(syncCtx, deps.store, deps.config.URL, syncLog)
+	}()
+	go func() {
+		ticker := time.NewTicker(deps.config.SyncInterval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				syncCommunityContent(ctx, st, defaultCommunityURL, syncLog)
-				dc.refreshResolver(ctx)
+				syncCtx, syncCancel := communitySyncContext(ctx, deps.config.SyncTimeout)
+				syncCommunityContent(syncCtx, deps.store, deps.config.URL, syncLog)
+				deps.coordinator.refreshResolver(syncCtx)
+				syncCancel()
 			}
 		}
 	}()
 	return func() {
-		syncCommunityContent(context.Background(), st, defaultCommunityURL, syncLog)
-		dc.refreshResolver(context.Background())
+		syncCtx, syncCancel := communitySyncContext(ctx, deps.config.SyncTimeout)
+		defer syncCancel()
+		syncCommunityContent(syncCtx, deps.store, deps.config.URL, syncLog)
+		deps.coordinator.refreshResolver(syncCtx)
 	}
+}
+
+func communitySyncContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, timeout)
 }
 
 // seedStartupData seeds all embedded content into the database and returns a
@@ -864,21 +836,27 @@ func seedStartupData(ctx context.Context, pgStore *store.Store, content embedded
 
 // applyScanOverrides returns a copy of cfg with ScanInterval and LookbackDays
 // overridden from app_config when valid UI-set values exist.
-func applyScanOverrides(cfg config.Config, st httpapi.Storer) config.Config {
+func applyScanOverrides(ctx context.Context, cfg config.Config, st httpapi.Storer) config.Config {
 	if st == nil {
 		return cfg
 	}
-	if v, err := st.GetAppConfig(context.Background(), "scan_interval"); err == nil {
+	if v, err := getAppConfigWithTimeout(ctx, st, "scan_interval", cfg.AppConfig.ReadTimeout); err == nil {
 		if n, convErr := strconv.Atoi(v); convErr == nil && n > 0 {
 			cfg.ScanInterval = n
 		}
 	}
-	if v, err := st.GetAppConfig(context.Background(), "lookback_days"); err == nil {
+	if v, err := getAppConfigWithTimeout(ctx, st, "lookback_days", cfg.AppConfig.ReadTimeout); err == nil {
 		if n, convErr := strconv.Atoi(v); convErr == nil && n > 0 {
 			cfg.LookbackDays = n
 		}
 	}
 	return cfg
+}
+
+func getAppConfigWithTimeout(ctx context.Context, st httpapi.Storer, key string, timeout time.Duration) (string, error) {
+	readCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return st.GetAppConfig(readCtx, key)
 }
 
 // syncCommunityContent fetches mcc.json and categories.json from the community URL,

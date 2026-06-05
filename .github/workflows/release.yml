@@ -82,7 +82,7 @@ jobs:
         run: |
           go build \
             -trimpath \
-            -ldflags="-s -w -X main.Version=${{ steps.version.outputs.VERSION }}" \
+            -ldflags="-s -w -X github.com/ArionMiles/expensor/backend/pkg/config.Version=${{ steps.version.outputs.VERSION }}" \
             -o ../dist/${{ matrix.output_name }} \
             ./cmd/server
 
