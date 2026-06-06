@@ -31,8 +31,8 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.Port != 8080 || cfg.BaseURL != "http://localhost:8080" || cfg.FrontendURL != cfg.BaseURL {
 		t.Fatalf("server defaults: got port=%d base=%q frontend=%q", cfg.Port, cfg.BaseURL, cfg.FrontendURL)
 	}
-	if cfg.BaseCurrency != "INR" || cfg.ScanInterval != 60 || cfg.LookbackDays != 180 {
-		t.Fatalf("application defaults: got currency=%q scan=%d lookback=%d", cfg.BaseCurrency, cfg.ScanInterval, cfg.LookbackDays)
+	if cfg.ScanInterval != 60 || cfg.LookbackDays != 180 {
+		t.Fatalf("application defaults: got scan=%d lookback=%d", cfg.ScanInterval, cfg.LookbackDays)
 	}
 	if cfg.Postgres.Port != 5432 || cfg.Postgres.SSLMode != "disable" || cfg.Postgres.BatchSize != 10 ||
 		cfg.Postgres.FlushInterval != 30 || cfg.Postgres.MaxPoolSize != 10 {
@@ -124,7 +124,6 @@ func clearConfigEnv(t *testing.T) {
 		"PORT",
 		"BASE_URL",
 		"FRONTEND_URL",
-		"EXPENSOR_BASE_CURRENCY",
 		"EXPENSOR_SCAN_INTERVAL",
 		"EXPENSOR_LOOKBACK_DAYS",
 		"EXPENSOR_STATIC_DIR",

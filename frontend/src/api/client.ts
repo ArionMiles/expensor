@@ -59,6 +59,47 @@ apiClient.interceptors.response.use(
   },
 )
 
+function transactionFilterParams(filters: TransactionFilters): URLSearchParams {
+  const params = new URLSearchParams()
+  if (filters.page) params.set('page', String(filters.page))
+  if (filters.page_size) params.set('page_size', String(filters.page_size))
+  if (filters.category) params.set('category', filters.category)
+  if (filters.category_missing) params.set('category_missing', '1')
+  if (filters.exclude_categories?.length)
+    params.set('exclude_categories', filters.exclude_categories.join(','))
+  if (filters.currency) params.set('currency', filters.currency)
+  if (filters.source) params.set('source', filters.source)
+  if (filters.exclude_sources?.length)
+    params.set('exclude_sources', filters.exclude_sources.join(','))
+  if (filters.source_type) params.set('source_type', filters.source_type)
+  if (filters.exclude_source_types?.length)
+    params.set('exclude_source_types', filters.exclude_source_types.join(','))
+  if (filters.bank) params.set('bank', filters.bank)
+  if (filters.exclude_banks?.length) params.set('exclude_banks', filters.exclude_banks.join(','))
+  if (filters.bucket) params.set('bucket', filters.bucket)
+  if (filters.bucket_missing) params.set('bucket_missing', '1')
+  if (filters.exclude_buckets?.length)
+    params.set('exclude_buckets', filters.exclude_buckets.join(','))
+  if (filters.merchant) params.set('merchant', filters.merchant)
+  if (filters.label) params.set('label', filters.label)
+  if (filters.label_missing) params.set('label_missing', '1')
+  if (filters.exclude_labels?.length) params.set('exclude_labels', filters.exclude_labels.join(','))
+  if (filters.date_from) params.set('date_from', filters.date_from)
+  if (filters.date_to) params.set('date_to', filters.date_to)
+  if (filters.sort_by) params.set('sort_by', filters.sort_by)
+  if (filters.sort_dir) params.set('sort_dir', filters.sort_dir)
+  if (filters.show_muted) params.set('show_muted', '1')
+  if (filters.muted_only) params.set('muted_only', '1')
+  if (filters.individual_only) params.set('individual_only', '1')
+  if (filters.hour_from !== undefined && filters.hour_from >= 0)
+    params.set('hour_from', String(filters.hour_from))
+  if (filters.hour_to !== undefined && filters.hour_to >= 0)
+    params.set('hour_to', String(filters.hour_to))
+  if (filters.weekday !== undefined) params.set('weekday', String(filters.weekday))
+  if (filters.tz) params.set('tz', filters.tz)
+  return params
+}
+
 export const api = {
   health: {
     get: () => apiClient.get<HealthResponse>('/health'),
@@ -281,51 +322,13 @@ export const api = {
 
   transactions: {
     list: (filters: TransactionFilters = {}) => {
-      const params = new URLSearchParams()
-      if (filters.page) params.set('page', String(filters.page))
-      if (filters.page_size) params.set('page_size', String(filters.page_size))
-      if (filters.category) params.set('category', filters.category)
-      if (filters.category_missing) params.set('category_missing', '1')
-      if (filters.exclude_categories?.length)
-        params.set('exclude_categories', filters.exclude_categories.join(','))
-      if (filters.currency) params.set('currency', filters.currency)
-      if (filters.source) params.set('source', filters.source)
-      if (filters.exclude_sources?.length)
-        params.set('exclude_sources', filters.exclude_sources.join(','))
-      if (filters.source_type) params.set('source_type', filters.source_type)
-      if (filters.exclude_source_types?.length)
-        params.set('exclude_source_types', filters.exclude_source_types.join(','))
-      if (filters.bank) params.set('bank', filters.bank)
-      if (filters.exclude_banks?.length)
-        params.set('exclude_banks', filters.exclude_banks.join(','))
-      if (filters.bucket) params.set('bucket', filters.bucket)
-      if (filters.bucket_missing) params.set('bucket_missing', '1')
-      if (filters.exclude_buckets?.length)
-        params.set('exclude_buckets', filters.exclude_buckets.join(','))
-      if (filters.merchant) params.set('merchant', filters.merchant)
-      if (filters.label) params.set('label', filters.label)
-      if (filters.label_missing) params.set('label_missing', '1')
-      if (filters.exclude_labels?.length)
-        params.set('exclude_labels', filters.exclude_labels.join(','))
-      if (filters.date_from) params.set('date_from', filters.date_from)
-      if (filters.date_to) params.set('date_to', filters.date_to)
-      if (filters.sort_by) params.set('sort_by', filters.sort_by)
-      if (filters.sort_dir) params.set('sort_dir', filters.sort_dir)
-      if (filters.show_muted) params.set('show_muted', '1')
-      if (filters.muted_only) params.set('muted_only', '1')
-      if (filters.individual_only) params.set('individual_only', '1')
-      if (filters.hour_from !== undefined && filters.hour_from >= 0)
-        params.set('hour_from', String(filters.hour_from))
-      if (filters.hour_to !== undefined && filters.hour_to >= 0)
-        params.set('hour_to', String(filters.hour_to))
-      if (filters.weekday !== undefined) params.set('weekday', String(filters.weekday))
-      if (filters.tz) params.set('tz', filters.tz)
+      const params = transactionFilterParams(filters)
       return apiClient.get<TransactionsResponse>(`/transactions?${params.toString()}`)
     },
 
-    search: (q: string, page = 1, pageSize = 20, showMuted = false) => {
-      const params = new URLSearchParams({ q, page: String(page), page_size: String(pageSize) })
-      if (showMuted) params.set('show_muted', '1')
+    search: (q: string, filters: TransactionFilters = {}) => {
+      const params = transactionFilterParams(filters)
+      params.set('q', q)
       return apiClient.get<TransactionsResponse>(`/transactions/search?${params.toString()}`)
     },
 

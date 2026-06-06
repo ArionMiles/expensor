@@ -1190,6 +1190,62 @@ func TestSearchTransactions_HonorsAscendingSort(t *testing.T) {
 	}
 }
 
+func TestSearchTransactions_AppliesDateAndSourceTypeFilters(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+
+	for _, params := range []store.InsertParams{
+		{
+			MessageID:    "srch-filter-match",
+			Amount:       100,
+			Currency:     "INR",
+			MerchantInfo: "Instamart May",
+			SourceType:   "Credit Card",
+			Timestamp:    time.Date(2026, time.May, 15, 12, 0, 0, 0, time.UTC),
+		},
+		{
+			MessageID:    "srch-filter-outside-date",
+			Amount:       200,
+			Currency:     "INR",
+			MerchantInfo: "Instamart April",
+			SourceType:   "Credit Card",
+			Timestamp:    time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC),
+		},
+		{
+			MessageID:    "srch-filter-wrong-source",
+			Amount:       300,
+			Currency:     "INR",
+			MerchantInfo: "Instamart UPI",
+			SourceType:   "UPI",
+			Timestamp:    time.Date(2026, time.May, 20, 12, 0, 0, 0, time.UTC),
+		},
+	} {
+		if _, err := ts.InsertForTest(ctx, params); err != nil {
+			t.Fatalf("InsertForTest: %v", err)
+		}
+	}
+
+	from := time.Date(2026, time.May, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, time.May, 31, 23, 59, 59, 0, time.UTC)
+	rows, result, err := ts.SearchTransactions(ctx, "instamart", store.ListFilter{
+		Page:       1,
+		PageSize:   20,
+		SourceType: "Credit Card",
+		From:       &from,
+		To:         &to,
+	})
+	if err != nil {
+		t.Fatalf("SearchTransactions: %v", err)
+	}
+	if result.Total != 1 || len(rows) != 1 {
+		t.Fatalf("expected one filtered result, got total=%d rows=%+v", result.Total, rows)
+	}
+	if rows[0].MessageID != "srch-filter-match" {
+		t.Fatalf("message_id = %q, want srch-filter-match", rows[0].MessageID)
+	}
+}
+
 func TestSearchTransactions_EmptyQuery(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()

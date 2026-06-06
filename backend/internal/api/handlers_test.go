@@ -1837,6 +1837,39 @@ func TestSearchTransactions_MutedAndIndividualFlags(t *testing.T) {
 	}
 }
 
+func TestSearchTransactions_ParsesListFilters(t *testing.T) {
+	st := &mockStore{
+		searchResult:     []store.Transaction{},
+		searchListResult: store.TransactionListResult{Total: 0},
+	}
+	h := newTestHandlers(t, st, &mockDaemon{})
+
+	rr := get(
+		h.SearchTransactions,
+		"/api/transactions/search?q=instamart&source_type=Credit%20Card&bank=HDFC"+
+			"&date_from=2026-04-30T18:30:00.000Z&date_to=2026-05-31T18:29:59.999Z&sort_dir=asc",
+	)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if st.searchFilter.SourceType != "Credit Card" {
+		t.Fatalf("source_type = %q, want Credit Card", st.searchFilter.SourceType)
+	}
+	if st.searchFilter.Bank != "HDFC" {
+		t.Fatalf("bank = %q, want HDFC", st.searchFilter.Bank)
+	}
+	if st.searchFilter.From == nil || st.searchFilter.From.UTC().Format(time.RFC3339Nano) != "2026-04-30T18:30:00Z" {
+		t.Fatalf("date_from = %#v", st.searchFilter.From)
+	}
+	if st.searchFilter.To == nil || st.searchFilter.To.UTC().Format(time.RFC3339Nano) != "2026-05-31T18:29:59.999Z" {
+		t.Fatalf("date_to = %#v", st.searchFilter.To)
+	}
+	if st.searchFilter.SortDir != "asc" {
+		t.Fatalf("sort_dir = %q, want asc", st.searchFilter.SortDir)
+	}
+}
+
 func TestSearchTransactions_InvalidControlCharQuery(t *testing.T) {
 	st := &mockStore{}
 	h := newTestHandlers(t, st, &mockDaemon{})
