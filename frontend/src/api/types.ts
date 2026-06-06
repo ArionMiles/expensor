@@ -388,4 +388,6 @@ export interface TransactionPatch {
   description?: string
   category?: string
   bucket?: string
+  muted?: boolean
+  mute_reason?: string
 }

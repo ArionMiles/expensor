@@ -522,6 +522,12 @@ definitions:
         example: contract check
         type: string
     type: object
+  api.MerchantReasonResponse:
+    properties:
+      reason:
+        example: Internal transfer
+        type: string
+    type: object
   api.MonthlyBreakdownResponse:
     properties:
       labels:
@@ -562,28 +568,6 @@ definitions:
     properties:
       pattern:
         example: Swiggy
-        type: string
-    type: object
-  api.MuteReasonResponse:
-    properties:
-      reason:
-        example: Internal transfer
-        type: string
-    type: object
-  api.MuteTransactionRequest:
-    properties:
-      muted:
-        type: boolean
-      reason:
-        example: contract check
-        type: string
-    type: object
-  api.MuteTransactionResponse:
-    properties:
-      muted:
-        type: boolean
-      reason:
-        example: Internal transfer
         type: string
     type: object
   api.MutedMerchantResponse:
@@ -1081,6 +1065,12 @@ definitions:
       description:
         example: Dinner order
         type: string
+      mute_reason:
+        example: Duplicate notification
+        type: string
+      muted:
+        example: true
+        type: boolean
     type: object
   api.TransactionsListResponse:
     properties:
@@ -1107,14 +1097,6 @@ definitions:
         type: string
     required:
     - color
-    type: object
-  api.UpdateMuteReasonRequest:
-    properties:
-      reason:
-        example: contract check
-        type: string
-    required:
-    - reason
     type: object
   api.UploadCredentialsResponse:
     properties:
@@ -2364,8 +2346,7 @@ paths:
       summary: Get an extraction diagnostic
       tags:
       - Extraction Diagnostics
-  /extraction-diagnostics/{id}/status:
-    put:
+    patch:
       consumes:
       - application/json
       parameters:
@@ -2551,8 +2532,7 @@ paths:
       summary: Delete a muted merchant pattern
       tags:
       - Transactions
-  /muted-merchants/{id}/reason:
-    put:
+    patch:
       consumes:
       - application/json
       parameters:
@@ -2575,7 +2555,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.MuteReasonResponse'
+            $ref: '#/definitions/api.MerchantReasonResponse'
         "400":
           description: Bad Request
           schema:
@@ -3591,7 +3571,7 @@ paths:
       summary: Get a transaction
       tags:
       - Transactions
-    put:
+    patch:
       consumes:
       - application/json
       parameters:
@@ -3722,94 +3702,6 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Remove a label from a transaction
-      tags:
-      - Transactions
-  /transactions/{id}/mute:
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Transaction ID
-        example: 00000000-0000-0000-0000-000000000001
-        format: uuid
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Mute payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.MuteTransactionRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.MuteTransactionResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Mute or unmute a transaction
-      tags:
-      - Transactions
-  /transactions/{id}/mute-reason:
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Transaction ID
-        example: 00000000-0000-0000-0000-000000000001
-        format: uuid
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Mute reason payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.UpdateMuteReasonRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.MuteReasonResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Update a transaction mute reason
       tags:
       - Transactions
   /transactions/facets:

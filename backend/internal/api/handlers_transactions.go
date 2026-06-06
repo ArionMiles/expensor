@@ -265,8 +265,8 @@ func (h *Handlers) validateBucket(w http.ResponseWriter, r *http.Request, name s
 	return false
 }
 
-// UpdateTransaction handles PUT /api/transactions/{id}.
-// Body: {"description": "...", "category": "...", "bucket": "..."}
+// UpdateTransaction handles PATCH /api/transactions/{id}.
+// Body: {"description": "...", "category": "...", "bucket": "...", "muted": true, "mute_reason": "..."}
 // All fields are optional; only non-nil fields are written.
 // @Summary Update a transaction
 // @Tags Transactions
@@ -280,17 +280,13 @@ func (h *Handlers) validateBucket(w http.ResponseWriter, r *http.Request, name s
 // @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /transactions/{id} [put]
+// @Router /transactions/{id} [patch]
 func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 	id, ok := uuidPathValue(w, r, "id", "transaction")
 	if !ok {
 		return
 	}
-	var body struct {
-		Description *string `json:"description"`
-		Category    *string `json:"category"`
-		Bucket      *string `json:"bucket"`
-	}
+	var body TransactionUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
 		return
@@ -303,18 +299,7 @@ func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u := store.TransactionUpdate{
-		Description: body.Description,
-		Category:    body.Category,
-		Bucket:      body.Bucket,
-	}
-	if err := h.transactionStore.UpdateTransaction(r.Context(), id, u); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "transaction not found")
-			return
-		}
-		h.logger.Error("update transaction", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update transaction")
+	if !h.patchTransaction(w, r, id, body) {
 		return
 	}
 
@@ -330,84 +315,46 @@ func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tx)
 }
 
-// --- muted transactions ---
-
-// MuteTransaction handles PUT /api/transactions/{id}/mute.
-// Body: {"muted": true|false}
-// @Summary Mute or unmute a transaction
-// @Tags Transactions
-// @Accept json
-// @Produce json
-// @Param id path string true "Transaction ID" format(uuid) example(00000000-0000-0000-0000-000000000001)
-// @Param request body MuteTransactionRequest true "Mute payload"
-// @Success 200 {object} MuteTransactionResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Failure 503 {object} ErrorResponse
-// @Router /transactions/{id}/mute [put]
-func (h *Handlers) MuteTransaction(w http.ResponseWriter, r *http.Request) {
-	id, ok := uuidPathValue(w, r, "id", "transaction")
-	if !ok {
-		return
-	}
-	var body struct {
-		Muted  bool   `json:"muted"`
-		Reason string `json:"reason"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	if err := h.muteStore.MuteTransaction(r.Context(), id, body.Muted, body.Reason); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "transaction not found")
-			return
+func (h *Handlers) patchTransaction(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+	body TransactionUpdateRequest,
+) bool {
+	if body.Description != nil || body.Category != nil || body.Bucket != nil {
+		update := store.TransactionUpdate{
+			Description: body.Description,
+			Category:    body.Category,
+			Bucket:      body.Bucket,
 		}
-		h.logger.Error("mute transaction", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update transaction")
-		return
+		if err := h.transactionStore.UpdateTransaction(r.Context(), id, update); err != nil {
+			return h.writeTransactionPatchError(w, err, "update transaction details")
+		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"muted": body.Muted, "reason": body.Reason})
+	if body.Muted != nil {
+		reason := ""
+		if body.MuteReason != nil {
+			reason = *body.MuteReason
+		}
+		if err := h.muteStore.MuteTransaction(r.Context(), id, *body.Muted, reason); err != nil {
+			return h.writeTransactionPatchError(w, err, "update transaction mute state")
+		}
+	} else if body.MuteReason != nil {
+		if err := h.muteStore.UpdateMuteReason(r.Context(), id, *body.MuteReason); err != nil {
+			return h.writeTransactionPatchError(w, err, "update transaction mute reason")
+		}
+	}
+	return true
 }
 
-// UpdateMuteReason handles PUT /api/transactions/{id}/mute-reason.
-// Body: {"reason": "optional text"}
-//
-// @Summary Update a transaction mute reason
-// @Tags Transactions
-// @Accept json
-// @Produce json
-// @Param id path string true "Transaction ID" format(uuid) example(00000000-0000-0000-0000-000000000001)
-// @Param request body UpdateMuteReasonRequest true "Mute reason payload"
-// @Success 200 {object} MuteReasonResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Failure 503 {object} ErrorResponse
-// @Router /transactions/{id}/mute-reason [put]
-func (h *Handlers) UpdateMuteReason(w http.ResponseWriter, r *http.Request) {
-	id, ok := uuidPathValue(w, r, "id", "transaction")
-	if !ok {
-		return
+func (h *Handlers) writeTransactionPatchError(w http.ResponseWriter, err error, operation string) bool {
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "transaction not found")
+		return false
 	}
-	var body struct {
-		Reason string `json:"reason"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	if err := h.muteStore.UpdateMuteReason(r.Context(), id, body.Reason); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "transaction not found or not muted")
-			return
-		}
-		h.logger.Error("update mute reason", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update reason")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"reason": body.Reason})
+	h.logger.Error(operation, "error", err)
+	writeError(w, http.StatusInternalServerError, "failed to update transaction")
+	return false
 }
 
 // ListMutedMerchants handles GET /api/muted-merchants.
@@ -459,7 +406,7 @@ func (h *Handlers) MuteByMerchant(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{"pattern": body.Pattern})
 }
 
-// UpdateMerchantReason handles PUT /api/muted-merchants/{id}/reason.
+// UpdateMerchantReason handles PATCH /api/muted-merchants/{id}.
 // Body: {"reason": "optional text"}
 //
 // @Summary Update a muted merchant reason
@@ -468,12 +415,12 @@ func (h *Handlers) MuteByMerchant(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param id path string true "Muted merchant ID" format(uuid) example(00000000-0000-0000-0000-00000000c003)
 // @Param request body MerchantReasonRequest true "Muted merchant reason payload"
-// @Success 200 {object} MuteReasonResponse
+// @Success 200 {object} MerchantReasonResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /muted-merchants/{id}/reason [put]
+// @Router /muted-merchants/{id} [patch]
 func (h *Handlers) UpdateMerchantReason(w http.ResponseWriter, r *http.Request) {
 	id, ok := uuidPathValue(w, r, "id", "muted merchant")
 	if !ok {

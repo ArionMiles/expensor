@@ -178,7 +178,7 @@ export const handlers = [
     }
     return HttpResponse.json(diagnostic)
   }),
-  http.put('/api/extraction-diagnostics/:id/status', async ({ params, request }) => {
+  http.patch('/api/extraction-diagnostics/:id', async ({ params, request }) => {
     const body = (await request.json()) as { status?: ExtractionDiagnostic['status'] }
     const diagnostic = extractionDiagnostics.find((item) => item.id === params.id)
     if (!diagnostic) {

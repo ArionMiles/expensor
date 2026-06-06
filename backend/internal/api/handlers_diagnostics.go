@@ -85,7 +85,7 @@ func (h *Handlers) GetExtractionDiagnostic(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, row)
 }
 
-// UpdateExtractionDiagnosticStatus handles PUT /api/extraction-diagnostics/{id}/status.
+// UpdateExtractionDiagnosticStatus handles PATCH /api/extraction-diagnostics/{id}.
 // @Summary Update extraction diagnostic status
 // @Tags Extraction Diagnostics
 // @Accept json
@@ -99,7 +99,7 @@ func (h *Handlers) GetExtractionDiagnostic(w http.ResponseWriter, r *http.Reques
 // @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /extraction-diagnostics/{id}/status [put]
+// @Router /extraction-diagnostics/{id} [patch]
 func (h *Handlers) UpdateExtractionDiagnosticStatus(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if _, err := uuid.Parse(id); err != nil {

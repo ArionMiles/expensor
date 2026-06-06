@@ -23,11 +23,9 @@ PUT	/config/timezone	update timezone config
 GET	/transactions	transaction listing
 GET	/transactions/facets	transaction facets
 GET	/transactions/{id}	transaction detail
-PUT	/transactions/{id}	update transaction
+PATCH	/transactions/{id}	update transaction
 POST	/transactions/{id}/labels	add transaction labels
 DELETE	/transactions/{id}/labels/{label}	remove transaction label
-PUT	/transactions/{id}/mute	mute transaction
-PUT	/transactions/{id}/mute-reason	update transaction mute reason
 GET	/plugins/readers	reader plugin metadata
 GET	/plugins/writers	writer plugin metadata
 GET	/readers/{name}/guide	reader setup guide
@@ -57,7 +55,7 @@ POST	/config/buckets	create bucket taxonomy entry
 DELETE	/config/buckets/{name}	delete bucket taxonomy entry
 GET	/muted-merchants	muted merchant listing
 POST	/muted-merchants	mute merchant pattern
-PUT	/muted-merchants/{id}/reason	update muted merchant reason
+PATCH	/muted-merchants/{id}	update muted merchant reason
 DELETE	/muted-merchants/{id}	delete muted merchant pattern
 POST	/merchants/categorize	merchant categorization
 POST	/config/categories/{name}/apply	category merchant apply
@@ -68,4 +66,4 @@ DELETE	/config/readers/{name}/checkpoint	clear reader checkpoint
 DELETE	/config/labels/{name}/merchant	label merchant removal
 GET	/extraction-diagnostics	extraction diagnostic listing
 GET	/extraction-diagnostics/{id}	seeded extraction diagnostic detail
-PUT	/extraction-diagnostics/{id}/status	update seeded extraction diagnostic status
+PATCH	/extraction-diagnostics/{id}	update seeded extraction diagnostic status

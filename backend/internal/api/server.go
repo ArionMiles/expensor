@@ -190,21 +190,19 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("GET /api/transactions/facets", h.GetFacets)
 	mux.HandleFunc("GET /api/transactions", h.ListTransactions)
 	mux.HandleFunc("GET /api/transactions/{id}", h.GetTransaction)
-	mux.HandleFunc("PUT /api/transactions/{id}", h.UpdateTransaction)
+	mux.HandleFunc("PATCH /api/transactions/{id}", h.UpdateTransaction)
 	mux.HandleFunc("POST /api/transactions/{id}/labels", h.AddLabels)
 	mux.HandleFunc("DELETE /api/transactions/{id}/labels/{label}", h.RemoveLabel)
-	mux.HandleFunc("PUT /api/transactions/{id}/mute", h.MuteTransaction)
-	mux.HandleFunc("PUT /api/transactions/{id}/mute-reason", h.UpdateMuteReason)
 
 	// Extraction diagnostics
 	mux.HandleFunc("GET /api/extraction-diagnostics", h.ListExtractionDiagnostics)
 	mux.HandleFunc("GET /api/extraction-diagnostics/{id}", h.GetExtractionDiagnostic)
-	mux.HandleFunc("PUT /api/extraction-diagnostics/{id}/status", h.UpdateExtractionDiagnosticStatus)
+	mux.HandleFunc("PATCH /api/extraction-diagnostics/{id}", h.UpdateExtractionDiagnosticStatus)
 
 	// Muted merchants
 	mux.HandleFunc("GET /api/muted-merchants", h.ListMutedMerchants)
 	mux.HandleFunc("POST /api/muted-merchants", h.MuteByMerchant)
-	mux.HandleFunc("PUT /api/muted-merchants/{id}/reason", h.UpdateMerchantReason)
+	mux.HandleFunc("PATCH /api/muted-merchants/{id}", h.UpdateMerchantReason)
 	mux.HandleFunc("DELETE /api/muted-merchants/{id}", h.DeleteMutedMerchant)
 
 	// Merchant-wide categorization

@@ -317,7 +317,7 @@ export const api = {
       ),
     get: (id: string) => apiClient.get<ExtractionDiagnostic>(`/extraction-diagnostics/${id}`),
     updateStatus: (id: string, status: ExtractionDiagnosticStatus) =>
-      apiClient.put<ExtractionDiagnostic>(`/extraction-diagnostics/${id}/status`, { status }),
+      apiClient.patch<ExtractionDiagnostic>(`/extraction-diagnostics/${id}`, { status }),
   },
 
   transactions: {
@@ -337,7 +337,7 @@ export const api = {
     get: (id: string) => apiClient.get<Transaction>(`/transactions/${id}`),
 
     update: (id: string, patch: TransactionPatch) =>
-      apiClient.put<Transaction>(`/transactions/${id}`, patch),
+      apiClient.patch<Transaction>(`/transactions/${id}`, patch),
 
     addLabels: (id: string, labels: string[]) =>
       apiClient.post<Transaction>(`/transactions/${id}/labels`, { labels }),
@@ -346,10 +346,10 @@ export const api = {
       apiClient.delete<Transaction>(`/transactions/${id}/labels/${encodeURIComponent(label)}`),
 
     mute: (id: string, muted: boolean, reason?: string) =>
-      apiClient.put<{ muted: boolean }>(`/transactions/${id}/mute`, { muted, reason }),
+      apiClient.patch<Transaction>(`/transactions/${id}`, { muted, mute_reason: reason }),
 
     updateMuteReason: (id: string, reason: string) =>
-      apiClient.put<{ reason: string }>(`/transactions/${id}/mute-reason`, { reason }),
+      apiClient.patch<Transaction>(`/transactions/${id}`, { mute_reason: reason }),
   },
 
   mutedMerchants: {
@@ -357,7 +357,7 @@ export const api = {
     add: (pattern: string, reason?: string) =>
       apiClient.post<{ pattern: string }>('/muted-merchants', { pattern, reason }),
     updateReason: (id: string, reason: string) =>
-      apiClient.put<{ reason: string }>(`/muted-merchants/${id}/reason`, { reason }),
+      apiClient.patch<{ reason: string }>(`/muted-merchants/${id}`, { reason }),
     delete: (id: string, unmute = false) =>
       apiClient.delete(`/muted-merchants/${id}${unmute ? '?unmute=true' : ''}`),
   },
