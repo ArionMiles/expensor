@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -27,14 +26,6 @@ func (h *Handlers) ListBanks(w http.ResponseWriter, r *http.Request) {
 	if _, err := w.Write(data); err != nil {
 		h.logger.Warn("failed to write banks response", "error", err)
 	}
-}
-
-// validTimeFormats is the set of accepted time_format values.
-var validTimeFormats = map[string]bool{
-	"HH:mm":     true,
-	"HH:mm:ss":  true,
-	"h:mm a":    true,
-	"h:mm:ss a": true,
 }
 
 // GetPreferences handles GET /api/config/preferences.
@@ -63,11 +54,11 @@ func (h *Handlers) GetPreferences(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) PatchPreferences(w http.ResponseWriter, r *http.Request) {
 	var body PreferencesPatchRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if err := normalizePreferencesPatch(&body); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	normalizePreferencesPatch(&body)
+	if !h.validateRequest(w, "body", body) {
 		return
 	}
 	if err := h.persistPreferences(r.Context(), body); err != nil {
@@ -105,47 +96,19 @@ func (h *Handlers) storedIntPreference(ctx context.Context, key string, fallback
 	return parsed
 }
 
-func normalizePreferencesPatch(body *PreferencesPatchRequest) error {
+func normalizePreferencesPatch(body *PreferencesPatchRequest) {
 	if body.BaseCurrency != nil {
 		value := strings.ToUpper(strings.TrimSpace(*body.BaseCurrency))
-		if !isCurrencyCode(value) {
-			return errors.New("base_currency must be a 3-letter ISO 4217 code (e.g. INR, USD)")
-		}
 		body.BaseCurrency = &value
-	}
-	if body.ScanInterval != nil && (*body.ScanInterval < 10 || *body.ScanInterval > 3600) {
-		return errors.New("scan_interval must be an integer between 10 and 3600 seconds")
-	}
-	if body.LookbackDays != nil && (*body.LookbackDays < 1 || *body.LookbackDays > 3650) {
-		return errors.New("lookback_days must be an integer between 1 and 3650")
 	}
 	if body.Timezone != nil {
 		value := strings.TrimSpace(*body.Timezone)
-		if _, err := time.LoadLocation(value); err != nil {
-			return errors.New("invalid IANA timezone string")
-		}
 		body.Timezone = &value
 	}
 	if body.TimeFormat != nil {
 		value := strings.TrimSpace(*body.TimeFormat)
-		if !validTimeFormats[value] {
-			return errors.New("invalid time_format; accepted: HH:mm, HH:mm:ss, h:mm a, h:mm:ss a")
-		}
 		body.TimeFormat = &value
 	}
-	return nil
-}
-
-func isCurrencyCode(value string) bool {
-	if len(value) != 3 {
-		return false
-	}
-	for _, char := range value {
-		if char < 'A' || char > 'Z' {
-			return false
-		}
-	}
-	return true
 }
 
 func (h *Handlers) persistPreferences(ctx context.Context, body PreferencesPatchRequest) error {

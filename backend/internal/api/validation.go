@@ -35,6 +35,26 @@ func newRequestValidator() *validator.Validate {
 		_, err := time.LoadLocation(field.Field().String())
 		return err == nil
 	})
+	mustRegisterValidation(validate, "currency_code", func(field validator.FieldLevel) bool {
+		value := field.Field().String()
+		if len(value) != 3 {
+			return false
+		}
+		for _, char := range value {
+			if char < 'A' || char > 'Z' {
+				return false
+			}
+		}
+		return true
+	})
+	mustRegisterValidation(validate, "time_format", func(field validator.FieldLevel) bool {
+		switch field.Field().String() {
+		case "HH:mm", "HH:mm:ss", "h:mm a", "h:mm:ss a":
+			return true
+		default:
+			return false
+		}
+	})
 	return validate
 }
 
@@ -88,6 +108,10 @@ func validationMessage(fieldError validator.FieldError) string {
 		return "must not contain control characters"
 	case "iana_timezone":
 		return "must be a valid IANA timezone"
+	case "currency_code":
+		return "must be a 3-letter ISO 4217 code"
+	case "time_format":
+		return "must be one of: HH:mm, HH:mm:ss, h:mm a, h:mm:ss a"
 	default:
 		return "is invalid"
 	}

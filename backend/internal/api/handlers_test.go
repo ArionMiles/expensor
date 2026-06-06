@@ -2330,17 +2330,80 @@ func TestPatchPreferencesUpdatesSuppliedFields(t *testing.T) {
 	}
 }
 
-func TestPatchPreferencesValidatesBeforeWriting(t *testing.T) {
+func TestPatchPreferencesRejectsInvalidFieldsBeforeWriting(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		field   string
+		message string
+	}{
+		{
+			name:    "currency",
+			body:    `{"base_currency":"US1"}`,
+			field:   "base_currency",
+			message: "must be a 3-letter ISO 4217 code",
+		},
+		{
+			name:    "scan interval",
+			body:    `{"base_currency":"USD","scan_interval":5}`,
+			field:   "scan_interval",
+			message: "must be at least 10",
+		},
+		{
+			name:    "lookback days",
+			body:    `{"lookback_days":3651}`,
+			field:   "lookback_days",
+			message: "must be at most 3650",
+		},
+		{
+			name:    "timezone",
+			body:    `{"timezone":"Mars/Olympus"}`,
+			field:   "timezone",
+			message: "must be a valid IANA timezone",
+		},
+		{
+			name:    "time format",
+			body:    `{"time_format":"24h"}`,
+			field:   "time_format",
+			message: "must be one of: HH:mm, HH:mm:ss, h:mm a, h:mm:ss a",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ms := &mockStore{}
+			h := newTestHandlers(t, ms, &mockDaemon{})
+			req := httptest.NewRequestWithContext(
+				context.Background(),
+				http.MethodPatch,
+				"/api/config/preferences",
+				strings.NewReader(tt.body),
+			)
+			rr := httptest.NewRecorder()
+			h.PatchPreferences(rr, req)
+
+			assertValidationError(t, rr, tt.field, "body", tt.message)
+			if len(ms.appConfig) != 0 {
+				t.Fatalf("invalid patch persisted values: %#v", ms.appConfig)
+			}
+		})
+	}
+}
+
+func TestPatchPreferencesRejectsInvalidJSON(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-
-	body := strings.NewReader(`{"base_currency":"USD","scan_interval":5}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/api/config/preferences", body)
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPatch,
+		"/api/config/preferences",
+		strings.NewReader("not-json"),
+	)
 	rr := httptest.NewRecorder()
 	h.PatchPreferences(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d (body: %s)", rr.Code, rr.Body.String())
+		t.Fatalf("expected 400, got %d (body=%s)", rr.Code, rr.Body.String())
 	}
 	if len(ms.appConfig) != 0 {
 		t.Fatalf("invalid patch persisted values: %#v", ms.appConfig)

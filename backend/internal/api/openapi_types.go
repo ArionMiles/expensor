@@ -348,12 +348,14 @@ type MonthlyBreakdownResponse struct {
 }
 
 // PreferencesPatchRequest is a partial application preferences update.
+//
+//nolint:revive // validate tags include custom rules registered by newRequestValidator.
 type PreferencesPatchRequest struct {
-	BaseCurrency *string `json:"base_currency,omitempty" example:"USD" minLength:"3" maxLength:"3"`
-	ScanInterval *int    `json:"scan_interval,omitempty" example:"120" minimum:"10" maximum:"3600"`
-	LookbackDays *int    `json:"lookback_days,omitempty" example:"365" minimum:"1" maximum:"3650"`
-	Timezone     *string `json:"timezone,omitempty" example:"Asia/Kolkata"`
-	TimeFormat   *string `json:"time_format,omitempty" example:"HH:mm" enums:"HH:mm,HH:mm:ss,h:mm a,h:mm:ss a"`
+	BaseCurrency *string `json:"base_currency,omitempty" validate:"omitempty,currency_code" example:"USD" minLength:"3" maxLength:"3"`
+	ScanInterval *int    `json:"scan_interval,omitempty" validate:"omitempty,min=10,max=3600" example:"120" minimum:"10" maximum:"3600"`
+	LookbackDays *int    `json:"lookback_days,omitempty" validate:"omitempty,min=1,max=3650" example:"365" minimum:"1" maximum:"3650"`
+	Timezone     *string `json:"timezone,omitempty" validate:"omitempty,iana_timezone" example:"Asia/Kolkata"`
+	TimeFormat   *string `json:"time_format,omitempty" validate:"omitempty,time_format" example:"HH:mm" enums:"HH:mm,HH:mm:ss,h:mm a,h:mm:ss a"`
 }
 
 // PreferencesResponse is the effective application preferences payload.
