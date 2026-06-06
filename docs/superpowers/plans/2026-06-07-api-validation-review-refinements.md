@@ -17,7 +17,7 @@
 - Modify: `backend/internal/api/handlers_transactions.go`
 - Modify: `backend/internal/api/validation.go`
 
-- [ ] **Step 1: Replace the old page-size boundary test and add accepted pagination tests**
+- [x] **Step 1: Replace the old page-size boundary test and add accepted pagination tests**
 
 In `TestListTransactions_RejectsInvalidQuery`, replace the `page_size=501`
 case with:
@@ -70,7 +70,7 @@ func TestListTransactions_RejectsOffsetOverflow(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the handler tests and verify they fail**
+- [x] **Step 2: Run the handler tests and verify they fail**
 
 Run:
 
@@ -82,7 +82,7 @@ Expected: FAIL in the new transaction handler cases because `page` still has a
 maximum, `page_size` still permits 500, and offset overflow has no semantic
 rule.
 
-- [ ] **Step 3: Update transaction query tags and OpenAPI annotations**
+- [x] **Step 3: Update transaction query tags and OpenAPI annotations**
 
 Change the annotations in `handlers_transactions.go` to:
 
@@ -98,7 +98,7 @@ Page     *int `form:"page" validate:"omitempty,min=1"`
 PageSize *int `form:"page_size" validate:"omitempty,min=1,max=100"`
 ```
 
-- [ ] **Step 4: Add a transaction pagination struct validator**
+- [x] **Step 4: Add a transaction pagination struct validator**
 
 Register the rule in `newRequestValidator`:
 
@@ -136,7 +136,7 @@ case "page_offset":
 	return "is too large for page_size"
 ```
 
-- [ ] **Step 5: Run the focused handler tests**
+- [x] **Step 5: Run the focused handler tests**
 
 Run:
 
@@ -146,7 +146,7 @@ task test:be
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit the pagination contract**
+- [x] **Step 6: Commit the pagination contract**
 
 ```bash
 git add backend/internal/api/handlers_test.go backend/internal/api/handlers_transactions.go backend/internal/api/validation.go
@@ -160,7 +160,7 @@ git commit --no-gpg-sign -m "Correct transaction pagination validation"
 - Modify: `backend/internal/store/store_test.go`
 - Modify: `backend/internal/store/transactions_repository.go`
 
-- [ ] **Step 1: Add repository overflow tests for list and search**
+- [x] **Step 1: Add repository overflow tests for list and search**
 
 Add:
 
@@ -195,7 +195,7 @@ func TestSearchTransactions_RejectsOffsetOverflow(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the repository tests and verify they fail**
+- [x] **Step 2: Run the repository tests and verify they fail**
 
 Run:
 
@@ -205,7 +205,7 @@ task test:be
 
 Expected: FAIL to compile because `store.ErrPaginationOverflow` does not exist.
 
-- [ ] **Step 3: Implement checked offset calculation before database work**
+- [x] **Step 3: Implement checked offset calculation before database work**
 
 Add the exported sentinel to `errors.go`:
 
@@ -245,7 +245,7 @@ query := strings.TrimSpace(request.search)
 
 Remove the existing unchecked offset assignment later in the method.
 
-- [ ] **Step 4: Run the repository tests**
+- [x] **Step 4: Run the repository tests**
 
 Run:
 
@@ -255,7 +255,7 @@ task test:be
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit repository protection**
+- [x] **Step 5: Commit repository protection**
 
 ```bash
 git add backend/internal/store/errors.go backend/internal/store/store_test.go backend/internal/store/transactions_repository.go
@@ -270,7 +270,7 @@ git commit --no-gpg-sign -m "Guard transaction pagination offsets"
 - Modify: `backend/internal/api/handlers_transactions.go`
 - Modify: `backend/internal/api/handlers_diagnostics.go`
 
-- [ ] **Step 1: Rewrite binding tests around the desired generic API**
+- [x] **Step 1: Rewrite binding tests around the desired generic API**
 
 Add semantic tags to the fixture:
 
@@ -304,7 +304,7 @@ Add a semantic failure case:
 }
 ```
 
-- [ ] **Step 2: Run focused tests and verify compilation fails**
+- [x] **Step 2: Run focused tests and verify compilation fails**
 
 Run:
 
@@ -314,7 +314,7 @@ task test:be
 
 Expected: FAIL to compile because `decodeAndValidateQuery` does not exist.
 
-- [ ] **Step 3: Implement the generic helper and metadata cache**
+- [x] **Step 3: Implement the generic helper and metadata cache**
 
 Replace the `Handlers.decodeQuery` method with:
 
@@ -414,7 +414,7 @@ func buildQueryFieldTypes(targetType reflect.Type) map[string]reflect.Type {
 }
 ```
 
-- [ ] **Step 4: Migrate both candidate query handlers**
+- [x] **Step 4: Migrate both candidate query handlers**
 
 Change transactions to:
 
@@ -445,7 +445,7 @@ Status string `form:"status" validate:"omitempty,oneof=open resolved ignored all
 
 Remove the now-duplicated explicit `validateRequest` calls from both handlers.
 
-- [ ] **Step 5: Run query and candidate handler tests**
+- [x] **Step 5: Run query and candidate handler tests**
 
 Run:
 
@@ -455,7 +455,7 @@ task test:be
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit the generic helper**
+- [x] **Step 6: Commit the generic helper**
 
 ```bash
 git add backend/internal/api/query_binding.go backend/internal/api/query_binding_test.go backend/internal/api/handlers_transactions.go backend/internal/api/handlers_diagnostics.go
@@ -469,7 +469,7 @@ git commit --no-gpg-sign -m "Type candidate query validation"
 - Modify: `backend/internal/api/openapi_types.go`
 - Modify: `api/openapi/expensor.openapi.yaml`
 
-- [ ] **Step 1: Remove the obsolete OpenAPI response type**
+- [x] **Step 1: Remove the obsolete OpenAPI response type**
 
 Delete `TransactionsSearchResponse` from `openapi_types.go`. Also update the
 `ValidationErrorDetail.Message` example:
@@ -486,7 +486,7 @@ rg -n "TransactionsSearchResponse" backend
 
 Expected: no output.
 
-- [ ] **Step 2: Add generics guidance**
+- [x] **Step 2: Add generics guidance**
 
 Under `### Backend code health` in `CLAUDE.md`, add:
 
@@ -500,7 +500,7 @@ cache unavoidable local reflection metadata by concrete DTO type when it is
 reused.
 ```
 
-- [ ] **Step 3: Regenerate and verify OpenAPI**
+- [x] **Step 3: Regenerate and verify OpenAPI**
 
 Run:
 
@@ -518,7 +518,7 @@ rg -n -A8 "name: page$|name: page_size$" api/openapi/expensor.openapi.yaml
 Expected: the first command has no output; the page parameter has no maximum;
 the page-size parameter has `maximum: 100`.
 
-- [ ] **Step 4: Commit documentation and schema cleanup**
+- [x] **Step 4: Commit documentation and schema cleanup**
 
 ```bash
 git add CLAUDE.md backend/internal/api/openapi_types.go api/openapi/expensor.openapi.yaml
@@ -530,7 +530,7 @@ git commit --no-gpg-sign -m "Document validation generics guidance"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-06-07-api-validation-review-refinements.md`
 
-- [ ] **Step 1: Format backend code**
+- [x] **Step 1: Format backend code**
 
 Run:
 
@@ -540,7 +540,7 @@ task fmt:be
 
 Expected: exit 0.
 
-- [ ] **Step 2: Run full backend tests**
+- [x] **Step 2: Run full backend tests**
 
 Run:
 
@@ -550,7 +550,7 @@ task test:be
 
 Expected: all backend packages pass, including Postgres integration tests.
 
-- [ ] **Step 3: Run strict production lint**
+- [x] **Step 3: Run strict production lint**
 
 Run:
 
@@ -560,7 +560,7 @@ task lint:be:prod
 
 Expected: `0 issues.`
 
-- [ ] **Step 4: Check OpenAPI drift**
+- [x] **Step 4: Check OpenAPI drift**
 
 Run:
 
@@ -570,7 +570,7 @@ task openapi:check
 
 Expected: exit 0 with no generated artifact diff.
 
-- [ ] **Step 5: Check the final worktree**
+- [x] **Step 5: Check the final worktree**
 
 Run:
 
@@ -582,7 +582,7 @@ git status --short
 Expected: no whitespace errors; only the intentionally untracked
 `CODE_QUALITY_REVIEW.md` remains outside the committed changes.
 
-- [ ] **Step 6: Push the feature branch**
+- [x] **Step 6: Push the feature branch**
 
 ```bash
 git push origin pr/api-validation-candidates
