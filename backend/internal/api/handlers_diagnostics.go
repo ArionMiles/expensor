@@ -17,7 +17,7 @@ import (
 // @Param status query string false "Diagnostic status filter" Enums(open,resolved,ignored,all) default(open)
 // @Param limit query int false "Maximum rows to return" minimum(1) default(20)
 // @Success 200 {array} ExtractionDiagnosticResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /extraction-diagnostics [get]
@@ -100,7 +100,7 @@ func (h *Handlers) GetExtractionDiagnostic(w http.ResponseWriter, r *http.Reques
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /extraction-diagnostics/{id} [patch]

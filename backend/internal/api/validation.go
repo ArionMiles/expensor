@@ -23,39 +23,47 @@ func newRequestValidator() *validator.Validate {
 		}
 		return field.Name
 	})
-	mustRegisterValidation(validate, "no_control_chars", func(field validator.FieldLevel) bool {
-		for _, char := range field.Field().String() {
-			if unicode.IsControl(char) {
-				return false
-			}
-		}
-		return true
-	})
-	mustRegisterValidation(validate, "iana_timezone", func(field validator.FieldLevel) bool {
-		_, err := time.LoadLocation(field.Field().String())
-		return err == nil
-	})
-	mustRegisterValidation(validate, "currency_code", func(field validator.FieldLevel) bool {
-		value := field.Field().String()
-		if len(value) != 3 {
-			return false
-		}
-		for _, char := range value {
-			if char < 'A' || char > 'Z' {
-				return false
-			}
-		}
-		return true
-	})
-	mustRegisterValidation(validate, "time_format", func(field validator.FieldLevel) bool {
-		switch field.Field().String() {
-		case "HH:mm", "HH:mm:ss", "h:mm a", "h:mm:ss a":
-			return true
-		default:
-			return false
-		}
-	})
+	mustRegisterValidation(validate, "no_control_chars", hasNoControlChars)
+	mustRegisterValidation(validate, "iana_timezone", isIANATimezone)
+	mustRegisterValidation(validate, "currency_code", isCurrencyCode)
+	mustRegisterValidation(validate, "time_format", isTimeFormat)
 	return validate
+}
+
+func hasNoControlChars(field validator.FieldLevel) bool {
+	for _, char := range field.Field().String() {
+		if unicode.IsControl(char) {
+			return false
+		}
+	}
+	return true
+}
+
+func isIANATimezone(field validator.FieldLevel) bool {
+	_, err := time.LoadLocation(field.Field().String())
+	return err == nil
+}
+
+func isCurrencyCode(field validator.FieldLevel) bool {
+	value := field.Field().String()
+	if len(value) != 3 {
+		return false
+	}
+	for _, char := range value {
+		if char < 'A' || char > 'Z' {
+			return false
+		}
+	}
+	return true
+}
+
+func isTimeFormat(field validator.FieldLevel) bool {
+	switch field.Field().String() {
+	case "HH:mm", "HH:mm:ss", "h:mm a", "h:mm:ss a":
+		return true
+	default:
+		return false
+	}
 }
 
 func mustRegisterValidation(validate *validator.Validate, tag string, fn validator.Func) {

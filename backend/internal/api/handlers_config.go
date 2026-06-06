@@ -47,7 +47,7 @@ func (h *Handlers) GetPreferences(w http.ResponseWriter, r *http.Request) {
 // @Param request body PreferencesPatchRequest true "Preferences to update"
 // @Success 200 {object} PreferencesResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/preferences [patch]

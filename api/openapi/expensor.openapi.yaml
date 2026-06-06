@@ -1057,6 +1057,28 @@ definitions:
         example: db://reader_runtime/gmail/client_secret
         type: string
     type: object
+  api.ValidationErrorDetail:
+    properties:
+      field:
+        example: page_size
+        type: string
+      location:
+        example: query
+        type: string
+      message:
+        example: must be at most 500
+        type: string
+    type: object
+  api.ValidationErrorResponse:
+    properties:
+      details:
+        items:
+          $ref: '#/definitions/api.ValidationErrorDetail'
+        type: array
+      error:
+        example: request validation failed
+        type: string
+    type: object
   api.VersionResponse:
     properties:
       version:
@@ -1818,7 +1840,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2028,7 +2050,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2115,7 +2137,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3074,11 +3096,15 @@ paths:
       - default: 1
         description: 1-based page number
         in: query
+        maximum: 10000
+        minimum: 1
         name: page
         type: integer
       - default: 20
         description: Page size
         in: query
+        maximum: 500
+        minimum: 1
         name: page_size
         type: integer
       - description: Merchant filter
@@ -3195,10 +3221,14 @@ paths:
         type: integer
       - description: Minimum hour filter (0-23)
         in: query
+        maximum: 23
+        minimum: 0
         name: hour_from
         type: integer
       - description: Maximum hour filter (0-23)
         in: query
+        maximum: 23
+        minimum: 0
         name: hour_to
         type: integer
       - description: IANA timezone used for weekday/hour filters
@@ -3233,6 +3263,10 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:

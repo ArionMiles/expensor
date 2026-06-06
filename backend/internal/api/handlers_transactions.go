@@ -18,8 +18,8 @@ import (
 // @Summary List transactions
 // @Tags Transactions
 // @Produce json
-// @Param page query int false "1-based page number" default(1)
-// @Param page_size query int false "Page size" default(20)
+// @Param page query int false "1-based page number" default(1) minimum(1) maximum(10000)
+// @Param page_size query int false "Page size" default(20) minimum(1) maximum(500)
 // @Param merchant query string false "Merchant filter"
 // @Param category query string false "Category filter"
 // @Param category_missing query int false "Only transactions without a category when set to 1" Enums(1)
@@ -43,14 +43,15 @@ import (
 // @Param muted_only query int false "Return only muted transactions when set to 1" Enums(1)
 // @Param individual_only query int false "Return only individually muted transactions when set to 1" Enums(1)
 // @Param weekday query int false "PostgreSQL DOW weekday filter (0=Sunday...6=Saturday)" Enums(0,1,2,3,4,5,6)
-// @Param hour_from query int false "Minimum hour filter (0-23)"
-// @Param hour_to query int false "Maximum hour filter (0-23)"
+// @Param hour_from query int false "Minimum hour filter (0-23)" minimum(0) maximum(23)
+// @Param hour_to query int false "Maximum hour filter (0-23)" minimum(0) maximum(23)
 // @Param tz query string false "IANA timezone used for weekday/hour filters"
 // @Param q query string false "Free-text search over merchant and description"
 // @Param sort_by query string false "Sort field" Enums(timestamp)
 // @Param sort_dir query string false "Sort direction" Enums(asc,desc)
 // @Success 200 {object} TransactionsListResponse
 // @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions [get]
