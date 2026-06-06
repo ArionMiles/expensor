@@ -43,6 +43,16 @@ export interface SetupStatus {
   missing: Array<'base_currency' | 'timezone' | 'time_format'>
 }
 
+export interface Preferences {
+  base_currency: string
+  scan_interval: number
+  lookback_days: number
+  timezone: string
+  time_format: string
+}
+
+export type PreferencesPatch = Partial<Preferences>
+
 export interface MutedMerchant {
   id: string
   pattern: string

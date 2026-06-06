@@ -78,22 +78,6 @@ definitions:
         example: HDFC Bank
         type: string
     type: object
-  api.BaseCurrencyRequest:
-    properties:
-      base_currency:
-        example: INR
-        maxLength: 3
-        minLength: 3
-        type: string
-    required:
-    - base_currency
-    type: object
-  api.BaseCurrencyResponse:
-    properties:
-      base_currency:
-        example: USD
-        type: string
-    type: object
   api.BucketResponse:
     properties:
       description:
@@ -502,20 +486,6 @@ definitions:
         example: Online
         type: string
     type: object
-  api.LookbackDaysRequest:
-    properties:
-      lookback_days:
-        example: "365"
-        type: string
-    required:
-    - lookback_days
-    type: object
-  api.LookbackDaysResponse:
-    properties:
-      lookback_days:
-        example: "365"
-        type: string
-    type: object
   api.MerchantReasonRequest:
     properties:
       reason:
@@ -590,6 +560,53 @@ definitions:
     properties:
       name:
         example: ContractCategory
+        type: string
+    type: object
+  api.PreferencesPatchRequest:
+    properties:
+      base_currency:
+        example: USD
+        maxLength: 3
+        minLength: 3
+        type: string
+      lookback_days:
+        example: 365
+        maximum: 3650
+        minimum: 1
+        type: integer
+      scan_interval:
+        example: 120
+        maximum: 3600
+        minimum: 10
+        type: integer
+      time_format:
+        enum:
+        - HH:mm
+        - HH:mm:ss
+        - h:mm a
+        - h:mm:ss a
+        example: HH:mm
+        type: string
+      timezone:
+        example: Asia/Kolkata
+        type: string
+    type: object
+  api.PreferencesResponse:
+    properties:
+      base_currency:
+        example: USD
+        type: string
+      lookback_days:
+        example: 365
+        type: integer
+      scan_interval:
+        example: 120
+        type: integer
+      time_format:
+        example: HH:mm
+        type: string
+      timezone:
+        example: Asia/Kolkata
         type: string
     type: object
   api.ReaderCheckpointResponse:
@@ -842,20 +859,6 @@ definitions:
     - bank
     - type
     type: object
-  api.ScanIntervalRequest:
-    properties:
-      scan_interval:
-        example: "120"
-        type: string
-    required:
-    - scan_interval
-    type: object
-  api.ScanIntervalResponse:
-    properties:
-      scan_interval:
-        example: "120"
-        type: string
-    type: object
   api.SetupStatusResponse:
     properties:
       missing:
@@ -958,39 +961,6 @@ definitions:
         type: integer
       period:
         example: 2026-05
-        type: string
-    type: object
-  api.TimeFormatRequest:
-    properties:
-      time_format:
-        enum:
-        - HH:mm
-        - HH:mm:ss
-        - h:mm a
-        - h:mm:ss a
-        example: HH:mm
-        type: string
-    required:
-    - time_format
-    type: object
-  api.TimeFormatResponse:
-    properties:
-      time_format:
-        example: HH:mm
-        type: string
-    type: object
-  api.TimezoneRequest:
-    properties:
-      timezone:
-        example: Asia/Kolkata
-        type: string
-    required:
-    - timezone
-    type: object
-  api.TimezoneResponse:
-    properties:
-      timezone:
-        example: Asia/Kolkata
         type: string
     type: object
   api.TransactionLabelsRequest:
@@ -1199,58 +1169,6 @@ paths:
       summary: List bank color mappings
       tags:
       - Taxonomy
-  /config/base-currency:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.BaseCurrencyResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Get the base currency
-      tags:
-      - Config
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Base currency payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.BaseCurrencyRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.BaseCurrencyResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Set the base currency
-      tags:
-      - Config
   /config/buckets:
     get:
       produces:
@@ -1892,7 +1810,7 @@ paths:
       summary: Get label mappings
       tags:
       - Taxonomy
-  /config/lookback-days:
+  /config/preferences:
     get:
       produces:
       - application/json
@@ -1900,31 +1818,31 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.LookbackDaysResponse'
+            $ref: '#/definitions/api.PreferencesResponse'
         "503":
           description: Service Unavailable
           schema:
             $ref: '#/definitions/api.ErrorResponse'
-      summary: Get lookback days
+      summary: Get application preferences
       tags:
       - Config
-    put:
+    patch:
       consumes:
       - application/json
       parameters:
-      - description: Lookback days payload
+      - description: Preferences to update
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.LookbackDaysRequest'
+          $ref: '#/definitions/api.PreferencesPatchRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.LookbackDaysResponse'
+            $ref: '#/definitions/api.PreferencesResponse'
         "400":
           description: Bad Request
           schema:
@@ -1941,7 +1859,7 @@ paths:
           description: Service Unavailable
           schema:
             $ref: '#/definitions/api.ErrorResponse'
-      summary: Set lookback days
+      summary: Update application preferences
       tags:
       - Config
   /config/readers/{name}/checkpoint:
@@ -1993,58 +1911,6 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Get a reader checkpoint
-      tags:
-      - Config
-  /config/scan-interval:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.ScanIntervalResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Get the scan interval
-      tags:
-      - Config
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Scan interval payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.ScanIntervalRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.ScanIntervalResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Set the scan interval
       tags:
       - Config
   /config/setup-status:
@@ -2099,110 +1965,6 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Get community sync status
-      tags:
-      - Config
-  /config/time-format:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.TimeFormatResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Get the time format
-      tags:
-      - Config
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Time format payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.TimeFormatRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.TimeFormatResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Set the time format
-      tags:
-      - Config
-  /config/timezone:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.TimezoneResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Get the application timezone
-      tags:
-      - Config
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Timezone payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.TimezoneRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.TimezoneResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Set the application timezone
       tags:
       - Config
   /daemon/rescan:

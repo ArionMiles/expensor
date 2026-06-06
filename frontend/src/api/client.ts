@@ -19,6 +19,8 @@ import type {
   MonthlyBreakdownData,
   MutedMerchantWithCount,
   PluginInfo,
+  Preferences,
+  PreferencesPatch,
   ReaderConfig,
   ReaderGuide,
   ReaderStatus,
@@ -192,30 +194,12 @@ export const api = {
   config: {
     getActiveReader: () => apiClient.get<{ reader: string }>('/config/active-reader'),
     getSetupStatus: () => apiClient.get<SetupStatus>('/config/setup-status'),
-    getBaseCurrency: () => apiClient.get<{ base_currency: string }>('/config/base-currency'),
-    setBaseCurrency: (currency: string) =>
-      apiClient.put<{ base_currency: string }>('/config/base-currency', {
-        base_currency: currency,
-      }),
-    getScanInterval: () => apiClient.get<{ scan_interval: string }>('/config/scan-interval'),
-    setScanInterval: (seconds: number) =>
-      apiClient.put<{ scan_interval: string }>('/config/scan-interval', {
-        scan_interval: String(seconds),
-      }),
-    getLookbackDays: () => apiClient.get<{ lookback_days: string }>('/config/lookback-days'),
-    setLookbackDays: (days: number) =>
-      apiClient.put<{ lookback_days: string }>('/config/lookback-days', {
-        lookback_days: String(days),
-      }),
+    getPreferences: () => apiClient.get<Preferences>('/config/preferences'),
+    updatePreferences: (patch: PreferencesPatch) =>
+      apiClient.patch<Preferences>('/config/preferences', patch),
     getCheckpoint: (reader: string) =>
       apiClient.get<{ last_scan_at: string | null }>(`/config/readers/${reader}/checkpoint`),
     clearCheckpoint: (reader: string) => apiClient.delete(`/config/readers/${reader}/checkpoint`),
-    getTimezone: () => apiClient.get<{ timezone: string }>('/config/timezone'),
-    setTimezone: (timezone: string) =>
-      apiClient.put<{ timezone: string }>('/config/timezone', { timezone }),
-    getTimeFormat: () => apiClient.get<{ time_format: string }>('/config/time-format'),
-    setTimeFormat: (time_format: string) =>
-      apiClient.put<{ time_format: string }>('/config/time-format', { time_format }),
 
     labels: {
       list: () => apiClient.get<Label[]>('/config/labels'),

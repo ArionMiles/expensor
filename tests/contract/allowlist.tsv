@@ -3,23 +3,15 @@ GET	/version	version endpoint
 GET	/status	daemon status endpoint
 GET	/config/active-reader	active reader config
 GET	/config/banks	bank color mappings
-GET	/config/base-currency	base currency config
-PUT	/config/base-currency	update base currency config
+GET	/config/preferences	application preferences
+PATCH	/config/preferences	update application preferences
 GET	/config/buckets	bucket taxonomy
 GET	/config/categories	category taxonomy
 GET	/config/labels	label taxonomy
 GET	/config/labels/mappings	label merchant mappings
-GET	/config/lookback-days	lookback-days config
-PUT	/config/lookback-days	update lookback-days config
 GET	/config/readers/{name}/checkpoint	reader checkpoint config
-GET	/config/scan-interval	scan-interval config
-PUT	/config/scan-interval	update scan-interval config
 GET	/config/setup-status	first-run setup status
 GET	/config/sync/status	config sync status
-GET	/config/time-format	time-format config
-PUT	/config/time-format	update time-format config
-GET	/config/timezone	timezone config
-PUT	/config/timezone	update timezone config
 GET	/transactions	transaction listing
 GET	/transactions/facets	transaction facets
 GET	/transactions/{id}	transaction detail

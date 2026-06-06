@@ -1,13 +1,12 @@
 import {
   useActiveReader,
   useClearReaderCheckpoint,
-  useLookbackDays,
+  usePreferences,
   useReaderCheckpoint,
   useRescan,
-  useScanInterval,
-  useSetLookbackDays,
-  useSetScanInterval,
+  useUpdatePreferences,
 } from '@/api/queries'
+import type { PreferencesPatch } from '@/api/types'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -57,10 +56,10 @@ function DaemonSettings() {
   } = useRescan()
   const reader = activeReader ?? ''
 
-  const { data: scanInterval = 60 } = useScanInterval()
-  const { data: lookbackDays = 180 } = useLookbackDays()
-  const { mutate: setScanInterval } = useSetScanInterval()
-  const { mutate: setLookbackDays } = useSetLookbackDays()
+  const { data: preferences } = usePreferences()
+  const scanInterval = preferences?.scan_interval ?? 60
+  const lookbackDays = preferences?.lookback_days ?? 180
+  const { mutate: updatePreferences } = useUpdatePreferences()
   const { data: checkpoint } = useReaderCheckpoint(reader)
   const { mutate: clearCheckpoint, isPending: clearing } = useClearReaderCheckpoint()
   const { timezone, timeFormat } = useDisplay()
@@ -87,8 +86,10 @@ function DaemonSettings() {
       setScanError(t('settings.daemon.lookbackError'))
       return
     }
-    if (interval !== scanInterval) setScanInterval(interval)
-    if (lookback !== lookbackDays) setLookbackDays(lookback)
+    const patch: PreferencesPatch = {}
+    if (interval !== scanInterval) patch.scan_interval = interval
+    if (lookback !== lookbackDays) patch.lookback_days = lookback
+    if (Object.keys(patch).length > 0) updatePreferences(patch)
     setScanSaved(true)
   }
 

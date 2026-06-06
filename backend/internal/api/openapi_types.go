@@ -338,54 +338,22 @@ type MonthlyBreakdownResponse struct {
 	Series []MonthlyBreakdownSeriesResponse `json:"series"`
 }
 
-// BaseCurrencyRequest is the base currency update payload.
-type BaseCurrencyRequest struct {
-	BaseCurrency string `json:"base_currency" example:"INR" binding:"required" minLength:"3" maxLength:"3"`
+// PreferencesPatchRequest is a partial application preferences update.
+type PreferencesPatchRequest struct {
+	BaseCurrency *string `json:"base_currency,omitempty" example:"USD" minLength:"3" maxLength:"3"`
+	ScanInterval *int    `json:"scan_interval,omitempty" example:"120" minimum:"10" maximum:"3600"`
+	LookbackDays *int    `json:"lookback_days,omitempty" example:"365" minimum:"1" maximum:"3650"`
+	Timezone     *string `json:"timezone,omitempty" example:"Asia/Kolkata"`
+	TimeFormat   *string `json:"time_format,omitempty" example:"HH:mm" enums:"HH:mm,HH:mm:ss,h:mm a,h:mm:ss a"`
 }
 
-// BaseCurrencyResponse is the base currency payload.
-type BaseCurrencyResponse struct {
+// PreferencesResponse is the effective application preferences payload.
+type PreferencesResponse struct {
 	BaseCurrency string `json:"base_currency" example:"USD"`
-}
-
-// ScanIntervalRequest is the scan interval update payload.
-type ScanIntervalRequest struct {
-	ScanInterval string `json:"scan_interval" example:"120" binding:"required"`
-}
-
-// ScanIntervalResponse is the scan interval payload.
-type ScanIntervalResponse struct {
-	ScanInterval string `json:"scan_interval" example:"120"`
-}
-
-// LookbackDaysRequest is the lookback days update payload.
-type LookbackDaysRequest struct {
-	LookbackDays string `json:"lookback_days" example:"365" binding:"required"`
-}
-
-// LookbackDaysResponse is the lookback days payload.
-type LookbackDaysResponse struct {
-	LookbackDays string `json:"lookback_days" example:"365"`
-}
-
-// TimezoneRequest is the timezone update payload.
-type TimezoneRequest struct {
-	Timezone string `json:"timezone" example:"Asia/Kolkata" binding:"required"`
-}
-
-// TimezoneResponse is the timezone payload.
-type TimezoneResponse struct {
-	Timezone string `json:"timezone" example:"Asia/Kolkata"`
-}
-
-// TimeFormatRequest is the time format update payload.
-type TimeFormatRequest struct {
-	TimeFormat string `json:"time_format" example:"HH:mm" binding:"required" enums:"HH:mm,HH:mm:ss,h:mm a,h:mm:ss a"`
-}
-
-// TimeFormatResponse is the time format payload.
-type TimeFormatResponse struct {
-	TimeFormat string `json:"time_format" example:"HH:mm"`
+	ScanInterval int    `json:"scan_interval" example:"120"`
+	LookbackDays int    `json:"lookback_days" example:"365"`
+	Timezone     string `json:"timezone" example:"Asia/Kolkata"`
+	TimeFormat   string `json:"time_format" example:"HH:mm"`
 }
 
 // SetupStatusResponse is the first-run setup status payload.

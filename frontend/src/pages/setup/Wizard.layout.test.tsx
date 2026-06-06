@@ -7,7 +7,7 @@ import { renderWithProviders } from '@/test/render'
 
 const apiMocks = vi.hoisted(() => ({
   authStart: vi.fn(),
-  setBaseCurrency: vi.fn(),
+  updatePreferences: vi.fn(),
   daemonStart: vi.fn(),
   saveReaderConfig: vi.fn(),
 }))
@@ -45,7 +45,7 @@ let activeReader = ''
 
 vi.mock('@/api/client', () => ({
   api: {
-    config: { setBaseCurrency: apiMocks.setBaseCurrency },
+    config: { updatePreferences: apiMocks.updatePreferences },
     daemon: { start: apiMocks.daemonStart },
     readers: { auth: { start: apiMocks.authStart } },
   },
@@ -97,8 +97,10 @@ vi.mock('@/api/queries', () => ({
   }),
   useSetupStatus: () => ({ data: setupStatus, isLoading: false }),
   useStatus: () => ({ data: { daemon: { running: false } } }),
-  useSetTimeFormat: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useSetTimezone: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdatePreferences: () => ({
+    mutateAsync: (preferences: Record<string, unknown>) => apiMocks.updatePreferences(preferences),
+    isPending: false,
+  }),
   useTimeFormat: () => ({ data: 'HH:mm', isLoading: false }),
   useTimezone: () => ({ data: 'UTC', isLoading: false }),
   useUploadCredentials: () => ({
@@ -118,8 +120,8 @@ vi.mock('@/lib/timezone', () => ({
 describe('Wizard guide layout', () => {
   beforeEach(() => {
     apiMocks.authStart.mockReset()
-    apiMocks.setBaseCurrency.mockReset()
-    apiMocks.setBaseCurrency.mockResolvedValue({})
+    apiMocks.updatePreferences.mockReset()
+    apiMocks.updatePreferences.mockResolvedValue({})
     apiMocks.daemonStart.mockReset()
     apiMocks.saveReaderConfig.mockReset()
     setupStatus = { required: false, missing: [] }

@@ -13,32 +13,33 @@ func TestSettingsRoundTripAndCheckpointClear(t *testing.T) {
 	helpers.WaitForHealthy(t)
 	client := helpers.NewClient(t)
 
-	readCases := []struct {
-		name string
-		path string
-		key  string
-		want string
-	}{
-		{name: "base currency", path: "/api/config/base-currency", key: "base_currency", want: "INR"},
-		{name: "scan interval", path: "/api/config/scan-interval", key: "scan_interval", want: "120"},
-		{name: "timezone", path: "/api/config/timezone", key: "timezone", want: "Asia/Kolkata"},
+	type preferences struct {
+		BaseCurrency string `json:"base_currency"`
+		ScanInterval int    `json:"scan_interval"`
+		LookbackDays int    `json:"lookback_days"`
+		Timezone     string `json:"timezone"`
+		TimeFormat   string `json:"time_format"`
 	}
 
-	for _, tc := range readCases {
-		t.Run(tc.name, func(t *testing.T) {
-			resp := client.Get(t, tc.path)
-			helpers.RequireStatus(t, resp, http.StatusOK)
-			body := helpers.DecodeJSON[map[string]string](t, resp)
-			if body[tc.key] != tc.want {
-				t.Fatalf("unexpected payload for %s: %#v", tc.name, body)
-			}
-		})
+	resp := client.Get(t, "/api/config/preferences")
+	helpers.RequireStatus(t, resp, http.StatusOK)
+	body := helpers.DecodeJSON[preferences](t, resp)
+	if body.BaseCurrency != "INR" || body.ScanInterval != 120 || body.LookbackDays != 365 {
+		t.Fatalf("unexpected preferences: %#v", body)
+	}
+	if body.Timezone != "Asia/Kolkata" || body.TimeFormat != "HH:mm" {
+		t.Fatalf("unexpected display preferences: %#v", body)
 	}
 
-	t.Run("update base currency", func(t *testing.T) {
-		updateCurrency := client.JSON(t, http.MethodPut, "/api/config/base-currency", map[string]string{"base_currency": "INR"})
-		helpers.RequireStatus(t, updateCurrency, http.StatusOK)
+	update := client.JSON(t, http.MethodPatch, "/api/config/preferences", map[string]any{
+		"scan_interval": 180,
+		"time_format":   "h:mm a",
 	})
+	helpers.RequireStatus(t, update, http.StatusOK)
+	updated := helpers.DecodeJSON[preferences](t, update)
+	if updated.ScanInterval != 180 || updated.TimeFormat != "h:mm a" {
+		t.Fatalf("unexpected updated preferences: %#v", updated)
+	}
 
 	t.Run("checkpoint exists then clears", func(t *testing.T) {
 		checkpoint := client.Get(t, "/api/config/readers/gmail/checkpoint")

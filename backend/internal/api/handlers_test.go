@@ -2076,37 +2076,49 @@ func TestAuthCallback_ReturnsClosePageAfterTokenSaved(t *testing.T) {
 	}
 }
 
-// --- app config / base currency ---
+// --- app preferences ---
 
-func TestGetBaseCurrency_DefaultsToConfig(t *testing.T) {
+func TestGetPreferencesCombinesStoredValuesAndDefaults(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/base-currency", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/preferences", nil)
 	rr := httptest.NewRecorder()
-	h.GetBaseCurrency(rr, req)
+	h.GetPreferences(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	var resp map[string]string
+	var resp PreferencesResponse
 	decodeJSON(t, rr.Body.String(), &resp)
-	if resp["base_currency"] != "INR" {
-		t.Errorf("expected INR (from config), got %q", resp["base_currency"])
+	if resp.BaseCurrency != "INR" || resp.ScanInterval != 60 || resp.LookbackDays != 180 {
+		t.Fatalf("unexpected configured defaults: %#v", resp)
+	}
+	if resp.Timezone != "" || resp.TimeFormat != "HH:mm" {
+		t.Fatalf("unexpected display defaults: %#v", resp)
 	}
 }
 
-func TestGetBaseCurrency_FromDB(t *testing.T) {
-	ms := &mockStore{appConfig: map[string]string{"base_currency": "USD"}}
+func TestGetPreferencesUsesStoredValues(t *testing.T) {
+	ms := &mockStore{appConfig: map[string]string{
+		"base_currency":   "USD",
+		"scan_interval":   "120",
+		"lookback_days":   "365",
+		"app.timezone":    "Asia/Kolkata",
+		"app.time_format": "h:mm a",
+	}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/base-currency", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/preferences", nil)
 	rr := httptest.NewRecorder()
-	h.GetBaseCurrency(rr, req)
+	h.GetPreferences(rr, req)
 
-	var resp map[string]string
+	var resp PreferencesResponse
 	decodeJSON(t, rr.Body.String(), &resp)
-	if resp["base_currency"] != "USD" {
-		t.Errorf("expected USD from DB, got %q", resp["base_currency"])
+	if resp.BaseCurrency != "USD" || resp.ScanInterval != 120 || resp.LookbackDays != 365 {
+		t.Fatalf("unexpected stored numeric preferences: %#v", resp)
+	}
+	if resp.Timezone != "Asia/Kolkata" || resp.TimeFormat != "h:mm a" {
+		t.Fatalf("unexpected stored display preferences: %#v", resp)
 	}
 }
 
@@ -2233,38 +2245,51 @@ func TestGetMonthlyBreakdown_InvalidDimension(t *testing.T) {
 	}
 }
 
-func TestSetBaseCurrency_Success(t *testing.T) {
+func TestPatchPreferencesUpdatesSuppliedFields(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
-	body := strings.NewReader(`{"base_currency":"usd"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/base-currency", body)
+	body := strings.NewReader(
+		`{"base_currency":"usd","scan_interval":120,"lookback_days":365,"timezone":"Asia/Kolkata","time_format":"h:mm a"}`,
+	)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/api/config/preferences", body)
 	rr := httptest.NewRecorder()
-	h.SetBaseCurrency(rr, req)
+	h.PatchPreferences(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
-	var resp map[string]string
+	var resp PreferencesResponse
 	decodeJSON(t, rr.Body.String(), &resp)
-	if resp["base_currency"] != "USD" {
-		t.Errorf("expected normalised USD, got %q", resp["base_currency"])
+	if resp.BaseCurrency != "USD" || resp.ScanInterval != 120 || resp.LookbackDays != 365 {
+		t.Fatalf("unexpected response: %#v", resp)
 	}
-	if ms.appConfig["base_currency"] != "USD" {
-		t.Errorf("store not updated, got %q", ms.appConfig["base_currency"])
+	want := map[string]string{
+		"base_currency":   "USD",
+		"scan_interval":   "120",
+		"lookback_days":   "365",
+		"app.timezone":    "Asia/Kolkata",
+		"app.time_format": "h:mm a",
+	}
+	if !reflect.DeepEqual(ms.appConfig, want) {
+		t.Fatalf("stored preferences = %#v, want %#v", ms.appConfig, want)
 	}
 }
 
-func TestSetBaseCurrency_InvalidCode(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+func TestPatchPreferencesValidatesBeforeWriting(t *testing.T) {
+	ms := &mockStore{}
+	h := newTestHandlers(t, ms, &mockDaemon{})
 
-	for _, tc := range []string{`{"base_currency":"US"}`, `{"base_currency":"USDA"}`, `{"base_currency":"12A"}`} {
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/base-currency", strings.NewReader(tc))
-		rr := httptest.NewRecorder()
-		h.SetBaseCurrency(rr, req)
-		if rr.Code != http.StatusBadRequest {
-			t.Errorf("input %s: expected 400, got %d", tc, rr.Code)
-		}
+	body := strings.NewReader(`{"base_currency":"USD","scan_interval":5}`)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/api/config/preferences", body)
+	rr := httptest.NewRecorder()
+	h.PatchPreferences(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	if len(ms.appConfig) != 0 {
+		t.Fatalf("invalid patch persisted values: %#v", ms.appConfig)
 	}
 }
 
@@ -2593,54 +2618,6 @@ func TestExportBuckets_IncludesMerchants(t *testing.T) {
 	merchants, ok := resp[0]["merchants"].([]any)
 	if !ok || len(merchants) != 1 || merchants[0] != "rent" {
 		t.Fatalf("expected merchants in export, got %#v", resp)
-	}
-}
-
-func TestSetScanInterval_Valid(t *testing.T) {
-	ms := &mockStore{}
-	h := newTestHandlers(t, ms, &mockDaemon{})
-
-	body := strings.NewReader(`{"scan_interval":"120"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/scan-interval", body)
-	rr := httptest.NewRecorder()
-	h.SetScanInterval(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
-	var resp map[string]string
-	decodeJSON(t, rr.Body.String(), &resp)
-	if resp["scan_interval"] != "120" {
-		t.Errorf("expected scan_interval=120, got %q", resp["scan_interval"])
-	}
-	if ms.appConfig["scan_interval"] != "120" {
-		t.Errorf("store not updated, got %q", ms.appConfig["scan_interval"])
-	}
-}
-
-func TestSetScanInterval_TooLow(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-
-	body := strings.NewReader(`{"scan_interval":"5"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/scan-interval", body)
-	rr := httptest.NewRecorder()
-	h.SetScanInterval(rr, req)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
-}
-
-func TestSetScanInterval_TooHigh(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-
-	body := strings.NewReader(`{"scan_interval":"9999"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/scan-interval", body)
-	rr := httptest.NewRecorder()
-	h.SetScanInterval(rr, req)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
@@ -3688,25 +3665,6 @@ func TestListTransactions_MissingTimezoneFallsBackToAppTimezone(t *testing.T) {
 	}
 	if st.listFilter.Timezone != "Asia/Kolkata" {
 		t.Fatalf("expected fallback timezone Asia/Kolkata, got %q", st.listFilter.Timezone)
-	}
-}
-
-func TestGetTimezoneDefaultsToEmptyWhenUnset(t *testing.T) {
-	st := &mockStore{}
-	h := newTestHandlers(t, st, &mockDaemon{})
-
-	rr := get(h.GetTimezone, "/api/config/timezone")
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-
-	var resp map[string]string
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if resp["timezone"] != "" {
-		t.Fatalf("expected empty timezone default, got %q", resp["timezone"])
 	}
 }
 
