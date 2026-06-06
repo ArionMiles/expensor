@@ -59,9 +59,9 @@ func (p *Plugin) ConfigSchema() []plugins.ConfigField {
 // SetupGuide returns the injected setup guide for Thunderbird.
 func (p *Plugin) SetupGuide() []byte { return p.guideData }
 
-// ApplyConfig maps the web-UI-persisted JSON config onto config.Config.
+// ApplyConfig maps the web-UI-persisted JSON config onto config.App.
 // The frontend wraps fields under a "config" key: {"config":{"profilePath":...}}.
-func (p *Plugin) ApplyConfig(cfg *config.Config, raw map[string]any) {
+func (p *Plugin) ApplyConfig(cfg *config.App, raw map[string]any) {
 	fields, ok := raw["config"].(map[string]any)
 	if !ok {
 		return
@@ -76,7 +76,7 @@ func (p *Plugin) ApplyConfig(cfg *config.Config, raw map[string]any) {
 
 // NewReader creates a new Thunderbird reader instance.
 func (p *Plugin) NewReader(input plugins.ReaderInput) (api.Reader, error) {
-	cfg := config.Config{}
+	cfg := config.App{}
 	if input.AppConfig != nil {
 		cfg = *input.AppConfig
 	}

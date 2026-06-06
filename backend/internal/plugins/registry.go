@@ -60,7 +60,7 @@ type WriterMetadata struct {
 // ReaderInput contains dependencies required to create a reader instance.
 type ReaderInput struct {
 	HTTPClient     *http.Client
-	AppConfig      *config.Config
+	AppConfig      *config.App
 	ReaderConfig   json.RawMessage
 	Rules          []api.Rule
 	Resolver       api.CategoryResolver
@@ -72,7 +72,7 @@ type ReaderInput struct {
 // WriterInput contains dependencies required to create a writer instance.
 type WriterInput struct {
 	HTTPClient *http.Client
-	AppConfig  *config.Config
+	AppConfig  *config.App
 	Logger     *slog.Logger
 }
 

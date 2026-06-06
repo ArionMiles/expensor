@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -17,20 +18,31 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/ArionMiles/expensor/backend/pkg/config"
+)
+
+// Exporter identifies the telemetry exporter backend.
+type Exporter string
+
+const (
+	ExporterNone Exporter = "none"
+	ExporterOTLP Exporter = "otlp"
 )
 
 // Shutdown releases observability resources.
 type Shutdown func(context.Context) error
 
 // Setup initializes logging and telemetry providers.
-func Setup(ctx context.Context, cfg Config) (Shutdown, *slog.Logger, error) {
+func Setup(ctx context.Context, cfg config.Observability) (Shutdown, *slog.Logger, error) {
 	logger := setupLogger(cfg)
 	slog.SetDefault(logger)
 
-	if !cfg.Enabled || cfg.Exporter == ExporterNone {
+	exporter := Exporter(strings.ToLower(strings.TrimSpace(cfg.Exporter)))
+	if !cfg.Enabled || exporter == ExporterNone {
 		return noopShutdown, logger, nil
 	}
-	if cfg.Exporter != ExporterOTLP {
+	if exporter != ExporterOTLP {
 		return nil, nil, fmt.Errorf("unsupported observability exporter %q", cfg.Exporter)
 	}
 
@@ -39,26 +51,19 @@ func Setup(ctx context.Context, cfg Config) (Shutdown, *slog.Logger, error) {
 		return nil, nil, err
 	}
 
-	var shutdowns []Shutdown
-	if cfg.TracesEnabled {
-		tp, err := newTracerProvider(ctx, cfg, res)
-		if err != nil {
-			return nil, nil, err
-		}
-		otel.SetTracerProvider(tp)
-		shutdowns = append(shutdowns, tp.Shutdown)
+	tp, err := newTracerProvider(ctx, cfg, res)
+	if err != nil {
+		return nil, nil, err
 	}
-	if cfg.MetricsEnabled {
-		mp, err := newMeterProvider(ctx, cfg, res)
-		if err != nil {
-			return nil, nil, err
-		}
-		otel.SetMeterProvider(mp)
-		shutdowns = append(shutdowns, mp.Shutdown)
+	otel.SetTracerProvider(tp)
+
+	mp, err := newMeterProvider(ctx, cfg, res)
+	if err != nil {
+		return nil, nil, err
 	}
-	if len(shutdowns) == 0 {
-		return noopShutdown, logger, nil
-	}
+	otel.SetMeterProvider(mp)
+
+	shutdowns := []Shutdown{tp.Shutdown, mp.Shutdown}
 
 	return func(ctx context.Context) error {
 		var joined error
@@ -69,7 +74,7 @@ func Setup(ctx context.Context, cfg Config) (Shutdown, *slog.Logger, error) {
 	}, logger, nil
 }
 
-func setupLogger(cfg Config) *slog.Logger {
+func setupLogger(cfg config.Observability) *slog.Logger {
 	output := cfg.Output
 	if output == nil {
 		output = os.Stderr
@@ -92,13 +97,13 @@ func noopShutdown(context.Context) error {
 	return nil
 }
 
-func newResource(cfg Config) (*resource.Resource, error) {
+func newResource(cfg config.Observability) (*resource.Resource, error) {
 	res, err := resource.Merge(
 		resource.Default(),
 		resource.NewWithAttributes(
 			semconv.SchemaURL,
-			semconv.ServiceName(cfg.ServiceName),
-			semconv.ServiceVersion(cfg.ServiceVersion),
+			semconv.ServiceName(config.ServiceName),
+			semconv.ServiceVersion(config.Version),
 		),
 	)
 	if err != nil {
@@ -107,7 +112,7 @@ func newResource(cfg Config) (*resource.Resource, error) {
 	return res, nil
 }
 
-func newTracerProvider(ctx context.Context, cfg Config, res *resource.Resource) (*sdktrace.TracerProvider, error) {
+func newTracerProvider(ctx context.Context, cfg config.Observability, res *resource.Resource) (*sdktrace.TracerProvider, error) {
 	opts := []otlptracegrpc.Option{}
 	if cfg.OTLPEndpoint != "" {
 		opts = append(opts, otlptracegrpc.WithEndpoint(cfg.OTLPEndpoint))
@@ -123,7 +128,7 @@ func newTracerProvider(ctx context.Context, cfg Config, res *resource.Resource) 
 	return sdktrace.NewTracerProvider(sdktrace.WithResource(res), sdktrace.WithBatcher(exporter)), nil
 }
 
-func newMeterProvider(ctx context.Context, cfg Config, res *resource.Resource) (*sdkmetric.MeterProvider, error) {
+func newMeterProvider(ctx context.Context, cfg config.Observability, res *resource.Resource) (*sdkmetric.MeterProvider, error) {
 	opts := []otlpmetricgrpc.Option{}
 	if cfg.OTLPEndpoint != "" {
 		opts = append(opts, otlpmetricgrpc.WithEndpoint(cfg.OTLPEndpoint))

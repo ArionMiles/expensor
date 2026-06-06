@@ -182,7 +182,7 @@ func TestRunCreatesDaemonLifecycleSpan(t *testing.T) {
 	err := runner.Run(t.Context(), RunConfig{
 		ReaderName: "test-reader",
 		WriterName: "test-writer",
-		Config:     &config.Config{},
+		Config:     &config.App{},
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -265,7 +265,7 @@ func TestRun_SuccessfulRun(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	runner := New(registry, &http.Client{}, logger)
 
-	cfg := &config.Config{}
+	cfg := &config.App{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
@@ -326,7 +326,7 @@ func TestRun_ReaderError(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	runner := New(registry, &http.Client{}, logger)
 
-	cfg := &config.Config{}
+	cfg := &config.App{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
@@ -373,7 +373,7 @@ func TestRun_WriterError(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	runner := New(registry, &http.Client{}, logger)
 
-	cfg := &config.Config{}
+	cfg := &config.App{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
@@ -418,7 +418,7 @@ func TestRun_PassesPersistedReaderConfigToPlugin(t *testing.T) {
 	err := runner.Run(context.Background(), RunConfig{
 		ReaderName:   "test-reader",
 		WriterName:   "test-writer",
-		Config:       &config.Config{},
+		Config:       &config.App{},
 		RuntimeStore: runtimeStore,
 	})
 	if err != nil {
@@ -469,7 +469,7 @@ func TestRun_ContextCancellation(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	runner := New(registry, &http.Client{}, logger)
 
-	cfg := &config.Config{}
+	cfg := &config.App{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
@@ -517,7 +517,7 @@ func TestRun_NewReaderError(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	runner := New(registry, &http.Client{}, logger)
 
-	cfg := &config.Config{}
+	cfg := &config.App{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
@@ -561,7 +561,7 @@ func TestRun_NewWriterError(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	runner := New(registry, &http.Client{}, logger)
 
-	cfg := &config.Config{}
+	cfg := &config.App{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
@@ -638,7 +638,7 @@ func TestRunnerWriterErrorDeadlock(t *testing.T) {
 	runCfg := RunConfig{
 		ReaderName: "test-reader",
 		WriterName: "test-writer",
-		Config:     &config.Config{},
+		Config:     &config.App{},
 		Rules:      []api.Rule{},
 	}
 
@@ -700,7 +700,7 @@ func TestRun_WriterResourceCleanup(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	runner := New(registry, &http.Client{}, logger)
 
-	cfg := &config.Config{}
+	cfg := &config.App{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",

@@ -56,7 +56,7 @@ type RunConfig struct {
 	ReaderName string
 	// WriterName is the plugin name of the writer to use (e.g. "postgres").
 	WriterName     string
-	Config         *config.Config
+	Config         *config.App
 	Rules          []api.Rule
 	Resolver       api.CategoryResolver
 	StateManager   *state.Manager

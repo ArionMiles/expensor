@@ -13,69 +13,16 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace/noop"
 
+	"github.com/ArionMiles/expensor/backend/pkg/config"
 	"github.com/ArionMiles/expensor/backend/pkg/observability"
 )
 
-func TestDefaultConfigPreservesLoggingDefaults(t *testing.T) {
-	t.Setenv("LOG_LEVEL", "")
-	t.Setenv("EXPENSOR_OBSERVABILITY_ENABLED", "")
-	t.Setenv("EXPENSOR_OBSERVABILITY_EXPORTER", "")
-
-	cfg := observability.DefaultConfig()
-
-	if cfg.LogLevel != slog.LevelInfo {
-		t.Fatalf("LogLevel = %v, want INFO", cfg.LogLevel)
-	}
-	if cfg.LogJSON {
-		t.Fatal("LogJSON = true, want false")
-	}
-	if cfg.Output == nil {
-		t.Fatal("Output = nil, want non-nil")
-	}
-	if cfg.Enabled {
-		t.Fatal("Enabled = true, want false")
-	}
-	if cfg.Exporter != observability.ExporterNone {
-		t.Fatalf("Exporter = %q, want %q", cfg.Exporter, observability.ExporterNone)
-	}
-}
-
-func TestDefaultConfigReadsLogLevelCaseInsensitively(t *testing.T) {
-	t.Setenv("LOG_LEVEL", "debug")
-
-	cfg := observability.DefaultConfig()
-
-	if cfg.LogLevel != slog.LevelDebug {
-		t.Fatalf("LogLevel = %v, want DEBUG", cfg.LogLevel)
-	}
-}
-
-func TestProductionConfigPreservesLoggingDefaults(t *testing.T) {
-	cfg := observability.ProductionConfig()
-
-	if cfg.LogLevel != slog.LevelInfo {
-		t.Fatalf("LogLevel = %v, want INFO", cfg.LogLevel)
-	}
-	if !cfg.LogJSON {
-		t.Fatal("LogJSON = false, want true")
-	}
-	if cfg.Output == nil {
-		t.Fatal("Output = nil, want non-nil")
-	}
-	if cfg.Enabled {
-		t.Fatal("Enabled = true, want false")
-	}
-	if cfg.Exporter != observability.ExporterNone {
-		t.Fatalf("Exporter = %q, want %q", cfg.Exporter, observability.ExporterNone)
-	}
-}
-
 func TestSetupInstallsSlogLogger(t *testing.T) {
 	var out bytes.Buffer
-	shutdown, logger, err := observability.Setup(context.Background(), observability.Config{
+	shutdown, logger, err := observability.Setup(context.Background(), config.Observability{
 		LogLevel: slog.LevelInfo,
 		Output:   &out,
-		Exporter: observability.ExporterNone,
+		Exporter: string(observability.ExporterNone),
 	})
 	if err != nil {
 		t.Fatalf("Setup() error = %v", err)
@@ -99,10 +46,10 @@ func TestSetupInstallsSlogLogger(t *testing.T) {
 }
 
 func TestSetupSupportsDisabledTelemetry(t *testing.T) {
-	shutdown, logger, err := observability.Setup(context.Background(), observability.Config{
+	shutdown, logger, err := observability.Setup(context.Background(), config.Observability{
 		LogLevel: slog.LevelInfo,
 		Output:   &bytes.Buffer{},
-		Exporter: observability.ExporterNone,
+		Exporter: string(observability.ExporterNone),
 	})
 	if err != nil {
 		t.Fatalf("Setup() error = %v", err)
@@ -117,13 +64,11 @@ func TestSetupSupportsDisabledTelemetry(t *testing.T) {
 
 func TestOperationRecorderAcceptsSuccessAndError(t *testing.T) {
 	logs := &bytes.Buffer{}
-	shutdown, logger, err := observability.Setup(context.Background(), observability.Config{
-		LogLevel:       slog.LevelDebug,
-		Output:         logs,
-		Enabled:        true,
-		Exporter:       observability.ExporterNone,
-		TracesEnabled:  true,
-		MetricsEnabled: true,
+	shutdown, logger, err := observability.Setup(context.Background(), config.Observability{
+		LogLevel: slog.LevelDebug,
+		Output:   logs,
+		Enabled:  true,
+		Exporter: string(observability.ExporterNone),
 	})
 	if err != nil {
 		t.Fatalf("Setup() error = %v", err)

@@ -3,18 +3,23 @@ package config
 
 import (
 	"fmt"
+	"io"
+	"log/slog"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
 )
 
+const ServiceName = "expensor"
+
 // Version is set at build time via -ldflags.
 var Version = "dev"
 
-// Config holds the application configuration loaded from environment variables.
+// App holds the application configuration loaded from environment variables.
 // Reader and writer plugin selection is driven by the web UI, not env vars.
-type Config struct {
+type App struct {
 	// Port is the HTTP server port.
 	// Environment variable: PORT
 	// Default: 8080
@@ -57,15 +62,16 @@ type Config struct {
 	OnCheckpoint  func(time.Time) `ignored:"true"`
 
 	// Thunderbird reader configuration (profile path/mailboxes set via UI wizard).
-	Thunderbird ThunderbirdConfig
+	Thunderbird Thunderbird
 
-	Postgres  PostgresConfig
-	Community CommunityConfig
-	AppConfig AppConfigConfig
+	Postgres      Postgres
+	Community     Community
+	Persisted     Persisted
+	Observability Observability
 }
 
-// ThunderbirdConfig holds Thunderbird reader configuration.
-type ThunderbirdConfig struct {
+// Thunderbird holds Thunderbird reader configuration.
+type Thunderbird struct {
 	// ProfilePath is the path to the Thunderbird profile directory.
 	// Set via the web UI onboarding wizard; not loaded from env vars.
 	ProfilePath string
@@ -82,7 +88,7 @@ type ThunderbirdConfig struct {
 }
 
 // GetMailboxes returns the mailboxes as a slice.
-func (c *ThunderbirdConfig) GetMailboxes() []string {
+func (c *Thunderbird) GetMailboxes() []string {
 	if c.Mailboxes == "" {
 		return []string{}
 	}
@@ -93,8 +99,8 @@ func (c *ThunderbirdConfig) GetMailboxes() []string {
 	return mailboxes
 }
 
-// PostgresConfig holds PostgreSQL connection configuration.
-type PostgresConfig struct {
+// Postgres holds PostgreSQL connection configuration.
+type Postgres struct {
 	Host     string `envconfig:"POSTGRES_HOST" required:"true"`
 	Port     int    `envconfig:"POSTGRES_PORT" default:"5432"`
 	Database string `envconfig:"POSTGRES_DB" required:"true"`
@@ -124,23 +130,34 @@ type PostgresConfig struct {
 	RetryInterval time.Duration `envconfig:"POSTGRES_RETRY_INTERVAL" default:"2s"`
 }
 
-// CommunityConfig controls community content synchronization.
-type CommunityConfig struct {
+// Community controls community content synchronization.
+type Community struct {
 	URL          string        `envconfig:"EXPENSOR_COMMUNITY_URL" default:"https://raw.githubusercontent.com/ArionMiles/expensor/main/content"`
 	SyncInterval time.Duration `envconfig:"EXPENSOR_CONTENT_SYNC_INTERVAL" default:"24h"`
 	SyncTimeout  time.Duration `envconfig:"EXPENSOR_CONTENT_SYNC_TIMEOUT" default:"2m"`
 }
 
-// AppConfigConfig controls reads from the persisted application configuration.
-type AppConfigConfig struct {
+// Persisted controls reads from the persisted application configuration.
+type Persisted struct {
 	ReadTimeout time.Duration `envconfig:"EXPENSOR_APP_CONFIG_READ_TIMEOUT" default:"3s"`
 }
 
+// Observability controls application logging and telemetry export.
+type Observability struct {
+	LogLevel     slog.Level `envconfig:"LOG_LEVEL" default:"INFO"`
+	LogJSON      bool       `envconfig:"LOG_JSON" default:"false"`
+	Enabled      bool       `envconfig:"EXPENSOR_OBSERVABILITY_ENABLED" default:"false"`
+	Exporter     string     `envconfig:"EXPENSOR_OBSERVABILITY_EXPORTER" default:"none"`
+	OTLPEndpoint string     `envconfig:"EXPENSOR_OBSERVABILITY_OTLP_ENDPOINT"`
+	OTLPInsecure bool       `envconfig:"EXPENSOR_OBSERVABILITY_OTLP_INSECURE" default:"false"`
+	Output       io.Writer  `ignored:"true"`
+}
+
 // Load reads application configuration from environment variables.
-func Load() (Config, error) {
-	var cfg Config
+func Load() (App, error) {
+	var cfg App
 	if err := envconfig.Process("", &cfg); err != nil {
-		return Config{}, fmt.Errorf("loading environment configuration: %w", err)
+		return App{}, fmt.Errorf("loading environment configuration: %w", err)
 	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = fmt.Sprintf("http://localhost:%d", cfg.Port)
@@ -148,5 +165,6 @@ func Load() (Config, error) {
 	if cfg.FrontendURL == "" {
 		cfg.FrontendURL = cfg.BaseURL
 	}
+	cfg.Observability.Output = os.Stderr
 	return cfg, nil
 }

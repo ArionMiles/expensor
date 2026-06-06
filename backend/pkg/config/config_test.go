@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
@@ -45,8 +46,12 @@ func TestLoadAppliesDefaults(t *testing.T) {
 		cfg.Community.SyncInterval != 24*time.Hour || cfg.Community.SyncTimeout != 2*time.Minute {
 		t.Fatalf("community defaults: %#v", cfg.Community)
 	}
-	if cfg.AppConfig.ReadTimeout != 3*time.Second {
-		t.Fatalf("app config read timeout: got %s", cfg.AppConfig.ReadTimeout)
+	if cfg.Persisted.ReadTimeout != 3*time.Second {
+		t.Fatalf("app config read timeout: got %s", cfg.Persisted.ReadTimeout)
+	}
+	if cfg.Observability.LogLevel != slog.LevelInfo || cfg.Observability.LogJSON ||
+		cfg.Observability.Enabled || cfg.Observability.Exporter != "none" {
+		t.Fatalf("observability defaults: %#v", cfg.Observability)
 	}
 }
 
@@ -61,6 +66,12 @@ func TestLoadUsesEnvironmentOverrides(t *testing.T) {
 	t.Setenv("EXPENSOR_CONTENT_SYNC_INTERVAL", "12h")
 	t.Setenv("EXPENSOR_CONTENT_SYNC_TIMEOUT", "90s")
 	t.Setenv("EXPENSOR_APP_CONFIG_READ_TIMEOUT", "7s")
+	t.Setenv("LOG_LEVEL", "debug")
+	t.Setenv("LOG_JSON", "true")
+	t.Setenv("EXPENSOR_OBSERVABILITY_ENABLED", "true")
+	t.Setenv("EXPENSOR_OBSERVABILITY_EXPORTER", "otlp")
+	t.Setenv("EXPENSOR_OBSERVABILITY_OTLP_ENDPOINT", "collector:4317")
+	t.Setenv("EXPENSOR_OBSERVABILITY_OTLP_INSECURE", "true")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -77,8 +88,37 @@ func TestLoadUsesEnvironmentOverrides(t *testing.T) {
 		cfg.Community.SyncTimeout != 90*time.Second {
 		t.Fatalf("community overrides: %#v", cfg.Community)
 	}
-	if cfg.AppConfig.ReadTimeout != 7*time.Second {
-		t.Fatalf("app config read timeout: got %s", cfg.AppConfig.ReadTimeout)
+	if cfg.Persisted.ReadTimeout != 7*time.Second {
+		t.Fatalf("app config read timeout: got %s", cfg.Persisted.ReadTimeout)
+	}
+	if cfg.Observability.LogLevel != slog.LevelDebug || !cfg.Observability.LogJSON ||
+		!cfg.Observability.Enabled || cfg.Observability.Exporter != "otlp" ||
+		cfg.Observability.OTLPEndpoint != "collector:4317" || !cfg.Observability.OTLPInsecure {
+		t.Fatalf("observability overrides: %#v", cfg.Observability)
+	}
+}
+
+func TestLoadRejectsInvalidObservabilityValues(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		value string
+	}{
+		{name: "log level", key: "LOG_LEVEL", value: "verbose"},
+		{name: "JSON logging boolean", key: "LOG_JSON", value: "sometimes"},
+		{name: "observability enabled boolean", key: "EXPENSOR_OBSERVABILITY_ENABLED", value: "sometimes"},
+		{name: "OTLP insecure boolean", key: "EXPENSOR_OBSERVABILITY_OTLP_INSECURE", value: "sometimes"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setRequiredConfigEnv(t)
+			t.Setenv(tc.key, tc.value)
+
+			if _, err := config.Load(); err == nil {
+				t.Fatalf("Load accepted %s=%q", tc.key, tc.value)
+			}
+		})
 	}
 }
 
@@ -96,7 +136,7 @@ func TestThunderbirdConfig_GetMailboxes(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg := &config.ThunderbirdConfig{Mailboxes: tc.mailboxes}
+			cfg := &config.Thunderbird{Mailboxes: tc.mailboxes}
 			got := cfg.GetMailboxes()
 			if len(got) != len(tc.want) {
 				t.Fatalf("len: got %d, want %d — got %v", len(got), len(tc.want), got)
@@ -131,6 +171,12 @@ func clearConfigEnv(t *testing.T) {
 		"EXPENSOR_CONTENT_SYNC_INTERVAL",
 		"EXPENSOR_CONTENT_SYNC_TIMEOUT",
 		"EXPENSOR_APP_CONFIG_READ_TIMEOUT",
+		"LOG_LEVEL",
+		"LOG_JSON",
+		"EXPENSOR_OBSERVABILITY_ENABLED",
+		"EXPENSOR_OBSERVABILITY_EXPORTER",
+		"EXPENSOR_OBSERVABILITY_OTLP_ENDPOINT",
+		"EXPENSOR_OBSERVABILITY_OTLP_INSECURE",
 		"THUNDERBIRD_DATA_DIR",
 		"POSTGRES_HOST",
 		"POSTGRES_PORT",

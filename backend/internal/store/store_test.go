@@ -80,7 +80,7 @@ func newTestStoreWithLogger(t *testing.T, logs *bytes.Buffer) *testStore {
 	}
 	pool.Close()
 
-	cfg := config.PostgresConfig{
+	cfg := config.Postgres{
 		Host:        "localhost",
 		Database:    "expensor_test",
 		User:        "expensor",
