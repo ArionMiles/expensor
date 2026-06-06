@@ -186,8 +186,7 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("DELETE /api/rules/{id}", h.DeleteRule)
 
 	// Transactions
-	// /search and /facets must be registered before /{id} to avoid the wildcard swallowing them.
-	mux.HandleFunc("GET /api/transactions/search", h.SearchTransactions)
+	// /facets must be registered before /{id} to avoid the wildcard swallowing it.
 	mux.HandleFunc("GET /api/transactions/facets", h.GetFacets)
 	mux.HandleFunc("GET /api/transactions", h.ListTransactions)
 	mux.HandleFunc("GET /api/transactions/{id}", h.GetTransaction)

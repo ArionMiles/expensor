@@ -46,6 +46,7 @@ import (
 // @Param hour_from query int false "Minimum hour filter (0-23)"
 // @Param hour_to query int false "Maximum hour filter (0-23)"
 // @Param tz query string false "IANA timezone used for weekday/hour filters"
+// @Param q query string false "Free-text search over merchant and description"
 // @Param sort_by query string false "Sort field" Enums(timestamp)
 // @Param sort_dir query string false "Sort direction" Enums(asc,desc)
 // @Success 200 {object} TransactionsListResponse
@@ -54,6 +55,11 @@ import (
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions [get]
 func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if containsControlChars(q) {
+		writeError(w, http.StatusBadRequest, "invalid q filter")
+		return
+	}
 	if invalidKey, ok := invalidTransactionFilter(r); ok {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid %s filter", invalidKey))
 		return
@@ -61,10 +67,19 @@ func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
 
 	f := h.transactionListFilter(r)
 
-	txns, result, err := h.transactionStore.ListTransactions(r.Context(), f)
+	var (
+		txns   []store.Transaction
+		result store.TransactionListResult
+		err    error
+	)
+	if q == "" {
+		txns, result, err = h.transactionStore.ListTransactions(r.Context(), f)
+	} else {
+		txns, result, err = h.transactionStore.SearchTransactions(r.Context(), q, f)
+	}
 	if err != nil {
-		h.logger.Error("list transactions", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to list transactions")
+		h.logger.Error("query transactions", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to query transactions")
 		return
 	}
 	if txns == nil {
@@ -558,79 +573,6 @@ func (h *Handlers) CategorizeMerchant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"updated": n})
-}
-
-// SearchTransactions handles GET /api/transactions/search?q=...
-// @Summary Search transactions
-// @Tags Transactions
-// @Produce json
-// @Param q query string true "Search query"
-// @Param page query int false "1-based page number" default(1)
-// @Param page_size query int false "Page size" default(20)
-// @Param merchant query string false "Merchant filter"
-// @Param category query string false "Category filter"
-// @Param category_missing query int false "Only transactions without a category when set to 1" Enums(1)
-// @Param exclude_categories query string false "Comma-separated categories to exclude"
-// @Param currency query string false "Currency filter"
-// @Param source query string false "Source filter"
-// @Param exclude_sources query string false "Comma-separated sources to exclude"
-// @Param source_type query string false "Source type filter"
-// @Param exclude_source_types query string false "Comma-separated source types to exclude"
-// @Param bank query string false "Bank filter"
-// @Param exclude_banks query string false "Comma-separated banks to exclude"
-// @Param label query string false "Label filter"
-// @Param label_missing query int false "Only transactions without labels when set to 1" Enums(1)
-// @Param exclude_labels query string false "Comma-separated labels to exclude"
-// @Param bucket query string false "Bucket filter"
-// @Param bucket_missing query int false "Only transactions without a bucket when set to 1" Enums(1)
-// @Param exclude_buckets query string false "Comma-separated buckets to exclude"
-// @Param date_from query string false "RFC3339 start timestamp"
-// @Param date_to query string false "RFC3339 end timestamp"
-// @Param show_muted query int false "Include muted transactions when set to 1" Enums(1)
-// @Param muted_only query int false "Return only muted transactions when set to 1" Enums(1)
-// @Param individual_only query int false "Return only individually muted transactions when set to 1" Enums(1)
-// @Param weekday query int false "PostgreSQL DOW weekday filter (0=Sunday...6=Saturday)" Enums(0,1,2,3,4,5,6)
-// @Param hour_from query int false "Minimum hour filter (0-23)"
-// @Param hour_to query int false "Maximum hour filter (0-23)"
-// @Param tz query string false "IANA timezone used for weekday/hour filters"
-// @Param sort_by query string false "Sort field" Enums(timestamp)
-// @Param sort_dir query string false "Sort direction" Enums(asc,desc)
-// @Success 200 {object} TransactionsSearchResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Failure 503 {object} ErrorResponse
-// @Router /transactions/search [get]
-func (h *Handlers) SearchTransactions(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query().Get("q")
-	if containsControlChars(q) {
-		writeError(w, http.StatusBadRequest, "invalid q filter")
-		return
-	}
-	if invalidKey, ok := invalidTransactionFilter(r); ok {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid %s filter", invalidKey))
-		return
-	}
-	f := h.transactionListFilter(r)
-
-	txns, result, err := h.transactionStore.SearchTransactions(r.Context(), q, f)
-	if err != nil {
-		h.logger.Error("search transactions", "error", err)
-		writeError(w, http.StatusInternalServerError, "search failed")
-		return
-	}
-	if txns == nil {
-		txns = []store.Transaction{}
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"transactions":  txns,
-		"total":         result.Total,
-		"total_amount":  result.TotalAmount,
-		"base_currency": h.currentBaseCurrency(r.Context()),
-		"page":          f.Page,
-		"page_size":     f.PageSize,
-		"query":         q,
-	})
 }
 
 // GetFacets handles GET /api/transactions/facets.

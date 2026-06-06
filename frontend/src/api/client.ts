@@ -329,7 +329,7 @@ export const api = {
     search: (q: string, filters: TransactionFilters = {}) => {
       const params = transactionFilterParams(filters)
       params.set('q', q)
-      return apiClient.get<TransactionsResponse>(`/transactions/search?${params.toString()}`)
+      return apiClient.get<TransactionsResponse>(`/transactions?${params.toString()}`)
     },
 
     facets: () => apiClient.get<Facets>('/transactions/facets'),

@@ -47,7 +47,7 @@ describe('transactions API', () => {
     const requestURL = axiosMocks.get.mock.calls[0][0] as string
     const url = new URL(requestURL, 'http://localhost')
 
-    expect(url.pathname).toBe('/transactions/search')
+    expect(url.pathname).toBe('/transactions')
     expect(url.searchParams.get('q')).toBe('instamart')
     expect(url.searchParams.get('page_size')).toBe('50')
     expect(url.searchParams.get('source_type')).toBe('Credit Card')

@@ -241,18 +241,6 @@ export const handlers = [
   http.delete('/api/config/buckets/:name/merchant', () => HttpResponse.json({})),
   http.get('/api/config/banks', () => HttpResponse.json([])),
   http.get('/api/transactions/facets', () => HttpResponse.json(seededFacets)),
-  http.get('/api/transactions/search', ({ request }) => {
-    const url = new URL(request.url)
-    const transactions = filterTransactions(url)
-    const totalAmount = transactions.reduce((sum, transaction) => sum + transaction.amount, 0)
-
-    return HttpResponse.json({
-      transactions,
-      total: transactions.length,
-      total_amount: totalAmount,
-      base_currency: 'USD',
-    })
-  }),
   http.get('/api/transactions', ({ request }) => {
     const url = new URL(request.url)
     const transactions = filterTransactions(url)

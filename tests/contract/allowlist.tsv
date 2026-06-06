@@ -22,7 +22,6 @@ GET	/config/timezone	timezone config
 PUT	/config/timezone	update timezone config
 GET	/transactions	transaction listing
 GET	/transactions/facets	transaction facets
-GET	/transactions/search	transaction search
 GET	/transactions/{id}	transaction detail
 PUT	/transactions/{id}	update transaction
 POST	/transactions/{id}/labels	add transaction labels

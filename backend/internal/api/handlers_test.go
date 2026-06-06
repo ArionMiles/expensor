@@ -1743,7 +1743,7 @@ func TestUpdateMuteReason_InvalidID(t *testing.T) {
 	}
 }
 
-func TestSearchTransactions_Basic(t *testing.T) {
+func TestListTransactions_WithSearchQuery(t *testing.T) {
 	st := &mockStore{
 		searchResult: []store.Transaction{{ID: "x", MerchantInfo: "Zomato", Labels: []string{}}},
 		searchListResult: store.TransactionListResult{
@@ -1752,16 +1752,13 @@ func TestSearchTransactions_Basic(t *testing.T) {
 		},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.SearchTransactions, "/api/transactions/search?q=zomato")
+	rr := get(h.ListTransactions, "/api/transactions?q=zomato")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 	var resp map[string]any
 	decodeJSON(t, rr.Body.String(), &resp)
-	if resp["query"] != "zomato" {
-		t.Errorf("expected query=zomato, got %v", resp["query"])
-	}
 	if resp["total"] != float64(1) {
 		t.Errorf("expected total=1, got %v", resp["total"])
 	}
@@ -1773,13 +1770,13 @@ func TestSearchTransactions_Basic(t *testing.T) {
 	}
 }
 
-func TestSearchTransactions_EmptyArray(t *testing.T) {
+func TestListTransactions_SearchEmptyArray(t *testing.T) {
 	st := &mockStore{
 		searchResult:     []store.Transaction{},
 		searchListResult: store.TransactionListResult{Total: 0},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.SearchTransactions, "/api/transactions/search?q=zomato")
+	rr := get(h.ListTransactions, "/api/transactions?q=zomato")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -1795,13 +1792,13 @@ func TestSearchTransactions_EmptyArray(t *testing.T) {
 	}
 }
 
-func TestSearchTransactions_NilSliceReturnsEmptyArray(t *testing.T) {
+func TestListTransactions_SearchNilSliceReturnsEmptyArray(t *testing.T) {
 	st := &mockStore{
 		searchResult:     nil,
 		searchListResult: store.TransactionListResult{Total: 0},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.SearchTransactions, "/api/transactions/search?q=zomato")
+	rr := get(h.ListTransactions, "/api/transactions?q=zomato")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -1817,14 +1814,14 @@ func TestSearchTransactions_NilSliceReturnsEmptyArray(t *testing.T) {
 	}
 }
 
-func TestSearchTransactions_MutedAndIndividualFlags(t *testing.T) {
+func TestListTransactions_SearchMutedAndIndividualFlags(t *testing.T) {
 	st := &mockStore{
 		searchResult:     []store.Transaction{},
 		searchListResult: store.TransactionListResult{Total: 0},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
-	rr := get(h.SearchTransactions, "/api/transactions/search?q=zomato&muted_only=1&individual_only=1")
+	rr := get(h.ListTransactions, "/api/transactions?q=zomato&muted_only=1&individual_only=1")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -1837,7 +1834,7 @@ func TestSearchTransactions_MutedAndIndividualFlags(t *testing.T) {
 	}
 }
 
-func TestSearchTransactions_ParsesListFilters(t *testing.T) {
+func TestListTransactions_SearchParsesListFilters(t *testing.T) {
 	st := &mockStore{
 		searchResult:     []store.Transaction{},
 		searchListResult: store.TransactionListResult{Total: 0},
@@ -1845,8 +1842,8 @@ func TestSearchTransactions_ParsesListFilters(t *testing.T) {
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	rr := get(
-		h.SearchTransactions,
-		"/api/transactions/search?q=instamart&source_type=Credit%20Card&bank=HDFC"+
+		h.ListTransactions,
+		"/api/transactions?q=instamart&source_type=Credit%20Card&bank=HDFC"+
 			"&date_from=2026-04-30T18:30:00.000Z&date_to=2026-05-31T18:29:59.999Z&sort_dir=asc",
 	)
 
@@ -1870,23 +1867,23 @@ func TestSearchTransactions_ParsesListFilters(t *testing.T) {
 	}
 }
 
-func TestSearchTransactions_InvalidControlCharQuery(t *testing.T) {
+func TestListTransactions_InvalidControlCharQuery(t *testing.T) {
 	st := &mockStore{}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.SearchTransactions, "/api/transactions/search?q=%00bad")
+	rr := get(h.ListTransactions, "/api/transactions?q=%00bad")
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 
-func TestSearchTransactions_HugePaginationFallsBackToDefaults(t *testing.T) {
+func TestListTransactions_SearchHugePaginationFallsBackToDefaults(t *testing.T) {
 	st := &mockStore{
 		searchResult:     []store.Transaction{},
 		searchListResult: store.TransactionListResult{Total: 0},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.SearchTransactions, "/api/transactions/search?q=test&page=576460752303423488&page_size=999999")
+	rr := get(h.ListTransactions, "/api/transactions?q=test&page=576460752303423488&page_size=999999")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
