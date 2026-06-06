@@ -9,14 +9,13 @@ import (
 )
 
 type queryBindingFixture struct {
-	Page     *int       `form:"page"`
+	Page     *int       `form:"page" validate:"omitempty,min=1"`
 	DateFrom *time.Time `form:"date_from"`
 	Ignored  string
 }
 
-func TestDecodeQuery_DecodesTypedValues(t *testing.T) {
+func TestDecodeAndValidateQuery_DecodesTypedValues(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	var query queryBindingFixture
 	req := httptest.NewRequestWithContext(
 		context.Background(),
 		http.MethodGet,
@@ -25,8 +24,9 @@ func TestDecodeQuery_DecodesTypedValues(t *testing.T) {
 	)
 	rr := httptest.NewRecorder()
 
-	if !h.decodeQuery(rr, req, &query) {
-		t.Fatalf("decode failed: status=%d body=%s", rr.Code, rr.Body.String())
+	query, ok := decodeAndValidateQuery[queryBindingFixture](h, rr, req)
+	if !ok {
+		t.Fatalf("query validation failed: status=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if query.Page == nil || *query.Page != 3 {
 		t.Fatalf("page = %#v", query.Page)
@@ -39,21 +39,21 @@ func TestDecodeQuery_DecodesTypedValues(t *testing.T) {
 	}
 }
 
-func TestDecodeQuery_LeavesAbsentPointerValuesNil(t *testing.T) {
+func TestDecodeAndValidateQuery_LeavesAbsentPointerValuesNil(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	var query queryBindingFixture
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/example", nil)
 	rr := httptest.NewRecorder()
 
-	if !h.decodeQuery(rr, req, &query) {
-		t.Fatalf("decode failed: status=%d body=%s", rr.Code, rr.Body.String())
+	query, ok := decodeAndValidateQuery[queryBindingFixture](h, rr, req)
+	if !ok {
+		t.Fatalf("query validation failed: status=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if query.Page != nil || query.DateFrom != nil {
 		t.Fatalf("query = %#v", query)
 	}
 }
 
-func TestDecodeQuery_ReportsTypedConversionFailures(t *testing.T) {
+func TestDecodeAndValidateQuery_ReportsValidationFailures(t *testing.T) {
 	tests := []struct {
 		name    string
 		query   string
@@ -72,17 +72,22 @@ func TestDecodeQuery_ReportsTypedConversionFailures(t *testing.T) {
 			field:   "date_from",
 			message: "must be an RFC3339 timestamp",
 		},
+		{
+			name:    "range",
+			query:   "page=0",
+			field:   "page",
+			message: "must be at least 1",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-			var query queryBindingFixture
 			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/example?"+tt.query, nil)
 			rr := httptest.NewRecorder()
 
-			if h.decodeQuery(rr, req, &query) {
-				t.Fatal("expected decode failure")
+			if _, ok := decodeAndValidateQuery[queryBindingFixture](h, rr, req); ok {
+				t.Fatal("expected query validation failure")
 			}
 			assertValidationError(t, rr, tt.field, "query", tt.message)
 		})

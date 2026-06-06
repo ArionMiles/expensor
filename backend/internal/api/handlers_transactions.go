@@ -55,11 +55,8 @@ import (
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions [get]
 func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
-	var query transactionListQuery
-	if !h.decodeQuery(w, r, &query) {
-		return
-	}
-	if !h.validateRequest(w, "query", query) {
+	query, ok := decodeAndValidateQuery[transactionListQuery](h, w, r)
+	if !ok {
 		return
 	}
 

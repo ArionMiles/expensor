@@ -6,10 +6,14 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-playground/form/v4"
 )
+
+//nolint:gochecknoglobals // immutable query metadata is shared across handler instances.
+var queryFieldTypesCache sync.Map
 
 func newQueryDecoder() *form.Decoder {
 	decoder := form.NewDecoder()
@@ -17,20 +21,32 @@ func newQueryDecoder() *form.Decoder {
 	return decoder
 }
 
-func (h *Handlers) decodeQuery(w http.ResponseWriter, r *http.Request, target any) bool {
-	err := h.queryDecoder.Decode(target, r.URL.Query())
-	if err == nil {
-		return true
+func decodeAndValidateQuery[T any](
+	h *Handlers,
+	w http.ResponseWriter,
+	r *http.Request,
+) (T, bool) {
+	var query T
+	err := h.queryDecoder.Decode(&query, r.URL.Query())
+	if err != nil {
+		writeQueryDecodeError[T](h, w, err)
+		return query, false
 	}
+	if !h.validateRequest(w, "query", query) {
+		return query, false
+	}
+	return query, true
+}
 
+func writeQueryDecodeError[T any](h *Handlers, w http.ResponseWriter, err error) {
 	var decodeErrors form.DecodeErrors
 	if !errors.As(err, &decodeErrors) {
 		h.logger.Error("decode query", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to decode query")
-		return false
+		return
 	}
 
-	fieldTypes := queryFieldTypes(target)
+	fieldTypes := queryFieldTypes[T]()
 	fields := make([]string, 0, len(decodeErrors))
 	for field := range decodeErrors {
 		fields = append(fields, field)
@@ -46,15 +62,27 @@ func (h *Handlers) decodeQuery(w http.ResponseWriter, r *http.Request, target an
 		})
 	}
 	writeValidationErrors(w, violations)
-	return false
 }
 
-func queryFieldTypes(target any) map[string]reflect.Type {
-	targetType := reflect.TypeOf(target)
-	for targetType != nil && targetType.Kind() == reflect.Pointer {
+func queryFieldTypes[T any]() map[string]reflect.Type {
+	targetType := reflect.TypeFor[T]()
+	if cached, ok := queryFieldTypesCache.Load(targetType); ok {
+		fieldTypes, valid := cached.(map[string]reflect.Type)
+		if valid {
+			return fieldTypes
+		}
+	}
+
+	fieldTypes := buildQueryFieldTypes(targetType)
+	queryFieldTypesCache.Store(targetType, fieldTypes)
+	return fieldTypes
+}
+
+func buildQueryFieldTypes(targetType reflect.Type) map[string]reflect.Type {
+	for targetType.Kind() == reflect.Pointer {
 		targetType = targetType.Elem()
 	}
-	if targetType == nil || targetType.Kind() != reflect.Struct {
+	if targetType.Kind() != reflect.Struct {
 		return nil
 	}
 

@@ -22,15 +22,12 @@ import (
 // @Failure 503 {object} ErrorResponse
 // @Router /extraction-diagnostics [get]
 func (h *Handlers) ListExtractionDiagnostics(w http.ResponseWriter, r *http.Request) {
-	var query diagnosticListQuery
-	if !h.decodeQuery(w, r, &query) {
+	query, ok := decodeAndValidateQuery[diagnosticListQuery](h, w, r)
+	if !ok {
 		return
 	}
 	if query.Status == "" {
 		query.Status = store.DiagnosticStatusOpen
-	}
-	if !h.validateRequest(w, "query", query) {
-		return
 	}
 
 	filter := store.DiagnosticFilter{Status: query.Status}
@@ -51,7 +48,7 @@ func (h *Handlers) ListExtractionDiagnostics(w http.ResponseWriter, r *http.Requ
 }
 
 type diagnosticListQuery struct {
-	Status string `form:"status" validate:"required,oneof=open resolved ignored all"`
+	Status string `form:"status" validate:"omitempty,oneof=open resolved ignored all"`
 	Limit  *int   `form:"limit" validate:"omitempty,min=1"`
 }
 
