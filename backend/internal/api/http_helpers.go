@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/google/uuid"
 )
@@ -36,56 +35,4 @@ func uuidPathValue(w http.ResponseWriter, r *http.Request, name, label string) (
 		return "", false
 	}
 	return value, true
-}
-
-// --- helpers ---
-
-func queryInt(r *http.Request, key string, def int) int {
-	v := r.URL.Query().Get(key)
-	if v == "" {
-		return def
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil || n < 1 {
-		return def
-	}
-	switch key {
-	case "page":
-		if n > maxPageParam {
-			return def
-		}
-	case "page_size":
-		if n > maxPageSizeParam {
-			return def
-		}
-	}
-	return n
-}
-
-// queryHour parses an hour filter (0–23) from a query parameter.
-// Returns nil when the parameter is absent or out of range.
-func queryHour(r *http.Request, key string) *int {
-	v := r.URL.Query().Get(key)
-	if v == "" {
-		return nil
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil || n < 0 || n > 23 {
-		return nil
-	}
-	return &n
-}
-
-// queryWeekday parses a PostgreSQL DOW weekday filter (0–6) from a query parameter.
-// Returns nil when the parameter is absent or out of range.
-func queryWeekday(r *http.Request, key string) *int {
-	v := r.URL.Query().Get(key)
-	if v == "" {
-		return nil
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil || n < 0 || n > 6 {
-		return nil
-	}
-	return &n
 }

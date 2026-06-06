@@ -48,6 +48,7 @@ type mockStore struct {
 	listResult            store.TransactionListResult
 	listErr               error
 	listFilter            store.ListFilter
+	listCalls             int
 	getResult             *store.Transaction
 	getErr                error
 	updateErr             error
@@ -65,6 +66,7 @@ type mockStore struct {
 	searchListResult      store.TransactionListResult
 	searchErr             error
 	searchFilter          store.ListFilter
+	searchCalls           int
 	stats                 *store.Stats
 	statsErr              error
 	dashboardData         *store.DashboardData
@@ -116,6 +118,7 @@ func (m *mockStore) ListTransactions(
 	_ context.Context,
 	f store.ListFilter,
 ) ([]store.Transaction, store.TransactionListResult, error) {
+	m.listCalls++
 	m.listFilter = f
 	if m.listErr != nil {
 		return nil, store.TransactionListResult{}, m.listErr
@@ -140,6 +143,7 @@ func (m *mockStore) SearchTransactions(
 	_ string,
 	f store.ListFilter,
 ) ([]store.Transaction, store.TransactionListResult, error) {
+	m.searchCalls++
 	m.searchFilter = f
 	if m.searchErr != nil {
 		return nil, store.TransactionListResult{}, m.searchErr
@@ -1337,29 +1341,49 @@ func TestListTransactions_StoreError(t *testing.T) {
 	}
 }
 
-func TestListTransactions_InvalidControlCharFilter(t *testing.T) {
-	st := &mockStore{}
-	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.ListTransactions, "/api/transactions?currency=%00bad")
+func TestListTransactions_RejectsInvalidQuery(t *testing.T) {
+	tests := []struct {
+		name    string
+		query   string
+		field   string
+		message string
+	}{
+		{name: "page overflow", query: "page=99999999999999999999999999999", field: "page", message: "must be an integer"},
+		{name: "page size too large", query: "page_size=501", field: "page_size", message: "must be at most 500"},
+		{name: "invalid date", query: "date_from=yesterday", field: "date_from", message: "must be an RFC3339 timestamp"},
+		{name: "invalid weekday", query: "weekday=7", field: "weekday", message: "must be at most 6"},
+		{name: "invalid hour", query: "hour_from=24", field: "hour_from", message: "must be at most 23"},
+		{name: "invalid boolean flag", query: "show_muted=true", field: "show_muted", message: "must be 1 when present"},
+		{name: "invalid sort", query: "sort_dir=sideways", field: "sort_dir", message: "must be one of: asc, desc"},
+		{name: "invalid timezone", query: "tz=Mars/Olympus", field: "tz", message: "must be a valid IANA timezone"},
+		{name: "control character", query: "currency=%00bad", field: "currency", message: "must not contain control characters"},
+		{name: "invalid search query", query: "q=%00bad", field: "q", message: "must not contain control characters"},
+	}
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := &mockStore{}
+			h := newTestHandlers(t, st, &mockDaemon{})
+			rr := get(h.ListTransactions, "/api/transactions?"+tt.query)
+
+			assertValidationError(t, rr, tt.field, "query", tt.message)
+			if st.listCalls != 0 || st.searchCalls != 0 {
+				t.Fatalf("store calls = list:%d search:%d", st.listCalls, st.searchCalls)
+			}
+		})
 	}
 }
 
-func TestListTransactions_HugePaginationFallsBackToDefaults(t *testing.T) {
+func TestListTransactions_DefaultsPagination(t *testing.T) {
 	st := &mockStore{transactions: []store.Transaction{}, listResult: store.TransactionListResult{Total: 0}}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.ListTransactions, "/api/transactions?page=576460752303423488&page_size=999999")
+	rr := get(h.ListTransactions, "/api/transactions")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	if st.listFilter.Page != 1 {
-		t.Fatalf("expected page to fall back to 1, got %d", st.listFilter.Page)
-	}
-	if st.listFilter.PageSize != 20 {
-		t.Fatalf("expected page_size to fall back to 20, got %d", st.listFilter.PageSize)
+	if st.listFilter.Page != 1 || st.listFilter.PageSize != 20 {
+		t.Fatalf("pagination = page:%d page_size:%d", st.listFilter.Page, st.listFilter.PageSize)
 	}
 }
 
@@ -1930,35 +1954,6 @@ func TestListTransactions_SearchParsesListFilters(t *testing.T) {
 	}
 	if st.searchFilter.SortDir != "asc" {
 		t.Fatalf("sort_dir = %q, want asc", st.searchFilter.SortDir)
-	}
-}
-
-func TestListTransactions_InvalidControlCharQuery(t *testing.T) {
-	st := &mockStore{}
-	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.ListTransactions, "/api/transactions?q=%00bad")
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
-	}
-}
-
-func TestListTransactions_SearchHugePaginationFallsBackToDefaults(t *testing.T) {
-	st := &mockStore{
-		searchResult:     []store.Transaction{},
-		searchListResult: store.TransactionListResult{Total: 0},
-	}
-	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.ListTransactions, "/api/transactions?q=test&page=576460752303423488&page_size=999999")
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
-	}
-	if st.searchFilter.Page != 1 {
-		t.Fatalf("expected page to fall back to 1, got %d", st.searchFilter.Page)
-	}
-	if st.searchFilter.PageSize != 20 {
-		t.Fatalf("expected page_size to fall back to 20, got %d", st.searchFilter.PageSize)
 	}
 }
 
@@ -3675,24 +3670,6 @@ func TestListTransactions_MissingTaxonomyParams(t *testing.T) {
 	}
 	if !st.listFilter.LabelMissing {
 		t.Fatal("expected label_missing=1 to set ListFilter.LabelMissing")
-	}
-}
-
-func TestListTransactions_InvalidTimezoneFallsBackToAppTimezone(t *testing.T) {
-	st := &mockStore{
-		transactions: []store.Transaction{},
-		listResult:   store.TransactionListResult{Total: 0},
-		appConfig:    map[string]string{"app.timezone": "Asia/Kolkata"},
-	}
-	h := newTestHandlers(t, st, &mockDaemon{})
-
-	rr := get(h.ListTransactions, "/api/transactions?weekday=5&hour_from=9&hour_to=9&tz=Not/AZone")
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if st.listFilter.Timezone != "Asia/Kolkata" {
-		t.Fatalf("expected fallback timezone Asia/Kolkata, got %q", st.listFilter.Timezone)
 	}
 }
 

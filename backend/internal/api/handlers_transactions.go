@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
@@ -55,17 +55,17 @@ import (
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions [get]
 func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
-	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	if containsControlChars(q) {
-		writeError(w, http.StatusBadRequest, "invalid q filter")
+	query, details := decodeTransactionListQuery(r.URL.Query())
+	if len(details) > 0 {
+		writeValidationErrors(w, details)
 		return
 	}
-	if invalidKey, ok := invalidTransactionFilter(r); ok {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid %s filter", invalidKey))
+	if !h.validateRequest(w, "query", query) {
 		return
 	}
 
-	f := h.transactionListFilter(r)
+	f := query.listFilter(h.resolveTimezone(r.Context(), query.Timezone))
+	q := strings.TrimSpace(query.Query)
 
 	var (
 		txns   []store.Transaction
@@ -96,77 +96,141 @@ func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func invalidTransactionFilter(r *http.Request) (string, bool) {
-	return firstInvalidFilterParam(
-		r,
-		"merchant",
-		"category",
-		"currency",
-		"source",
-		"source_type",
-		"bank",
-		"label",
-		"bucket",
-		"exclude_categories",
-		"exclude_sources",
-		"exclude_source_types",
-		"exclude_banks",
-		"exclude_labels",
-		"exclude_buckets",
-	)
+//nolint:revive // validate tags include custom rules registered by newRequestValidator.
+type transactionListQuery struct {
+	Page               *int       `query:"page" validate:"omitempty,min=1,max=10000"`
+	PageSize           *int       `query:"page_size" validate:"omitempty,min=1,max=500"`
+	Merchant           string     `query:"merchant" validate:"no_control_chars"`
+	Category           string     `query:"category" validate:"no_control_chars"`
+	CategoryMissing    string     `query:"category_missing" validate:"omitempty,oneof=1"`
+	ExcludeCategories  string     `query:"exclude_categories" validate:"no_control_chars"`
+	Currency           string     `query:"currency" validate:"no_control_chars"`
+	Source             string     `query:"source" validate:"no_control_chars"`
+	ExcludeSources     string     `query:"exclude_sources" validate:"no_control_chars"`
+	SourceType         string     `query:"source_type" validate:"no_control_chars"`
+	ExcludeSourceTypes string     `query:"exclude_source_types" validate:"no_control_chars"`
+	Bank               string     `query:"bank" validate:"no_control_chars"`
+	ExcludeBanks       string     `query:"exclude_banks" validate:"no_control_chars"`
+	Label              string     `query:"label" validate:"no_control_chars"`
+	LabelMissing       string     `query:"label_missing" validate:"omitempty,oneof=1"`
+	ExcludeLabels      string     `query:"exclude_labels" validate:"no_control_chars"`
+	Bucket             string     `query:"bucket" validate:"no_control_chars"`
+	BucketMissing      string     `query:"bucket_missing" validate:"omitempty,oneof=1"`
+	ExcludeBuckets     string     `query:"exclude_buckets" validate:"no_control_chars"`
+	DateFrom           *time.Time `query:"date_from"`
+	DateTo             *time.Time `query:"date_to"`
+	ShowMuted          string     `query:"show_muted" validate:"omitempty,oneof=1"`
+	MutedOnly          string     `query:"muted_only" validate:"omitempty,oneof=1"`
+	IndividualOnly     string     `query:"individual_only" validate:"omitempty,oneof=1"`
+	Weekday            *int       `query:"weekday" validate:"omitempty,min=0,max=6"`
+	HourFrom           *int       `query:"hour_from" validate:"omitempty,min=0,max=23"`
+	HourTo             *int       `query:"hour_to" validate:"omitempty,min=0,max=23"`
+	Timezone           string     `query:"tz" validate:"omitempty,iana_timezone"`
+	Query              string     `query:"q" validate:"no_control_chars"`
+	SortBy             string     `query:"sort_by" validate:"omitempty,oneof=timestamp"`
+	SortDir            string     `query:"sort_dir" validate:"omitempty,oneof=asc desc"`
 }
 
-func (h *Handlers) transactionListFilter(r *http.Request) store.ListFilter {
-	f := store.ListFilter{
-		Page:               queryInt(r, "page", 1),
-		PageSize:           queryInt(r, "page_size", 20),
-		Merchant:           r.URL.Query().Get("merchant"),
-		Category:           r.URL.Query().Get("category"),
-		CategoryMissing:    r.URL.Query().Get("category_missing") == "1",
-		ExcludeCategories:  queryCSV(r, "exclude_categories"),
-		Currency:           r.URL.Query().Get("currency"),
-		Source:             r.URL.Query().Get("source"),
-		ExcludeSources:     queryCSV(r, "exclude_sources"),
-		SourceType:         r.URL.Query().Get("source_type"),
-		ExcludeSourceTypes: queryCSV(r, "exclude_source_types"),
-		Bank:               r.URL.Query().Get("bank"),
-		ExcludeBanks:       queryCSV(r, "exclude_banks"),
-		Label:              r.URL.Query().Get("label"),
-		ExcludeLabels:      queryCSV(r, "exclude_labels"),
-		Bucket:             r.URL.Query().Get("bucket"),
-		BucketMissing:      r.URL.Query().Get("bucket_missing") == "1",
-		ExcludeBuckets:     queryCSV(r, "exclude_buckets"),
-		LabelMissing:       r.URL.Query().Get("label_missing") == "1",
-		ShowMuted:          r.URL.Query().Get("show_muted") == "1",
-		MutedOnly:          r.URL.Query().Get("muted_only") == "1",
-		IndividualOnly:     r.URL.Query().Get("individual_only") == "1",
-		Weekday:            queryWeekday(r, "weekday"),
-		HourFrom:           queryHour(r, "hour_from"),
-		HourTo:             queryHour(r, "hour_to"),
-		Timezone:           h.resolveTimezone(r.Context(), r.URL.Query().Get("tz")),
+func decodeTransactionListQuery(values url.Values) (transactionListQuery, []ValidationErrorDetail) {
+	query := transactionListQuery{
+		Merchant:           values.Get("merchant"),
+		Category:           values.Get("category"),
+		CategoryMissing:    values.Get("category_missing"),
+		ExcludeCategories:  values.Get("exclude_categories"),
+		Currency:           values.Get("currency"),
+		Source:             values.Get("source"),
+		ExcludeSources:     values.Get("exclude_sources"),
+		SourceType:         values.Get("source_type"),
+		ExcludeSourceTypes: values.Get("exclude_source_types"),
+		Bank:               values.Get("bank"),
+		ExcludeBanks:       values.Get("exclude_banks"),
+		Label:              values.Get("label"),
+		LabelMissing:       values.Get("label_missing"),
+		ExcludeLabels:      values.Get("exclude_labels"),
+		Bucket:             values.Get("bucket"),
+		BucketMissing:      values.Get("bucket_missing"),
+		ExcludeBuckets:     values.Get("exclude_buckets"),
+		ShowMuted:          values.Get("show_muted"),
+		MutedOnly:          values.Get("muted_only"),
+		IndividualOnly:     values.Get("individual_only"),
+		Timezone:           values.Get("tz"),
+		Query:              values.Get("q"),
+		SortBy:             values.Get("sort_by"),
+		SortDir:            values.Get("sort_dir"),
 	}
-	if v := r.URL.Query().Get("date_from"); v != "" {
-		// JavaScript toISOString() includes milliseconds (RFC3339Nano); try that first.
-		if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
-			f.From = &t
-		} else if t, err := time.Parse(time.RFC3339, v); err == nil {
-			f.From = &t
-		}
-	}
-	if v := r.URL.Query().Get("date_to"); v != "" {
-		if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
-			f.To = &t
-		} else if t, err := time.Parse(time.RFC3339, v); err == nil {
-			f.To = &t
-		}
-	}
-	f.SortBy = r.URL.Query().Get("sort_by")
-	f.SortDir = r.URL.Query().Get("sort_dir")
-	return f
+
+	var details []ValidationErrorDetail
+	query.Page = appendQueryInt(values, "page", &details)
+	query.PageSize = appendQueryInt(values, "page_size", &details)
+	query.DateFrom = appendQueryTime(values, "date_from", &details)
+	query.DateTo = appendQueryTime(values, "date_to", &details)
+	query.Weekday = appendQueryInt(values, "weekday", &details)
+	query.HourFrom = appendQueryInt(values, "hour_from", &details)
+	query.HourTo = appendQueryInt(values, "hour_to", &details)
+	return query, details
 }
 
-func queryCSV(r *http.Request, key string) []string {
-	raw := strings.TrimSpace(r.URL.Query().Get(key))
+func appendQueryInt(values url.Values, key string, details *[]ValidationErrorDetail) *int {
+	value, detail := optionalQueryInt(values, key)
+	if detail != nil {
+		*details = append(*details, *detail)
+	}
+	return value
+}
+
+func appendQueryTime(values url.Values, key string, details *[]ValidationErrorDetail) *time.Time {
+	value, detail := optionalQueryTime(values, key)
+	if detail != nil {
+		*details = append(*details, *detail)
+	}
+	return value
+}
+
+func (query transactionListQuery) listFilter(timezone string) store.ListFilter {
+	page := 1
+	if query.Page != nil {
+		page = *query.Page
+	}
+	pageSize := 20
+	if query.PageSize != nil {
+		pageSize = *query.PageSize
+	}
+	return store.ListFilter{
+		Page:               page,
+		PageSize:           pageSize,
+		Merchant:           query.Merchant,
+		Category:           query.Category,
+		CategoryMissing:    query.CategoryMissing == "1",
+		ExcludeCategories:  queryCSV(query.ExcludeCategories),
+		Currency:           query.Currency,
+		Source:             query.Source,
+		ExcludeSources:     queryCSV(query.ExcludeSources),
+		SourceType:         query.SourceType,
+		ExcludeSourceTypes: queryCSV(query.ExcludeSourceTypes),
+		Bank:               query.Bank,
+		ExcludeBanks:       queryCSV(query.ExcludeBanks),
+		Label:              query.Label,
+		ExcludeLabels:      queryCSV(query.ExcludeLabels),
+		Bucket:             query.Bucket,
+		BucketMissing:      query.BucketMissing == "1",
+		ExcludeBuckets:     queryCSV(query.ExcludeBuckets),
+		LabelMissing:       query.LabelMissing == "1",
+		ShowMuted:          query.ShowMuted == "1",
+		MutedOnly:          query.MutedOnly == "1",
+		IndividualOnly:     query.IndividualOnly == "1",
+		Weekday:            query.Weekday,
+		HourFrom:           query.HourFrom,
+		HourTo:             query.HourTo,
+		Timezone:           timezone,
+		From:               query.DateFrom,
+		To:                 query.DateTo,
+		SortBy:             query.SortBy,
+		SortDir:            query.SortDir,
+	}
+}
+
+func queryCSV(raw string) []string {
+	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil
 	}
@@ -182,24 +246,6 @@ func queryCSV(r *http.Request, key string) []string {
 		return nil
 	}
 	return values
-}
-
-func firstInvalidFilterParam(r *http.Request, keys ...string) (string, bool) {
-	for _, key := range keys {
-		if containsControlChars(r.URL.Query().Get(key)) {
-			return key, true
-		}
-	}
-	return "", false
-}
-
-func containsControlChars(value string) bool {
-	for _, r := range value {
-		if unicode.IsControl(r) {
-			return true
-		}
-	}
-	return false
 }
 
 // GetTransaction handles GET /api/transactions/{id}.

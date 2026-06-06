@@ -19,8 +19,6 @@ const (
 	queryValueTrue      = "true"
 	maxCredentialsSize  = 5 << 20 // 5 MB
 	oauthStateTTL       = 10 * time.Minute
-	maxPageParam        = 10000
-	maxPageSizeParam    = 500
 )
 
 var (

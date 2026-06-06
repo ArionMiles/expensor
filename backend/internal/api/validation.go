@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"time"
+	"unicode"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -21,7 +23,25 @@ func newRequestValidator() *validator.Validate {
 		}
 		return field.Name
 	})
+	mustRegisterValidation(validate, "no_control_chars", func(field validator.FieldLevel) bool {
+		for _, char := range field.Field().String() {
+			if unicode.IsControl(char) {
+				return false
+			}
+		}
+		return true
+	})
+	mustRegisterValidation(validate, "iana_timezone", func(field validator.FieldLevel) bool {
+		_, err := time.LoadLocation(field.Field().String())
+		return err == nil
+	})
 	return validate
+}
+
+func mustRegisterValidation(validate *validator.Validate, tag string, fn validator.Func) {
+	if err := validate.RegisterValidation(tag, fn); err != nil {
+		panic(err)
+	}
 }
 
 func (h *Handlers) validateRequest(w http.ResponseWriter, location string, request any) bool {
@@ -54,6 +74,9 @@ func validationMessage(fieldError validator.FieldError) string {
 	case "required":
 		return "is required"
 	case "oneof":
+		if fieldError.Param() == "1" {
+			return "must be 1 when present"
+		}
 		return "must be one of: " + strings.Join(strings.Fields(fieldError.Param()), ", ")
 	case "min":
 		return fmt.Sprintf("must be at least %s", fieldError.Param())
@@ -61,6 +84,10 @@ func validationMessage(fieldError validator.FieldError) string {
 		return fmt.Sprintf("must be at most %s", fieldError.Param())
 	case "len":
 		return fmt.Sprintf("must be exactly %s characters", fieldError.Param())
+	case "no_control_chars":
+		return "must not contain control characters"
+	case "iana_timezone":
+		return "must be a valid IANA timezone"
 	default:
 		return "is invalid"
 	}
