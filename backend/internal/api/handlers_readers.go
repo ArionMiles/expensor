@@ -686,7 +686,7 @@ func (h *Handlers) GetReaderConfig(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data) //nolint:gosec // data is JSON read from a known config file; Content-Type is already set to application/json
 }
 
-// SaveReaderConfig handles POST /api/readers/{name}/config.
+// SaveReaderConfig handles PUT /api/readers/{name}/config.
 // @Summary Save reader runtime config
 // @Tags Readers
 // @Accept json
@@ -699,7 +699,7 @@ func (h *Handlers) GetReaderConfig(w http.ResponseWriter, r *http.Request) {
 // @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /readers/{name}/config [post]
+// @Router /readers/{name}/config [put]
 func (h *Handlers) SaveReaderConfig(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.registry.GetReader(name); err != nil {

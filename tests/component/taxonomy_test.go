@@ -40,9 +40,12 @@ func TestTaxonomyListAndLabelMutationFlow(t *testing.T) {
 		})
 		helpers.RequireStatus(t, createLabel, http.StatusCreated)
 
-		applyLabel := client.JSON(t, http.MethodPost, "/api/config/labels/ComponentLabel/apply", map[string]string{
-			"merchant_pattern": "Swiggy",
-		})
+		applyLabel := client.JSON(
+			t,
+			http.MethodPut,
+			"/api/config/labels/ComponentLabel/merchant-mappings/Swiggy",
+			nil,
+		)
 		helpers.RequireStatus(t, applyLabel, http.StatusOK)
 		applyBody := helpers.DecodeJSON[map[string]any](t, applyLabel)
 		if applyBody["applied"] == nil {

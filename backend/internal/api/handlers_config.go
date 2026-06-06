@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -28,167 +29,6 @@ func (h *Handlers) ListBanks(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// GetBaseCurrency handles GET /api/config/base-currency.
-// @Summary Get the base currency
-// @Tags Config
-// @Produce json
-// @Success 200 {object} BaseCurrencyResponse
-// @Failure 503 {object} ErrorResponse
-// @Router /config/base-currency [get]
-func (h *Handlers) GetBaseCurrency(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"base_currency": h.currentBaseCurrency(r.Context())})
-}
-
-// SetBaseCurrency handles PUT /api/config/base-currency.
-// Body: {"base_currency": "USD"}
-// @Summary Set the base currency
-// @Tags Config
-// @Accept json
-// @Produce json
-// @Param request body BaseCurrencyRequest true "Base currency payload"
-// @Success 200 {object} BaseCurrencyResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Failure 503 {object} ErrorResponse
-// @Router /config/base-currency [put]
-func (h *Handlers) SetBaseCurrency(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		BaseCurrency string `json:"base_currency"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
-		return
-	}
-	currency := strings.ToUpper(strings.TrimSpace(body.BaseCurrency))
-	if len(currency) != 3 {
-		writeError(w, http.StatusBadRequest, "base_currency must be a 3-letter ISO 4217 code (e.g. INR, USD)")
-		return
-	}
-	for _, c := range currency {
-		if c < 'A' || c > 'Z' {
-			writeError(w, http.StatusBadRequest, "base_currency must be a 3-letter ISO 4217 code (e.g. INR, USD)")
-			return
-		}
-	}
-	if err := h.settingsStore.SetAppConfig(r.Context(), "base_currency", currency); err != nil {
-		h.logger.Error("set base currency", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update base currency")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"base_currency": currency})
-}
-
-// GetScanInterval handles GET /api/config/scan-interval.
-// @Summary Get the scan interval
-// @Tags Config
-// @Produce json
-// @Success 200 {object} ScanIntervalResponse
-// @Failure 503 {object} ErrorResponse
-// @Router /config/scan-interval [get]
-func (h *Handlers) GetScanInterval(w http.ResponseWriter, r *http.Request) {
-	val := strconv.Itoa(h.scanInterval)
-	if dbVal, err := h.settingsStore.GetAppConfig(r.Context(), "scan_interval"); err == nil && dbVal != "" {
-		val = dbVal
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"scan_interval": val})
-}
-
-// SetScanInterval handles PUT /api/config/scan-interval.
-// Body: {"scan_interval": "120"}
-// @Summary Set the scan interval
-// @Tags Config
-// @Accept json
-// @Produce json
-// @Param request body ScanIntervalRequest true "Scan interval payload"
-// @Success 200 {object} ScanIntervalResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Failure 503 {object} ErrorResponse
-// @Router /config/scan-interval [put]
-func (h *Handlers) SetScanInterval(w http.ResponseWriter, r *http.Request) {
-	h.setNumericAppConfig(w, r, numericConfigSpec{
-		key:         "scan_interval",
-		min:         10,
-		max:         3600,
-		bodyMessage: "body must be {\"scan_interval\": \"<seconds>\"}",
-		rangeMsg:    "scan_interval must be an integer between 10 and 3600 seconds",
-		logMessage:  "set scan interval",
-		errorMsg:    "failed to update scan interval",
-	})
-}
-
-// GetLookbackDays handles GET /api/config/lookback-days.
-// @Summary Get lookback days
-// @Tags Config
-// @Produce json
-// @Success 200 {object} LookbackDaysResponse
-// @Failure 503 {object} ErrorResponse
-// @Router /config/lookback-days [get]
-func (h *Handlers) GetLookbackDays(w http.ResponseWriter, r *http.Request) {
-	val := strconv.Itoa(h.lookbackDays)
-	if dbVal, err := h.settingsStore.GetAppConfig(r.Context(), "lookback_days"); err == nil && dbVal != "" {
-		val = dbVal
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"lookback_days": val})
-}
-
-// SetLookbackDays handles PUT /api/config/lookback-days.
-// Body: {"lookback_days": "365"}
-// @Summary Set lookback days
-// @Tags Config
-// @Accept json
-// @Produce json
-// @Param request body LookbackDaysRequest true "Lookback days payload"
-// @Success 200 {object} LookbackDaysResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Failure 503 {object} ErrorResponse
-// @Router /config/lookback-days [put]
-func (h *Handlers) SetLookbackDays(w http.ResponseWriter, r *http.Request) {
-	h.setNumericAppConfig(w, r, numericConfigSpec{
-		key:         "lookback_days",
-		min:         1,
-		max:         3650,
-		bodyMessage: "body must be {\"lookback_days\": \"<days>\"}",
-		rangeMsg:    "lookback_days must be an integer between 1 and 3650",
-		logMessage:  "set lookback days",
-		errorMsg:    "failed to update lookback days",
-	})
-}
-
-type numericConfigSpec struct {
-	key         string
-	min         int
-	max         int
-	bodyMessage string
-	rangeMsg    string
-	logMessage  string
-	errorMsg    string
-}
-
-func (h *Handlers) setNumericAppConfig(w http.ResponseWriter, r *http.Request, spec numericConfigSpec) {
-	var body map[string]string
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body[spec.key] == "" {
-		writeError(w, http.StatusUnprocessableEntity, spec.bodyMessage)
-		return
-	}
-	value := body[spec.key]
-	n, err := strconv.Atoi(value)
-	if err != nil || n < spec.min || n > spec.max {
-		writeError(w, http.StatusBadRequest, spec.rangeMsg)
-		return
-	}
-	if err := h.settingsStore.SetAppConfig(r.Context(), spec.key, value); err != nil {
-		h.logger.Error(spec.logMessage, "error", err)
-		writeError(w, http.StatusInternalServerError, spec.errorMsg)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{spec.key: value})
-}
-
 // validTimeFormats is the set of accepted time_format values.
 var validTimeFormats = map[string]bool{
 	"HH:mm":     true,
@@ -197,102 +37,145 @@ var validTimeFormats = map[string]bool{
 	"h:mm:ss a": true,
 }
 
-// GetTimezone handles GET /api/config/timezone.
-// @Summary Get the application timezone
+// GetPreferences handles GET /api/config/preferences.
+// @Summary Get application preferences
 // @Tags Config
 // @Produce json
-// @Success 200 {object} TimezoneResponse
+// @Success 200 {object} PreferencesResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /config/timezone [get]
-func (h *Handlers) GetTimezone(w http.ResponseWriter, r *http.Request) {
-	tz := ""
-	if dbVal, err := h.settingsStore.GetAppConfig(r.Context(), "app.timezone"); err == nil && dbVal != "" {
-		tz = dbVal
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"timezone": tz})
+// @Router /config/preferences [get]
+func (h *Handlers) GetPreferences(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.preferences(r.Context()))
 }
 
-// SetTimezone handles PUT /api/config/timezone.
-// Body: {"timezone": "Asia/Kolkata"}
-// @Summary Set the application timezone
+// PatchPreferences handles PATCH /api/config/preferences.
+// @Summary Update application preferences
 // @Tags Config
 // @Accept json
 // @Produce json
-// @Param request body TimezoneRequest true "Timezone payload"
-// @Success 200 {object} TimezoneResponse
+// @Param request body PreferencesPatchRequest true "Preferences to update"
+// @Success 200 {object} PreferencesResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /config/timezone [put]
-func (h *Handlers) SetTimezone(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Timezone string `json:"timezone"`
-	}
+// @Router /config/preferences [patch]
+func (h *Handlers) PatchPreferences(w http.ResponseWriter, r *http.Request) {
+	var body PreferencesPatchRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
 		return
 	}
-	tz := strings.TrimSpace(body.Timezone)
-	if _, err := time.LoadLocation(tz); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid IANA timezone string")
+	if err := normalizePreferencesPatch(&body); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := h.settingsStore.SetAppConfig(r.Context(), "app.timezone", tz); err != nil {
-		h.logger.Error("set timezone", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update timezone")
+	if err := h.persistPreferences(r.Context(), body); err != nil {
+		h.logger.Error("update preferences", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to update preferences")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"timezone": tz})
+	writeJSON(w, http.StatusOK, h.preferences(r.Context()))
 }
 
-// GetTimeFormat handles GET /api/config/time-format.
-// @Summary Get the time format
-// @Tags Config
-// @Produce json
-// @Success 200 {object} TimeFormatResponse
-// @Failure 503 {object} ErrorResponse
-// @Router /config/time-format [get]
-func (h *Handlers) GetTimeFormat(w http.ResponseWriter, r *http.Request) {
-	tf := "HH:mm"
-	if dbVal, err := h.settingsStore.GetAppConfig(r.Context(), "app.time_format"); err == nil && dbVal != "" {
-		tf = dbVal
+func (h *Handlers) preferences(ctx context.Context) PreferencesResponse {
+	return PreferencesResponse{
+		BaseCurrency: h.currentBaseCurrency(ctx),
+		ScanInterval: h.storedIntPreference(ctx, "scan_interval", h.scanInterval),
+		LookbackDays: h.storedIntPreference(ctx, "lookback_days", h.lookbackDays),
+		Timezone:     h.storedPreference(ctx, "app.timezone", ""),
+		TimeFormat:   h.storedPreference(ctx, "app.time_format", "HH:mm"),
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"time_format": tf})
 }
 
-// SetTimeFormat handles PUT /api/config/time-format.
-// Body: {"time_format": "HH:mm"}
-// @Summary Set the time format
-// @Tags Config
-// @Accept json
-// @Produce json
-// @Param request body TimeFormatRequest true "Time format payload"
-// @Success 200 {object} TimeFormatResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Failure 503 {object} ErrorResponse
-// @Router /config/time-format [put]
-func (h *Handlers) SetTimeFormat(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		TimeFormat string `json:"time_format"`
+func (h *Handlers) storedPreference(ctx context.Context, key, fallback string) string {
+	value, err := h.settingsStore.GetAppConfig(ctx, key)
+	if err != nil || value == "" {
+		return fallback
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
-		return
+	return value
+}
+
+func (h *Handlers) storedIntPreference(ctx context.Context, key string, fallback int) int {
+	value := h.storedPreference(ctx, key, "")
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
 	}
-	tf := strings.TrimSpace(body.TimeFormat)
-	if !validTimeFormats[tf] {
-		writeError(w, http.StatusBadRequest, "invalid time_format; accepted: HH:mm, HH:mm:ss, h:mm a, h:mm:ss a")
-		return
+	return parsed
+}
+
+func normalizePreferencesPatch(body *PreferencesPatchRequest) error {
+	if body.BaseCurrency != nil {
+		value := strings.ToUpper(strings.TrimSpace(*body.BaseCurrency))
+		if !isCurrencyCode(value) {
+			return errors.New("base_currency must be a 3-letter ISO 4217 code (e.g. INR, USD)")
+		}
+		body.BaseCurrency = &value
 	}
-	if err := h.settingsStore.SetAppConfig(r.Context(), "app.time_format", tf); err != nil {
-		h.logger.Error("set time format", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update time format")
-		return
+	if body.ScanInterval != nil && (*body.ScanInterval < 10 || *body.ScanInterval > 3600) {
+		return errors.New("scan_interval must be an integer between 10 and 3600 seconds")
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"time_format": tf})
+	if body.LookbackDays != nil && (*body.LookbackDays < 1 || *body.LookbackDays > 3650) {
+		return errors.New("lookback_days must be an integer between 1 and 3650")
+	}
+	if body.Timezone != nil {
+		value := strings.TrimSpace(*body.Timezone)
+		if _, err := time.LoadLocation(value); err != nil {
+			return errors.New("invalid IANA timezone string")
+		}
+		body.Timezone = &value
+	}
+	if body.TimeFormat != nil {
+		value := strings.TrimSpace(*body.TimeFormat)
+		if !validTimeFormats[value] {
+			return errors.New("invalid time_format; accepted: HH:mm, HH:mm:ss, h:mm a, h:mm:ss a")
+		}
+		body.TimeFormat = &value
+	}
+	return nil
+}
+
+func isCurrencyCode(value string) bool {
+	if len(value) != 3 {
+		return false
+	}
+	for _, char := range value {
+		if char < 'A' || char > 'Z' {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *Handlers) persistPreferences(ctx context.Context, body PreferencesPatchRequest) error {
+	values := []struct {
+		key   string
+		value *string
+	}{
+		{key: "base_currency", value: body.BaseCurrency},
+		{key: "scan_interval", value: intString(body.ScanInterval)},
+		{key: "lookback_days", value: intString(body.LookbackDays)},
+		{key: "app.timezone", value: body.Timezone},
+		{key: "app.time_format", value: body.TimeFormat},
+	}
+	for _, preference := range values {
+		if preference.value == nil {
+			continue
+		}
+		if err := h.settingsStore.SetAppConfig(ctx, preference.key, *preference.value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func intString(value *int) *string {
+	if value == nil {
+		return nil
+	}
+	result := strconv.Itoa(*value)
+	return &result
 }
 
 func (h *Handlers) missingSetupPreferences(ctx context.Context) []string {

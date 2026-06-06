@@ -118,7 +118,7 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 
 	// Reader config (config-only readers like Thunderbird, plus optional settings for OAuth readers)
 	mux.HandleFunc("GET /api/readers/{name}/config", h.GetReaderConfig)
-	mux.HandleFunc("POST /api/readers/{name}/config", h.SaveReaderConfig)
+	mux.HandleFunc("PUT /api/readers/{name}/config", h.SaveReaderConfig)
 
 	// Reader overall readiness
 	mux.HandleFunc("GET /api/readers/{name}/status", h.ReaderStatus)
@@ -131,23 +131,14 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("GET /api/stats/charts", h.GetChartData)
 	mux.HandleFunc("GET /api/stats/labels/monthly", h.GetLabelMonthlySpend)
 	mux.HandleFunc("GET /api/stats/heatmap", h.GetHeatmap)
-	mux.HandleFunc("GET /api/stats/heatmap/annual", h.GetAnnualHeatmap)
 
 	// App configuration
 	mux.HandleFunc("GET /api/config/banks", h.ListBanks)
 	mux.HandleFunc("GET /api/config/setup-status", h.GetSetupStatus)
 	mux.HandleFunc("POST /api/config/sync", h.TriggerSync)
 	mux.HandleFunc("GET /api/config/sync/status", h.GetSyncStatus)
-	mux.HandleFunc("GET /api/config/base-currency", h.GetBaseCurrency)
-	mux.HandleFunc("PUT /api/config/base-currency", h.SetBaseCurrency)
-	mux.HandleFunc("GET /api/config/scan-interval", h.GetScanInterval)
-	mux.HandleFunc("PUT /api/config/scan-interval", h.SetScanInterval)
-	mux.HandleFunc("GET /api/config/lookback-days", h.GetLookbackDays)
-	mux.HandleFunc("PUT /api/config/lookback-days", h.SetLookbackDays)
-	mux.HandleFunc("GET /api/config/timezone", h.GetTimezone)
-	mux.HandleFunc("PUT /api/config/timezone", h.SetTimezone)
-	mux.HandleFunc("GET /api/config/time-format", h.GetTimeFormat)
-	mux.HandleFunc("PUT /api/config/time-format", h.SetTimeFormat)
+	mux.HandleFunc("GET /api/config/preferences", h.GetPreferences)
+	mux.HandleFunc("PATCH /api/config/preferences", h.PatchPreferences)
 	mux.HandleFunc("GET /api/config/readers/{name}/checkpoint", h.GetReaderCheckpoint)
 	mux.HandleFunc("DELETE /api/config/readers/{name}/checkpoint", h.ClearReaderCheckpoint)
 
@@ -158,8 +149,8 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("POST /api/config/labels", h.CreateLabel)
 	mux.HandleFunc("PUT /api/config/labels/{name}", h.UpdateLabel)
 	mux.HandleFunc("DELETE /api/config/labels/{name}", h.DeleteLabel)
-	mux.HandleFunc("POST /api/config/labels/{name}/apply", h.ApplyLabel)
-	mux.HandleFunc("DELETE /api/config/labels/{name}/merchant", h.RemoveLabelByMerchant)
+	mux.HandleFunc("PUT /api/config/labels/{name}/merchant-mappings/{pattern}", h.ApplyLabel)
+	mux.HandleFunc("DELETE /api/config/labels/{name}/merchant-mappings/{pattern}", h.RemoveLabelByMerchant)
 
 	// Categories and buckets
 	mux.HandleFunc("GET /api/config/categories/export", h.ExportCategories)      // must precede /{name}
@@ -167,15 +158,15 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("GET /api/config/categories", h.ListCategories)
 	mux.HandleFunc("POST /api/config/categories", h.CreateCategory)
 	mux.HandleFunc("DELETE /api/config/categories/{name}", h.DeleteCategory)
-	mux.HandleFunc("POST /api/config/categories/{name}/apply", h.ApplyCategoryByMerchant)
-	mux.HandleFunc("DELETE /api/config/categories/{name}/merchant", h.RemoveCategoryByMerchant)
+	mux.HandleFunc("PUT /api/config/categories/{name}/merchant-mappings/{pattern}", h.ApplyCategoryByMerchant)
+	mux.HandleFunc("DELETE /api/config/categories/{name}/merchant-mappings/{pattern}", h.RemoveCategoryByMerchant)
 	mux.HandleFunc("GET /api/config/buckets/export", h.ExportBuckets)       // must precede /{name}
 	mux.HandleFunc("GET /api/config/buckets/mappings", h.GetBucketMappings) // must precede /{name}
 	mux.HandleFunc("GET /api/config/buckets", h.ListBuckets)
 	mux.HandleFunc("POST /api/config/buckets", h.CreateBucket)
 	mux.HandleFunc("DELETE /api/config/buckets/{name}", h.DeleteBucket)
-	mux.HandleFunc("POST /api/config/buckets/{name}/apply", h.ApplyBucketByMerchant)
-	mux.HandleFunc("DELETE /api/config/buckets/{name}/merchant", h.RemoveBucketByMerchant)
+	mux.HandleFunc("PUT /api/config/buckets/{name}/merchant-mappings/{pattern}", h.ApplyBucketByMerchant)
+	mux.HandleFunc("DELETE /api/config/buckets/{name}/merchant-mappings/{pattern}", h.RemoveBucketByMerchant)
 
 	// Rules — export and import before /{id} to avoid wildcard capture
 	mux.HandleFunc("GET /api/rules", h.ListRules)
@@ -186,26 +177,23 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("DELETE /api/rules/{id}", h.DeleteRule)
 
 	// Transactions
-	// /search and /facets must be registered before /{id} to avoid the wildcard swallowing them.
-	mux.HandleFunc("GET /api/transactions/search", h.SearchTransactions)
+	// /facets must be registered before /{id} to avoid the wildcard swallowing it.
 	mux.HandleFunc("GET /api/transactions/facets", h.GetFacets)
 	mux.HandleFunc("GET /api/transactions", h.ListTransactions)
 	mux.HandleFunc("GET /api/transactions/{id}", h.GetTransaction)
-	mux.HandleFunc("PUT /api/transactions/{id}", h.UpdateTransaction)
+	mux.HandleFunc("PATCH /api/transactions/{id}", h.UpdateTransaction)
 	mux.HandleFunc("POST /api/transactions/{id}/labels", h.AddLabels)
 	mux.HandleFunc("DELETE /api/transactions/{id}/labels/{label}", h.RemoveLabel)
-	mux.HandleFunc("PUT /api/transactions/{id}/mute", h.MuteTransaction)
-	mux.HandleFunc("PUT /api/transactions/{id}/mute-reason", h.UpdateMuteReason)
 
 	// Extraction diagnostics
 	mux.HandleFunc("GET /api/extraction-diagnostics", h.ListExtractionDiagnostics)
 	mux.HandleFunc("GET /api/extraction-diagnostics/{id}", h.GetExtractionDiagnostic)
-	mux.HandleFunc("PUT /api/extraction-diagnostics/{id}/status", h.UpdateExtractionDiagnosticStatus)
+	mux.HandleFunc("PATCH /api/extraction-diagnostics/{id}", h.UpdateExtractionDiagnosticStatus)
 
 	// Muted merchants
 	mux.HandleFunc("GET /api/muted-merchants", h.ListMutedMerchants)
 	mux.HandleFunc("POST /api/muted-merchants", h.MuteByMerchant)
-	mux.HandleFunc("PUT /api/muted-merchants/{id}/reason", h.UpdateMerchantReason)
+	mux.HandleFunc("PATCH /api/muted-merchants/{id}", h.UpdateMerchantReason)
 	mux.HandleFunc("DELETE /api/muted-merchants/{id}", h.DeleteMutedMerchant)
 
 	// Merchant-wide categorization

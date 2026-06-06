@@ -68,7 +68,7 @@ test('captures README dashboard screenshot @screenshot', async ({ page }) => {
     if (pathname === '/config/buckets') return json(fixture.buckets)
     if (pathname === '/config/banks') return json([])
     if (pathname === '/transactions/facets') return json(fixture.facets)
-    if (pathname === '/transactions' || pathname === '/transactions/search') {
+    if (pathname === '/transactions') {
       const pageSize = Number(requestURL.searchParams.get('page_size') ?? '20')
       const transactions = fixture.transactions.slice(0, Number.isFinite(pageSize) ? pageSize : 20)
       const totalAmount = fixture.transactions.reduce(

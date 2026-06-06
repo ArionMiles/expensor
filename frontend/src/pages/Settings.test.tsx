@@ -57,8 +57,15 @@ describe('Settings', () => {
 
   it('starts the timezone setting from the browser timezone when the config is unset', async () => {
     server.use(
-      http.get('/api/config/timezone', () => HttpResponse.json({ timezone: '' })),
-      http.put('/api/config/timezone', async () => HttpResponse.json({ timezone: '' })),
+      http.get('/api/config/preferences', () =>
+        HttpResponse.json({
+          base_currency: 'USD',
+          scan_interval: 60,
+          lookback_days: 180,
+          timezone: '',
+          time_format: 'HH:mm',
+        }),
+      ),
     )
 
     renderSettings('/settings')

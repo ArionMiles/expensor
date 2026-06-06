@@ -46,6 +46,7 @@ import (
 // @Param hour_from query int false "Minimum hour filter (0-23)"
 // @Param hour_to query int false "Maximum hour filter (0-23)"
 // @Param tz query string false "IANA timezone used for weekday/hour filters"
+// @Param q query string false "Free-text search over merchant and description"
 // @Param sort_by query string false "Sort field" Enums(timestamp)
 // @Param sort_dir query string false "Sort direction" Enums(asc,desc)
 // @Success 200 {object} TransactionsListResponse
@@ -54,6 +55,11 @@ import (
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions [get]
 func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if containsControlChars(q) {
+		writeError(w, http.StatusBadRequest, "invalid q filter")
+		return
+	}
 	if invalidKey, ok := invalidTransactionFilter(r); ok {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid %s filter", invalidKey))
 		return
@@ -61,10 +67,19 @@ func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
 
 	f := h.transactionListFilter(r)
 
-	txns, result, err := h.transactionStore.ListTransactions(r.Context(), f)
+	var (
+		txns   []store.Transaction
+		result store.TransactionListResult
+		err    error
+	)
+	if q == "" {
+		txns, result, err = h.transactionStore.ListTransactions(r.Context(), f)
+	} else {
+		txns, result, err = h.transactionStore.SearchTransactions(r.Context(), q, f)
+	}
 	if err != nil {
-		h.logger.Error("list transactions", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to list transactions")
+		h.logger.Error("query transactions", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to query transactions")
 		return
 	}
 	if txns == nil {
@@ -250,8 +265,8 @@ func (h *Handlers) validateBucket(w http.ResponseWriter, r *http.Request, name s
 	return false
 }
 
-// UpdateTransaction handles PUT /api/transactions/{id}.
-// Body: {"description": "...", "category": "...", "bucket": "..."}
+// UpdateTransaction handles PATCH /api/transactions/{id}.
+// Body: {"description": "...", "category": "...", "bucket": "...", "muted": true, "mute_reason": "..."}
 // All fields are optional; only non-nil fields are written.
 // @Summary Update a transaction
 // @Tags Transactions
@@ -265,17 +280,13 @@ func (h *Handlers) validateBucket(w http.ResponseWriter, r *http.Request, name s
 // @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /transactions/{id} [put]
+// @Router /transactions/{id} [patch]
 func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 	id, ok := uuidPathValue(w, r, "id", "transaction")
 	if !ok {
 		return
 	}
-	var body struct {
-		Description *string `json:"description"`
-		Category    *string `json:"category"`
-		Bucket      *string `json:"bucket"`
-	}
+	var body TransactionUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
 		return
@@ -288,18 +299,7 @@ func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u := store.TransactionUpdate{
-		Description: body.Description,
-		Category:    body.Category,
-		Bucket:      body.Bucket,
-	}
-	if err := h.transactionStore.UpdateTransaction(r.Context(), id, u); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "transaction not found")
-			return
-		}
-		h.logger.Error("update transaction", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update transaction")
+	if !h.patchTransaction(w, r, id, body) {
 		return
 	}
 
@@ -315,84 +315,46 @@ func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tx)
 }
 
-// --- muted transactions ---
-
-// MuteTransaction handles PUT /api/transactions/{id}/mute.
-// Body: {"muted": true|false}
-// @Summary Mute or unmute a transaction
-// @Tags Transactions
-// @Accept json
-// @Produce json
-// @Param id path string true "Transaction ID" format(uuid) example(00000000-0000-0000-0000-000000000001)
-// @Param request body MuteTransactionRequest true "Mute payload"
-// @Success 200 {object} MuteTransactionResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Failure 503 {object} ErrorResponse
-// @Router /transactions/{id}/mute [put]
-func (h *Handlers) MuteTransaction(w http.ResponseWriter, r *http.Request) {
-	id, ok := uuidPathValue(w, r, "id", "transaction")
-	if !ok {
-		return
-	}
-	var body struct {
-		Muted  bool   `json:"muted"`
-		Reason string `json:"reason"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	if err := h.muteStore.MuteTransaction(r.Context(), id, body.Muted, body.Reason); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "transaction not found")
-			return
+func (h *Handlers) patchTransaction(
+	w http.ResponseWriter,
+	r *http.Request,
+	id string,
+	body TransactionUpdateRequest,
+) bool {
+	if body.Description != nil || body.Category != nil || body.Bucket != nil {
+		update := store.TransactionUpdate{
+			Description: body.Description,
+			Category:    body.Category,
+			Bucket:      body.Bucket,
 		}
-		h.logger.Error("mute transaction", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update transaction")
-		return
+		if err := h.transactionStore.UpdateTransaction(r.Context(), id, update); err != nil {
+			return h.writeTransactionPatchError(w, err, "update transaction details")
+		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"muted": body.Muted, "reason": body.Reason})
+	if body.Muted != nil {
+		reason := ""
+		if body.MuteReason != nil {
+			reason = *body.MuteReason
+		}
+		if err := h.muteStore.MuteTransaction(r.Context(), id, *body.Muted, reason); err != nil {
+			return h.writeTransactionPatchError(w, err, "update transaction mute state")
+		}
+	} else if body.MuteReason != nil {
+		if err := h.muteStore.UpdateMuteReason(r.Context(), id, *body.MuteReason); err != nil {
+			return h.writeTransactionPatchError(w, err, "update transaction mute reason")
+		}
+	}
+	return true
 }
 
-// UpdateMuteReason handles PUT /api/transactions/{id}/mute-reason.
-// Body: {"reason": "optional text"}
-//
-// @Summary Update a transaction mute reason
-// @Tags Transactions
-// @Accept json
-// @Produce json
-// @Param id path string true "Transaction ID" format(uuid) example(00000000-0000-0000-0000-000000000001)
-// @Param request body UpdateMuteReasonRequest true "Mute reason payload"
-// @Success 200 {object} MuteReasonResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Failure 503 {object} ErrorResponse
-// @Router /transactions/{id}/mute-reason [put]
-func (h *Handlers) UpdateMuteReason(w http.ResponseWriter, r *http.Request) {
-	id, ok := uuidPathValue(w, r, "id", "transaction")
-	if !ok {
-		return
+func (h *Handlers) writeTransactionPatchError(w http.ResponseWriter, err error, operation string) bool {
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "transaction not found")
+		return false
 	}
-	var body struct {
-		Reason string `json:"reason"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	if err := h.muteStore.UpdateMuteReason(r.Context(), id, body.Reason); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "transaction not found or not muted")
-			return
-		}
-		h.logger.Error("update mute reason", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update reason")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"reason": body.Reason})
+	h.logger.Error(operation, "error", err)
+	writeError(w, http.StatusInternalServerError, "failed to update transaction")
+	return false
 }
 
 // ListMutedMerchants handles GET /api/muted-merchants.
@@ -444,7 +406,7 @@ func (h *Handlers) MuteByMerchant(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{"pattern": body.Pattern})
 }
 
-// UpdateMerchantReason handles PUT /api/muted-merchants/{id}/reason.
+// UpdateMerchantReason handles PATCH /api/muted-merchants/{id}.
 // Body: {"reason": "optional text"}
 //
 // @Summary Update a muted merchant reason
@@ -453,12 +415,12 @@ func (h *Handlers) MuteByMerchant(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param id path string true "Muted merchant ID" format(uuid) example(00000000-0000-0000-0000-00000000c003)
 // @Param request body MerchantReasonRequest true "Muted merchant reason payload"
-// @Success 200 {object} MuteReasonResponse
+// @Success 200 {object} MerchantReasonResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /muted-merchants/{id}/reason [put]
+// @Router /muted-merchants/{id} [patch]
 func (h *Handlers) UpdateMerchantReason(w http.ResponseWriter, r *http.Request) {
 	id, ok := uuidPathValue(w, r, "id", "muted merchant")
 	if !ok {
@@ -558,79 +520,6 @@ func (h *Handlers) CategorizeMerchant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"updated": n})
-}
-
-// SearchTransactions handles GET /api/transactions/search?q=...
-// @Summary Search transactions
-// @Tags Transactions
-// @Produce json
-// @Param q query string true "Search query"
-// @Param page query int false "1-based page number" default(1)
-// @Param page_size query int false "Page size" default(20)
-// @Param merchant query string false "Merchant filter"
-// @Param category query string false "Category filter"
-// @Param category_missing query int false "Only transactions without a category when set to 1" Enums(1)
-// @Param exclude_categories query string false "Comma-separated categories to exclude"
-// @Param currency query string false "Currency filter"
-// @Param source query string false "Source filter"
-// @Param exclude_sources query string false "Comma-separated sources to exclude"
-// @Param source_type query string false "Source type filter"
-// @Param exclude_source_types query string false "Comma-separated source types to exclude"
-// @Param bank query string false "Bank filter"
-// @Param exclude_banks query string false "Comma-separated banks to exclude"
-// @Param label query string false "Label filter"
-// @Param label_missing query int false "Only transactions without labels when set to 1" Enums(1)
-// @Param exclude_labels query string false "Comma-separated labels to exclude"
-// @Param bucket query string false "Bucket filter"
-// @Param bucket_missing query int false "Only transactions without a bucket when set to 1" Enums(1)
-// @Param exclude_buckets query string false "Comma-separated buckets to exclude"
-// @Param date_from query string false "RFC3339 start timestamp"
-// @Param date_to query string false "RFC3339 end timestamp"
-// @Param show_muted query int false "Include muted transactions when set to 1" Enums(1)
-// @Param muted_only query int false "Return only muted transactions when set to 1" Enums(1)
-// @Param individual_only query int false "Return only individually muted transactions when set to 1" Enums(1)
-// @Param weekday query int false "PostgreSQL DOW weekday filter (0=Sunday...6=Saturday)" Enums(0,1,2,3,4,5,6)
-// @Param hour_from query int false "Minimum hour filter (0-23)"
-// @Param hour_to query int false "Maximum hour filter (0-23)"
-// @Param tz query string false "IANA timezone used for weekday/hour filters"
-// @Param sort_by query string false "Sort field" Enums(timestamp)
-// @Param sort_dir query string false "Sort direction" Enums(asc,desc)
-// @Success 200 {object} TransactionsSearchResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Failure 503 {object} ErrorResponse
-// @Router /transactions/search [get]
-func (h *Handlers) SearchTransactions(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query().Get("q")
-	if containsControlChars(q) {
-		writeError(w, http.StatusBadRequest, "invalid q filter")
-		return
-	}
-	if invalidKey, ok := invalidTransactionFilter(r); ok {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid %s filter", invalidKey))
-		return
-	}
-	f := h.transactionListFilter(r)
-
-	txns, result, err := h.transactionStore.SearchTransactions(r.Context(), q, f)
-	if err != nil {
-		h.logger.Error("search transactions", "error", err)
-		writeError(w, http.StatusInternalServerError, "search failed")
-		return
-	}
-	if txns == nil {
-		txns = []store.Transaction{}
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"transactions":  txns,
-		"total":         result.Total,
-		"total_amount":  result.TotalAmount,
-		"base_currency": h.currentBaseCurrency(r.Context()),
-		"page":          f.Page,
-		"page_size":     f.PageSize,
-		"query":         q,
-	})
 }
 
 // GetFacets handles GET /api/transactions/facets.

@@ -19,6 +19,8 @@ import type {
   MonthlyBreakdownData,
   MutedMerchantWithCount,
   PluginInfo,
+  Preferences,
+  PreferencesPatch,
   ReaderConfig,
   ReaderGuide,
   ReaderStatus,
@@ -124,7 +126,7 @@ export const api = {
       return apiClient.get<HeatmapData>(qs ? `/stats/heatmap?${qs}` : '/stats/heatmap')
     },
     annualHeatmap: (year: number) =>
-      apiClient.get<AnnualHeatmapData>(`/stats/heatmap/annual?year=${year}`),
+      apiClient.get<AnnualHeatmapData>(`/stats/heatmap?year=${year}`),
     monthlyBreakdown: (dimension: 'labels' | 'categories' | 'buckets') =>
       apiClient.get<MonthlyBreakdownData>(
         `/stats/labels/monthly?dimension=${encodeURIComponent(dimension)}`,
@@ -166,7 +168,7 @@ export const api = {
     config: {
       get: (readerName: string) => apiClient.get<ReaderConfig>(`/readers/${readerName}/config`),
       save: (readerName: string, config: Record<string, string>) =>
-        apiClient.post(`/readers/${readerName}/config`, { config }),
+        apiClient.put(`/readers/${readerName}/config`, { config }),
     },
 
     status: (readerName: string) => apiClient.get<ReaderStatus>(`/readers/${readerName}/status`),
@@ -192,30 +194,12 @@ export const api = {
   config: {
     getActiveReader: () => apiClient.get<{ reader: string }>('/config/active-reader'),
     getSetupStatus: () => apiClient.get<SetupStatus>('/config/setup-status'),
-    getBaseCurrency: () => apiClient.get<{ base_currency: string }>('/config/base-currency'),
-    setBaseCurrency: (currency: string) =>
-      apiClient.put<{ base_currency: string }>('/config/base-currency', {
-        base_currency: currency,
-      }),
-    getScanInterval: () => apiClient.get<{ scan_interval: string }>('/config/scan-interval'),
-    setScanInterval: (seconds: number) =>
-      apiClient.put<{ scan_interval: string }>('/config/scan-interval', {
-        scan_interval: String(seconds),
-      }),
-    getLookbackDays: () => apiClient.get<{ lookback_days: string }>('/config/lookback-days'),
-    setLookbackDays: (days: number) =>
-      apiClient.put<{ lookback_days: string }>('/config/lookback-days', {
-        lookback_days: String(days),
-      }),
+    getPreferences: () => apiClient.get<Preferences>('/config/preferences'),
+    updatePreferences: (patch: PreferencesPatch) =>
+      apiClient.patch<Preferences>('/config/preferences', patch),
     getCheckpoint: (reader: string) =>
       apiClient.get<{ last_scan_at: string | null }>(`/config/readers/${reader}/checkpoint`),
     clearCheckpoint: (reader: string) => apiClient.delete(`/config/readers/${reader}/checkpoint`),
-    getTimezone: () => apiClient.get<{ timezone: string }>('/config/timezone'),
-    setTimezone: (timezone: string) =>
-      apiClient.put<{ timezone: string }>('/config/timezone', { timezone }),
-    getTimeFormat: () => apiClient.get<{ time_format: string }>('/config/time-format'),
-    setTimeFormat: (time_format: string) =>
-      apiClient.put<{ time_format: string }>('/config/time-format', { time_format }),
 
     labels: {
       list: () => apiClient.get<Label[]>('/config/labels'),
@@ -231,16 +215,13 @@ export const api = {
           params: { remove_from_transactions: removeFromTransactions },
           data: { remove_from_transactions: removeFromTransactions },
         }),
-      apply: (name: string, merchantPattern: string) =>
-        apiClient.post<{ applied: number }>(`/config/labels/${encodeURIComponent(name)}/apply`, {
-          merchant_pattern: merchantPattern,
-        }),
-      removeMerchant: (name: string, merchantPattern: string) =>
+      putMerchantMapping: (name: string, merchantPattern: string) =>
+        apiClient.put<{ applied: number }>(
+          `/config/labels/${encodeURIComponent(name)}/merchant-mappings/${encodeURIComponent(merchantPattern)}`,
+        ),
+      deleteMerchantMapping: (name: string, merchantPattern: string) =>
         apiClient.delete<{ removed: number }>(
-          `/config/labels/${encodeURIComponent(name)}/merchant`,
-          {
-            data: { merchant_pattern: merchantPattern },
-          },
+          `/config/labels/${encodeURIComponent(name)}/merchant-mappings/${encodeURIComponent(merchantPattern)}`,
         ),
       mappings: () => apiClient.get<Record<string, string[]>>('/config/labels/mappings'),
       export: () => apiClient.get('/config/labels/export', { responseType: 'blob' }),
@@ -255,17 +236,13 @@ export const api = {
           params: { remove_from_transactions: removeFromTransactions },
           data: { remove_from_transactions: removeFromTransactions },
         }),
-      apply: (name: string, merchantPattern: string) =>
-        apiClient.post<{ applied: number }>(
-          `/config/categories/${encodeURIComponent(name)}/apply`,
-          { merchant_pattern: merchantPattern },
+      putMerchantMapping: (name: string, merchantPattern: string) =>
+        apiClient.put<{ applied: number }>(
+          `/config/categories/${encodeURIComponent(name)}/merchant-mappings/${encodeURIComponent(merchantPattern)}`,
         ),
-      removeMerchant: (name: string, merchantPattern: string) =>
+      deleteMerchantMapping: (name: string, merchantPattern: string) =>
         apiClient.delete<{ removed: number }>(
-          `/config/categories/${encodeURIComponent(name)}/merchant`,
-          {
-            data: { merchant_pattern: merchantPattern },
-          },
+          `/config/categories/${encodeURIComponent(name)}/merchant-mappings/${encodeURIComponent(merchantPattern)}`,
         ),
       mappings: () => apiClient.get<Record<string, string[]>>('/config/categories/mappings'),
       export: () => apiClient.get('/config/categories/export', { responseType: 'blob' }),
@@ -280,16 +257,13 @@ export const api = {
           params: { remove_from_transactions: removeFromTransactions },
           data: { remove_from_transactions: removeFromTransactions },
         }),
-      apply: (name: string, merchantPattern: string) =>
-        apiClient.post<{ applied: number }>(`/config/buckets/${encodeURIComponent(name)}/apply`, {
-          merchant_pattern: merchantPattern,
-        }),
-      removeMerchant: (name: string, merchantPattern: string) =>
+      putMerchantMapping: (name: string, merchantPattern: string) =>
+        apiClient.put<{ applied: number }>(
+          `/config/buckets/${encodeURIComponent(name)}/merchant-mappings/${encodeURIComponent(merchantPattern)}`,
+        ),
+      deleteMerchantMapping: (name: string, merchantPattern: string) =>
         apiClient.delete<{ removed: number }>(
-          `/config/buckets/${encodeURIComponent(name)}/merchant`,
-          {
-            data: { merchant_pattern: merchantPattern },
-          },
+          `/config/buckets/${encodeURIComponent(name)}/merchant-mappings/${encodeURIComponent(merchantPattern)}`,
         ),
       mappings: () => apiClient.get<Record<string, string[]>>('/config/buckets/mappings'),
       export: () => apiClient.get('/config/buckets/export', { responseType: 'blob' }),
@@ -317,7 +291,7 @@ export const api = {
       ),
     get: (id: string) => apiClient.get<ExtractionDiagnostic>(`/extraction-diagnostics/${id}`),
     updateStatus: (id: string, status: ExtractionDiagnosticStatus) =>
-      apiClient.put<ExtractionDiagnostic>(`/extraction-diagnostics/${id}/status`, { status }),
+      apiClient.patch<ExtractionDiagnostic>(`/extraction-diagnostics/${id}`, { status }),
   },
 
   transactions: {
@@ -329,7 +303,7 @@ export const api = {
     search: (q: string, filters: TransactionFilters = {}) => {
       const params = transactionFilterParams(filters)
       params.set('q', q)
-      return apiClient.get<TransactionsResponse>(`/transactions/search?${params.toString()}`)
+      return apiClient.get<TransactionsResponse>(`/transactions?${params.toString()}`)
     },
 
     facets: () => apiClient.get<Facets>('/transactions/facets'),
@@ -337,7 +311,7 @@ export const api = {
     get: (id: string) => apiClient.get<Transaction>(`/transactions/${id}`),
 
     update: (id: string, patch: TransactionPatch) =>
-      apiClient.put<Transaction>(`/transactions/${id}`, patch),
+      apiClient.patch<Transaction>(`/transactions/${id}`, patch),
 
     addLabels: (id: string, labels: string[]) =>
       apiClient.post<Transaction>(`/transactions/${id}/labels`, { labels }),
@@ -346,10 +320,10 @@ export const api = {
       apiClient.delete<Transaction>(`/transactions/${id}/labels/${encodeURIComponent(label)}`),
 
     mute: (id: string, muted: boolean, reason?: string) =>
-      apiClient.put<{ muted: boolean }>(`/transactions/${id}/mute`, { muted, reason }),
+      apiClient.patch<Transaction>(`/transactions/${id}`, { muted, mute_reason: reason }),
 
     updateMuteReason: (id: string, reason: string) =>
-      apiClient.put<{ reason: string }>(`/transactions/${id}/mute-reason`, { reason }),
+      apiClient.patch<Transaction>(`/transactions/${id}`, { mute_reason: reason }),
   },
 
   mutedMerchants: {
@@ -357,7 +331,7 @@ export const api = {
     add: (pattern: string, reason?: string) =>
       apiClient.post<{ pattern: string }>('/muted-merchants', { pattern, reason }),
     updateReason: (id: string, reason: string) =>
-      apiClient.put<{ reason: string }>(`/muted-merchants/${id}/reason`, { reason }),
+      apiClient.patch<{ reason: string }>(`/muted-merchants/${id}`, { reason }),
     delete: (id: string, unmute = false) =>
       apiClient.delete(`/muted-merchants/${id}${unmute ? '?unmute=true' : ''}`),
   },

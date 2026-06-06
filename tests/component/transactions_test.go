@@ -58,7 +58,7 @@ func TestTransactionsSeededFiltersAndMutations(t *testing.T) {
 	}{
 		{
 			name:   "update transaction",
-			method: http.MethodPut,
+			method: http.MethodPatch,
 			path:   "/api/transactions/00000000-0000-0000-0000-000000000001",
 			body: map[string]string{
 				"description": "Updated seeded purchase",
@@ -78,20 +78,20 @@ func TestTransactionsSeededFiltersAndMutations(t *testing.T) {
 		},
 		{
 			name:   "mute transaction",
-			method: http.MethodPut,
-			path:   "/api/transactions/00000000-0000-0000-0000-000000000001/mute",
+			method: http.MethodPatch,
+			path:   "/api/transactions/00000000-0000-0000-0000-000000000001",
 			body: map[string]any{
-				"muted":  true,
-				"reason": "component test mute",
+				"muted":      true,
+				"mute_reason": "component test mute",
 			},
 			want: http.StatusOK,
 		},
 		{
 			name:   "update mute reason",
-			method: http.MethodPut,
-			path:   "/api/transactions/00000000-0000-0000-0000-000000000001/mute-reason",
+			method: http.MethodPatch,
+			path:   "/api/transactions/00000000-0000-0000-0000-000000000001",
 			body: map[string]string{
-				"reason": "component test reason",
+				"mute_reason": "component test reason",
 			},
 			want: http.StatusOK,
 		},

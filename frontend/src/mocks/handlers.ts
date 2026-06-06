@@ -128,23 +128,32 @@ export const handlers = [
   ),
   http.get('/api/version', () => HttpResponse.json({ version: 'test' })),
   http.get('/api/stats/dashboard', () => HttpResponse.json(dashboardData)),
-  http.get('/api/stats/heatmap', () => HttpResponse.json(heatmapData)),
-  http.get('/api/stats/heatmap/annual', ({ request }) => {
-    const year = Number(new URL(request.url).searchParams.get('year') ?? '2026')
+  http.get('/api/stats/heatmap', ({ request }) => {
+    const yearParam = new URL(request.url).searchParams.get('year')
+    if (yearParam === null) return HttpResponse.json(heatmapData)
+    const year = Number(yearParam)
     return HttpResponse.json(buildAnnualHeatmapData(Number.isFinite(year) ? year : 2026))
   }),
   http.get('/api/stats/labels/monthly', () => HttpResponse.json(monthlyBreakdownData)),
   http.get('/api/config/setup-status', () => HttpResponse.json({ required: false, missing: [] })),
-  http.get('/api/config/timezone', () => HttpResponse.json({ timezone: 'UTC' })),
-  http.put('/api/config/timezone', async () => HttpResponse.json({ timezone: 'UTC' })),
-  http.get('/api/config/time-format', () => HttpResponse.json({ time_format: '24h' })),
-  http.put('/api/config/time-format', async () => HttpResponse.json({ time_format: '24h' })),
-  http.get('/api/config/base-currency', () => HttpResponse.json({ base_currency: 'USD' })),
-  http.put('/api/config/base-currency', async () => HttpResponse.json({ base_currency: 'USD' })),
-  http.get('/api/config/scan-interval', () => HttpResponse.json({ scan_interval: '60' })),
-  http.put('/api/config/scan-interval', async () => HttpResponse.json({ scan_interval: '60' })),
-  http.get('/api/config/lookback-days', () => HttpResponse.json({ lookback_days: '180' })),
-  http.put('/api/config/lookback-days', async () => HttpResponse.json({ lookback_days: '180' })),
+  http.get('/api/config/preferences', () =>
+    HttpResponse.json({
+      base_currency: 'USD',
+      scan_interval: 60,
+      lookback_days: 180,
+      timezone: 'UTC',
+      time_format: 'HH:mm',
+    }),
+  ),
+  http.patch('/api/config/preferences', async () =>
+    HttpResponse.json({
+      base_currency: 'USD',
+      scan_interval: 60,
+      lookback_days: 180,
+      timezone: 'UTC',
+      time_format: 'HH:mm',
+    }),
+  ),
   http.get('/api/config/active-reader', () => HttpResponse.json({ reader: '' })),
   http.get('/api/config/readers/:reader/checkpoint', () =>
     HttpResponse.json({ last_scan_at: null }),
@@ -178,7 +187,7 @@ export const handlers = [
     }
     return HttpResponse.json(diagnostic)
   }),
-  http.put('/api/extraction-diagnostics/:id/status', async ({ params, request }) => {
+  http.patch('/api/extraction-diagnostics/:id', async ({ params, request }) => {
     const body = (await request.json()) as { status?: ExtractionDiagnostic['status'] }
     const diagnostic = extractionDiagnostics.find((item) => item.id === params.id)
     if (!diagnostic) {
@@ -210,8 +219,12 @@ export const handlers = [
     return HttpResponse.json({ name: String(params.name), color: body.color ?? '' })
   }),
   http.delete('/api/config/labels/:name', () => HttpResponse.json({})),
-  http.post('/api/config/labels/:name/apply', () => HttpResponse.json({ applied: 0 })),
-  http.delete('/api/config/labels/:name/merchant', () => HttpResponse.json({})),
+  http.put('/api/config/labels/:name/merchant-mappings/:pattern', () =>
+    HttpResponse.json({ applied: 0 }),
+  ),
+  http.delete('/api/config/labels/:name/merchant-mappings/:pattern', () =>
+    HttpResponse.json({ removed: 0 }),
+  ),
   http.get('/api/config/categories', () =>
     HttpResponse.json([
       { name: 'Food', description: 'Food spending', is_default: false },
@@ -225,8 +238,12 @@ export const handlers = [
     return HttpResponse.json({ name: body.name ?? '' })
   }),
   http.delete('/api/config/categories/:name', () => HttpResponse.json({})),
-  http.post('/api/config/categories/:name/apply', () => HttpResponse.json({ applied: 0 })),
-  http.delete('/api/config/categories/:name/merchant', () => HttpResponse.json({})),
+  http.put('/api/config/categories/:name/merchant-mappings/:pattern', () =>
+    HttpResponse.json({ applied: 0 }),
+  ),
+  http.delete('/api/config/categories/:name/merchant-mappings/:pattern', () =>
+    HttpResponse.json({ removed: 0 }),
+  ),
   http.get('/api/config/buckets', () =>
     HttpResponse.json([{ name: 'Needs', description: 'Essential spending', is_default: false }]),
   ),
@@ -237,22 +254,14 @@ export const handlers = [
     return HttpResponse.json({ name: body.name ?? '' })
   }),
   http.delete('/api/config/buckets/:name', () => HttpResponse.json({})),
-  http.post('/api/config/buckets/:name/apply', () => HttpResponse.json({ applied: 0 })),
-  http.delete('/api/config/buckets/:name/merchant', () => HttpResponse.json({})),
+  http.put('/api/config/buckets/:name/merchant-mappings/:pattern', () =>
+    HttpResponse.json({ applied: 0 }),
+  ),
+  http.delete('/api/config/buckets/:name/merchant-mappings/:pattern', () =>
+    HttpResponse.json({ removed: 0 }),
+  ),
   http.get('/api/config/banks', () => HttpResponse.json([])),
   http.get('/api/transactions/facets', () => HttpResponse.json(seededFacets)),
-  http.get('/api/transactions/search', ({ request }) => {
-    const url = new URL(request.url)
-    const transactions = filterTransactions(url)
-    const totalAmount = transactions.reduce((sum, transaction) => sum + transaction.amount, 0)
-
-    return HttpResponse.json({
-      transactions,
-      total: transactions.length,
-      total_amount: totalAmount,
-      base_currency: 'USD',
-    })
-  }),
   http.get('/api/transactions', ({ request }) => {
     const url = new URL(request.url)
     const transactions = filterTransactions(url)

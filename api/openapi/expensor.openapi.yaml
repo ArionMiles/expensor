@@ -6,28 +6,10 @@ definitions:
         example: gmail
         type: string
     type: object
-  api.AnnualHeatmapResponse:
-    properties:
-      buckets:
-        items:
-          $ref: '#/definitions/api.DailyBucketResponse'
-        type: array
-      year:
-        example: 2026
-        type: integer
-    type: object
   api.AppliedCountResponse:
     properties:
       applied:
         type: integer
-    type: object
-  api.ApplyLabelRequest:
-    properties:
-      merchant_pattern:
-        example: Swiggy
-        type: string
-    required:
-    - merchant_pattern
     type: object
   api.AuthExchangeRequest:
     properties:
@@ -76,22 +58,6 @@ definitions:
         type: string
       name:
         example: HDFC Bank
-        type: string
-    type: object
-  api.BaseCurrencyRequest:
-    properties:
-      base_currency:
-        example: INR
-        maxLength: 3
-        minLength: 3
-        type: string
-    required:
-    - base_currency
-    type: object
-  api.BaseCurrencyResponse:
-    properties:
-      base_currency:
-        example: USD
         type: string
     type: object
   api.BucketResponse:
@@ -452,8 +418,12 @@ definitions:
         example: ok
         type: string
     type: object
-  api.HeatmapDataResponse:
+  api.HeatmapResponse:
     properties:
+      buckets:
+        items:
+          $ref: '#/definitions/api.DailyBucketResponse'
+        type: array
       by_day_of_month:
         items:
           $ref: '#/definitions/api.DayOfMonthBucketResponse'
@@ -462,6 +432,9 @@ definitions:
         items:
           $ref: '#/definitions/api.WeekdayHourBucketResponse'
         type: array
+      year:
+        example: 2026
+        type: integer
     type: object
   api.LabelMappingsResponse:
     additionalProperties:
@@ -502,24 +475,16 @@ definitions:
         example: Online
         type: string
     type: object
-  api.LookbackDaysRequest:
-    properties:
-      lookback_days:
-        example: "365"
-        type: string
-    required:
-    - lookback_days
-    type: object
-  api.LookbackDaysResponse:
-    properties:
-      lookback_days:
-        example: "365"
-        type: string
-    type: object
   api.MerchantReasonRequest:
     properties:
       reason:
         example: contract check
+        type: string
+    type: object
+  api.MerchantReasonResponse:
+    properties:
+      reason:
+        example: Internal transfer
         type: string
     type: object
   api.MonthlyBreakdownResponse:
@@ -564,28 +529,6 @@ definitions:
         example: Swiggy
         type: string
     type: object
-  api.MuteReasonResponse:
-    properties:
-      reason:
-        example: Internal transfer
-        type: string
-    type: object
-  api.MuteTransactionRequest:
-    properties:
-      muted:
-        type: boolean
-      reason:
-        example: contract check
-        type: string
-    type: object
-  api.MuteTransactionResponse:
-    properties:
-      muted:
-        type: boolean
-      reason:
-        example: Internal transfer
-        type: string
-    type: object
   api.MutedMerchantResponse:
     properties:
       created_at:
@@ -606,6 +549,53 @@ definitions:
     properties:
       name:
         example: ContractCategory
+        type: string
+    type: object
+  api.PreferencesPatchRequest:
+    properties:
+      base_currency:
+        example: USD
+        maxLength: 3
+        minLength: 3
+        type: string
+      lookback_days:
+        example: 365
+        maximum: 3650
+        minimum: 1
+        type: integer
+      scan_interval:
+        example: 120
+        maximum: 3600
+        minimum: 10
+        type: integer
+      time_format:
+        enum:
+        - HH:mm
+        - HH:mm:ss
+        - h:mm a
+        - h:mm:ss a
+        example: HH:mm
+        type: string
+      timezone:
+        example: Asia/Kolkata
+        type: string
+    type: object
+  api.PreferencesResponse:
+    properties:
+      base_currency:
+        example: USD
+        type: string
+      lookback_days:
+        example: 365
+        type: integer
+      scan_interval:
+        example: 120
+        type: integer
+      time_format:
+        example: HH:mm
+        type: string
+      timezone:
+        example: Asia/Kolkata
         type: string
     type: object
   api.ReaderCheckpointResponse:
@@ -858,20 +848,6 @@ definitions:
     - bank
     - type
     type: object
-  api.ScanIntervalRequest:
-    properties:
-      scan_interval:
-        example: "120"
-        type: string
-    required:
-    - scan_interval
-    type: object
-  api.ScanIntervalResponse:
-    properties:
-      scan_interval:
-        example: "120"
-        type: string
-    type: object
   api.SetupStatusResponse:
     properties:
       missing:
@@ -944,12 +920,6 @@ definitions:
         type: string
       type: array
     type: object
-  api.TaxonomyMerchantRequest:
-    properties:
-      merchant_pattern:
-        example: Swiggy
-        type: string
-    type: object
   api.ThunderbirdMailboxesResponse:
     properties:
       mailboxes:
@@ -974,39 +944,6 @@ definitions:
         type: integer
       period:
         example: 2026-05
-        type: string
-    type: object
-  api.TimeFormatRequest:
-    properties:
-      time_format:
-        enum:
-        - HH:mm
-        - HH:mm:ss
-        - h:mm a
-        - h:mm:ss a
-        example: HH:mm
-        type: string
-    required:
-    - time_format
-    type: object
-  api.TimeFormatResponse:
-    properties:
-      time_format:
-        example: HH:mm
-        type: string
-    type: object
-  api.TimezoneRequest:
-    properties:
-      timezone:
-        example: Asia/Kolkata
-        type: string
-    required:
-    - timezone
-    type: object
-  api.TimezoneResponse:
-    properties:
-      timezone:
-        example: Asia/Kolkata
         type: string
     type: object
   api.TransactionLabelsRequest:
@@ -1081,6 +1018,12 @@ definitions:
       description:
         example: Dinner order
         type: string
+      mute_reason:
+        example: Duplicate notification
+        type: string
+      muted:
+        example: true
+        type: boolean
     type: object
   api.TransactionsListResponse:
     properties:
@@ -1100,27 +1043,6 @@ definitions:
           $ref: '#/definitions/api.TransactionResponse'
         type: array
     type: object
-  api.TransactionsSearchResponse:
-    properties:
-      base_currency:
-        example: INR
-        type: string
-      page:
-        type: integer
-      page_size:
-        type: integer
-      query:
-        example: coffee
-        type: string
-      total:
-        type: integer
-      total_amount:
-        type: number
-      transactions:
-        items:
-          $ref: '#/definitions/api.TransactionResponse'
-        type: array
-    type: object
   api.UpdateLabelRequest:
     properties:
       color:
@@ -1128,14 +1050,6 @@ definitions:
         type: string
     required:
     - color
-    type: object
-  api.UpdateMuteReasonRequest:
-    properties:
-      reason:
-        example: contract check
-        type: string
-    required:
-    - reason
     type: object
   api.UploadCredentialsResponse:
     properties:
@@ -1238,58 +1152,6 @@ paths:
       summary: List bank color mappings
       tags:
       - Taxonomy
-  /config/base-currency:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.BaseCurrencyResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Get the base currency
-      tags:
-      - Config
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Base currency payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.BaseCurrencyRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.BaseCurrencyResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Set the base currency
-      tags:
-      - Config
   /config/buckets:
     get:
       produces:
@@ -1371,49 +1233,8 @@ paths:
       summary: Delete a bucket
       tags:
       - Taxonomy
-  /config/buckets/{name}/apply:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Bucket name
-        example: Needs
-        in: path
-        name: name
-        required: true
-        type: string
-      - description: Merchant pattern payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.TaxonomyMerchantRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.AppliedCountResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Apply a bucket by merchant pattern
-      tags:
-      - Taxonomy
-  /config/buckets/{name}/merchant:
+  /config/buckets/{name}/merchant-mappings/{pattern}:
     delete:
-      consumes:
-      - application/json
       parameters:
       - description: Bucket name
         example: Needs
@@ -1421,12 +1242,12 @@ paths:
         name: name
         required: true
         type: string
-      - description: Merchant pattern payload
-        in: body
-        name: request
+      - description: URL-encoded merchant pattern
+        example: Rent
+        in: path
+        name: pattern
         required: true
-        schema:
-          $ref: '#/definitions/api.TaxonomyMerchantRequest'
+        type: string
       produces:
       - application/json
       responses:
@@ -1434,8 +1255,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.RemovedCountResponse'
-        "422":
-          description: Unprocessable Entity
+        "400":
+          description: Bad Request
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":
@@ -1447,6 +1268,42 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Remove a bucket by merchant pattern
+      tags:
+      - Taxonomy
+    put:
+      parameters:
+      - description: Bucket name
+        example: Needs
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: URL-encoded merchant pattern
+        example: Rent
+        in: path
+        name: pattern
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppliedCountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Apply a bucket by merchant pattern
       tags:
       - Taxonomy
   /config/buckets/export:
@@ -1572,49 +1429,8 @@ paths:
       summary: Delete a category
       tags:
       - Taxonomy
-  /config/categories/{name}/apply:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Category name
-        example: Food & Dining
-        in: path
-        name: name
-        required: true
-        type: string
-      - description: Merchant pattern payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.TaxonomyMerchantRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.AppliedCountResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Apply a category by merchant pattern
-      tags:
-      - Taxonomy
-  /config/categories/{name}/merchant:
+  /config/categories/{name}/merchant-mappings/{pattern}:
     delete:
-      consumes:
-      - application/json
       parameters:
       - description: Category name
         example: Food & Dining
@@ -1622,12 +1438,12 @@ paths:
         name: name
         required: true
         type: string
-      - description: Merchant pattern payload
-        in: body
-        name: request
+      - description: URL-encoded merchant pattern
+        example: Swiggy
+        in: path
+        name: pattern
         required: true
-        schema:
-          $ref: '#/definitions/api.TaxonomyMerchantRequest'
+        type: string
       produces:
       - application/json
       responses:
@@ -1635,8 +1451,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.RemovedCountResponse'
-        "422":
-          description: Unprocessable Entity
+        "400":
+          description: Bad Request
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":
@@ -1648,6 +1464,42 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Remove a category by merchant pattern
+      tags:
+      - Taxonomy
+    put:
+      parameters:
+      - description: Category name
+        example: Food & Dining
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: URL-encoded merchant pattern
+        example: Swiggy
+        in: path
+        name: pattern
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppliedCountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Apply a category by merchant pattern
       tags:
       - Taxonomy
   /config/categories/export:
@@ -1811,49 +1663,8 @@ paths:
       summary: Update a label
       tags:
       - Taxonomy
-  /config/labels/{name}/apply:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Label name
-        example: ContractLabel
-        in: path
-        name: name
-        required: true
-        type: string
-      - description: Merchant pattern payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.ApplyLabelRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.AppliedCountResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Apply a label by merchant pattern
-      tags:
-      - Taxonomy
-  /config/labels/{name}/merchant:
+  /config/labels/{name}/merchant-mappings/{pattern}:
     delete:
-      consumes:
-      - application/json
       parameters:
       - description: Label name
         example: Online
@@ -1861,12 +1672,12 @@ paths:
         name: name
         required: true
         type: string
-      - description: Merchant pattern payload
-        in: body
-        name: request
+      - description: URL-encoded merchant pattern
+        example: Swiggy
+        in: path
+        name: pattern
         required: true
-        schema:
-          $ref: '#/definitions/api.TaxonomyMerchantRequest'
+        type: string
       produces:
       - application/json
       responses:
@@ -1874,8 +1685,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.RemovedCountResponse'
-        "422":
-          description: Unprocessable Entity
+        "400":
+          description: Bad Request
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":
@@ -1887,6 +1698,42 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Remove a label by merchant pattern
+      tags:
+      - Taxonomy
+    put:
+      parameters:
+      - description: Label name
+        example: ContractLabel
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: URL-encoded merchant pattern
+        example: Swiggy
+        in: path
+        name: pattern
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppliedCountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Apply a label by merchant pattern
       tags:
       - Taxonomy
   /config/labels/export:
@@ -1931,7 +1778,7 @@ paths:
       summary: Get label mappings
       tags:
       - Taxonomy
-  /config/lookback-days:
+  /config/preferences:
     get:
       produces:
       - application/json
@@ -1939,31 +1786,31 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.LookbackDaysResponse'
+            $ref: '#/definitions/api.PreferencesResponse'
         "503":
           description: Service Unavailable
           schema:
             $ref: '#/definitions/api.ErrorResponse'
-      summary: Get lookback days
+      summary: Get application preferences
       tags:
       - Config
-    put:
+    patch:
       consumes:
       - application/json
       parameters:
-      - description: Lookback days payload
+      - description: Preferences to update
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.LookbackDaysRequest'
+          $ref: '#/definitions/api.PreferencesPatchRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.LookbackDaysResponse'
+            $ref: '#/definitions/api.PreferencesResponse'
         "400":
           description: Bad Request
           schema:
@@ -1980,7 +1827,7 @@ paths:
           description: Service Unavailable
           schema:
             $ref: '#/definitions/api.ErrorResponse'
-      summary: Set lookback days
+      summary: Update application preferences
       tags:
       - Config
   /config/readers/{name}/checkpoint:
@@ -2032,58 +1879,6 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Get a reader checkpoint
-      tags:
-      - Config
-  /config/scan-interval:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.ScanIntervalResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Get the scan interval
-      tags:
-      - Config
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Scan interval payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.ScanIntervalRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.ScanIntervalResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Set the scan interval
       tags:
       - Config
   /config/setup-status:
@@ -2138,110 +1933,6 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Get community sync status
-      tags:
-      - Config
-  /config/time-format:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.TimeFormatResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Get the time format
-      tags:
-      - Config
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Time format payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.TimeFormatRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.TimeFormatResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Set the time format
-      tags:
-      - Config
-  /config/timezone:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.TimezoneResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Get the application timezone
-      tags:
-      - Config
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Timezone payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.TimezoneRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.TimezoneResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Set the application timezone
       tags:
       - Config
   /daemon/rescan:
@@ -2385,8 +2076,7 @@ paths:
       summary: Get an extraction diagnostic
       tags:
       - Extraction Diagnostics
-  /extraction-diagnostics/{id}/status:
-    put:
+    patch:
       consumes:
       - application/json
       parameters:
@@ -2572,8 +2262,7 @@ paths:
       summary: Delete a muted merchant pattern
       tags:
       - Transactions
-  /muted-merchants/{id}/reason:
-    put:
+    patch:
       consumes:
       - application/json
       parameters:
@@ -2596,7 +2285,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.MuteReasonResponse'
+            $ref: '#/definitions/api.MerchantReasonResponse'
         "400":
           description: Bad Request
           schema:
@@ -2837,7 +2526,7 @@ paths:
       summary: Get reader runtime config
       tags:
       - Readers
-    post:
+    put:
       consumes:
       - application/json
       parameters:
@@ -3306,13 +2995,18 @@ paths:
         in: query
         name: to
         type: string
+      - description: Calendar year; cannot be combined with from or to
+        example: 2026
+        in: query
+        name: year
+        type: integer
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.HeatmapDataResponse'
+            $ref: '#/definitions/api.HeatmapResponse'
         "400":
           description: Bad Request
           schema:
@@ -3326,32 +3020,6 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Get spending heatmap
-      tags:
-      - Stats
-  /stats/heatmap/annual:
-    get:
-      parameters:
-      - description: Calendar year
-        example: 2026
-        in: query
-        name: year
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.AnnualHeatmapResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Get annual spending heatmap
       tags:
       - Stats
   /stats/labels/monthly:
@@ -3537,6 +3205,10 @@ paths:
         in: query
         name: tz
         type: string
+      - description: Free-text search over merchant and description
+        in: query
+        name: q
+        type: string
       - description: Sort field
         enum:
         - timestamp
@@ -3608,7 +3280,7 @@ paths:
       summary: Get a transaction
       tags:
       - Transactions
-    put:
+    patch:
       consumes:
       - application/json
       parameters:
@@ -3741,94 +3413,6 @@ paths:
       summary: Remove a label from a transaction
       tags:
       - Transactions
-  /transactions/{id}/mute:
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Transaction ID
-        example: 00000000-0000-0000-0000-000000000001
-        format: uuid
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Mute payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.MuteTransactionRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.MuteTransactionResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Mute or unmute a transaction
-      tags:
-      - Transactions
-  /transactions/{id}/mute-reason:
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Transaction ID
-        example: 00000000-0000-0000-0000-000000000001
-        format: uuid
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Mute reason payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.UpdateMuteReasonRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.MuteReasonResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Update a transaction mute reason
-      tags:
-      - Transactions
   /transactions/facets:
     get:
       produces:
@@ -3847,183 +3431,6 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Get transaction facets
-      tags:
-      - Transactions
-  /transactions/search:
-    get:
-      parameters:
-      - description: Search query
-        in: query
-        name: q
-        required: true
-        type: string
-      - default: 1
-        description: 1-based page number
-        in: query
-        name: page
-        type: integer
-      - default: 20
-        description: Page size
-        in: query
-        name: page_size
-        type: integer
-      - description: Merchant filter
-        in: query
-        name: merchant
-        type: string
-      - description: Category filter
-        in: query
-        name: category
-        type: string
-      - description: Only transactions without a category when set to 1
-        enum:
-        - 1
-        in: query
-        name: category_missing
-        type: integer
-      - description: Comma-separated categories to exclude
-        in: query
-        name: exclude_categories
-        type: string
-      - description: Currency filter
-        in: query
-        name: currency
-        type: string
-      - description: Source filter
-        in: query
-        name: source
-        type: string
-      - description: Comma-separated sources to exclude
-        in: query
-        name: exclude_sources
-        type: string
-      - description: Source type filter
-        in: query
-        name: source_type
-        type: string
-      - description: Comma-separated source types to exclude
-        in: query
-        name: exclude_source_types
-        type: string
-      - description: Bank filter
-        in: query
-        name: bank
-        type: string
-      - description: Comma-separated banks to exclude
-        in: query
-        name: exclude_banks
-        type: string
-      - description: Label filter
-        in: query
-        name: label
-        type: string
-      - description: Only transactions without labels when set to 1
-        enum:
-        - 1
-        in: query
-        name: label_missing
-        type: integer
-      - description: Comma-separated labels to exclude
-        in: query
-        name: exclude_labels
-        type: string
-      - description: Bucket filter
-        in: query
-        name: bucket
-        type: string
-      - description: Only transactions without a bucket when set to 1
-        enum:
-        - 1
-        in: query
-        name: bucket_missing
-        type: integer
-      - description: Comma-separated buckets to exclude
-        in: query
-        name: exclude_buckets
-        type: string
-      - description: RFC3339 start timestamp
-        in: query
-        name: date_from
-        type: string
-      - description: RFC3339 end timestamp
-        in: query
-        name: date_to
-        type: string
-      - description: Include muted transactions when set to 1
-        enum:
-        - 1
-        in: query
-        name: show_muted
-        type: integer
-      - description: Return only muted transactions when set to 1
-        enum:
-        - 1
-        in: query
-        name: muted_only
-        type: integer
-      - description: Return only individually muted transactions when set to 1
-        enum:
-        - 1
-        in: query
-        name: individual_only
-        type: integer
-      - description: PostgreSQL DOW weekday filter (0=Sunday...6=Saturday)
-        enum:
-        - 0
-        - 1
-        - 2
-        - 3
-        - 4
-        - 5
-        - 6
-        in: query
-        name: weekday
-        type: integer
-      - description: Minimum hour filter (0-23)
-        in: query
-        name: hour_from
-        type: integer
-      - description: Maximum hour filter (0-23)
-        in: query
-        name: hour_to
-        type: integer
-      - description: IANA timezone used for weekday/hour filters
-        in: query
-        name: tz
-        type: string
-      - description: Sort field
-        enum:
-        - timestamp
-        in: query
-        name: sort_by
-        type: string
-      - description: Sort direction
-        enum:
-        - asc
-        - desc
-        in: query
-        name: sort_dir
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.TransactionsSearchResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Search transactions
       tags:
       - Transactions
   /version:

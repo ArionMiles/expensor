@@ -6,6 +6,7 @@ import type {
   ExtractionDiagnosticListStatus,
   ExtractionDiagnosticStatus,
   MonthlyBreakdownData,
+  PreferencesPatch,
   RuleDocument,
   RulePayload,
   SyncStatus,
@@ -18,6 +19,7 @@ export const queryKeys = {
   status: ['status'] as const,
   chartData: ['stats', 'charts'] as const,
   dashboardData: ['stats', 'dashboard'] as const,
+  preferences: ['config', 'preferences'] as const,
   heatmap: (from?: string, to?: string) => ['stats', 'heatmap', from ?? null, to ?? null] as const,
   annualHeatmap: (year: number) => ['stats', 'heatmap', 'annual', year] as const,
   readers: ['plugins', 'readers'] as const,
@@ -351,7 +353,7 @@ export function useApplyLabel() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ name, pattern }: { name: string; pattern: string }) =>
-      api.config.labels.apply(name, pattern),
+      api.config.labels.putMerchantMapping(name, pattern),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] })
       qc.invalidateQueries({ queryKey: ['label-mappings'] })
@@ -363,7 +365,7 @@ export function useRemoveLabelByMerchant() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ name, pattern }: { name: string; pattern: string }) =>
-      api.config.labels.removeMerchant(name, pattern),
+      api.config.labels.deleteMerchantMapping(name, pattern),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] })
       qc.invalidateQueries({ queryKey: ['label-mappings'] })
@@ -406,7 +408,7 @@ export function useApplyCategory() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ name, pattern }: { name: string; pattern: string }) =>
-      api.config.categories.apply(name, pattern),
+      api.config.categories.putMerchantMapping(name, pattern),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] })
       qc.invalidateQueries({ queryKey: ['category-mappings'] })
@@ -419,7 +421,7 @@ export function useRemoveCategoryByMerchant() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ name, pattern }: { name: string; pattern: string }) =>
-      api.config.categories.removeMerchant(name, pattern),
+      api.config.categories.deleteMerchantMapping(name, pattern),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] })
       qc.invalidateQueries({ queryKey: ['category-mappings'] })
@@ -462,7 +464,7 @@ export function useApplyBucket() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ name, pattern }: { name: string; pattern: string }) =>
-      api.config.buckets.apply(name, pattern),
+      api.config.buckets.putMerchantMapping(name, pattern),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] })
       qc.invalidateQueries({ queryKey: ['bucket-mappings'] })
@@ -475,7 +477,7 @@ export function useRemoveBucketByMerchant() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ name, pattern }: { name: string; pattern: string }) =>
-      api.config.buckets.removeMerchant(name, pattern),
+      api.config.buckets.deleteMerchantMapping(name, pattern),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] })
       qc.invalidateQueries({ queryKey: ['bucket-mappings'] })
@@ -566,35 +568,11 @@ export function useRescan() {
   })
 }
 
-export function useScanInterval() {
+export function usePreferences() {
   return useQuery({
-    queryKey: ['config', 'scan-interval'] as const,
-    queryFn: () => api.config.getScanInterval().then((r) => Number(r.data.scan_interval)),
+    queryKey: queryKeys.preferences,
+    queryFn: () => api.config.getPreferences().then((r) => r.data),
     staleTime: 60_000,
-  })
-}
-
-export function useSetScanInterval() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (seconds: number) => api.config.setScanInterval(seconds).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['config', 'scan-interval'] }),
-  })
-}
-
-export function useLookbackDays() {
-  return useQuery({
-    queryKey: ['config', 'lookback-days'] as const,
-    queryFn: () => api.config.getLookbackDays().then((r) => Number(r.data.lookback_days)),
-    staleTime: 60_000,
-  })
-}
-
-export function useSetLookbackDays() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (days: number) => api.config.setLookbackDays(days).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['config', 'lookback-days'] }),
   })
 }
 
@@ -617,33 +595,28 @@ export function useClearReaderCheckpoint() {
 
 export function useTimezone() {
   return useQuery({
-    queryKey: ['config', 'timezone'] as const,
-    queryFn: () => api.config.getTimezone().then((r) => r.data.timezone),
+    queryKey: queryKeys.preferences,
+    queryFn: () => api.config.getPreferences().then((r) => r.data),
+    select: (preferences) => preferences.timezone,
     staleTime: Infinity,
-  })
-}
-
-export function useSetTimezone() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (timezone: string) => api.config.setTimezone(timezone).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['config', 'timezone'] }),
   })
 }
 
 export function useTimeFormat() {
   return useQuery({
-    queryKey: ['config', 'time-format'] as const,
-    queryFn: () => api.config.getTimeFormat().then((r) => r.data.time_format),
+    queryKey: queryKeys.preferences,
+    queryFn: () => api.config.getPreferences().then((r) => r.data),
+    select: (preferences) => preferences.time_format,
     staleTime: Infinity,
   })
 }
 
-export function useSetTimeFormat() {
+export function useUpdatePreferences() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (timeFormat: string) => api.config.setTimeFormat(timeFormat).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['config', 'time-format'] }),
+    mutationFn: (patch: PreferencesPatch) =>
+      api.config.updatePreferences(patch).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.preferences }),
   })
 }
 

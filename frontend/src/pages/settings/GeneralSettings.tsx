@@ -1,11 +1,4 @@
-import { api } from '@/api/client'
-import {
-  useSetTimeFormat,
-  useSetTimezone,
-  useTimeFormat,
-  useTimezone,
-  useVersion,
-} from '@/api/queries'
+import { usePreferences, useUpdatePreferences, useVersion } from '@/api/queries'
 import { TIME_FORMATS, type TimeFormatValue } from '@/contexts/DisplayContext'
 import { FloatingDropdown, comboboxOptionClass, useComboboxNavigation } from '@/components/Combobox'
 import { getBrowserTimezone, getTimezoneOptions, normalizeTimezone } from '@/lib/timezone'
@@ -404,48 +397,38 @@ function VersionSection() {
 
 export function GeneralSettings() {
   const [currency, setCurrency] = useState('INR')
-  const [loading, setLoading] = useState(true)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const { data: savedTimezone } = useTimezone()
-  const { data: savedTimeFormat } = useTimeFormat()
-  const { mutate: setTimezone } = useSetTimezone()
-  const { mutate: setTimeFormat } = useSetTimeFormat()
+  const { data: preferences, isLoading } = usePreferences()
+  const updatePreferences = useUpdatePreferences()
 
   const [timezone, setTimezoneDraft] = useState<string>(getBrowserTimezone())
   const [timeFormat, setTimeFormatDraft] = useState<TimeFormatValue>('HH:mm')
 
   useEffect(() => {
-    if (savedTimezone) setTimezoneDraft(normalizeTimezone(savedTimezone))
-  }, [savedTimezone])
-
-  useEffect(() => {
-    if (savedTimeFormat) setTimeFormatDraft(savedTimeFormat as TimeFormatValue)
-  }, [savedTimeFormat])
-
-  useEffect(() => {
-    api.status.get().then((r) => {
-      const c = r.data.stats?.base_currency
-      if (c) setCurrency(c)
-      setLoading(false)
-    })
-  }, [])
+    if (!preferences) return
+    setCurrency(preferences.base_currency)
+    if (preferences.timezone) setTimezoneDraft(normalizeTimezone(preferences.timezone))
+    setTimeFormatDraft(preferences.time_format as TimeFormatValue)
+  }, [preferences])
 
   const handleSave = async () => {
     setSaved(false)
     setError(null)
     try {
-      await api.config.setBaseCurrency(currency)
-      setTimezone(timezone)
-      setTimeFormat(timeFormat)
+      await updatePreferences.mutateAsync({
+        base_currency: currency,
+        timezone,
+        time_format: timeFormat,
+      })
       setSaved(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
     }
   }
 
-  if (loading) return <p className="text-xs text-muted-foreground">Loading...</p>
+  if (isLoading) return <p className="text-xs text-muted-foreground">Loading...</p>
 
   return (
     <div className="space-y-6">

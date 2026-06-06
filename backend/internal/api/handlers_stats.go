@@ -45,19 +45,30 @@ func (h *Handlers) GetDashboardData(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetHeatmap handles GET /api/stats/heatmap.
-// Optional query params: from=<RFC3339>, to=<RFC3339> (both or neither).
+// Optional query params: from=<RFC3339>, to=<RFC3339>, or year=<YYYY>.
 // Returns 400 if either param is present but malformed.
 // @Summary Get spending heatmap
 // @Tags Stats
 // @Produce json
 // @Param from query string false "RFC3339 start timestamp" example(2026-05-01T00:00:00Z)
 // @Param to query string false "RFC3339 end timestamp" example(2026-05-31T23:59:59Z)
-// @Success 200 {object} HeatmapDataResponse
+// @Param year query int false "Calendar year; cannot be combined with from or to" example(2026)
+// @Success 200 {object} HeatmapResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /stats/heatmap [get]
 func (h *Handlers) GetHeatmap(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	if query.Has("year") {
+		if query.Has("from") || query.Has("to") {
+			writeError(w, http.StatusBadRequest, "year cannot be combined with from or to")
+			return
+		}
+		h.getAnnualHeatmap(w, r)
+		return
+	}
+
 	from, to, err := parseHeatmapRange(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -73,18 +84,7 @@ func (h *Handlers) GetHeatmap(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, data)
 }
 
-// GetAnnualHeatmap handles GET /api/stats/heatmap/annual?year=YYYY.
-// Returns per-day transaction totals for the requested calendar year.
-// Defaults to the current year when ?year is absent or invalid.
-// @Summary Get annual spending heatmap
-// @Tags Stats
-// @Produce json
-// @Param year query int false "Calendar year" example(2026)
-// @Success 200 {object} AnnualHeatmapResponse
-// @Failure 500 {object} ErrorResponse
-// @Failure 503 {object} ErrorResponse
-// @Router /stats/heatmap/annual [get]
-func (h *Handlers) GetAnnualHeatmap(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) getAnnualHeatmap(w http.ResponseWriter, r *http.Request) {
 	yearStr := r.URL.Query().Get("year")
 	year, err := strconv.Atoi(yearStr)
 	if err != nil || year < 1 {

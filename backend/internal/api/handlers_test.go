@@ -51,6 +51,14 @@ type mockStore struct {
 	getResult             *store.Transaction
 	getErr                error
 	updateErr             error
+	updatedTransaction    store.TransactionUpdate
+	muteTransactionID     string
+	muteTransactionValue  bool
+	muteTransactionReason string
+	updateMuteReasonID    string
+	updateMuteReasonValue string
+	updateMerchantID      string
+	updateMerchantReason  string
 	addLabelsErr          error
 	removeLblErr          error
 	searchResult          []store.Transaction
@@ -418,7 +426,8 @@ func (m *mockStore) RemoveBucketByMerchant(_ context.Context, _, _ string) (int6
 	return 1, nil
 }
 
-func (m *mockStore) UpdateTransaction(_ context.Context, _ string, _ store.TransactionUpdate) error {
+func (m *mockStore) UpdateTransaction(_ context.Context, _ string, update store.TransactionUpdate) error {
+	m.updatedTransaction = update
 	return m.updateTxErr
 }
 
@@ -460,10 +469,25 @@ func (m *mockStore) ImportUserRules(_ context.Context, rows []store.RuleRow) err
 	return m.importErr
 }
 
-func (m *mockStore) MuteTransaction(_ context.Context, _ string, _ bool, _ string) error { return nil }
-func (m *mockStore) UpdateMuteReason(_ context.Context, _, _ string) error               { return nil }
-func (m *mockStore) MuteByMerchant(_ context.Context, _, _ string) error                 { return nil }
-func (m *mockStore) UpdateMerchantReason(_ context.Context, _, _ string) error           { return nil }
+func (m *mockStore) MuteTransaction(_ context.Context, id string, muted bool, reason string) error {
+	m.muteTransactionID = id
+	m.muteTransactionValue = muted
+	m.muteTransactionReason = reason
+	return nil
+}
+
+func (m *mockStore) UpdateMuteReason(_ context.Context, id, reason string) error {
+	m.updateMuteReasonID = id
+	m.updateMuteReasonValue = reason
+	return nil
+}
+func (m *mockStore) MuteByMerchant(_ context.Context, _, _ string) error { return nil }
+func (m *mockStore) UpdateMerchantReason(_ context.Context, id, reason string) error {
+	m.updateMerchantID = id
+	m.updateMerchantReason = reason
+	return nil
+}
+
 func (m *mockStore) ListMutedMerchants(_ context.Context) ([]store.MutedMerchant, error) {
 	return []store.MutedMerchant{}, nil
 }
@@ -1100,7 +1124,7 @@ func TestSaveReaderConfig_SavesToStore(t *testing.T) {
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	req := httptest.NewRequestWithContext(
 		context.Background(),
-		http.MethodPost,
+		http.MethodPut,
 		"/api/readers/thunderbird/config",
 		strings.NewReader(`{"config":{"mailboxes":"Inbox"}}`),
 	)
@@ -1371,7 +1395,7 @@ func TestUpdateTransaction_Success(t *testing.T) {
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	body := `{"description":"Updated"}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/11111111-1111-1111-1111-111111111111", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/api/transactions/11111111-1111-1111-1111-111111111111", strings.NewReader(body))
 	req.SetPathValue("id", testTransactionID)
 	rr := httptest.NewRecorder()
 	h.UpdateTransaction(rr, req)
@@ -1381,12 +1405,58 @@ func TestUpdateTransaction_Success(t *testing.T) {
 	}
 }
 
+func TestUpdateTransaction_MuteStateAndReason(t *testing.T) {
+	txn := &store.Transaction{ID: testTransactionID, Muted: true, MuteReason: "duplicate", Labels: []string{}}
+	st := &mockStore{getResult: txn}
+	h := newTestHandlers(t, st, &mockDaemon{})
+
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPatch,
+		"/api/transactions/"+testTransactionID,
+		strings.NewReader(`{"muted":true,"mute_reason":"duplicate"}`),
+	)
+	req.SetPathValue("id", testTransactionID)
+	rr := httptest.NewRecorder()
+	h.UpdateTransaction(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	if st.muteTransactionID != testTransactionID || !st.muteTransactionValue || st.muteTransactionReason != "duplicate" {
+		t.Fatalf("mute call = id=%q muted=%v reason=%q", st.muteTransactionID, st.muteTransactionValue, st.muteTransactionReason)
+	}
+}
+
+func TestUpdateTransaction_MuteReasonOnly(t *testing.T) {
+	txn := &store.Transaction{ID: testTransactionID, Muted: true, MuteReason: "updated", Labels: []string{}}
+	st := &mockStore{getResult: txn}
+	h := newTestHandlers(t, st, &mockDaemon{})
+
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPatch,
+		"/api/transactions/"+testTransactionID,
+		strings.NewReader(`{"mute_reason":"updated"}`),
+	)
+	req.SetPathValue("id", testTransactionID)
+	rr := httptest.NewRecorder()
+	h.UpdateTransaction(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	if st.updateMuteReasonID != testTransactionID || st.updateMuteReasonValue != "updated" {
+		t.Fatalf("mute reason call = id=%q reason=%q", st.updateMuteReasonID, st.updateMuteReasonValue)
+	}
+}
+
 func TestUpdateTransaction_NotFound(t *testing.T) {
 	st := &mockStore{updateTxErr: store.ErrNotFound}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	body := `{"description":"x"}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/"+testTransactionID, strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/api/transactions/"+testTransactionID, strings.NewReader(body))
 	req.SetPathValue("id", testTransactionID)
 	rr := httptest.NewRecorder()
 	h.UpdateTransaction(rr, req)
@@ -1400,7 +1470,7 @@ func TestUpdateTransaction_FetchUpdatedNotFound(t *testing.T) {
 	st := &mockStore{getErr: store.ErrNotFound}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/"+testTransactionID, strings.NewReader(`{}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/api/transactions/"+testTransactionID, strings.NewReader(`{}`))
 	req.SetPathValue("id", testTransactionID)
 	rr := httptest.NewRecorder()
 	h.UpdateTransaction(rr, req)
@@ -1412,7 +1482,7 @@ func TestUpdateTransaction_FetchUpdatedNotFound(t *testing.T) {
 
 func TestUpdateTransaction_InvalidID(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/not-a-uuid", strings.NewReader(`{}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/api/transactions/not-a-uuid", strings.NewReader(`{}`))
 	req.SetPathValue("id", "not-a-uuid")
 	rr := httptest.NewRecorder()
 	h.UpdateTransaction(rr, req)
@@ -1424,7 +1494,7 @@ func TestUpdateTransaction_InvalidID(t *testing.T) {
 
 func TestUpdateTransaction_InvalidJSON(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/11111111-1111-1111-1111-111111111111", strings.NewReader("not-json"))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/api/transactions/11111111-1111-1111-1111-111111111111", strings.NewReader("not-json"))
 	req.SetPathValue("id", testTransactionID)
 	rr := httptest.NewRecorder()
 	h.UpdateTransaction(rr, req)
@@ -1548,8 +1618,8 @@ func TestUpdateExtractionDiagnosticStatus_InvalidStatus(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(
 		context.Background(),
-		http.MethodPut,
-		"/api/extraction-diagnostics/11111111-1111-1111-1111-111111111111/status",
+		http.MethodPatch,
+		"/api/extraction-diagnostics/11111111-1111-1111-1111-111111111111",
 		strings.NewReader(`{"status":"all"}`),
 	)
 	req.SetPathValue("id", "11111111-1111-1111-1111-111111111111")
@@ -1566,8 +1636,8 @@ func TestUpdateExtractionDiagnosticStatus_NotFound(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(
 		context.Background(),
-		http.MethodPut,
-		"/api/extraction-diagnostics/33333333-3333-3333-3333-333333333333/status",
+		http.MethodPatch,
+		"/api/extraction-diagnostics/33333333-3333-3333-3333-333333333333",
 		strings.NewReader(`{"status":"resolved"}`),
 	)
 	req.SetPathValue("id", "33333333-3333-3333-3333-333333333333")
@@ -1584,8 +1654,8 @@ func TestUpdateExtractionDiagnosticStatus_InvalidID(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(
 		context.Background(),
-		http.MethodPut,
-		"/api/extraction-diagnostics/not-a-uuid/status",
+		http.MethodPatch,
+		"/api/extraction-diagnostics/not-a-uuid",
 		strings.NewReader(`{"status":"resolved"}`),
 	)
 	req.SetPathValue("id", "not-a-uuid")
@@ -1602,8 +1672,8 @@ func TestUpdateExtractionDiagnosticStatus_Conflict(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(
 		context.Background(),
-		http.MethodPut,
-		"/api/extraction-diagnostics/44444444-4444-4444-4444-444444444444/status",
+		http.MethodPatch,
+		"/api/extraction-diagnostics/44444444-4444-4444-4444-444444444444",
 		strings.NewReader(`{"status":"open"}`),
 	)
 	req.SetPathValue("id", "44444444-4444-4444-4444-444444444444")
@@ -1719,31 +1789,7 @@ func TestRemoveLabel_InvalidID(t *testing.T) {
 	}
 }
 
-func TestMuteTransaction_InvalidID(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/not-a-uuid/mute", strings.NewReader(`{"muted":true}`))
-	req.SetPathValue("id", "not-a-uuid")
-	rr := httptest.NewRecorder()
-	h.MuteTransaction(rr, req)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
-	}
-}
-
-func TestUpdateMuteReason_InvalidID(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/transactions/not-a-uuid/mute-reason", strings.NewReader(`{"reason":"x"}`))
-	req.SetPathValue("id", "not-a-uuid")
-	rr := httptest.NewRecorder()
-	h.UpdateMuteReason(rr, req)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
-	}
-}
-
-func TestSearchTransactions_Basic(t *testing.T) {
+func TestListTransactions_WithSearchQuery(t *testing.T) {
 	st := &mockStore{
 		searchResult: []store.Transaction{{ID: "x", MerchantInfo: "Zomato", Labels: []string{}}},
 		searchListResult: store.TransactionListResult{
@@ -1752,16 +1798,13 @@ func TestSearchTransactions_Basic(t *testing.T) {
 		},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.SearchTransactions, "/api/transactions/search?q=zomato")
+	rr := get(h.ListTransactions, "/api/transactions?q=zomato")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 	var resp map[string]any
 	decodeJSON(t, rr.Body.String(), &resp)
-	if resp["query"] != "zomato" {
-		t.Errorf("expected query=zomato, got %v", resp["query"])
-	}
 	if resp["total"] != float64(1) {
 		t.Errorf("expected total=1, got %v", resp["total"])
 	}
@@ -1773,13 +1816,13 @@ func TestSearchTransactions_Basic(t *testing.T) {
 	}
 }
 
-func TestSearchTransactions_EmptyArray(t *testing.T) {
+func TestListTransactions_SearchEmptyArray(t *testing.T) {
 	st := &mockStore{
 		searchResult:     []store.Transaction{},
 		searchListResult: store.TransactionListResult{Total: 0},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.SearchTransactions, "/api/transactions/search?q=zomato")
+	rr := get(h.ListTransactions, "/api/transactions?q=zomato")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -1795,13 +1838,13 @@ func TestSearchTransactions_EmptyArray(t *testing.T) {
 	}
 }
 
-func TestSearchTransactions_NilSliceReturnsEmptyArray(t *testing.T) {
+func TestListTransactions_SearchNilSliceReturnsEmptyArray(t *testing.T) {
 	st := &mockStore{
 		searchResult:     nil,
 		searchListResult: store.TransactionListResult{Total: 0},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.SearchTransactions, "/api/transactions/search?q=zomato")
+	rr := get(h.ListTransactions, "/api/transactions?q=zomato")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -1817,14 +1860,14 @@ func TestSearchTransactions_NilSliceReturnsEmptyArray(t *testing.T) {
 	}
 }
 
-func TestSearchTransactions_MutedAndIndividualFlags(t *testing.T) {
+func TestListTransactions_SearchMutedAndIndividualFlags(t *testing.T) {
 	st := &mockStore{
 		searchResult:     []store.Transaction{},
 		searchListResult: store.TransactionListResult{Total: 0},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
-	rr := get(h.SearchTransactions, "/api/transactions/search?q=zomato&muted_only=1&individual_only=1")
+	rr := get(h.ListTransactions, "/api/transactions?q=zomato&muted_only=1&individual_only=1")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -1837,7 +1880,7 @@ func TestSearchTransactions_MutedAndIndividualFlags(t *testing.T) {
 	}
 }
 
-func TestSearchTransactions_ParsesListFilters(t *testing.T) {
+func TestListTransactions_SearchParsesListFilters(t *testing.T) {
 	st := &mockStore{
 		searchResult:     []store.Transaction{},
 		searchListResult: store.TransactionListResult{Total: 0},
@@ -1845,8 +1888,8 @@ func TestSearchTransactions_ParsesListFilters(t *testing.T) {
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	rr := get(
-		h.SearchTransactions,
-		"/api/transactions/search?q=instamart&source_type=Credit%20Card&bank=HDFC"+
+		h.ListTransactions,
+		"/api/transactions?q=instamart&source_type=Credit%20Card&bank=HDFC"+
 			"&date_from=2026-04-30T18:30:00.000Z&date_to=2026-05-31T18:29:59.999Z&sort_dir=asc",
 	)
 
@@ -1870,23 +1913,23 @@ func TestSearchTransactions_ParsesListFilters(t *testing.T) {
 	}
 }
 
-func TestSearchTransactions_InvalidControlCharQuery(t *testing.T) {
+func TestListTransactions_InvalidControlCharQuery(t *testing.T) {
 	st := &mockStore{}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.SearchTransactions, "/api/transactions/search?q=%00bad")
+	rr := get(h.ListTransactions, "/api/transactions?q=%00bad")
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 
-func TestSearchTransactions_HugePaginationFallsBackToDefaults(t *testing.T) {
+func TestListTransactions_SearchHugePaginationFallsBackToDefaults(t *testing.T) {
 	st := &mockStore{
 		searchResult:     []store.Transaction{},
 		searchListResult: store.TransactionListResult{Total: 0},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.SearchTransactions, "/api/transactions/search?q=test&page=576460752303423488&page_size=999999")
+	rr := get(h.ListTransactions, "/api/transactions?q=test&page=576460752303423488&page_size=999999")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -2033,37 +2076,49 @@ func TestAuthCallback_ReturnsClosePageAfterTokenSaved(t *testing.T) {
 	}
 }
 
-// --- app config / base currency ---
+// --- app preferences ---
 
-func TestGetBaseCurrency_DefaultsToConfig(t *testing.T) {
+func TestGetPreferencesCombinesStoredValuesAndDefaults(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/base-currency", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/preferences", nil)
 	rr := httptest.NewRecorder()
-	h.GetBaseCurrency(rr, req)
+	h.GetPreferences(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	var resp map[string]string
+	var resp PreferencesResponse
 	decodeJSON(t, rr.Body.String(), &resp)
-	if resp["base_currency"] != "INR" {
-		t.Errorf("expected INR (from config), got %q", resp["base_currency"])
+	if resp.BaseCurrency != "INR" || resp.ScanInterval != 60 || resp.LookbackDays != 180 {
+		t.Fatalf("unexpected configured defaults: %#v", resp)
+	}
+	if resp.Timezone != "" || resp.TimeFormat != "HH:mm" {
+		t.Fatalf("unexpected display defaults: %#v", resp)
 	}
 }
 
-func TestGetBaseCurrency_FromDB(t *testing.T) {
-	ms := &mockStore{appConfig: map[string]string{"base_currency": "USD"}}
+func TestGetPreferencesUsesStoredValues(t *testing.T) {
+	ms := &mockStore{appConfig: map[string]string{
+		"base_currency":   "USD",
+		"scan_interval":   "120",
+		"lookback_days":   "365",
+		"app.timezone":    "Asia/Kolkata",
+		"app.time_format": "h:mm a",
+	}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/base-currency", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/preferences", nil)
 	rr := httptest.NewRecorder()
-	h.GetBaseCurrency(rr, req)
+	h.GetPreferences(rr, req)
 
-	var resp map[string]string
+	var resp PreferencesResponse
 	decodeJSON(t, rr.Body.String(), &resp)
-	if resp["base_currency"] != "USD" {
-		t.Errorf("expected USD from DB, got %q", resp["base_currency"])
+	if resp.BaseCurrency != "USD" || resp.ScanInterval != 120 || resp.LookbackDays != 365 {
+		t.Fatalf("unexpected stored numeric preferences: %#v", resp)
+	}
+	if resp.Timezone != "Asia/Kolkata" || resp.TimeFormat != "h:mm a" {
+		t.Fatalf("unexpected stored display preferences: %#v", resp)
 	}
 }
 
@@ -2190,38 +2245,51 @@ func TestGetMonthlyBreakdown_InvalidDimension(t *testing.T) {
 	}
 }
 
-func TestSetBaseCurrency_Success(t *testing.T) {
+func TestPatchPreferencesUpdatesSuppliedFields(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
-	body := strings.NewReader(`{"base_currency":"usd"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/base-currency", body)
+	body := strings.NewReader(
+		`{"base_currency":"usd","scan_interval":120,"lookback_days":365,"timezone":"Asia/Kolkata","time_format":"h:mm a"}`,
+	)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/api/config/preferences", body)
 	rr := httptest.NewRecorder()
-	h.SetBaseCurrency(rr, req)
+	h.PatchPreferences(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
-	var resp map[string]string
+	var resp PreferencesResponse
 	decodeJSON(t, rr.Body.String(), &resp)
-	if resp["base_currency"] != "USD" {
-		t.Errorf("expected normalised USD, got %q", resp["base_currency"])
+	if resp.BaseCurrency != "USD" || resp.ScanInterval != 120 || resp.LookbackDays != 365 {
+		t.Fatalf("unexpected response: %#v", resp)
 	}
-	if ms.appConfig["base_currency"] != "USD" {
-		t.Errorf("store not updated, got %q", ms.appConfig["base_currency"])
+	want := map[string]string{
+		"base_currency":   "USD",
+		"scan_interval":   "120",
+		"lookback_days":   "365",
+		"app.timezone":    "Asia/Kolkata",
+		"app.time_format": "h:mm a",
+	}
+	if !reflect.DeepEqual(ms.appConfig, want) {
+		t.Fatalf("stored preferences = %#v, want %#v", ms.appConfig, want)
 	}
 }
 
-func TestSetBaseCurrency_InvalidCode(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+func TestPatchPreferencesValidatesBeforeWriting(t *testing.T) {
+	ms := &mockStore{}
+	h := newTestHandlers(t, ms, &mockDaemon{})
 
-	for _, tc := range []string{`{"base_currency":"US"}`, `{"base_currency":"USDA"}`, `{"base_currency":"12A"}`} {
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/base-currency", strings.NewReader(tc))
-		rr := httptest.NewRecorder()
-		h.SetBaseCurrency(rr, req)
-		if rr.Code != http.StatusBadRequest {
-			t.Errorf("input %s: expected 400, got %d", tc, rr.Code)
-		}
+	body := strings.NewReader(`{"base_currency":"USD","scan_interval":5}`)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/api/config/preferences", body)
+	rr := httptest.NewRecorder()
+	h.PatchPreferences(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	if len(ms.appConfig) != 0 {
+		t.Fatalf("invalid patch persisted values: %#v", ms.appConfig)
 	}
 }
 
@@ -2425,9 +2493,14 @@ func TestGetCategoryMappings_Success(t *testing.T) {
 
 func TestApplyCategoryByMerchant_Success(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	body := strings.NewReader(`{"merchant_pattern":"swiggy"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/config/categories/Food/apply", body)
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPut,
+		"/api/config/categories/Food/merchant-mappings/swiggy",
+		nil,
+	)
 	req.SetPathValue("name", "Food")
+	req.SetPathValue("pattern", "swiggy")
 	rr := httptest.NewRecorder()
 
 	h.ApplyCategoryByMerchant(rr, req)
@@ -2497,9 +2570,14 @@ func TestGetBucketMappings_Success(t *testing.T) {
 
 func TestApplyBucketByMerchant_Success(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	body := strings.NewReader(`{"merchant_pattern":"rent"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/config/buckets/Needs/apply", body)
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPut,
+		"/api/config/buckets/Needs/merchant-mappings/rent",
+		nil,
+	)
 	req.SetPathValue("name", "Needs")
+	req.SetPathValue("pattern", "rent")
 	rr := httptest.NewRecorder()
 
 	h.ApplyBucketByMerchant(rr, req)
@@ -2550,54 +2628,6 @@ func TestExportBuckets_IncludesMerchants(t *testing.T) {
 	merchants, ok := resp[0]["merchants"].([]any)
 	if !ok || len(merchants) != 1 || merchants[0] != "rent" {
 		t.Fatalf("expected merchants in export, got %#v", resp)
-	}
-}
-
-func TestSetScanInterval_Valid(t *testing.T) {
-	ms := &mockStore{}
-	h := newTestHandlers(t, ms, &mockDaemon{})
-
-	body := strings.NewReader(`{"scan_interval":"120"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/scan-interval", body)
-	rr := httptest.NewRecorder()
-	h.SetScanInterval(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
-	var resp map[string]string
-	decodeJSON(t, rr.Body.String(), &resp)
-	if resp["scan_interval"] != "120" {
-		t.Errorf("expected scan_interval=120, got %q", resp["scan_interval"])
-	}
-	if ms.appConfig["scan_interval"] != "120" {
-		t.Errorf("store not updated, got %q", ms.appConfig["scan_interval"])
-	}
-}
-
-func TestSetScanInterval_TooLow(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-
-	body := strings.NewReader(`{"scan_interval":"5"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/scan-interval", body)
-	rr := httptest.NewRecorder()
-	h.SetScanInterval(rr, req)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
-}
-
-func TestSetScanInterval_TooHigh(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-
-	body := strings.NewReader(`{"scan_interval":"9999"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/config/scan-interval", body)
-	rr := httptest.NewRecorder()
-	h.SetScanInterval(rr, req)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
@@ -2711,7 +2741,7 @@ func TestGetHeatmap_InvalidFrom_Returns400(t *testing.T) {
 	}
 }
 
-func TestGetAnnualHeatmap_Success(t *testing.T) {
+func TestGetHeatmap_WithYear_ReturnsAnnualData(t *testing.T) {
 	ms := &mockStore{
 		annualData: []store.DailyBucket{
 			{Date: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), Amount: 1500.0, Count: 3},
@@ -2719,9 +2749,9 @@ func TestGetAnnualHeatmap_Success(t *testing.T) {
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap/annual?year=2026", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap?year=2026", nil)
 	rr := httptest.NewRecorder()
-	h.GetAnnualHeatmap(rr, req)
+	h.GetHeatmap(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -2742,16 +2772,32 @@ func TestGetAnnualHeatmap_Success(t *testing.T) {
 	}
 }
 
-func TestGetAnnualHeatmap_StoreError_Returns500(t *testing.T) {
+func TestGetHeatmap_WithYearStoreError_Returns500(t *testing.T) {
 	ms := &mockStore{annualErr: errors.New("db connection lost")}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap/annual?year=2026", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap?year=2026", nil)
 	rr := httptest.NewRecorder()
-	h.GetAnnualHeatmap(rr, req)
+	h.GetHeatmap(rr, req)
 
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestGetHeatmap_RejectsYearWithRange(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/api/stats/heatmap?year=2026&from=2026-01-01T00:00:00Z",
+		nil,
+	)
+	rr := httptest.NewRecorder()
+	h.GetHeatmap(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 
@@ -3648,25 +3694,6 @@ func TestListTransactions_MissingTimezoneFallsBackToAppTimezone(t *testing.T) {
 	}
 }
 
-func TestGetTimezoneDefaultsToEmptyWhenUnset(t *testing.T) {
-	st := &mockStore{}
-	h := newTestHandlers(t, st, &mockDaemon{})
-
-	rr := get(h.GetTimezone, "/api/config/timezone")
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-
-	var resp map[string]string
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if resp["timezone"] != "" {
-		t.Fatalf("expected empty timezone default, got %q", resp["timezone"])
-	}
-}
-
 // --- banks ---
 
 func TestListBanks(t *testing.T) {
@@ -3774,13 +3801,34 @@ func TestCategorizeMerchant_StoreError(t *testing.T) {
 
 func TestUpdateMerchantReason_InvalidID(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/api/muted-merchants/not-a-uuid/reason", strings.NewReader(`{"reason":"x"}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/api/muted-merchants/not-a-uuid", strings.NewReader(`{"reason":"x"}`))
 	req.SetPathValue("id", "not-a-uuid")
 	rr := httptest.NewRecorder()
 	h.UpdateMerchantReason(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestUpdateMerchantReason_Success(t *testing.T) {
+	st := &mockStore{}
+	h := newTestHandlers(t, st, &mockDaemon{})
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPatch,
+		"/api/muted-merchants/"+testTransactionID,
+		strings.NewReader(`{"reason":"subscription"}`),
+	)
+	req.SetPathValue("id", testTransactionID)
+	rr := httptest.NewRecorder()
+	h.UpdateMerchantReason(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if st.updateMerchantID != testTransactionID || st.updateMerchantReason != "subscription" {
+		t.Fatalf("merchant reason call = id=%q reason=%q", st.updateMerchantID, st.updateMerchantReason)
 	}
 }
 

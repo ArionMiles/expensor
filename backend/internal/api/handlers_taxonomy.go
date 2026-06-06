@@ -120,66 +120,38 @@ func (h *Handlers) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ApplyLabel handles POST /api/config/labels/{name}/apply.
-// Body: {"merchant_pattern": "swiggy"}
+// ApplyLabel handles PUT /api/config/labels/{name}/merchant-mappings/{pattern}.
 // @Summary Apply a label by merchant pattern
 // @Tags Taxonomy
-// @Accept json
 // @Produce json
 // @Param name path string true "Label name" example(ContractLabel)
-// @Param request body ApplyLabelRequest true "Merchant pattern payload"
+// @Param pattern path string true "URL-encoded merchant pattern" example(Swiggy)
 // @Success 200 {object} AppliedCountResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /config/labels/{name}/apply [post]
+// @Router /config/labels/{name}/merchant-mappings/{pattern} [put]
 func (h *Handlers) ApplyLabel(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	var body struct {
-		MerchantPattern string `json:"merchant_pattern"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.MerchantPattern == "" {
-		writeError(w, http.StatusUnprocessableEntity, "body must be {\"merchant_pattern\": \"<pattern>\"}")
-		return
-	}
-	affected, err := h.taxonomyStore.ApplyLabelByMerchant(r.Context(), name, body.MerchantPattern)
-	if err != nil {
-		h.logger.Error("apply label", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to apply label")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"applied": affected})
+	h.handleApplyTaxonomyMerchant(w, r, "label", func(ctx context.Context, label, pattern string) (int64, error) {
+		return h.taxonomyStore.ApplyLabelByMerchant(ctx, label, pattern)
+	})
 }
 
-// RemoveLabelByMerchant handles DELETE /api/config/labels/{name}/merchant.
-// Body: {"merchant_pattern": "swiggy"}
+// RemoveLabelByMerchant handles DELETE /api/config/labels/{name}/merchant-mappings/{pattern}.
 // @Summary Remove a label by merchant pattern
 // @Tags Taxonomy
-// @Accept json
 // @Produce json
 // @Param name path string true "Label name" example(Online)
-// @Param request body TaxonomyMerchantRequest true "Merchant pattern payload"
+// @Param pattern path string true "URL-encoded merchant pattern" example(Swiggy)
 // @Success 200 {object} RemovedCountResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /config/labels/{name}/merchant [delete]
+// @Router /config/labels/{name}/merchant-mappings/{pattern} [delete]
 func (h *Handlers) RemoveLabelByMerchant(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	var body struct {
-		MerchantPattern string `json:"merchant_pattern"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.MerchantPattern == "" {
-		writeError(w, http.StatusUnprocessableEntity, "body must be {\"merchant_pattern\": \"<pattern>\"}")
-		return
-	}
-	removed, err := h.taxonomyStore.RemoveLabelByMerchant(r.Context(), name, body.MerchantPattern)
-	if err != nil {
-		h.logger.Error("remove label by merchant", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to remove label")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"removed": removed})
+	h.handleRemoveTaxonomyMerchant(w, r, "label", func(ctx context.Context, label, pattern string) (int64, error) {
+		return h.taxonomyStore.RemoveLabelByMerchant(ctx, label, pattern)
+	})
 }
 
 // GetLabelMonthlySpend handles GET /api/stats/labels/monthly.
@@ -391,36 +363,34 @@ func (h *Handlers) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ApplyCategoryByMerchant handles POST /api/config/categories/{name}/apply.
+// ApplyCategoryByMerchant handles PUT /api/config/categories/{name}/merchant-mappings/{pattern}.
 // @Summary Apply a category by merchant pattern
 // @Tags Taxonomy
-// @Accept json
 // @Produce json
 // @Param name path string true "Category name" example(Food & Dining)
-// @Param request body TaxonomyMerchantRequest true "Merchant pattern payload"
+// @Param pattern path string true "URL-encoded merchant pattern" example(Swiggy)
 // @Success 200 {object} AppliedCountResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /config/categories/{name}/apply [post]
+// @Router /config/categories/{name}/merchant-mappings/{pattern} [put]
 func (h *Handlers) ApplyCategoryByMerchant(w http.ResponseWriter, r *http.Request) {
 	h.handleApplyTaxonomyMerchant(w, r, "category", func(ctx context.Context, category, pattern string) (int64, error) {
 		return h.taxonomyStore.ApplyCategoryByMerchant(ctx, category, pattern)
 	})
 }
 
-// RemoveCategoryByMerchant handles DELETE /api/config/categories/{name}/merchant.
+// RemoveCategoryByMerchant handles DELETE /api/config/categories/{name}/merchant-mappings/{pattern}.
 // @Summary Remove a category by merchant pattern
 // @Tags Taxonomy
-// @Accept json
 // @Produce json
 // @Param name path string true "Category name" example(Food & Dining)
-// @Param request body TaxonomyMerchantRequest true "Merchant pattern payload"
+// @Param pattern path string true "URL-encoded merchant pattern" example(Swiggy)
 // @Success 200 {object} RemovedCountResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /config/categories/{name}/merchant [delete]
+// @Router /config/categories/{name}/merchant-mappings/{pattern} [delete]
 func (h *Handlers) RemoveCategoryByMerchant(w http.ResponseWriter, r *http.Request) {
 	h.handleRemoveTaxonomyMerchant(w, r, "category", func(ctx context.Context, category, pattern string) (int64, error) {
 		return h.taxonomyStore.RemoveCategoryByMerchant(ctx, category, pattern)
@@ -540,36 +510,34 @@ func (h *Handlers) GetBucketMappings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, mappings)
 }
 
-// ApplyBucketByMerchant handles POST /api/config/buckets/{name}/apply.
+// ApplyBucketByMerchant handles PUT /api/config/buckets/{name}/merchant-mappings/{pattern}.
 // @Summary Apply a bucket by merchant pattern
 // @Tags Taxonomy
-// @Accept json
 // @Produce json
 // @Param name path string true "Bucket name" example(Needs)
-// @Param request body TaxonomyMerchantRequest true "Merchant pattern payload"
+// @Param pattern path string true "URL-encoded merchant pattern" example(Rent)
 // @Success 200 {object} AppliedCountResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /config/buckets/{name}/apply [post]
+// @Router /config/buckets/{name}/merchant-mappings/{pattern} [put]
 func (h *Handlers) ApplyBucketByMerchant(w http.ResponseWriter, r *http.Request) {
 	h.handleApplyTaxonomyMerchant(w, r, "bucket", func(ctx context.Context, bucket, pattern string) (int64, error) {
 		return h.taxonomyStore.ApplyBucketByMerchant(ctx, bucket, pattern)
 	})
 }
 
-// RemoveBucketByMerchant handles DELETE /api/config/buckets/{name}/merchant.
+// RemoveBucketByMerchant handles DELETE /api/config/buckets/{name}/merchant-mappings/{pattern}.
 // @Summary Remove a bucket by merchant pattern
 // @Tags Taxonomy
-// @Accept json
 // @Produce json
 // @Param name path string true "Bucket name" example(Needs)
-// @Param request body TaxonomyMerchantRequest true "Merchant pattern payload"
+// @Param pattern path string true "URL-encoded merchant pattern" example(Rent)
 // @Success 200 {object} RemovedCountResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /config/buckets/{name}/merchant [delete]
+// @Router /config/buckets/{name}/merchant-mappings/{pattern} [delete]
 func (h *Handlers) RemoveBucketByMerchant(w http.ResponseWriter, r *http.Request) {
 	h.handleRemoveTaxonomyMerchant(w, r, "bucket", func(ctx context.Context, bucket, pattern string) (int64, error) {
 		return h.taxonomyStore.RemoveBucketByMerchant(ctx, bucket, pattern)
@@ -675,14 +643,12 @@ func (h *Handlers) handleTaxonomyMerchant(
 	action taxonomyMerchantAction,
 ) {
 	name := r.PathValue("name")
-	var body struct {
-		MerchantPattern string `json:"merchant_pattern"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.MerchantPattern == "" {
-		writeError(w, http.StatusUnprocessableEntity, "body must be {\"merchant_pattern\": \"<pattern>\"}")
+	pattern := r.PathValue("pattern")
+	if name == "" || pattern == "" {
+		writeError(w, http.StatusBadRequest, "taxonomy name and merchant pattern are required")
 		return
 	}
-	count, err := action.update(r.Context(), name, body.MerchantPattern)
+	count, err := action.update(r.Context(), name, pattern)
 	if err != nil {
 		h.logger.Error(action.action+" taxonomy merchant", "kind", action.kind, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to "+action.action+" merchant")

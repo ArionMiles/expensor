@@ -1,5 +1,4 @@
-import { api } from '@/api/client'
-import { queryKeys, useSetTimeFormat, useSetTimezone } from '@/api/queries'
+import { queryKeys, useUpdatePreferences } from '@/api/queries'
 import type { TimeFormatValue } from '@/contexts/DisplayContext'
 import { useI18n } from '@/i18n/I18nProvider'
 import { getBrowserTimezone, normalizeTimezone } from '@/lib/timezone'
@@ -32,8 +31,7 @@ function PreferenceField({
 export function PreferencesStep({ onNext }: { onNext: () => void }) {
   const { t } = useI18n()
   const qc = useQueryClient()
-  const setTimezone = useSetTimezone()
-  const setTimeFormat = useSetTimeFormat()
+  const updatePreferences = useUpdatePreferences()
   const [currency, setCurrency] = useState('USD')
   const [timezone, setTimezoneDraft] = useState(normalizeTimezone(getBrowserTimezone()))
   const [timeFormat, setTimeFormatDraft] = useState<TimeFormatValue>('h:mm a')
@@ -44,9 +42,11 @@ export function PreferencesStep({ onNext }: { onNext: () => void }) {
     setSaving(true)
     setError(null)
     try {
-      await api.config.setBaseCurrency(currency)
-      await setTimezone.mutateAsync(timezone)
-      await setTimeFormat.mutateAsync(timeFormat)
+      await updatePreferences.mutateAsync({
+        base_currency: currency,
+        timezone,
+        time_format: timeFormat,
+      })
       await qc.invalidateQueries({ queryKey: queryKeys.setupStatus })
       onNext()
     } catch (err) {

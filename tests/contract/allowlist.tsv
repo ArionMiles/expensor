@@ -3,32 +3,21 @@ GET	/version	version endpoint
 GET	/status	daemon status endpoint
 GET	/config/active-reader	active reader config
 GET	/config/banks	bank color mappings
-GET	/config/base-currency	base currency config
-PUT	/config/base-currency	update base currency config
+GET	/config/preferences	application preferences
+PATCH	/config/preferences	update application preferences
 GET	/config/buckets	bucket taxonomy
 GET	/config/categories	category taxonomy
 GET	/config/labels	label taxonomy
 GET	/config/labels/mappings	label merchant mappings
-GET	/config/lookback-days	lookback-days config
-PUT	/config/lookback-days	update lookback-days config
 GET	/config/readers/{name}/checkpoint	reader checkpoint config
-GET	/config/scan-interval	scan-interval config
-PUT	/config/scan-interval	update scan-interval config
 GET	/config/setup-status	first-run setup status
 GET	/config/sync/status	config sync status
-GET	/config/time-format	time-format config
-PUT	/config/time-format	update time-format config
-GET	/config/timezone	timezone config
-PUT	/config/timezone	update timezone config
 GET	/transactions	transaction listing
 GET	/transactions/facets	transaction facets
-GET	/transactions/search	transaction search
 GET	/transactions/{id}	transaction detail
-PUT	/transactions/{id}	update transaction
+PATCH	/transactions/{id}	update transaction
 POST	/transactions/{id}/labels	add transaction labels
 DELETE	/transactions/{id}/labels/{label}	remove transaction label
-PUT	/transactions/{id}/mute	mute transaction
-PUT	/transactions/{id}/mute-reason	update transaction mute reason
 GET	/plugins/readers	reader plugin metadata
 GET	/plugins/writers	writer plugin metadata
 GET	/readers/{name}/guide	reader setup guide
@@ -42,11 +31,10 @@ GET	/stats/dashboard	dashboard stats data
 GET	/stats/charts	chart stats data
 GET	/stats/labels/monthly	label monthly stats data
 GET	/stats/heatmap	spending heatmap data
-GET	/stats/heatmap/annual	annual heatmap data
 GET	/config/labels/export	label taxonomy export
 POST	/config/labels	create label taxonomy entry
 PUT	/config/labels/{name}	update label taxonomy entry
-POST	/config/labels/{name}/apply	label merchant apply
+PUT	/config/labels/{name}/merchant-mappings/{pattern}	label merchant mapping
 DELETE	/config/labels/{name}	delete label taxonomy entry
 GET	/config/categories/export	category taxonomy export
 GET	/config/categories/mappings	category merchant mappings
@@ -58,15 +46,15 @@ POST	/config/buckets	create bucket taxonomy entry
 DELETE	/config/buckets/{name}	delete bucket taxonomy entry
 GET	/muted-merchants	muted merchant listing
 POST	/muted-merchants	mute merchant pattern
-PUT	/muted-merchants/{id}/reason	update muted merchant reason
+PATCH	/muted-merchants/{id}	update muted merchant reason
 DELETE	/muted-merchants/{id}	delete muted merchant pattern
 POST	/merchants/categorize	merchant categorization
-POST	/config/categories/{name}/apply	category merchant apply
-DELETE	/config/categories/{name}/merchant	category merchant removal
-POST	/config/buckets/{name}/apply	bucket merchant apply
-DELETE	/config/buckets/{name}/merchant	bucket merchant removal
+PUT	/config/categories/{name}/merchant-mappings/{pattern}	category merchant mapping
+DELETE	/config/categories/{name}/merchant-mappings/{pattern}	category merchant mapping removal
+PUT	/config/buckets/{name}/merchant-mappings/{pattern}	bucket merchant mapping
+DELETE	/config/buckets/{name}/merchant-mappings/{pattern}	bucket merchant mapping removal
 DELETE	/config/readers/{name}/checkpoint	clear reader checkpoint
-DELETE	/config/labels/{name}/merchant	label merchant removal
+DELETE	/config/labels/{name}/merchant-mappings/{pattern}	label merchant mapping removal
 GET	/extraction-diagnostics	extraction diagnostic listing
 GET	/extraction-diagnostics/{id}	seeded extraction diagnostic detail
-PUT	/extraction-diagnostics/{id}/status	update seeded extraction diagnostic status
+PATCH	/extraction-diagnostics/{id}	update seeded extraction diagnostic status
