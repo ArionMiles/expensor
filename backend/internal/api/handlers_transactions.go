@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -56,9 +55,8 @@ import (
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions [get]
 func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
-	query, details := decodeTransactionListQuery(r.URL.Query())
-	if len(details) > 0 {
-		writeValidationErrors(w, details)
+	var query transactionListQuery
+	if !h.decodeQuery(w, r, &query) {
 		return
 	}
 	if !h.validateRequest(w, "query", query) {
@@ -99,92 +97,37 @@ func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
 
 //nolint:revive // validate tags include custom rules registered by newRequestValidator.
 type transactionListQuery struct {
-	Page               *int       `query:"page" validate:"omitempty,min=1,max=10000"`
-	PageSize           *int       `query:"page_size" validate:"omitempty,min=1,max=500"`
-	Merchant           string     `query:"merchant" validate:"no_control_chars"`
-	Category           string     `query:"category" validate:"no_control_chars"`
-	CategoryMissing    string     `query:"category_missing" validate:"omitempty,oneof=1"`
-	ExcludeCategories  string     `query:"exclude_categories" validate:"no_control_chars"`
-	Currency           string     `query:"currency" validate:"no_control_chars"`
-	Source             string     `query:"source" validate:"no_control_chars"`
-	ExcludeSources     string     `query:"exclude_sources" validate:"no_control_chars"`
-	SourceType         string     `query:"source_type" validate:"no_control_chars"`
-	ExcludeSourceTypes string     `query:"exclude_source_types" validate:"no_control_chars"`
-	Bank               string     `query:"bank" validate:"no_control_chars"`
-	ExcludeBanks       string     `query:"exclude_banks" validate:"no_control_chars"`
-	Label              string     `query:"label" validate:"no_control_chars"`
-	LabelMissing       string     `query:"label_missing" validate:"omitempty,oneof=1"`
-	ExcludeLabels      string     `query:"exclude_labels" validate:"no_control_chars"`
-	Bucket             string     `query:"bucket" validate:"no_control_chars"`
-	BucketMissing      string     `query:"bucket_missing" validate:"omitempty,oneof=1"`
-	ExcludeBuckets     string     `query:"exclude_buckets" validate:"no_control_chars"`
-	DateFrom           *time.Time `query:"date_from"`
-	DateTo             *time.Time `query:"date_to"`
-	ShowMuted          string     `query:"show_muted" validate:"omitempty,oneof=1"`
-	MutedOnly          string     `query:"muted_only" validate:"omitempty,oneof=1"`
-	IndividualOnly     string     `query:"individual_only" validate:"omitempty,oneof=1"`
-	Weekday            *int       `query:"weekday" validate:"omitempty,min=0,max=6"`
-	HourFrom           *int       `query:"hour_from" validate:"omitempty,min=0,max=23"`
-	HourTo             *int       `query:"hour_to" validate:"omitempty,min=0,max=23"`
-	Timezone           string     `query:"tz" validate:"omitempty,iana_timezone"`
-	Query              string     `query:"q" validate:"no_control_chars"`
-	SortBy             string     `query:"sort_by" validate:"omitempty,oneof=timestamp"`
-	SortDir            string     `query:"sort_dir" validate:"omitempty,oneof=asc desc"`
-}
-
-func decodeTransactionListQuery(values url.Values) (transactionListQuery, []ValidationErrorDetail) {
-	query := transactionListQuery{
-		Merchant:           values.Get("merchant"),
-		Category:           values.Get("category"),
-		CategoryMissing:    values.Get("category_missing"),
-		ExcludeCategories:  values.Get("exclude_categories"),
-		Currency:           values.Get("currency"),
-		Source:             values.Get("source"),
-		ExcludeSources:     values.Get("exclude_sources"),
-		SourceType:         values.Get("source_type"),
-		ExcludeSourceTypes: values.Get("exclude_source_types"),
-		Bank:               values.Get("bank"),
-		ExcludeBanks:       values.Get("exclude_banks"),
-		Label:              values.Get("label"),
-		LabelMissing:       values.Get("label_missing"),
-		ExcludeLabels:      values.Get("exclude_labels"),
-		Bucket:             values.Get("bucket"),
-		BucketMissing:      values.Get("bucket_missing"),
-		ExcludeBuckets:     values.Get("exclude_buckets"),
-		ShowMuted:          values.Get("show_muted"),
-		MutedOnly:          values.Get("muted_only"),
-		IndividualOnly:     values.Get("individual_only"),
-		Timezone:           values.Get("tz"),
-		Query:              values.Get("q"),
-		SortBy:             values.Get("sort_by"),
-		SortDir:            values.Get("sort_dir"),
-	}
-
-	var details []ValidationErrorDetail
-	query.Page = appendQueryInt(values, "page", &details)
-	query.PageSize = appendQueryInt(values, "page_size", &details)
-	query.DateFrom = appendQueryTime(values, "date_from", &details)
-	query.DateTo = appendQueryTime(values, "date_to", &details)
-	query.Weekday = appendQueryInt(values, "weekday", &details)
-	query.HourFrom = appendQueryInt(values, "hour_from", &details)
-	query.HourTo = appendQueryInt(values, "hour_to", &details)
-	return query, details
-}
-
-func appendQueryInt(values url.Values, key string, details *[]ValidationErrorDetail) *int {
-	value, detail := optionalQueryInt(values, key)
-	if detail != nil {
-		*details = append(*details, *detail)
-	}
-	return value
-}
-
-func appendQueryTime(values url.Values, key string, details *[]ValidationErrorDetail) *time.Time {
-	value, detail := optionalQueryTime(values, key)
-	if detail != nil {
-		*details = append(*details, *detail)
-	}
-	return value
+	Page               *int       `form:"page" validate:"omitempty,min=1,max=10000"`
+	PageSize           *int       `form:"page_size" validate:"omitempty,min=1,max=500"`
+	Merchant           string     `form:"merchant" validate:"no_control_chars"`
+	Category           string     `form:"category" validate:"no_control_chars"`
+	CategoryMissing    string     `form:"category_missing" validate:"omitempty,oneof=1"`
+	ExcludeCategories  string     `form:"exclude_categories" validate:"no_control_chars"`
+	Currency           string     `form:"currency" validate:"no_control_chars"`
+	Source             string     `form:"source" validate:"no_control_chars"`
+	ExcludeSources     string     `form:"exclude_sources" validate:"no_control_chars"`
+	SourceType         string     `form:"source_type" validate:"no_control_chars"`
+	ExcludeSourceTypes string     `form:"exclude_source_types" validate:"no_control_chars"`
+	Bank               string     `form:"bank" validate:"no_control_chars"`
+	ExcludeBanks       string     `form:"exclude_banks" validate:"no_control_chars"`
+	Label              string     `form:"label" validate:"no_control_chars"`
+	LabelMissing       string     `form:"label_missing" validate:"omitempty,oneof=1"`
+	ExcludeLabels      string     `form:"exclude_labels" validate:"no_control_chars"`
+	Bucket             string     `form:"bucket" validate:"no_control_chars"`
+	BucketMissing      string     `form:"bucket_missing" validate:"omitempty,oneof=1"`
+	ExcludeBuckets     string     `form:"exclude_buckets" validate:"no_control_chars"`
+	DateFrom           *time.Time `form:"date_from"`
+	DateTo             *time.Time `form:"date_to"`
+	ShowMuted          string     `form:"show_muted" validate:"omitempty,oneof=1"`
+	MutedOnly          string     `form:"muted_only" validate:"omitempty,oneof=1"`
+	IndividualOnly     string     `form:"individual_only" validate:"omitempty,oneof=1"`
+	Weekday            *int       `form:"weekday" validate:"omitempty,min=0,max=6"`
+	HourFrom           *int       `form:"hour_from" validate:"omitempty,min=0,max=23"`
+	HourTo             *int       `form:"hour_to" validate:"omitempty,min=0,max=23"`
+	Timezone           string     `form:"tz" validate:"omitempty,iana_timezone"`
+	Query              string     `form:"q" validate:"no_control_chars"`
+	SortBy             string     `form:"sort_by" validate:"omitempty,oneof=timestamp"`
+	SortDir            string     `form:"sort_dir" validate:"omitempty,oneof=asc desc"`
 }
 
 func (query transactionListQuery) listFilter(timezone string) store.ListFilter {

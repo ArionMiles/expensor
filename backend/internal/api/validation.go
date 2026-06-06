@@ -15,7 +15,7 @@ import (
 func newRequestValidator() *validator.Validate {
 	validate := validator.New()
 	validate.RegisterTagNameFunc(func(field reflect.StructField) string {
-		for _, tagName := range []string{"json", "query"} {
+		for _, tagName := range []string{"json", "form"} {
 			name := strings.Split(field.Tag.Get(tagName), ",")[0]
 			if name != "" && name != "-" {
 				return name

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-playground/form/v4"
 	"github.com/go-playground/validator/v10"
 
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
@@ -71,6 +72,7 @@ type Handlers struct {
 	banksData          []byte
 	logger             *slog.Logger
 	validate           *validator.Validate
+	queryDecoder       *form.Decoder
 
 	// oauthStates maps state token → entry for in-flight OAuth flows.
 	mu          sync.Mutex
@@ -135,6 +137,7 @@ func NewHandlers(cfg HandlersConfig) *Handlers {
 		banksData:          cfg.BanksData,
 		logger:             cfg.Logger,
 		validate:           newRequestValidator(),
+		queryDecoder:       newQueryDecoder(),
 		oauthStates:        make(map[string]oauthStateEntry),
 	}
 }

@@ -4,6 +4,7 @@ go 1.26.4
 
 require (
 	github.com/emersion/go-mbox v1.0.4
+	github.com/go-playground/form/v4 v4.3.0
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0

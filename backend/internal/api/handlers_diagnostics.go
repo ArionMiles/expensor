@@ -22,15 +22,12 @@ import (
 // @Failure 503 {object} ErrorResponse
 // @Router /extraction-diagnostics [get]
 func (h *Handlers) ListExtractionDiagnostics(w http.ResponseWriter, r *http.Request) {
-	query := diagnosticListQuery{Status: r.URL.Query().Get("status")}
+	var query diagnosticListQuery
+	if !h.decodeQuery(w, r, &query) {
+		return
+	}
 	if query.Status == "" {
 		query.Status = store.DiagnosticStatusOpen
-	}
-	var detail *ValidationErrorDetail
-	query.Limit, detail = optionalQueryInt(r.URL.Query(), "limit")
-	if detail != nil {
-		writeValidationErrors(w, []ValidationErrorDetail{*detail})
-		return
 	}
 	if !h.validateRequest(w, "query", query) {
 		return
@@ -54,8 +51,8 @@ func (h *Handlers) ListExtractionDiagnostics(w http.ResponseWriter, r *http.Requ
 }
 
 type diagnosticListQuery struct {
-	Status string `query:"status" validate:"required,oneof=open resolved ignored all"`
-	Limit  *int   `query:"limit" validate:"omitempty,min=1"`
+	Status string `form:"status" validate:"required,oneof=open resolved ignored all"`
+	Limit  *int   `form:"limit" validate:"omitempty,min=1"`
 }
 
 // GetExtractionDiagnostic handles GET /api/extraction-diagnostics/{id}.
