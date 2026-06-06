@@ -353,7 +353,7 @@ export function useApplyLabel() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ name, pattern }: { name: string; pattern: string }) =>
-      api.config.labels.apply(name, pattern),
+      api.config.labels.putMerchantMapping(name, pattern),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] })
       qc.invalidateQueries({ queryKey: ['label-mappings'] })
@@ -365,7 +365,7 @@ export function useRemoveLabelByMerchant() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ name, pattern }: { name: string; pattern: string }) =>
-      api.config.labels.removeMerchant(name, pattern),
+      api.config.labels.deleteMerchantMapping(name, pattern),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] })
       qc.invalidateQueries({ queryKey: ['label-mappings'] })
@@ -408,7 +408,7 @@ export function useApplyCategory() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ name, pattern }: { name: string; pattern: string }) =>
-      api.config.categories.apply(name, pattern),
+      api.config.categories.putMerchantMapping(name, pattern),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] })
       qc.invalidateQueries({ queryKey: ['category-mappings'] })
@@ -421,7 +421,7 @@ export function useRemoveCategoryByMerchant() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ name, pattern }: { name: string; pattern: string }) =>
-      api.config.categories.removeMerchant(name, pattern),
+      api.config.categories.deleteMerchantMapping(name, pattern),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] })
       qc.invalidateQueries({ queryKey: ['category-mappings'] })
@@ -464,7 +464,7 @@ export function useApplyBucket() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ name, pattern }: { name: string; pattern: string }) =>
-      api.config.buckets.apply(name, pattern),
+      api.config.buckets.putMerchantMapping(name, pattern),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] })
       qc.invalidateQueries({ queryKey: ['bucket-mappings'] })
@@ -477,7 +477,7 @@ export function useRemoveBucketByMerchant() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ name, pattern }: { name: string; pattern: string }) =>
-      api.config.buckets.removeMerchant(name, pattern),
+      api.config.buckets.deleteMerchantMapping(name, pattern),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] })
       qc.invalidateQueries({ queryKey: ['bucket-mappings'] })

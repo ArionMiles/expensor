@@ -149,8 +149,8 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("POST /api/config/labels", h.CreateLabel)
 	mux.HandleFunc("PUT /api/config/labels/{name}", h.UpdateLabel)
 	mux.HandleFunc("DELETE /api/config/labels/{name}", h.DeleteLabel)
-	mux.HandleFunc("POST /api/config/labels/{name}/apply", h.ApplyLabel)
-	mux.HandleFunc("DELETE /api/config/labels/{name}/merchant", h.RemoveLabelByMerchant)
+	mux.HandleFunc("PUT /api/config/labels/{name}/merchant-mappings/{pattern}", h.ApplyLabel)
+	mux.HandleFunc("DELETE /api/config/labels/{name}/merchant-mappings/{pattern}", h.RemoveLabelByMerchant)
 
 	// Categories and buckets
 	mux.HandleFunc("GET /api/config/categories/export", h.ExportCategories)      // must precede /{name}
@@ -158,15 +158,15 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("GET /api/config/categories", h.ListCategories)
 	mux.HandleFunc("POST /api/config/categories", h.CreateCategory)
 	mux.HandleFunc("DELETE /api/config/categories/{name}", h.DeleteCategory)
-	mux.HandleFunc("POST /api/config/categories/{name}/apply", h.ApplyCategoryByMerchant)
-	mux.HandleFunc("DELETE /api/config/categories/{name}/merchant", h.RemoveCategoryByMerchant)
+	mux.HandleFunc("PUT /api/config/categories/{name}/merchant-mappings/{pattern}", h.ApplyCategoryByMerchant)
+	mux.HandleFunc("DELETE /api/config/categories/{name}/merchant-mappings/{pattern}", h.RemoveCategoryByMerchant)
 	mux.HandleFunc("GET /api/config/buckets/export", h.ExportBuckets)       // must precede /{name}
 	mux.HandleFunc("GET /api/config/buckets/mappings", h.GetBucketMappings) // must precede /{name}
 	mux.HandleFunc("GET /api/config/buckets", h.ListBuckets)
 	mux.HandleFunc("POST /api/config/buckets", h.CreateBucket)
 	mux.HandleFunc("DELETE /api/config/buckets/{name}", h.DeleteBucket)
-	mux.HandleFunc("POST /api/config/buckets/{name}/apply", h.ApplyBucketByMerchant)
-	mux.HandleFunc("DELETE /api/config/buckets/{name}/merchant", h.RemoveBucketByMerchant)
+	mux.HandleFunc("PUT /api/config/buckets/{name}/merchant-mappings/{pattern}", h.ApplyBucketByMerchant)
+	mux.HandleFunc("DELETE /api/config/buckets/{name}/merchant-mappings/{pattern}", h.RemoveBucketByMerchant)
 
 	// Rules — export and import before /{id} to avoid wildcard capture
 	mux.HandleFunc("GET /api/rules", h.ListRules)

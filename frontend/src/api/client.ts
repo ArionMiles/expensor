@@ -215,16 +215,13 @@ export const api = {
           params: { remove_from_transactions: removeFromTransactions },
           data: { remove_from_transactions: removeFromTransactions },
         }),
-      apply: (name: string, merchantPattern: string) =>
-        apiClient.post<{ applied: number }>(`/config/labels/${encodeURIComponent(name)}/apply`, {
-          merchant_pattern: merchantPattern,
-        }),
-      removeMerchant: (name: string, merchantPattern: string) =>
+      putMerchantMapping: (name: string, merchantPattern: string) =>
+        apiClient.put<{ applied: number }>(
+          `/config/labels/${encodeURIComponent(name)}/merchant-mappings/${encodeURIComponent(merchantPattern)}`,
+        ),
+      deleteMerchantMapping: (name: string, merchantPattern: string) =>
         apiClient.delete<{ removed: number }>(
-          `/config/labels/${encodeURIComponent(name)}/merchant`,
-          {
-            data: { merchant_pattern: merchantPattern },
-          },
+          `/config/labels/${encodeURIComponent(name)}/merchant-mappings/${encodeURIComponent(merchantPattern)}`,
         ),
       mappings: () => apiClient.get<Record<string, string[]>>('/config/labels/mappings'),
       export: () => apiClient.get('/config/labels/export', { responseType: 'blob' }),
@@ -239,17 +236,13 @@ export const api = {
           params: { remove_from_transactions: removeFromTransactions },
           data: { remove_from_transactions: removeFromTransactions },
         }),
-      apply: (name: string, merchantPattern: string) =>
-        apiClient.post<{ applied: number }>(
-          `/config/categories/${encodeURIComponent(name)}/apply`,
-          { merchant_pattern: merchantPattern },
+      putMerchantMapping: (name: string, merchantPattern: string) =>
+        apiClient.put<{ applied: number }>(
+          `/config/categories/${encodeURIComponent(name)}/merchant-mappings/${encodeURIComponent(merchantPattern)}`,
         ),
-      removeMerchant: (name: string, merchantPattern: string) =>
+      deleteMerchantMapping: (name: string, merchantPattern: string) =>
         apiClient.delete<{ removed: number }>(
-          `/config/categories/${encodeURIComponent(name)}/merchant`,
-          {
-            data: { merchant_pattern: merchantPattern },
-          },
+          `/config/categories/${encodeURIComponent(name)}/merchant-mappings/${encodeURIComponent(merchantPattern)}`,
         ),
       mappings: () => apiClient.get<Record<string, string[]>>('/config/categories/mappings'),
       export: () => apiClient.get('/config/categories/export', { responseType: 'blob' }),
@@ -264,16 +257,13 @@ export const api = {
           params: { remove_from_transactions: removeFromTransactions },
           data: { remove_from_transactions: removeFromTransactions },
         }),
-      apply: (name: string, merchantPattern: string) =>
-        apiClient.post<{ applied: number }>(`/config/buckets/${encodeURIComponent(name)}/apply`, {
-          merchant_pattern: merchantPattern,
-        }),
-      removeMerchant: (name: string, merchantPattern: string) =>
+      putMerchantMapping: (name: string, merchantPattern: string) =>
+        apiClient.put<{ applied: number }>(
+          `/config/buckets/${encodeURIComponent(name)}/merchant-mappings/${encodeURIComponent(merchantPattern)}`,
+        ),
+      deleteMerchantMapping: (name: string, merchantPattern: string) =>
         apiClient.delete<{ removed: number }>(
-          `/config/buckets/${encodeURIComponent(name)}/merchant`,
-          {
-            data: { merchant_pattern: merchantPattern },
-          },
+          `/config/buckets/${encodeURIComponent(name)}/merchant-mappings/${encodeURIComponent(merchantPattern)}`,
         ),
       mappings: () => apiClient.get<Record<string, string[]>>('/config/buckets/mappings'),
       export: () => apiClient.get('/config/buckets/export', { responseType: 'blob' }),

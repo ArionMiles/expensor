@@ -34,7 +34,7 @@ GET	/stats/heatmap	spending heatmap data
 GET	/config/labels/export	label taxonomy export
 POST	/config/labels	create label taxonomy entry
 PUT	/config/labels/{name}	update label taxonomy entry
-POST	/config/labels/{name}/apply	label merchant apply
+PUT	/config/labels/{name}/merchant-mappings/{pattern}	label merchant mapping
 DELETE	/config/labels/{name}	delete label taxonomy entry
 GET	/config/categories/export	category taxonomy export
 GET	/config/categories/mappings	category merchant mappings
@@ -49,12 +49,12 @@ POST	/muted-merchants	mute merchant pattern
 PATCH	/muted-merchants/{id}	update muted merchant reason
 DELETE	/muted-merchants/{id}	delete muted merchant pattern
 POST	/merchants/categorize	merchant categorization
-POST	/config/categories/{name}/apply	category merchant apply
-DELETE	/config/categories/{name}/merchant	category merchant removal
-POST	/config/buckets/{name}/apply	bucket merchant apply
-DELETE	/config/buckets/{name}/merchant	bucket merchant removal
+PUT	/config/categories/{name}/merchant-mappings/{pattern}	category merchant mapping
+DELETE	/config/categories/{name}/merchant-mappings/{pattern}	category merchant mapping removal
+PUT	/config/buckets/{name}/merchant-mappings/{pattern}	bucket merchant mapping
+DELETE	/config/buckets/{name}/merchant-mappings/{pattern}	bucket merchant mapping removal
 DELETE	/config/readers/{name}/checkpoint	clear reader checkpoint
-DELETE	/config/labels/{name}/merchant	label merchant removal
+DELETE	/config/labels/{name}/merchant-mappings/{pattern}	label merchant mapping removal
 GET	/extraction-diagnostics	extraction diagnostic listing
 GET	/extraction-diagnostics/{id}	seeded extraction diagnostic detail
 PATCH	/extraction-diagnostics/{id}	update seeded extraction diagnostic status

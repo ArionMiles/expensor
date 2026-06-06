@@ -11,14 +11,6 @@ definitions:
       applied:
         type: integer
     type: object
-  api.ApplyLabelRequest:
-    properties:
-      merchant_pattern:
-        example: Swiggy
-        type: string
-    required:
-    - merchant_pattern
-    type: object
   api.AuthExchangeRequest:
     properties:
       url:
@@ -928,12 +920,6 @@ definitions:
         type: string
       type: array
     type: object
-  api.TaxonomyMerchantRequest:
-    properties:
-      merchant_pattern:
-        example: Swiggy
-        type: string
-    type: object
   api.ThunderbirdMailboxesResponse:
     properties:
       mailboxes:
@@ -1247,49 +1233,8 @@ paths:
       summary: Delete a bucket
       tags:
       - Taxonomy
-  /config/buckets/{name}/apply:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Bucket name
-        example: Needs
-        in: path
-        name: name
-        required: true
-        type: string
-      - description: Merchant pattern payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.TaxonomyMerchantRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.AppliedCountResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Apply a bucket by merchant pattern
-      tags:
-      - Taxonomy
-  /config/buckets/{name}/merchant:
+  /config/buckets/{name}/merchant-mappings/{pattern}:
     delete:
-      consumes:
-      - application/json
       parameters:
       - description: Bucket name
         example: Needs
@@ -1297,12 +1242,12 @@ paths:
         name: name
         required: true
         type: string
-      - description: Merchant pattern payload
-        in: body
-        name: request
+      - description: URL-encoded merchant pattern
+        example: Rent
+        in: path
+        name: pattern
         required: true
-        schema:
-          $ref: '#/definitions/api.TaxonomyMerchantRequest'
+        type: string
       produces:
       - application/json
       responses:
@@ -1310,8 +1255,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.RemovedCountResponse'
-        "422":
-          description: Unprocessable Entity
+        "400":
+          description: Bad Request
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":
@@ -1323,6 +1268,42 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Remove a bucket by merchant pattern
+      tags:
+      - Taxonomy
+    put:
+      parameters:
+      - description: Bucket name
+        example: Needs
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: URL-encoded merchant pattern
+        example: Rent
+        in: path
+        name: pattern
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppliedCountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Apply a bucket by merchant pattern
       tags:
       - Taxonomy
   /config/buckets/export:
@@ -1448,49 +1429,8 @@ paths:
       summary: Delete a category
       tags:
       - Taxonomy
-  /config/categories/{name}/apply:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Category name
-        example: Food & Dining
-        in: path
-        name: name
-        required: true
-        type: string
-      - description: Merchant pattern payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.TaxonomyMerchantRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.AppliedCountResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Apply a category by merchant pattern
-      tags:
-      - Taxonomy
-  /config/categories/{name}/merchant:
+  /config/categories/{name}/merchant-mappings/{pattern}:
     delete:
-      consumes:
-      - application/json
       parameters:
       - description: Category name
         example: Food & Dining
@@ -1498,12 +1438,12 @@ paths:
         name: name
         required: true
         type: string
-      - description: Merchant pattern payload
-        in: body
-        name: request
+      - description: URL-encoded merchant pattern
+        example: Swiggy
+        in: path
+        name: pattern
         required: true
-        schema:
-          $ref: '#/definitions/api.TaxonomyMerchantRequest'
+        type: string
       produces:
       - application/json
       responses:
@@ -1511,8 +1451,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.RemovedCountResponse'
-        "422":
-          description: Unprocessable Entity
+        "400":
+          description: Bad Request
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":
@@ -1524,6 +1464,42 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Remove a category by merchant pattern
+      tags:
+      - Taxonomy
+    put:
+      parameters:
+      - description: Category name
+        example: Food & Dining
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: URL-encoded merchant pattern
+        example: Swiggy
+        in: path
+        name: pattern
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppliedCountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Apply a category by merchant pattern
       tags:
       - Taxonomy
   /config/categories/export:
@@ -1687,49 +1663,8 @@ paths:
       summary: Update a label
       tags:
       - Taxonomy
-  /config/labels/{name}/apply:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Label name
-        example: ContractLabel
-        in: path
-        name: name
-        required: true
-        type: string
-      - description: Merchant pattern payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.ApplyLabelRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.AppliedCountResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Apply a label by merchant pattern
-      tags:
-      - Taxonomy
-  /config/labels/{name}/merchant:
+  /config/labels/{name}/merchant-mappings/{pattern}:
     delete:
-      consumes:
-      - application/json
       parameters:
       - description: Label name
         example: Online
@@ -1737,12 +1672,12 @@ paths:
         name: name
         required: true
         type: string
-      - description: Merchant pattern payload
-        in: body
-        name: request
+      - description: URL-encoded merchant pattern
+        example: Swiggy
+        in: path
+        name: pattern
         required: true
-        schema:
-          $ref: '#/definitions/api.TaxonomyMerchantRequest'
+        type: string
       produces:
       - application/json
       responses:
@@ -1750,8 +1685,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.RemovedCountResponse'
-        "422":
-          description: Unprocessable Entity
+        "400":
+          description: Bad Request
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":
@@ -1763,6 +1698,42 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Remove a label by merchant pattern
+      tags:
+      - Taxonomy
+    put:
+      parameters:
+      - description: Label name
+        example: ContractLabel
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: URL-encoded merchant pattern
+        example: Swiggy
+        in: path
+        name: pattern
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppliedCountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Apply a label by merchant pattern
       tags:
       - Taxonomy
   /config/labels/export:

@@ -219,8 +219,12 @@ export const handlers = [
     return HttpResponse.json({ name: String(params.name), color: body.color ?? '' })
   }),
   http.delete('/api/config/labels/:name', () => HttpResponse.json({})),
-  http.post('/api/config/labels/:name/apply', () => HttpResponse.json({ applied: 0 })),
-  http.delete('/api/config/labels/:name/merchant', () => HttpResponse.json({})),
+  http.put('/api/config/labels/:name/merchant-mappings/:pattern', () =>
+    HttpResponse.json({ applied: 0 }),
+  ),
+  http.delete('/api/config/labels/:name/merchant-mappings/:pattern', () =>
+    HttpResponse.json({ removed: 0 }),
+  ),
   http.get('/api/config/categories', () =>
     HttpResponse.json([
       { name: 'Food', description: 'Food spending', is_default: false },
@@ -234,8 +238,12 @@ export const handlers = [
     return HttpResponse.json({ name: body.name ?? '' })
   }),
   http.delete('/api/config/categories/:name', () => HttpResponse.json({})),
-  http.post('/api/config/categories/:name/apply', () => HttpResponse.json({ applied: 0 })),
-  http.delete('/api/config/categories/:name/merchant', () => HttpResponse.json({})),
+  http.put('/api/config/categories/:name/merchant-mappings/:pattern', () =>
+    HttpResponse.json({ applied: 0 }),
+  ),
+  http.delete('/api/config/categories/:name/merchant-mappings/:pattern', () =>
+    HttpResponse.json({ removed: 0 }),
+  ),
   http.get('/api/config/buckets', () =>
     HttpResponse.json([{ name: 'Needs', description: 'Essential spending', is_default: false }]),
   ),
@@ -246,8 +254,12 @@ export const handlers = [
     return HttpResponse.json({ name: body.name ?? '' })
   }),
   http.delete('/api/config/buckets/:name', () => HttpResponse.json({})),
-  http.post('/api/config/buckets/:name/apply', () => HttpResponse.json({ applied: 0 })),
-  http.delete('/api/config/buckets/:name/merchant', () => HttpResponse.json({})),
+  http.put('/api/config/buckets/:name/merchant-mappings/:pattern', () =>
+    HttpResponse.json({ applied: 0 }),
+  ),
+  http.delete('/api/config/buckets/:name/merchant-mappings/:pattern', () =>
+    HttpResponse.json({ removed: 0 }),
+  ),
   http.get('/api/config/banks', () => HttpResponse.json([])),
   http.get('/api/transactions/facets', () => HttpResponse.json(seededFacets)),
   http.get('/api/transactions', ({ request }) => {

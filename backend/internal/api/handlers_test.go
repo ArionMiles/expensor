@@ -2493,9 +2493,14 @@ func TestGetCategoryMappings_Success(t *testing.T) {
 
 func TestApplyCategoryByMerchant_Success(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	body := strings.NewReader(`{"merchant_pattern":"swiggy"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/config/categories/Food/apply", body)
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPut,
+		"/api/config/categories/Food/merchant-mappings/swiggy",
+		nil,
+	)
 	req.SetPathValue("name", "Food")
+	req.SetPathValue("pattern", "swiggy")
 	rr := httptest.NewRecorder()
 
 	h.ApplyCategoryByMerchant(rr, req)
@@ -2565,9 +2570,14 @@ func TestGetBucketMappings_Success(t *testing.T) {
 
 func TestApplyBucketByMerchant_Success(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	body := strings.NewReader(`{"merchant_pattern":"rent"}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/config/buckets/Needs/apply", body)
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPut,
+		"/api/config/buckets/Needs/merchant-mappings/rent",
+		nil,
+	)
 	req.SetPathValue("name", "Needs")
+	req.SetPathValue("pattern", "rent")
 	rr := httptest.NewRecorder()
 
 	h.ApplyBucketByMerchant(rr, req)

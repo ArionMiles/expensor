@@ -394,11 +394,6 @@ type LabelMutationResponse struct {
 	Color string `json:"color" example:"#f59e0b"`
 }
 
-// ApplyLabelRequest is the label-by-merchant apply payload.
-type ApplyLabelRequest struct {
-	MerchantPattern string `json:"merchant_pattern" example:"Swiggy" binding:"required"`
-}
-
 // TaxonomyExportRowResponse documents exported taxonomy rows with merchant mappings.
 type TaxonomyExportRowResponse struct {
 	Name      string   `json:"name" example:"Food & Dining"`
@@ -414,11 +409,6 @@ type LabelTaxonomyExportRowResponse struct {
 
 // TaxonomyMappingsResponse documents taxonomy-to-merchant mappings.
 type TaxonomyMappingsResponse map[string][]string
-
-// TaxonomyMerchantRequest is the merchant-pattern payload for taxonomy apply/remove actions.
-type TaxonomyMerchantRequest struct {
-	MerchantPattern string `json:"merchant_pattern" example:"Swiggy"`
-}
 
 // AppliedCountResponse is the count payload for apply actions.
 type AppliedCountResponse struct {
