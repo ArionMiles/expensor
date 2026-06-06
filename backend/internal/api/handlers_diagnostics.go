@@ -112,8 +112,7 @@ func (h *Handlers) UpdateExtractionDiagnosticStatus(w http.ResponseWriter, r *ht
 		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
 		return
 	}
-	if !validDiagnosticUpdateStatus(body.Status) {
-		writeError(w, http.StatusUnprocessableEntity, "invalid diagnostic status")
+	if !h.validateRequest(w, "body", body) {
 		return
 	}
 
@@ -132,13 +131,4 @@ func (h *Handlers) UpdateExtractionDiagnosticStatus(w http.ResponseWriter, r *ht
 		return
 	}
 	writeJSON(w, http.StatusOK, row)
-}
-
-func validDiagnosticUpdateStatus(status string) bool {
-	switch status {
-	case store.DiagnosticStatusOpen, store.DiagnosticStatusResolved, store.DiagnosticStatusIgnored:
-		return true
-	default:
-		return false
-	}
 }

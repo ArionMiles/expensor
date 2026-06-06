@@ -645,6 +645,28 @@ func decodeJSON(t *testing.T, body string, v any) {
 	}
 }
 
+func assertValidationError(
+	t *testing.T,
+	rr *httptest.ResponseRecorder,
+	field string,
+	location string,
+	message string,
+) {
+	t.Helper()
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	var response ValidationErrorResponse
+	decodeJSON(t, rr.Body.String(), &response)
+	if response.Error != "request validation failed" {
+		t.Fatalf("error = %q", response.Error)
+	}
+	want := []ValidationErrorDetail{{Field: field, Location: location, Message: message}}
+	if !reflect.DeepEqual(response.Details, want) {
+		t.Fatalf("details = %#v, want %#v", response.Details, want)
+	}
+}
+
 // --- health ---
 
 func TestHealth(t *testing.T) {
@@ -1626,9 +1648,7 @@ func TestUpdateExtractionDiagnosticStatus_InvalidStatus(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.UpdateExtractionDiagnosticStatus(rr, req)
 
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422, got %d", rr.Code)
-	}
+	assertValidationError(t, rr, "status", "body", "must be one of: open, resolved, ignored")
 }
 
 func TestUpdateExtractionDiagnosticStatus_NotFound(t *testing.T) {

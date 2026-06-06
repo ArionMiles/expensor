@@ -7,6 +7,19 @@ type ErrorResponse struct {
 	Error string `json:"error" example:"internal server error"`
 }
 
+// ValidationErrorDetail describes one invalid request field.
+type ValidationErrorDetail struct {
+	Field    string `json:"field" example:"page_size"`
+	Location string `json:"location" example:"query"`
+	Message  string `json:"message" example:"must be at most 500"`
+}
+
+// ValidationErrorResponse is returned for semantically invalid requests.
+type ValidationErrorResponse struct {
+	Error   string                  `json:"error" example:"request validation failed"`
+	Details []ValidationErrorDetail `json:"details"`
+}
+
 // HealthResponse is the health check payload.
 type HealthResponse struct {
 	Status string `json:"status" example:"ok"`
@@ -531,7 +544,7 @@ type ExtractionDiagnosticResponse struct {
 
 // ExtractionDiagnosticStatusRequest is the diagnostic status update payload.
 type ExtractionDiagnosticStatusRequest struct {
-	Status string `json:"status" example:"resolved" binding:"required" enums:"open,resolved,ignored"`
+	Status string `json:"status" example:"resolved" validate:"required,oneof=open resolved ignored" enums:"open,resolved,ignored"`
 }
 
 // FacetsResponse documents the distinct transaction filter values.
