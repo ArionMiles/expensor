@@ -1349,7 +1349,7 @@ func TestListTransactions_RejectsInvalidQuery(t *testing.T) {
 		message string
 	}{
 		{name: "page overflow", query: "page=99999999999999999999999999999", field: "page", message: "must be an integer"},
-		{name: "page size too large", query: "page_size=501", field: "page_size", message: "must be at most 500"},
+		{name: "page size too large", query: "page_size=101", field: "page_size", message: "must be at most 100"},
 		{name: "invalid date", query: "date_from=yesterday", field: "date_from", message: "must be an RFC3339 timestamp"},
 		{name: "invalid weekday", query: "weekday=7", field: "weekday", message: "must be at most 6"},
 		{name: "invalid hour", query: "hour_from=24", field: "hour_from", message: "must be at most 23"},
@@ -1371,6 +1371,36 @@ func TestListTransactions_RejectsInvalidQuery(t *testing.T) {
 				t.Fatalf("store calls = list:%d search:%d", st.listCalls, st.searchCalls)
 			}
 		})
+	}
+}
+
+func TestListTransactions_AcceptsLargePageAndMaximumPageSize(t *testing.T) {
+	st := &mockStore{transactions: []store.Transaction{}}
+	h := newTestHandlers(t, st, &mockDaemon{})
+
+	rr := get(h.ListTransactions, "/api/transactions?page=10001&page_size=100")
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if st.listFilter.Page != 10001 || st.listFilter.PageSize != 100 {
+		t.Fatalf("pagination = page:%d page_size:%d", st.listFilter.Page, st.listFilter.PageSize)
+	}
+}
+
+func TestListTransactions_RejectsOffsetOverflow(t *testing.T) {
+	st := &mockStore{}
+	h := newTestHandlers(t, st, &mockDaemon{})
+	maxInt := int(^uint(0) >> 1)
+
+	rr := get(h.ListTransactions, fmt.Sprintf(
+		"/api/transactions?page=%d&page_size=100",
+		maxInt,
+	))
+
+	assertValidationError(t, rr, "page", "query", "is too large for page_size")
+	if st.listCalls != 0 || st.searchCalls != 0 {
+		t.Fatalf("store calls = list:%d search:%d", st.listCalls, st.searchCalls)
 	}
 }
 

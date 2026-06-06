@@ -27,7 +27,31 @@ func newRequestValidator() *validator.Validate {
 	mustRegisterValidation(validate, "iana_timezone", isIANATimezone)
 	mustRegisterValidation(validate, "currency_code", isCurrencyCode)
 	mustRegisterValidation(validate, "time_format", isTimeFormat)
+	validate.RegisterStructValidation(validateTransactionPagination, transactionListQuery{})
 	return validate
+}
+
+func validateTransactionPagination(level validator.StructLevel) {
+	query, ok := level.Current().Interface().(transactionListQuery)
+	if !ok {
+		return
+	}
+	if query.Page == nil || *query.Page <= 1 {
+		return
+	}
+
+	pageSize := 20
+	if query.PageSize != nil {
+		pageSize = *query.PageSize
+	}
+	if pageSize < 1 {
+		return
+	}
+
+	maxInt := int(^uint(0) >> 1)
+	if *query.Page-1 > maxInt/pageSize {
+		level.ReportError(query.Page, "page", "Page", "page_offset", "")
+	}
 }
 
 func hasNoControlChars(field validator.FieldLevel) bool {
@@ -120,6 +144,8 @@ func validationMessage(fieldError validator.FieldError) string {
 		return "must be a 3-letter ISO 4217 code"
 	case "time_format":
 		return "must be one of: HH:mm, HH:mm:ss, h:mm a, h:mm:ss a"
+	case "page_offset":
+		return "is too large for page_size"
 	default:
 		return "is invalid"
 	}

@@ -17,8 +17,8 @@ import (
 // @Summary List transactions
 // @Tags Transactions
 // @Produce json
-// @Param page query int false "1-based page number" default(1) minimum(1) maximum(10000)
-// @Param page_size query int false "Page size" default(20) minimum(1) maximum(500)
+// @Param page query int false "1-based page number" default(1) minimum(1)
+// @Param page_size query int false "Page size" default(20) minimum(1) maximum(100)
 // @Param merchant query string false "Merchant filter"
 // @Param category query string false "Category filter"
 // @Param category_missing query int false "Only transactions without a category when set to 1" Enums(1)
@@ -97,8 +97,8 @@ func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
 
 //nolint:revive // validate tags include custom rules registered by newRequestValidator.
 type transactionListQuery struct {
-	Page               *int       `form:"page" validate:"omitempty,min=1,max=10000"`
-	PageSize           *int       `form:"page_size" validate:"omitempty,min=1,max=500"`
+	Page               *int       `form:"page" validate:"omitempty,min=1"`
+	PageSize           *int       `form:"page_size" validate:"omitempty,min=1,max=100"`
 	Merchant           string     `form:"merchant" validate:"no_control_chars"`
 	Category           string     `form:"category" validate:"no_control_chars"`
 	CategoryMissing    string     `form:"category_missing" validate:"omitempty,oneof=1"`
