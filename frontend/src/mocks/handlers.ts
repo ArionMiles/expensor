@@ -20,6 +20,8 @@ function filterTransactions(url: URL) {
   const sourceType = url.searchParams.get('source_type')
   const bank = url.searchParams.get('bank')
   const label = url.searchParams.get('label')
+  const dateFrom = url.searchParams.get('date_from')
+  const dateTo = url.searchParams.get('date_to')
 
   return seededTransactions.filter((transaction) => {
     if (q) {
@@ -57,6 +59,14 @@ function filterTransactions(url: URL) {
     }
 
     if (label && !transaction.labels.includes(label)) {
+      return false
+    }
+
+    if (dateFrom && new Date(transaction.timestamp) < new Date(dateFrom)) {
+      return false
+    }
+
+    if (dateTo && new Date(transaction.timestamp) > new Date(dateTo)) {
       return false
     }
 

@@ -27,8 +27,8 @@ export const queryKeys = {
   readerStatus: (name: string) => ['readers', name, 'status'] as const,
   facets: ['transactions', 'facets'] as const,
   transactions: (filters: TransactionFilters) => ['transactions', filters] as const,
-  transactionSearch: (q: string, page: number, pageSize: number) =>
-    ['transactions', 'search', q, page, pageSize] as const,
+  transactionSearch: (q: string, filters: TransactionFilters) =>
+    ['transactions', 'search', q, filters] as const,
   transaction: (id: string) => ['transactions', id] as const,
   extractionDiagnostics: (status: ExtractionDiagnosticListStatus) =>
     ['extraction-diagnostics', status] as const,
@@ -177,18 +177,13 @@ export function useFacets() {
 
 export function useTransactions(filters: TransactionFilters, searchQuery: string) {
   const isSearch = searchQuery.trim().length > 0
-  const page = filters.page ?? 1
-  const pageSize = filters.page_size ?? 20
 
   return useQuery({
     queryKey: isSearch
-      ? queryKeys.transactionSearch(searchQuery, page, pageSize)
+      ? queryKeys.transactionSearch(searchQuery, filters)
       : queryKeys.transactions(filters),
     queryFn: isSearch
-      ? () =>
-          api.transactions
-            .search(searchQuery, page, pageSize, !!filters.show_muted)
-            .then((r) => r.data)
+      ? () => api.transactions.search(searchQuery, filters).then((r) => r.data)
       : () => api.transactions.list(filters).then((r) => r.data),
     placeholderData: (prev) => prev,
   })

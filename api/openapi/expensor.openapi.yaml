@@ -3443,6 +3443,22 @@ paths:
         in: query
         name: exclude_sources
         type: string
+      - description: Source type filter
+        in: query
+        name: source_type
+        type: string
+      - description: Comma-separated source types to exclude
+        in: query
+        name: exclude_source_types
+        type: string
+      - description: Bank filter
+        in: query
+        name: bank
+        type: string
+      - description: Comma-separated banks to exclude
+        in: query
+        name: exclude_banks
+        type: string
       - description: Label filter
         in: query
         name: label
@@ -3491,6 +3507,12 @@ paths:
         in: query
         name: muted_only
         type: integer
+      - description: Return only individually muted transactions when set to 1
+        enum:
+        - 1
+        in: query
+        name: individual_only
+        type: integer
       - description: PostgreSQL DOW weekday filter (0=Sunday...6=Saturday)
         enum:
         - 0
@@ -3514,6 +3536,12 @@ paths:
       - description: IANA timezone used for weekday/hour filters
         in: query
         name: tz
+        type: string
+      - description: Sort field
+        enum:
+        - timestamp
+        in: query
+        name: sort_by
         type: string
       - description: Sort direction
         enum:
@@ -3839,12 +3867,143 @@ paths:
         in: query
         name: page_size
         type: integer
+      - description: Merchant filter
+        in: query
+        name: merchant
+        type: string
+      - description: Category filter
+        in: query
+        name: category
+        type: string
+      - description: Only transactions without a category when set to 1
+        enum:
+        - 1
+        in: query
+        name: category_missing
+        type: integer
+      - description: Comma-separated categories to exclude
+        in: query
+        name: exclude_categories
+        type: string
+      - description: Currency filter
+        in: query
+        name: currency
+        type: string
+      - description: Source filter
+        in: query
+        name: source
+        type: string
+      - description: Comma-separated sources to exclude
+        in: query
+        name: exclude_sources
+        type: string
+      - description: Source type filter
+        in: query
+        name: source_type
+        type: string
+      - description: Comma-separated source types to exclude
+        in: query
+        name: exclude_source_types
+        type: string
+      - description: Bank filter
+        in: query
+        name: bank
+        type: string
+      - description: Comma-separated banks to exclude
+        in: query
+        name: exclude_banks
+        type: string
+      - description: Label filter
+        in: query
+        name: label
+        type: string
+      - description: Only transactions without labels when set to 1
+        enum:
+        - 1
+        in: query
+        name: label_missing
+        type: integer
+      - description: Comma-separated labels to exclude
+        in: query
+        name: exclude_labels
+        type: string
+      - description: Bucket filter
+        in: query
+        name: bucket
+        type: string
+      - description: Only transactions without a bucket when set to 1
+        enum:
+        - 1
+        in: query
+        name: bucket_missing
+        type: integer
+      - description: Comma-separated buckets to exclude
+        in: query
+        name: exclude_buckets
+        type: string
+      - description: RFC3339 start timestamp
+        in: query
+        name: date_from
+        type: string
+      - description: RFC3339 end timestamp
+        in: query
+        name: date_to
+        type: string
       - description: Include muted transactions when set to 1
         enum:
         - 1
         in: query
         name: show_muted
         type: integer
+      - description: Return only muted transactions when set to 1
+        enum:
+        - 1
+        in: query
+        name: muted_only
+        type: integer
+      - description: Return only individually muted transactions when set to 1
+        enum:
+        - 1
+        in: query
+        name: individual_only
+        type: integer
+      - description: PostgreSQL DOW weekday filter (0=Sunday...6=Saturday)
+        enum:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        in: query
+        name: weekday
+        type: integer
+      - description: Minimum hour filter (0-23)
+        in: query
+        name: hour_from
+        type: integer
+      - description: Maximum hour filter (0-23)
+        in: query
+        name: hour_to
+        type: integer
+      - description: IANA timezone used for weekday/hour filters
+        in: query
+        name: tz
+        type: string
+      - description: Sort field
+        enum:
+        - timestamp
+        in: query
+        name: sort_by
+        type: string
+      - description: Sort direction
+        enum:
+        - asc
+        - desc
+        in: query
+        name: sort_dir
+        type: string
       produces:
       - application/json
       responses:

@@ -33,11 +33,6 @@ type Config struct {
 	// Default: same as BASE_URL
 	FrontendURL string `envconfig:"FRONTEND_URL"`
 
-	// BaseCurrency is the primary currency used for aggregate stats.
-	// Environment variable: EXPENSOR_BASE_CURRENCY
-	// Default: INR
-	BaseCurrency string `envconfig:"EXPENSOR_BASE_CURRENCY" default:"INR"`
-
 	// ScanInterval is the polling interval in seconds for all readers.
 	// Environment variable: EXPENSOR_SCAN_INTERVAL
 	// Default: 60
