@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/google/uuid"
 
@@ -23,23 +22,23 @@ import (
 // @Failure 503 {object} ErrorResponse
 // @Router /extraction-diagnostics [get]
 func (h *Handlers) ListExtractionDiagnostics(w http.ResponseWriter, r *http.Request) {
-	status := r.URL.Query().Get("status")
-	if status == "" {
-		status = store.DiagnosticStatusOpen
+	query := diagnosticListQuery{Status: r.URL.Query().Get("status")}
+	if query.Status == "" {
+		query.Status = store.DiagnosticStatusOpen
 	}
-	if err := store.ValidateDiagnosticFilterStatus(status); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "invalid diagnostic status")
+	var detail *ValidationErrorDetail
+	query.Limit, detail = optionalQueryInt(r.URL.Query(), "limit")
+	if detail != nil {
+		writeValidationErrors(w, []ValidationErrorDetail{*detail})
+		return
+	}
+	if !h.validateRequest(w, "query", query) {
 		return
 	}
 
-	filter := store.DiagnosticFilter{Status: status}
-	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
-		limit, err := strconv.Atoi(rawLimit)
-		if err != nil || limit <= 0 {
-			writeError(w, http.StatusUnprocessableEntity, "invalid limit")
-			return
-		}
-		filter.Limit = limit
+	filter := store.DiagnosticFilter{Status: query.Status}
+	if query.Limit != nil {
+		filter.Limit = *query.Limit
 	}
 
 	rows, err := h.diagnosticStore.ListExtractionDiagnostics(r.Context(), filter)
@@ -52,6 +51,11 @@ func (h *Handlers) ListExtractionDiagnostics(w http.ResponseWriter, r *http.Requ
 		rows = []store.ExtractionDiagnosticRow{}
 	}
 	writeJSON(w, http.StatusOK, rows)
+}
+
+type diagnosticListQuery struct {
+	Status string `query:"status" validate:"required,oneof=open resolved ignored all"`
+	Limit  *int   `query:"limit" validate:"omitempty,min=1"`
 }
 
 // GetExtractionDiagnostic handles GET /api/extraction-diagnostics/{id}.
@@ -109,7 +113,7 @@ func (h *Handlers) UpdateExtractionDiagnosticStatus(w http.ResponseWriter, r *ht
 
 	var body ExtractionDiagnosticStatusRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 	if !h.validateRequest(w, "body", body) {

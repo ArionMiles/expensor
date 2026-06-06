@@ -1590,27 +1590,32 @@ func TestListExtractionDiagnostics_StatusAllAndLimit(t *testing.T) {
 	}
 }
 
-func TestListExtractionDiagnostics_InvalidStatus(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/extraction-diagnostics?status=pending", nil)
-	rr := httptest.NewRecorder()
-	h.ListExtractionDiagnostics(rr, req)
-
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422, got %d", rr.Code)
+func TestListExtractionDiagnostics_RejectsInvalidQuery(t *testing.T) {
+	tests := []struct {
+		name    string
+		query   string
+		field   string
+		message string
+	}{
+		{name: "status", query: "status=pending", field: "status", message: "must be one of: open, resolved, ignored, all"},
+		{name: "limit syntax", query: "limit=bad", field: "limit", message: "must be an integer"},
+		{name: "limit range", query: "limit=0", field: "limit", message: "must be at least 1"},
 	}
-}
 
-func TestListExtractionDiagnostics_InvalidLimit(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+			req := httptest.NewRequestWithContext(
+				context.Background(),
+				http.MethodGet,
+				"/api/extraction-diagnostics?"+tt.query,
+				nil,
+			)
+			rr := httptest.NewRecorder()
+			h.ListExtractionDiagnostics(rr, req)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/extraction-diagnostics?limit=bad", nil)
-	rr := httptest.NewRecorder()
-	h.ListExtractionDiagnostics(rr, req)
-
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422, got %d", rr.Code)
+			assertValidationError(t, rr, tt.field, "query", tt.message)
+		})
 	}
 }
 
@@ -1673,6 +1678,40 @@ func TestUpdateExtractionDiagnosticStatus_InvalidStatus(t *testing.T) {
 	h.UpdateExtractionDiagnosticStatus(rr, req)
 
 	assertValidationError(t, rr, "status", "body", "must be one of: open, resolved, ignored")
+}
+
+func TestUpdateExtractionDiagnosticStatus_MissingStatus(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPatch,
+		"/api/extraction-diagnostics/11111111-1111-1111-1111-111111111111",
+		strings.NewReader(`{}`),
+	)
+	req.SetPathValue("id", "11111111-1111-1111-1111-111111111111")
+	rr := httptest.NewRecorder()
+	h.UpdateExtractionDiagnosticStatus(rr, req)
+
+	assertValidationError(t, rr, "status", "body", "is required")
+}
+
+func TestUpdateExtractionDiagnosticStatus_InvalidJSON(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPatch,
+		"/api/extraction-diagnostics/11111111-1111-1111-1111-111111111111",
+		strings.NewReader("not-json"),
+	)
+	req.SetPathValue("id", "11111111-1111-1111-1111-111111111111")
+	rr := httptest.NewRecorder()
+	h.UpdateExtractionDiagnosticStatus(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d (body=%s)", rr.Code, rr.Body.String())
+	}
 }
 
 func TestUpdateExtractionDiagnosticStatus_NotFound(t *testing.T) {
