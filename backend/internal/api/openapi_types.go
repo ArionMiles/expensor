@@ -11,7 +11,7 @@ type ErrorResponse struct {
 type ValidationErrorDetail struct {
 	Field    string `json:"field" example:"page_size"`
 	Location string `json:"location" example:"query"`
-	Message  string `json:"message" example:"must be at most 500"`
+	Message  string `json:"message" example:"must be at most 100"`
 }
 
 // ValidationErrorResponse is returned for semantically invalid requests.
@@ -507,17 +507,6 @@ type TransactionsListResponse struct {
 	BaseCurrency string                `json:"base_currency" example:"INR"`
 	Page         int                   `json:"page"`
 	PageSize     int                   `json:"page_size"`
-}
-
-// TransactionsSearchResponse documents the paginated search payload.
-type TransactionsSearchResponse struct {
-	Transactions []TransactionResponse `json:"transactions"`
-	Total        int                   `json:"total"`
-	TotalAmount  float64               `json:"total_amount"`
-	BaseCurrency string                `json:"base_currency" example:"INR"`
-	Page         int                   `json:"page"`
-	PageSize     int                   `json:"page_size"`
-	Query        string                `json:"query" example:"coffee"`
 }
 
 // ExtractionDiagnosticResponse documents an extraction diagnostic payload.
