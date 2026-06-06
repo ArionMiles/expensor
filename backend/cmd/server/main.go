@@ -89,7 +89,7 @@ type communitySyncStore interface {
 }
 
 type communitySyncDependencies struct {
-	config      config.CommunityConfig
+	config      config.Community
 	store       communitySyncStore
 	pgStore     *store.Store
 	coordinator *daemonCoordinator
@@ -142,7 +142,7 @@ type daemonCoordinator struct {
 	cancelFn      context.CancelFunc // cancels the current daemon run; nil when idle
 	activeReader  string             // reader name currently running or last launched
 	registry      *plugins.Registry
-	cfg           config.Config
+	cfg           config.App
 	systemRules   []api.Rule
 	resolver      api.CategoryResolver
 	st            httpapi.Storer
@@ -329,7 +329,13 @@ func main() {
 }
 
 func run() int {
-	shutdownObservability, logger, err := observability.Setup(context.Background(), observability.DefaultConfig())
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to load configuration: %v\n", err)
+		return 1
+	}
+
+	shutdownObservability, logger, err := observability.Setup(context.Background(), cfg.Observability)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize observability: %v\n", err)
 		return 1
@@ -351,12 +357,6 @@ func run() int {
 		"readers", len(registry.ListReaders()),
 		"writers", len(registry.ListWriters()),
 	)
-
-	cfg, err := config.Load()
-	if err != nil {
-		logger.Error("failed to load config", "error", err)
-		return 1
-	}
 
 	// Wait for postgres connectivity — fatal if unavailable after timeout.
 	if err := waitForPostgres(cfg.Postgres, logger); err != nil {
@@ -465,7 +465,7 @@ func runDaemon( //nolint:revive // all parameters are required; splitting furthe
 	ctx context.Context,
 	registry *plugins.Registry,
 	readerName string,
-	cfg config.Config,
+	cfg config.App,
 	rules []api.Rule,
 	resolver api.CategoryResolver,
 	diagnosticSink api.DiagnosticSink,
@@ -625,7 +625,7 @@ func compileRule(row store.RuleRow) (api.Rule, error) {
 // runMigrations opens a short-lived pool, applies all pending numbered SQL
 // migrations from the embedded migrations directory, and closes the pool.
 // Called once at startup before the store and writer pools are created.
-func runMigrations(pgCfg config.PostgresConfig, logger *slog.Logger) error {
+func runMigrations(pgCfg config.Postgres, logger *slog.Logger) error {
 	connStr := fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s pool_max_conns=1",
 		pgCfg.Host, pgCfg.Port, pgCfg.User, pgCfg.Password, pgCfg.Database, pgCfg.SSLMode,
@@ -645,7 +645,7 @@ func runMigrations(pgCfg config.PostgresConfig, logger *slog.Logger) error {
 // waitForPostgres retries a postgres ping until the connection succeeds or the
 // timeout is reached. It gives the container time to accept connections after
 // being started by `task dev`.
-func waitForPostgres(pgCfg config.PostgresConfig, logger *slog.Logger) error {
+func waitForPostgres(pgCfg config.Postgres, logger *slog.Logger) error {
 	connStr := fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s pool_max_conns=1",
 		pgCfg.Host, pgCfg.Port, pgCfg.User, pgCfg.Password, pgCfg.Database, pgCfg.SSLMode,
@@ -836,16 +836,16 @@ func seedStartupData(ctx context.Context, pgStore *store.Store, content embedded
 
 // applyScanOverrides returns a copy of cfg with ScanInterval and LookbackDays
 // overridden from app_config when valid UI-set values exist.
-func applyScanOverrides(ctx context.Context, cfg config.Config, st httpapi.Storer) config.Config {
+func applyScanOverrides(ctx context.Context, cfg config.App, st httpapi.Storer) config.App {
 	if st == nil {
 		return cfg
 	}
-	if v, err := getAppConfigWithTimeout(ctx, st, "scan_interval", cfg.AppConfig.ReadTimeout); err == nil {
+	if v, err := getAppConfigWithTimeout(ctx, st, "scan_interval", cfg.Persisted.ReadTimeout); err == nil {
 		if n, convErr := strconv.Atoi(v); convErr == nil && n > 0 {
 			cfg.ScanInterval = n
 		}
 	}
-	if v, err := getAppConfigWithTimeout(ctx, st, "lookback_days", cfg.AppConfig.ReadTimeout); err == nil {
+	if v, err := getAppConfigWithTimeout(ctx, st, "lookback_days", cfg.Persisted.ReadTimeout); err == nil {
 		if n, convErr := strconv.Atoi(v); convErr == nil && n > 0 {
 			cfg.LookbackDays = n
 		}

@@ -27,7 +27,7 @@ func (p *Plugin) Metadata() plugins.WriterMetadata {
 func (p *Plugin) NewWriter(input plugins.WriterInput) (api.Writer, error) {
 	cfg := input.AppConfig
 	if cfg == nil {
-		cfg = &config.Config{}
+		cfg = &config.App{}
 	}
 	logger := input.Logger
 	if logger == nil {

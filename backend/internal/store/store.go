@@ -34,7 +34,7 @@ type Store struct {
 var _ api.DiagnosticSink = (*Store)(nil)
 
 // New creates a Store connected to the PostgreSQL instance described by cfg.
-func New(cfg config.PostgresConfig, logger *slog.Logger) (*Store, error) {
+func New(cfg config.Postgres, logger *slog.Logger) (*Store, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}

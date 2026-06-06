@@ -57,7 +57,7 @@ func TestPlugin_Metadata(t *testing.T) {
 
 func TestPlugin_NewReader_NilHTTPClient(t *testing.T) {
 	p := &gmailplugin.Plugin{}
-	cfg := &config.Config{
+	cfg := &config.App{
 		ScanInterval: 60,
 	}
 

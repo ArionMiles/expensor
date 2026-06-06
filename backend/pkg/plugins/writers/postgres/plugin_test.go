@@ -30,8 +30,8 @@ func TestPlugin_Metadata(t *testing.T) {
 
 func TestPlugin_NewWriter_ConnectionFailure(t *testing.T) {
 	p := &postgresplugin.Plugin{}
-	cfg := &config.Config{
-		Postgres: config.PostgresConfig{
+	cfg := &config.App{
+		Postgres: config.Postgres{
 			Host:          "nonexistent-host-12345",
 			Port:          5432,
 			Database:      "test",

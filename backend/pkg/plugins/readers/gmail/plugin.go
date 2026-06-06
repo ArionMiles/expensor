@@ -40,7 +40,7 @@ func (p *Plugin) Metadata() plugins.ReaderMetadata {
 func (p *Plugin) NewReader(input plugins.ReaderInput) (api.Reader, error) {
 	cfg := input.AppConfig
 	if cfg == nil {
-		cfg = &config.Config{}
+		cfg = &config.App{}
 	}
 	interval := time.Duration(cfg.ScanInterval) * time.Second
 	if interval == 0 {

@@ -53,9 +53,9 @@ func TestPlugin_NewReader(t *testing.T) {
 	}
 
 	// Create config
-	cfg := &config.Config{
+	cfg := &config.App{
 		ScanInterval: 10,
-		Thunderbird: config.ThunderbirdConfig{
+		Thunderbird: config.Thunderbird{
 			ProfilePath: tmpDir,
 			Mailboxes:   "Inbox",
 		},
@@ -96,9 +96,9 @@ func TestPlugin_NewReader_MissingMailbox(t *testing.T) {
 
 	// Don't create the mailbox - it should fail
 
-	cfg := &config.Config{
+	cfg := &config.App{
 		ScanInterval: 10,
-		Thunderbird: config.ThunderbirdConfig{
+		Thunderbird: config.Thunderbird{
 			ProfilePath: tmpDir,
 			Mailboxes:   "NonExistent",
 		},
@@ -132,9 +132,9 @@ func TestPlugin_NewReader_DefaultInterval(t *testing.T) {
 	}
 
 	// ScanInterval of 0 will be treated as zero duration; plugin uses it directly.
-	cfg := &config.Config{
+	cfg := &config.App{
 		ScanInterval: 0,
-		Thunderbird: config.ThunderbirdConfig{
+		Thunderbird: config.Thunderbird{
 			ProfilePath: tmpDir,
 			Mailboxes:   "Inbox",
 		},
@@ -171,7 +171,7 @@ func TestPlugin_NewReader_UsesPersistedReaderConfig(t *testing.T) {
 
 	plugin := &Plugin{}
 	reader, err := plugin.NewReader(plugins.ReaderInput{
-		AppConfig:    &config.Config{},
+		AppConfig:    &config.App{},
 		ReaderConfig: []byte(`{"config":{"profilePath":"` + tmpDir + `","mailboxes":"Inbox,Sent"}}`),
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
@@ -298,7 +298,7 @@ func TestGetMailboxes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := config.ThunderbirdConfig{
+			cfg := config.Thunderbird{
 				Mailboxes: tt.mailboxes,
 			}
 

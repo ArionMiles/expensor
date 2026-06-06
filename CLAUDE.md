@@ -83,7 +83,7 @@ When changing seeded demo data for screenshots, prefer realistic merchant names 
 Do not create ad hoc screenshot commands in shell history. If capture settings matter, encode them in `Taskfile.yml` or a script under `frontend/scripts/` so they can be reused.
 
 ### Configuration
-All env config flows through `pkg/config/config.go` using koanf. Only four env prefixes are loaded: `EXPENSOR_`, `GMAIL_`, `THUNDERBIRD_`, `POSTGRES_`. Do not add config fields under other prefixes.
+All application environment config flows through `pkg/config/config.go` using `kelseyhightower/envconfig`. Do not read application environment variables directly from feature packages. OS discovery variables such as Windows `APPDATA` may remain local to the platform-specific code that consumes them.
 
 ### Internationalization
 Frontend i18n lives under `frontend/src/i18n/`. English is the source catalog in `messages.ts`; add new locales by copying the full English key set and translating values without renaming keys. Components should use `useI18n()` and `MessageKey` for shared navigation, command, settings tab, repeated control label, and other extracted strings. User-facing currency, dates, month labels, and counts should use helpers from `frontend/src/i18n/format.ts`. See `docs/i18n/adding-translations.md` and `docs/i18n/string-extraction.md`.

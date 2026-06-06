@@ -140,8 +140,12 @@ Most setup happens in the web UI. Environment variables are only needed for depl
 | `POSTGRES_PASSWORD` | PostgreSQL password. |
 | `POSTGRES_PORT` | PostgreSQL port. Defaults to `5432`. |
 | `POSTGRES_SSLMODE` | PostgreSQL SSL mode. Defaults to `disable`. |
-| `LOG_LEVEL` | `DEBUG`, `INFO`, `WARN`, or `ERROR`. |
-| `LOG_JSON` | Set to `true` for structured JSON logs. |
+| `LOG_LEVEL` | Minimum log level: `DEBUG`, `INFO`, `WARN`, or `ERROR`. Defaults to `INFO`. |
+| `LOG_JSON` | Set to `true` for structured JSON logs. Defaults to `false`. |
+| `EXPENSOR_OBSERVABILITY_ENABLED` | Enable OpenTelemetry traces and metrics. Defaults to `false`. |
+| `EXPENSOR_OBSERVABILITY_EXPORTER` | Telemetry exporter. Supported values are `none` and `otlp`. |
+| `EXPENSOR_OBSERVABILITY_OTLP_ENDPOINT` | OTLP gRPC collector endpoint. |
+| `EXPENSOR_OBSERVABILITY_OTLP_INSECURE` | Set to `true` for an insecure OTLP gRPC connection. |
 
 ## Releases
 
