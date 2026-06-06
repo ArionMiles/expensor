@@ -15,6 +15,9 @@ var ErrRuleNameConflict = errors.New("rule name conflict")
 // ErrDiagnosticConflict is returned when reopening a diagnostic would duplicate an existing open diagnostic.
 var ErrDiagnosticConflict = errors.New("diagnostic conflict")
 
+// ErrPaginationOverflow is returned when a requested page cannot be represented as a SQL offset.
+var ErrPaginationOverflow = errors.New("pagination offset overflow")
+
 func isDiagnosticOpenConflict(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "extraction_diagnostics_open_unique"
