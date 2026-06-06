@@ -53,7 +53,7 @@ ARG VERSION=dev
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
-    go build -trimpath -ldflags="-s -w -X main.Version=${VERSION}" \
+    go build -trimpath -ldflags="-s -w -X github.com/ArionMiles/expensor/backend/pkg/config.Version=${VERSION}" \
     -o expensor ./cmd/server
 
 RUN test -x ./expensor && test -s ./expensor

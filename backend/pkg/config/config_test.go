@@ -1,159 +1,84 @@
 package config_test
 
 import (
+	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 )
 
-func TestConfig_ValidatePostgres(t *testing.T) {
-	tests := []struct {
-		name    string
-		cfg     config.Config
-		wantErr string
-	}{
-		{
-			name: "valid postgres config",
-			cfg: config.Config{
-				Postgres: config.PostgresConfig{Host: "localhost", Database: "expensor", User: "user"},
-			},
-		},
-		{
-			name:    "missing host",
-			cfg:     config.Config{Postgres: config.PostgresConfig{Database: "db", User: "u"}},
-			wantErr: "POSTGRES_HOST is required",
-		},
-		{
-			name:    "missing database",
-			cfg:     config.Config{Postgres: config.PostgresConfig{Host: "h", User: "u"}},
-			wantErr: "POSTGRES_DB is required",
-		},
-		{
-			name:    "missing user",
-			cfg:     config.Config{Postgres: config.PostgresConfig{Host: "h", Database: "db"}},
-			wantErr: "POSTGRES_USER is required",
-		},
-	}
+func TestLoadRequiresPostgresConnectionFields(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("POSTGRES_DB", "expensor")
+	t.Setenv("POSTGRES_USER", "expensor")
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			err := tc.cfg.ValidatePostgres()
-			if tc.wantErr == "" {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-				return
-			}
-			if err == nil {
-				t.Errorf("expected error %q, got nil", tc.wantErr)
-				return
-			}
-			if err.Error() != tc.wantErr {
-				t.Errorf("error: got %q, want %q", err.Error(), tc.wantErr)
-			}
-		})
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), "POSTGRES_HOST") {
+		t.Fatalf("expected missing POSTGRES_HOST error, got %v", err)
 	}
 }
 
-func TestConfig_ApplyDefaults(t *testing.T) {
-	t.Run("zero value gets all defaults", func(t *testing.T) {
-		cfg := config.Config{}
-		cfg.ApplyDefaults()
+func TestLoadAppliesDefaults(t *testing.T) {
+	setRequiredConfigEnv(t)
 
-		if cfg.ScanInterval != 60 {
-			t.Errorf("ScanInterval: got %d, want 60", cfg.ScanInterval)
-		}
-		if cfg.LookbackDays != 180 {
-			t.Errorf("LookbackDays: got %d, want 180", cfg.LookbackDays)
-		}
-		if cfg.Postgres.Port != 5432 {
-			t.Errorf("Postgres.Port: got %d, want 5432", cfg.Postgres.Port)
-		}
-		if cfg.Postgres.SSLMode != "disable" {
-			t.Errorf("Postgres.SSLMode: got %q, want \"disable\"", cfg.Postgres.SSLMode)
-		}
-		if cfg.Postgres.BatchSize != 10 {
-			t.Errorf("Postgres.BatchSize: got %d, want 10", cfg.Postgres.BatchSize)
-		}
-		if cfg.Postgres.FlushInterval != 30 {
-			t.Errorf("Postgres.FlushInterval: got %d, want 30", cfg.Postgres.FlushInterval)
-		}
-		if cfg.Postgres.MaxPoolSize != 10 {
-			t.Errorf("Postgres.MaxPoolSize: got %d, want 10", cfg.Postgres.MaxPoolSize)
-		}
-	})
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
 
-	t.Run("pre-set values are not overwritten", func(t *testing.T) {
-		cfg := config.Config{
-			ScanInterval: 120,
-			LookbackDays: 365,
-			Postgres: config.PostgresConfig{
-				Port:          5433,
-				SSLMode:       "require",
-				BatchSize:     50,
-				FlushInterval: 60,
-				MaxPoolSize:   20,
-			},
-		}
-		cfg.ApplyDefaults()
-
-		if cfg.ScanInterval != 120 {
-			t.Errorf("ScanInterval: got %d, want 120", cfg.ScanInterval)
-		}
-		if cfg.LookbackDays != 365 {
-			t.Errorf("LookbackDays: got %d, want 365", cfg.LookbackDays)
-		}
-		if cfg.Postgres.Port != 5433 {
-			t.Errorf("Postgres.Port: got %d, want 5433", cfg.Postgres.Port)
-		}
-		if cfg.Postgres.SSLMode != "require" {
-			t.Errorf("Postgres.SSLMode: got %q, want \"require\"", cfg.Postgres.SSLMode)
-		}
-		if cfg.Postgres.BatchSize != 50 {
-			t.Errorf("Postgres.BatchSize: got %d, want 50", cfg.Postgres.BatchSize)
-		}
-		if cfg.Postgres.FlushInterval != 60 {
-			t.Errorf("Postgres.FlushInterval: got %d, want 60", cfg.Postgres.FlushInterval)
-		}
-		if cfg.Postgres.MaxPoolSize != 20 {
-			t.Errorf("Postgres.MaxPoolSize: got %d, want 20", cfg.Postgres.MaxPoolSize)
-		}
-	})
-
-	t.Run("negative intervals get defaults", func(t *testing.T) {
-		cfg := config.Config{
-			ScanInterval: -1,
-			LookbackDays: -5,
-			Postgres:     config.PostgresConfig{Port: -1, BatchSize: -1, FlushInterval: -1, MaxPoolSize: -1},
-		}
-		cfg.ApplyDefaults()
-
-		if cfg.ScanInterval != 60 {
-			t.Errorf("ScanInterval: got %d, want 60", cfg.ScanInterval)
-		}
-		if cfg.LookbackDays != 180 {
-			t.Errorf("LookbackDays: got %d, want 180", cfg.LookbackDays)
-		}
-		if cfg.Postgres.Port != 5432 {
-			t.Errorf("Postgres.Port: got %d, want 5432", cfg.Postgres.Port)
-		}
-		if cfg.Postgres.BatchSize != 10 {
-			t.Errorf("Postgres.BatchSize: got %d, want 10", cfg.Postgres.BatchSize)
-		}
-		if cfg.Postgres.FlushInterval != 30 {
-			t.Errorf("Postgres.FlushInterval: got %d, want 30", cfg.Postgres.FlushInterval)
-		}
-		if cfg.Postgres.MaxPoolSize != 10 {
-			t.Errorf("Postgres.MaxPoolSize: got %d, want 10", cfg.Postgres.MaxPoolSize)
-		}
-	})
+	if cfg.Port != 8080 || cfg.BaseURL != "http://localhost:8080" || cfg.FrontendURL != cfg.BaseURL {
+		t.Fatalf("server defaults: got port=%d base=%q frontend=%q", cfg.Port, cfg.BaseURL, cfg.FrontendURL)
+	}
+	if cfg.BaseCurrency != "INR" || cfg.ScanInterval != 60 || cfg.LookbackDays != 180 {
+		t.Fatalf("application defaults: got currency=%q scan=%d lookback=%d", cfg.BaseCurrency, cfg.ScanInterval, cfg.LookbackDays)
+	}
+	if cfg.Postgres.Port != 5432 || cfg.Postgres.SSLMode != "disable" || cfg.Postgres.BatchSize != 10 ||
+		cfg.Postgres.FlushInterval != 30 || cfg.Postgres.MaxPoolSize != 10 {
+		t.Fatalf("postgres defaults: %#v", cfg.Postgres)
+	}
+	if cfg.Postgres.ConnectTimeout != 30*time.Second || cfg.Postgres.RetryInterval != 2*time.Second {
+		t.Fatalf("postgres timing defaults: %#v", cfg.Postgres)
+	}
+	if cfg.Community.URL != "https://raw.githubusercontent.com/ArionMiles/expensor/main/content" ||
+		cfg.Community.SyncInterval != 24*time.Hour || cfg.Community.SyncTimeout != 2*time.Minute {
+		t.Fatalf("community defaults: %#v", cfg.Community)
+	}
+	if cfg.AppConfig.ReadTimeout != 3*time.Second {
+		t.Fatalf("app config read timeout: got %s", cfg.AppConfig.ReadTimeout)
+	}
 }
 
-func TestApplyDefaults_BaseCurrency(t *testing.T) {
-	c := config.Config{}
-	c.ApplyDefaults()
-	if c.BaseCurrency != "INR" {
-		t.Errorf("expected BaseCurrency=INR, got %q", c.BaseCurrency)
+func TestLoadUsesEnvironmentOverrides(t *testing.T) {
+	setRequiredConfigEnv(t)
+	t.Setenv("PORT", "9090")
+	t.Setenv("BASE_URL", "https://api.example.com")
+	t.Setenv("FRONTEND_URL", "https://app.example.com")
+	t.Setenv("POSTGRES_CONNECT_TIMEOUT", "45s")
+	t.Setenv("POSTGRES_RETRY_INTERVAL", "5s")
+	t.Setenv("EXPENSOR_COMMUNITY_URL", "https://content.example.com")
+	t.Setenv("EXPENSOR_CONTENT_SYNC_INTERVAL", "12h")
+	t.Setenv("EXPENSOR_CONTENT_SYNC_TIMEOUT", "90s")
+	t.Setenv("EXPENSOR_APP_CONFIG_READ_TIMEOUT", "7s")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if cfg.Port != 9090 || cfg.BaseURL != "https://api.example.com" || cfg.FrontendURL != "https://app.example.com" {
+		t.Fatalf("server overrides: got port=%d base=%q frontend=%q", cfg.Port, cfg.BaseURL, cfg.FrontendURL)
+	}
+	if cfg.Postgres.ConnectTimeout != 45*time.Second || cfg.Postgres.RetryInterval != 5*time.Second {
+		t.Fatalf("postgres timing overrides: %#v", cfg.Postgres)
+	}
+	if cfg.Community.URL != "https://content.example.com" || cfg.Community.SyncInterval != 12*time.Hour ||
+		cfg.Community.SyncTimeout != 90*time.Second {
+		t.Fatalf("community overrides: %#v", cfg.Community)
+	}
+	if cfg.AppConfig.ReadTimeout != 7*time.Second {
+		t.Fatalf("app config read timeout: got %s", cfg.AppConfig.ReadTimeout)
 	}
 }
 
@@ -185,13 +110,51 @@ func TestThunderbirdConfig_GetMailboxes(t *testing.T) {
 	}
 }
 
-func TestApplyDefaults_ScanSettings(t *testing.T) {
-	c := config.Config{}
-	c.ApplyDefaults()
-	if c.ScanInterval != 60 {
-		t.Errorf("expected ScanInterval=60, got %d", c.ScanInterval)
-	}
-	if c.LookbackDays != 180 {
-		t.Errorf("expected LookbackDays=180, got %d", c.LookbackDays)
+func setRequiredConfigEnv(t *testing.T) {
+	t.Helper()
+	clearConfigEnv(t)
+	t.Setenv("POSTGRES_HOST", "localhost")
+	t.Setenv("POSTGRES_DB", "expensor")
+	t.Setenv("POSTGRES_USER", "expensor")
+}
+
+func clearConfigEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range []string{
+		"PORT",
+		"BASE_URL",
+		"FRONTEND_URL",
+		"EXPENSOR_BASE_CURRENCY",
+		"EXPENSOR_SCAN_INTERVAL",
+		"EXPENSOR_LOOKBACK_DAYS",
+		"EXPENSOR_STATIC_DIR",
+		"EXPENSOR_COMMUNITY_URL",
+		"EXPENSOR_CONTENT_SYNC_INTERVAL",
+		"EXPENSOR_CONTENT_SYNC_TIMEOUT",
+		"EXPENSOR_APP_CONFIG_READ_TIMEOUT",
+		"THUNDERBIRD_DATA_DIR",
+		"POSTGRES_HOST",
+		"POSTGRES_PORT",
+		"POSTGRES_DB",
+		"POSTGRES_USER",
+		"POSTGRES_PASSWORD",
+		"POSTGRES_SSLMODE",
+		"POSTGRES_BATCH_SIZE",
+		"POSTGRES_FLUSH_INTERVAL",
+		"POSTGRES_MAX_POOL_SIZE",
+		"POSTGRES_CONNECT_TIMEOUT",
+		"POSTGRES_RETRY_INTERVAL",
+	} {
+		value, exists := os.LookupEnv(key)
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatalf("unset %s: %v", key, err)
+		}
+		t.Cleanup(func() {
+			if exists {
+				_ = os.Setenv(key, value)
+				return
+			}
+			_ = os.Unsetenv(key)
+		})
 	}
 }
