@@ -6,16 +6,6 @@ definitions:
         example: gmail
         type: string
     type: object
-  api.AnnualHeatmapResponse:
-    properties:
-      buckets:
-        items:
-          $ref: '#/definitions/api.DailyBucketResponse'
-        type: array
-      year:
-        example: 2026
-        type: integer
-    type: object
   api.AppliedCountResponse:
     properties:
       applied:
@@ -436,8 +426,12 @@ definitions:
         example: ok
         type: string
     type: object
-  api.HeatmapDataResponse:
+  api.HeatmapResponse:
     properties:
+      buckets:
+        items:
+          $ref: '#/definitions/api.DailyBucketResponse'
+        type: array
       by_day_of_month:
         items:
           $ref: '#/definitions/api.DayOfMonthBucketResponse'
@@ -446,6 +440,9 @@ definitions:
         items:
           $ref: '#/definitions/api.WeekdayHourBucketResponse'
         type: array
+      year:
+        example: 2026
+        type: integer
     type: object
   api.LabelMappingsResponse:
     additionalProperties:
@@ -2558,7 +2555,7 @@ paths:
       summary: Get reader runtime config
       tags:
       - Readers
-    post:
+    put:
       consumes:
       - application/json
       parameters:
@@ -3027,13 +3024,18 @@ paths:
         in: query
         name: to
         type: string
+      - description: Calendar year; cannot be combined with from or to
+        example: 2026
+        in: query
+        name: year
+        type: integer
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.HeatmapDataResponse'
+            $ref: '#/definitions/api.HeatmapResponse'
         "400":
           description: Bad Request
           schema:
@@ -3047,32 +3049,6 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Get spending heatmap
-      tags:
-      - Stats
-  /stats/heatmap/annual:
-    get:
-      parameters:
-      - description: Calendar year
-        example: 2026
-        in: query
-        name: year
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.AnnualHeatmapResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      summary: Get annual spending heatmap
       tags:
       - Stats
   /stats/labels/monthly:

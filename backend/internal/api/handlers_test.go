@@ -1124,7 +1124,7 @@ func TestSaveReaderConfig_SavesToStore(t *testing.T) {
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	req := httptest.NewRequestWithContext(
 		context.Background(),
-		http.MethodPost,
+		http.MethodPut,
 		"/api/readers/thunderbird/config",
 		strings.NewReader(`{"config":{"mailboxes":"Inbox"}}`),
 	)
@@ -2731,7 +2731,7 @@ func TestGetHeatmap_InvalidFrom_Returns400(t *testing.T) {
 	}
 }
 
-func TestGetAnnualHeatmap_Success(t *testing.T) {
+func TestGetHeatmap_WithYear_ReturnsAnnualData(t *testing.T) {
 	ms := &mockStore{
 		annualData: []store.DailyBucket{
 			{Date: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), Amount: 1500.0, Count: 3},
@@ -2739,9 +2739,9 @@ func TestGetAnnualHeatmap_Success(t *testing.T) {
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap/annual?year=2026", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap?year=2026", nil)
 	rr := httptest.NewRecorder()
-	h.GetAnnualHeatmap(rr, req)
+	h.GetHeatmap(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
@@ -2762,16 +2762,32 @@ func TestGetAnnualHeatmap_Success(t *testing.T) {
 	}
 }
 
-func TestGetAnnualHeatmap_StoreError_Returns500(t *testing.T) {
+func TestGetHeatmap_WithYearStoreError_Returns500(t *testing.T) {
 	ms := &mockStore{annualErr: errors.New("db connection lost")}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap/annual?year=2026", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap?year=2026", nil)
 	rr := httptest.NewRecorder()
-	h.GetAnnualHeatmap(rr, req)
+	h.GetHeatmap(rr, req)
 
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestGetHeatmap_RejectsYearWithRange(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/api/stats/heatmap?year=2026&from=2026-01-01T00:00:00Z",
+		nil,
+	)
+	rr := httptest.NewRecorder()
+	h.GetHeatmap(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 

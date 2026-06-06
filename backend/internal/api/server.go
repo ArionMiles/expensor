@@ -118,7 +118,7 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 
 	// Reader config (config-only readers like Thunderbird, plus optional settings for OAuth readers)
 	mux.HandleFunc("GET /api/readers/{name}/config", h.GetReaderConfig)
-	mux.HandleFunc("POST /api/readers/{name}/config", h.SaveReaderConfig)
+	mux.HandleFunc("PUT /api/readers/{name}/config", h.SaveReaderConfig)
 
 	// Reader overall readiness
 	mux.HandleFunc("GET /api/readers/{name}/status", h.ReaderStatus)
@@ -131,7 +131,6 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("GET /api/stats/charts", h.GetChartData)
 	mux.HandleFunc("GET /api/stats/labels/monthly", h.GetLabelMonthlySpend)
 	mux.HandleFunc("GET /api/stats/heatmap", h.GetHeatmap)
-	mux.HandleFunc("GET /api/stats/heatmap/annual", h.GetAnnualHeatmap)
 
 	// App configuration
 	mux.HandleFunc("GET /api/config/banks", h.ListBanks)

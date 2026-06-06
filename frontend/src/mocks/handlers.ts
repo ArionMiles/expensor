@@ -128,9 +128,10 @@ export const handlers = [
   ),
   http.get('/api/version', () => HttpResponse.json({ version: 'test' })),
   http.get('/api/stats/dashboard', () => HttpResponse.json(dashboardData)),
-  http.get('/api/stats/heatmap', () => HttpResponse.json(heatmapData)),
-  http.get('/api/stats/heatmap/annual', ({ request }) => {
-    const year = Number(new URL(request.url).searchParams.get('year') ?? '2026')
+  http.get('/api/stats/heatmap', ({ request }) => {
+    const yearParam = new URL(request.url).searchParams.get('year')
+    if (yearParam === null) return HttpResponse.json(heatmapData)
+    const year = Number(yearParam)
     return HttpResponse.json(buildAnnualHeatmapData(Number.isFinite(year) ? year : 2026))
   }),
   http.get('/api/stats/labels/monthly', () => HttpResponse.json(monthlyBreakdownData)),

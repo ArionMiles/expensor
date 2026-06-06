@@ -306,12 +306,6 @@ type DayOfMonthBucketResponse struct {
 	Count  int     `json:"count" example:"3"`
 }
 
-// HeatmapDataResponse documents heatmap stats data.
-type HeatmapDataResponse struct {
-	ByWeekdayHour []WeekdayHourBucketResponse `json:"by_weekday_hour"`
-	ByDayOfMonth  []DayOfMonthBucketResponse  `json:"by_day_of_month"`
-}
-
 // DailyBucketResponse documents spend totals for a calendar date.
 type DailyBucketResponse struct {
 	Date   time.Time `json:"date"`
@@ -319,10 +313,12 @@ type DailyBucketResponse struct {
 	Count  int       `json:"count" example:"3"`
 }
 
-// AnnualHeatmapResponse documents annual heatmap stats data.
-type AnnualHeatmapResponse struct {
-	Year    int                   `json:"year" example:"2026"`
-	Buckets []DailyBucketResponse `json:"buckets"`
+// HeatmapResponse documents either range-based or annual heatmap data.
+type HeatmapResponse struct {
+	ByWeekdayHour []WeekdayHourBucketResponse `json:"by_weekday_hour,omitempty"`
+	ByDayOfMonth  []DayOfMonthBucketResponse  `json:"by_day_of_month,omitempty"`
+	Year          int                         `json:"year,omitempty" example:"2026"`
+	Buckets       []DailyBucketResponse       `json:"buckets,omitempty"`
 }
 
 // MonthlyBreakdownSeriesResponse documents a named monthly spend series.

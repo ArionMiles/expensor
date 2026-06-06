@@ -126,7 +126,7 @@ export const api = {
       return apiClient.get<HeatmapData>(qs ? `/stats/heatmap?${qs}` : '/stats/heatmap')
     },
     annualHeatmap: (year: number) =>
-      apiClient.get<AnnualHeatmapData>(`/stats/heatmap/annual?year=${year}`),
+      apiClient.get<AnnualHeatmapData>(`/stats/heatmap?year=${year}`),
     monthlyBreakdown: (dimension: 'labels' | 'categories' | 'buckets') =>
       apiClient.get<MonthlyBreakdownData>(
         `/stats/labels/monthly?dimension=${encodeURIComponent(dimension)}`,
@@ -168,7 +168,7 @@ export const api = {
     config: {
       get: (readerName: string) => apiClient.get<ReaderConfig>(`/readers/${readerName}/config`),
       save: (readerName: string, config: Record<string, string>) =>
-        apiClient.post(`/readers/${readerName}/config`, { config }),
+        apiClient.put(`/readers/${readerName}/config`, { config }),
     },
 
     status: (readerName: string) => apiClient.get<ReaderStatus>(`/readers/${readerName}/status`),
