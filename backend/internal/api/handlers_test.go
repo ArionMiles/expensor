@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1349,6 +1350,7 @@ func TestListTransactions_RejectsInvalidQuery(t *testing.T) {
 		message string
 	}{
 		{name: "page overflow", query: "page=99999999999999999999999999999", field: "page", message: "must be an integer"},
+		{name: "negative page", query: "page=-1", field: "page", message: "must be at least 0"},
 		{name: "page size too large", query: "page_size=101", field: "page_size", message: "must be at most 100"},
 		{name: "invalid date", query: "date_from=yesterday", field: "date_from", message: "must be an RFC3339 timestamp"},
 		{name: "invalid weekday", query: "weekday=7", field: "weekday", message: "must be at most 6"},
@@ -1391,11 +1393,10 @@ func TestListTransactions_AcceptsLargePageAndMaximumPageSize(t *testing.T) {
 func TestListTransactions_RejectsOffsetOverflow(t *testing.T) {
 	st := &mockStore{}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	maxInt := int(^uint(0) >> 1)
 
 	rr := get(h.ListTransactions, fmt.Sprintf(
 		"/api/transactions?page=%d&page_size=100",
-		maxInt,
+		math.MaxInt,
 	))
 
 	assertValidationError(t, rr, "page", "query", "is too large for page_size")
@@ -1414,6 +1415,20 @@ func TestListTransactions_DefaultsPagination(t *testing.T) {
 	}
 	if st.listFilter.Page != 1 || st.listFilter.PageSize != 20 {
 		t.Fatalf("pagination = page:%d page_size:%d", st.listFilter.Page, st.listFilter.PageSize)
+	}
+}
+
+func TestListTransactions_ZeroPageDefaultsToFirstPage(t *testing.T) {
+	st := &mockStore{transactions: []store.Transaction{}}
+	h := newTestHandlers(t, st, &mockDaemon{})
+
+	rr := get(h.ListTransactions, "/api/transactions?page=0")
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if st.listFilter.Page != 1 {
+		t.Fatalf("page = %d, want 1", st.listFilter.Page)
 	}
 }
 

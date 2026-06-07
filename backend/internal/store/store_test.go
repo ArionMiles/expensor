@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"math"
 	"os"
 	"reflect"
 	"testing"
@@ -632,11 +633,9 @@ func TestListTransactions_Pagination(t *testing.T) {
 func TestListTransactions_RejectsOffsetOverflow(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
-	maxInt := int(^uint(0) >> 1)
-
 	_, _, err := ts.ListTransactions(
 		context.Background(),
-		store.ListFilter{Page: maxInt, PageSize: 100},
+		store.ListFilter{Page: math.MaxInt, PageSize: 100},
 	)
 	if !errors.Is(err, store.ErrPaginationOverflow) {
 		t.Fatalf("expected ErrPaginationOverflow, got %v", err)
@@ -1167,12 +1166,10 @@ func TestSearchTransactions(t *testing.T) {
 func TestSearchTransactions_RejectsOffsetOverflow(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
-	maxInt := int(^uint(0) >> 1)
-
 	_, _, err := ts.SearchTransactions(
 		context.Background(),
 		"coffee",
-		store.ListFilter{Page: maxInt, PageSize: 100},
+		store.ListFilter{Page: math.MaxInt, PageSize: 100},
 	)
 	if !errors.Is(err, store.ErrPaginationOverflow) {
 		t.Fatalf("expected ErrPaginationOverflow, got %v", err)

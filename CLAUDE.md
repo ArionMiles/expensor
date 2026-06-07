@@ -30,6 +30,8 @@ Do not add optional plugin interfaces for required metadata. If every reader mus
 
 Use Go generics when they improve compile-time type safety or remove meaningful repeated algorithms across concrete types. Do not introduce generics solely to replace `any` when the underlying library still relies on reflection or when call sites do not become clearer. Do not claim a generics performance benefit without measuring the relevant path. For tag-driven decoders and validators, cache unavoidable local reflection metadata by concrete DTO type when it is reused.
 
+Prefer standard-library constants and helpers over manually derived equivalents. For example, use `math.MaxInt` instead of calculating the platform maximum integer with bit operations.
+
 Avoid long constructor signatures. Use a small input/deps struct once a constructor exceeds 4-5 parameters.
 
 `internal/plugins.Registry` is a catalog, not an application assembler. Daemon/runtime wiring belongs outside the registry.

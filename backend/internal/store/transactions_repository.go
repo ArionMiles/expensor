@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -98,8 +99,7 @@ func (r *pgTransactionsRepository) queryTransactions(
 }
 
 func transactionOffset(filter ListFilter) (int, error) {
-	maxInt := int(^uint(0) >> 1)
-	if filter.Page-1 > maxInt/filter.PageSize {
+	if filter.Page-1 > math.MaxInt/filter.PageSize {
 		return 0, fmt.Errorf(
 			"%w: page=%d page_size=%d",
 			ErrPaginationOverflow,

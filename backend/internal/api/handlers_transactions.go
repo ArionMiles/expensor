@@ -17,7 +17,7 @@ import (
 // @Summary List transactions
 // @Tags Transactions
 // @Produce json
-// @Param page query int false "1-based page number" default(1) minimum(1)
+// @Param page query int false "1-based page number; 0 defaults to 1" default(1) minimum(0)
 // @Param page_size query int false "Page size" default(20) minimum(1) maximum(100)
 // @Param merchant query string false "Merchant filter"
 // @Param category query string false "Category filter"
@@ -94,7 +94,8 @@ func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
 
 //nolint:revive // validate tags include custom rules registered by newRequestValidator.
 type transactionListQuery struct {
-	Page               *int       `form:"page" validate:"omitempty,min=1"`
+	// Page intentionally uses zero for both omission and page=0; both normalize to page 1.
+	Page               int        `form:"page" validate:"min=0"`
 	PageSize           *int       `form:"page_size" validate:"omitempty,min=1,max=100"`
 	Merchant           string     `form:"merchant" validate:"no_control_chars"`
 	Category           string     `form:"category" validate:"no_control_chars"`
@@ -128,9 +129,9 @@ type transactionListQuery struct {
 }
 
 func (query transactionListQuery) listFilter(timezone string) store.ListFilter {
-	page := 1
-	if query.Page != nil {
-		page = *query.Page
+	page := query.Page
+	if page == 0 {
+		page = 1
 	}
 	pageSize := 20
 	if query.PageSize != nil {

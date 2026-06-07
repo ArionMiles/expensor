@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"reflect"
 	"strings"
@@ -36,7 +37,7 @@ func validateTransactionPagination(level validator.StructLevel) {
 	if !ok {
 		return
 	}
-	if query.Page == nil || *query.Page <= 1 {
+	if query.Page <= 1 {
 		return
 	}
 
@@ -48,8 +49,7 @@ func validateTransactionPagination(level validator.StructLevel) {
 		return
 	}
 
-	maxInt := int(^uint(0) >> 1)
-	if *query.Page-1 > maxInt/pageSize {
+	if query.Page-1 > math.MaxInt/pageSize {
 		level.ReportError(query.Page, "page", "Page", "page_offset", "")
 	}
 }
