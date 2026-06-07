@@ -45,7 +45,7 @@ tasks:
       Lints Go source files using .golangci.toml (lighter local configuration
       for development).
     dir: backend
-    cmd: go tool golangci-lint --config="../.golangci.toml" run ./...
+    cmd: go tool golangci-lint --config=".golangci.toml" run ./...
 
   lint:be:new:
     summary: Lint only new/changed Go source files (compared to main).
@@ -53,7 +53,7 @@ tasks:
       Lints only Go files that are new or changed compared to origin/main.
       Uses --new-from-rev for incremental adoption.
     dir: backend
-    cmd: go tool golangci-lint --config="../.golangci-prod.toml" --new-from-rev=origin/main --max-same-issues=0 --max-issues-per-linter=0 run ./...
+    cmd: go tool golangci-lint --config=".golangci-prod.toml" --new-from-rev=origin/main --max-same-issues=0 --max-issues-per-linter=0 run ./...
 
   lint:be:prod:
     summary: Lint all Go source files with golangci-lint (strict production config).
@@ -61,7 +61,7 @@ tasks:
       Lints all Go source files using .golangci-prod.toml (strict CI rules).
       Must report 0 issues before committing.
     dir: backend
-    cmd: go tool golangci-lint --config="../.golangci-prod.toml" --max-same-issues=0 --max-issues-per-linter=0 run ./...
+    cmd: go tool golangci-lint --config=".golangci-prod.toml" --max-same-issues=0 --max-issues-per-linter=0 run ./...
 
   lint:fe:
     summary: Type-check frontend TypeScript source files.
