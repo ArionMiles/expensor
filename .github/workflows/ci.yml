@@ -42,7 +42,7 @@ jobs:
           version: ${{ steps.golangci-version.outputs.version }}
           working-directory: backend
           args: >-
-            --config=../.golangci-prod.toml
+            --config=.golangci-prod.toml
             --max-same-issues=0
             --max-issues-per-linter=0
 
