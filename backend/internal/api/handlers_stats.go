@@ -1,10 +1,9 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
-	"strconv"
-	"time"
+
+	"github.com/go-playground/validator/v10"
 )
 
 // GetChartData handles GET /api/stats/charts.
@@ -54,28 +53,21 @@ func (h *Handlers) GetDashboardData(w http.ResponseWriter, r *http.Request) {
 // @Param to query string false "RFC3339 end timestamp" example(2026-05-31T23:59:59Z)
 // @Param year query int false "Calendar year; cannot be combined with from or to" example(2026)
 // @Success 200 {object} HeatmapResponse
-// @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /stats/heatmap [get]
 func (h *Handlers) GetHeatmap(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	if query.Has("year") {
-		if query.Has("from") || query.Has("to") {
-			writeError(w, http.StatusBadRequest, "year cannot be combined with from or to")
-			return
-		}
-		h.getAnnualHeatmap(w, r)
+	query, ok := decodeAndValidateQuery[heatmapQuery](h, w, r)
+	if !ok {
+		return
+	}
+	if query.Year != nil {
+		h.getAnnualHeatmap(w, r, *query.Year)
 		return
 	}
 
-	from, to, err := parseHeatmapRange(r)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	data, err := h.analyticsStore.GetSpendingHeatmap(r.Context(), from, to)
+	data, err := h.analyticsStore.GetSpendingHeatmap(r.Context(), query.From, query.To)
 	if err != nil {
 		h.logger.Error("get heatmap", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch heatmap data")
@@ -84,13 +76,7 @@ func (h *Handlers) GetHeatmap(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, data)
 }
 
-func (h *Handlers) getAnnualHeatmap(w http.ResponseWriter, r *http.Request) {
-	yearStr := r.URL.Query().Get("year")
-	year, err := strconv.Atoi(yearStr)
-	if err != nil || year < 1 {
-		year = time.Now().Year()
-	}
-
+func (h *Handlers) getAnnualHeatmap(w http.ResponseWriter, r *http.Request, year int) {
 	buckets, err := h.analyticsStore.GetAnnualSpend(r.Context(), year)
 	if err != nil {
 		h.logger.Error("get annual heatmap", "error", err, "year", year)
@@ -104,23 +90,10 @@ func (h *Handlers) getAnnualHeatmap(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// parseHeatmapRange parses optional ?from= and ?to= RFC3339 query parameters.
-// Returns nil, nil when neither is provided. Returns an error if either is
-// present but cannot be parsed as RFC3339.
-func parseHeatmapRange(r *http.Request) (from, to *time.Time, err error) {
-	if v := r.URL.Query().Get("from"); v != "" {
-		t, parseErr := time.Parse(time.RFC3339, v)
-		if parseErr != nil {
-			return nil, nil, fmt.Errorf("invalid 'from' param: must be RFC3339 (e.g. 2026-04-01T00:00:00Z)")
-		}
-		from = &t
+func validateHeatmapQuery(level validator.StructLevel) {
+	query, ok := level.Current().Interface().(heatmapQuery)
+	if !ok || query.Year == nil || (query.From == nil && query.To == nil) {
+		return
 	}
-	if v := r.URL.Query().Get("to"); v != "" {
-		t, parseErr := time.Parse(time.RFC3339, v)
-		if parseErr != nil {
-			return nil, nil, fmt.Errorf("invalid 'to' param: must be RFC3339 (e.g. 2026-04-30T23:59:59Z)")
-		}
-		to = &t
-	}
-	return from, to, nil
+	level.ReportError(query.Year, "year", "Year", "heatmap_range", "")
 }

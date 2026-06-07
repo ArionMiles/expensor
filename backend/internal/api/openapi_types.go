@@ -7,6 +7,81 @@ type ErrorResponse struct {
 	Error string `json:"error" example:"internal server error"`
 }
 
+// ValidationErrorDetail describes one invalid request field.
+type ValidationErrorDetail struct {
+	Field    string `json:"field" example:"page_size"`
+	Location string `json:"location" example:"query"`
+	Message  string `json:"message" example:"must be at most 100"`
+}
+
+// ValidationErrorResponse is returned for semantically invalid requests.
+type ValidationErrorResponse struct {
+	Error   string                  `json:"error" example:"request validation failed"`
+	Details []ValidationErrorDetail `json:"details"`
+}
+
+type diagnosticListQuery struct {
+	Status string `form:"status" validate:"omitempty,oneof=open resolved ignored all"`
+	Limit  *int   `form:"limit" validate:"omitempty,min=1"`
+}
+
+type heatmapQuery struct {
+	From *time.Time `form:"from"`
+	To   *time.Time `form:"to"`
+	Year *int       `form:"year" validate:"omitempty,min=1"`
+}
+
+type mailboxDiscoveryQuery struct {
+	Profile string `form:"profile" validate:"required,no_control_chars"`
+}
+
+type monthlyBreakdownQuery struct {
+	Dimension string `form:"dimension" validate:"omitempty,oneof=labels categories buckets"`
+}
+
+type taxonomyCleanupQuery struct {
+	RemoveFromTransactions bool `form:"remove_from_transactions"`
+}
+
+type deleteMutedMerchantQuery struct {
+	Unmute bool `form:"unmute"`
+}
+
+type transactionListQuery struct {
+	// Page intentionally uses zero for both omission and page=0; both normalize to page 1.
+	Page               int        `form:"page" validate:"min=0"`
+	PageSize           *int       `form:"page_size" validate:"omitempty,min=1,max=100"`
+	Merchant           string     `form:"merchant" validate:"no_control_chars"`
+	Category           string     `form:"category" validate:"no_control_chars"`
+	CategoryMissing    string     `form:"category_missing" validate:"omitempty,oneof=1"`
+	ExcludeCategories  string     `form:"exclude_categories" validate:"no_control_chars"`
+	Currency           string     `form:"currency" validate:"no_control_chars"`
+	Source             string     `form:"source" validate:"no_control_chars"`
+	ExcludeSources     string     `form:"exclude_sources" validate:"no_control_chars"`
+	SourceType         string     `form:"source_type" validate:"no_control_chars"`
+	ExcludeSourceTypes string     `form:"exclude_source_types" validate:"no_control_chars"`
+	Bank               string     `form:"bank" validate:"no_control_chars"`
+	ExcludeBanks       string     `form:"exclude_banks" validate:"no_control_chars"`
+	Label              string     `form:"label" validate:"no_control_chars"`
+	LabelMissing       string     `form:"label_missing" validate:"omitempty,oneof=1"`
+	ExcludeLabels      string     `form:"exclude_labels" validate:"no_control_chars"`
+	Bucket             string     `form:"bucket" validate:"no_control_chars"`
+	BucketMissing      string     `form:"bucket_missing" validate:"omitempty,oneof=1"`
+	ExcludeBuckets     string     `form:"exclude_buckets" validate:"no_control_chars"`
+	DateFrom           *time.Time `form:"date_from"`
+	DateTo             *time.Time `form:"date_to"`
+	ShowMuted          string     `form:"show_muted" validate:"omitempty,oneof=1"`
+	MutedOnly          string     `form:"muted_only" validate:"omitempty,oneof=1"`
+	IndividualOnly     string     `form:"individual_only" validate:"omitempty,oneof=1"`
+	Weekday            *int       `form:"weekday" validate:"omitempty,min=0,max=6"`
+	HourFrom           *int       `form:"hour_from" validate:"omitempty,min=0,max=23"`
+	HourTo             *int       `form:"hour_to" validate:"omitempty,min=0,max=23"`
+	Timezone           string     `form:"tz" validate:"omitempty,iana_timezone"`
+	Query              string     `form:"q" validate:"no_control_chars"`
+	SortBy             string     `form:"sort_by" validate:"omitempty,oneof=timestamp"`
+	SortDir            string     `form:"sort_dir" validate:"omitempty,oneof=asc desc"`
+}
+
 // HealthResponse is the health check payload.
 type HealthResponse struct {
 	Status string `json:"status" example:"ok"`
@@ -34,7 +109,7 @@ type StatusResponse struct {
 
 // DaemonReaderRequest is the daemon start/rescan request body.
 type DaemonReaderRequest struct {
-	Reader string `json:"reader" example:"thunderbird" binding:"required"`
+	Reader string `json:"reader" validate:"required,no_control_chars" example:"thunderbird"`
 }
 
 // StatusOnlyResponse is a simple status message payload.
@@ -49,9 +124,9 @@ type ActiveReaderResponse struct {
 
 // RuleSourceResponse documents a structured rule source.
 type RuleSourceResponse struct {
-	Type  string `json:"type" example:"Email" binding:"required"`
-	Label string `json:"label" example:"Contract"`
-	Bank  string `json:"bank" example:"Contract Bank" binding:"required"`
+	Type  string `json:"type" validate:"required,no_control_chars" example:"Email"`
+	Label string `json:"label" validate:"no_control_chars" example:"Contract"`
+	Bank  string `json:"bank" validate:"required,no_control_chars" example:"Contract Bank"`
 }
 
 // RuleResponse documents a rule returned by the API.
@@ -76,13 +151,13 @@ type RuleResponse struct {
 
 // RuleMutationRequest documents the create/update rule payload.
 type RuleMutationRequest struct {
-	Name            string             `json:"name" example:"Contract Rule" binding:"required"`
-	SenderEmails    []string           `json:"sender_emails" binding:"required"`
-	SubjectContains string             `json:"subject_contains" example:"Contract transaction"`
-	AmountRegex     string             `json:"amount_regex" example:"INR\\s+([0-9,.]+)" binding:"required"`
-	MerchantRegex   string             `json:"merchant_regex" example:"at\\s+(.+)$" binding:"required"`
-	CurrencyRegex   string             `json:"currency_regex" example:"(INR)"`
-	Source          RuleSourceResponse `json:"source" binding:"required"`
+	Name            string             `json:"name" validate:"required,no_control_chars" example:"Contract Rule"`
+	SenderEmails    []string           `json:"sender_emails" validate:"required,min=1,dive,required,email"`
+	SubjectContains string             `json:"subject_contains" validate:"no_control_chars" example:"Contract transaction"`
+	AmountRegex     string             `json:"amount_regex" validate:"required,regexp" example:"INR\\s+([0-9,.]+)"`
+	MerchantRegex   string             `json:"merchant_regex" validate:"required,regexp" example:"at\\s+(.+)$"`
+	CurrencyRegex   string             `json:"currency_regex" validate:"omitempty,regexp" example:"(INR)"`
+	Source          RuleSourceResponse `json:"source" validate:"required"`
 }
 
 // RulePresetValueResponse documents a rule preset taxonomy value.
@@ -99,20 +174,20 @@ type RulePresetsResponse struct {
 
 // RuleDocumentEntryResponse documents a rule entry in an import/export document.
 type RuleDocumentEntryResponse struct {
-	Name            string             `json:"name" example:"Contract Import Rule" binding:"required"`
-	SenderEmails    []string           `json:"sender_emails" binding:"required"`
-	SubjectContains string             `json:"subject_contains" example:"Contract transaction"`
-	AmountRegex     string             `json:"amount_regex" example:"INR\\s+([0-9,.]+)" binding:"required"`
-	MerchantRegex   string             `json:"merchant_regex" example:"at\\s+(.+)$" binding:"required"`
-	CurrencyRegex   string             `json:"currency_regex" example:"(INR)"`
-	Source          RuleSourceResponse `json:"source" binding:"required"`
+	Name            string             `json:"name" validate:"required,no_control_chars" example:"Contract Import Rule"`
+	SenderEmails    []string           `json:"sender_emails" validate:"required,min=1,dive,required,email"`
+	SubjectContains string             `json:"subject_contains" validate:"no_control_chars" example:"Contract transaction"`
+	AmountRegex     string             `json:"amount_regex" validate:"required,regexp" example:"INR\\s+([0-9,.]+)"`
+	MerchantRegex   string             `json:"merchant_regex" validate:"required,regexp" example:"at\\s+(.+)$"`
+	CurrencyRegex   string             `json:"currency_regex" validate:"omitempty,regexp" example:"(INR)"`
+	Source          RuleSourceResponse `json:"source" validate:"required"`
 }
 
 // RuleDocumentResponse documents a versioned rules import/export document.
 type RuleDocumentResponse struct {
-	Version int                         `json:"version" example:"2" binding:"required"`
+	Version int                         `json:"version" validate:"required,oneof=2" example:"2"`
 	Presets RulePresetsResponse         `json:"presets"`
-	Rules   []RuleDocumentEntryResponse `json:"rules" binding:"required"`
+	Rules   []RuleDocumentEntryResponse `json:"rules" validate:"required,dive"`
 }
 
 // RuleImportResponse documents a rules import result.
@@ -157,7 +232,7 @@ type AuthStartResponse struct {
 
 // AuthExchangeRequest documents a manual OAuth callback exchange request.
 type AuthExchangeRequest struct {
-	URL string `json:"url" example:"http://localhost:8080/api/auth/callback?state=state&code=code" binding:"required"`
+	URL string `json:"url" validate:"required,url" example:"http://localhost:8080/api/auth/callback?state=state&code=code"`
 }
 
 // AuthExchangeResponse documents a successful manual OAuth exchange.
@@ -336,11 +411,11 @@ type MonthlyBreakdownResponse struct {
 
 // PreferencesPatchRequest is a partial application preferences update.
 type PreferencesPatchRequest struct {
-	BaseCurrency *string `json:"base_currency,omitempty" example:"USD" minLength:"3" maxLength:"3"`
-	ScanInterval *int    `json:"scan_interval,omitempty" example:"120" minimum:"10" maximum:"3600"`
-	LookbackDays *int    `json:"lookback_days,omitempty" example:"365" minimum:"1" maximum:"3650"`
-	Timezone     *string `json:"timezone,omitempty" example:"Asia/Kolkata"`
-	TimeFormat   *string `json:"time_format,omitempty" example:"HH:mm" enums:"HH:mm,HH:mm:ss,h:mm a,h:mm:ss a"`
+	BaseCurrency *string `json:"base_currency,omitempty" validate:"omitempty,currency_code" example:"USD" minLength:"3" maxLength:"3"`
+	ScanInterval *int    `json:"scan_interval,omitempty" validate:"omitempty,min=10,max=3600" example:"120" minimum:"10" maximum:"3600"`
+	LookbackDays *int    `json:"lookback_days,omitempty" validate:"omitempty,min=1,max=3650" example:"365" minimum:"1" maximum:"3650"`
+	Timezone     *string `json:"timezone,omitempty" validate:"omitempty,iana_timezone" example:"Asia/Kolkata"`
+	TimeFormat   *string `json:"time_format,omitempty" validate:"omitempty,time_format" example:"HH:mm" enums:"HH:mm,HH:mm:ss,h:mm a,h:mm:ss a"`
 }
 
 // PreferencesResponse is the effective application preferences payload.
@@ -379,13 +454,18 @@ type LabelResponse struct {
 
 // CreateLabelRequest is the label creation payload.
 type CreateLabelRequest struct {
-	Name  string `json:"name" example:"ContractLabel" binding:"required"`
-	Color string `json:"color" example:"#f59e0b"`
+	Name  string `json:"name" validate:"required,no_control_chars" example:"ContractLabel"`
+	Color string `json:"color" validate:"omitempty,hexcolor" example:"#f59e0b"`
 }
 
 // UpdateLabelRequest is the label update payload.
 type UpdateLabelRequest struct {
-	Color string `json:"color" example:"#f59e0b" binding:"required"`
+	Color string `json:"color" validate:"required,hexcolor" example:"#f59e0b"`
+}
+
+// TaxonomyCleanupRequest controls whether deleted taxonomy values are cleared from transactions.
+type TaxonomyCleanupRequest struct {
+	RemoveFromTransactions bool `json:"remove_from_transactions"`
 }
 
 // LabelMutationResponse is the label create/update response payload.
@@ -432,8 +512,8 @@ type CategoryResponse struct {
 
 // CreateCategoryRequest is the category creation payload.
 type CreateCategoryRequest struct {
-	Name        string `json:"name" example:"ContractCategory" binding:"required"`
-	Description string `json:"description,omitempty" example:"Contract category"`
+	Name        string `json:"name" validate:"required,no_control_chars" example:"ContractCategory"`
+	Description string `json:"description,omitempty" validate:"no_control_chars" example:"Contract category"`
 }
 
 // BucketResponse documents a managed bucket.
@@ -445,8 +525,8 @@ type BucketResponse struct {
 
 // CreateBucketRequest is the bucket creation payload.
 type CreateBucketRequest struct {
-	Name        string `json:"name" example:"ContractBucket" binding:"required"`
-	Description string `json:"description,omitempty" example:"Contract bucket"`
+	Name        string `json:"name" validate:"required,no_control_chars" example:"ContractBucket"`
+	Description string `json:"description,omitempty" validate:"no_control_chars" example:"Contract bucket"`
 }
 
 // NameResponse is a simple named resource payload.
@@ -494,17 +574,6 @@ type TransactionsListResponse struct {
 	PageSize     int                   `json:"page_size"`
 }
 
-// TransactionsSearchResponse documents the paginated search payload.
-type TransactionsSearchResponse struct {
-	Transactions []TransactionResponse `json:"transactions"`
-	Total        int                   `json:"total"`
-	TotalAmount  float64               `json:"total_amount"`
-	BaseCurrency string                `json:"base_currency" example:"INR"`
-	Page         int                   `json:"page"`
-	PageSize     int                   `json:"page_size"`
-	Query        string                `json:"query" example:"coffee"`
-}
-
 // ExtractionDiagnosticResponse documents an extraction diagnostic payload.
 type ExtractionDiagnosticResponse struct {
 	ID             string     `json:"id" example:"11111111-1111-1111-1111-111111111111"`
@@ -531,7 +600,7 @@ type ExtractionDiagnosticResponse struct {
 
 // ExtractionDiagnosticStatusRequest is the diagnostic status update payload.
 type ExtractionDiagnosticStatusRequest struct {
-	Status string `json:"status" example:"resolved" binding:"required" enums:"open,resolved,ignored"`
+	Status string `json:"status" example:"resolved" validate:"required,oneof=open resolved ignored" enums:"open,resolved,ignored"`
 }
 
 // FacetsResponse documents the distinct transaction filter values.
@@ -546,16 +615,16 @@ type FacetsResponse struct {
 
 // TransactionUpdateRequest is the transaction patch payload.
 type TransactionUpdateRequest struct {
-	Description *string `json:"description,omitempty" example:"Dinner order"`
-	Category    *string `json:"category,omitempty" example:"Food & Dining"`
-	Bucket      *string `json:"bucket,omitempty" example:"Wants"`
+	Description *string `json:"description,omitempty" validate:"omitempty,no_control_chars" example:"Dinner order"`
+	Category    *string `json:"category,omitempty" validate:"omitempty,no_control_chars" example:"Food & Dining"`
+	Bucket      *string `json:"bucket,omitempty" validate:"omitempty,no_control_chars" example:"Wants"`
 	Muted       *bool   `json:"muted,omitempty" example:"true"`
-	MuteReason  *string `json:"mute_reason,omitempty" example:"Duplicate notification"`
+	MuteReason  *string `json:"mute_reason,omitempty" validate:"omitempty,no_control_chars" example:"Duplicate notification"`
 }
 
 // TransactionLabelsRequest is the transaction labels mutation payload.
 type TransactionLabelsRequest struct {
-	Labels []string `json:"labels" binding:"required"`
+	Labels []string `json:"labels" validate:"required,min=1,dive,required,no_control_chars"`
 }
 
 // MutedMerchantResponse is a muted merchant pattern with the current muted transaction count.
@@ -569,8 +638,8 @@ type MutedMerchantResponse struct {
 
 // MuteMerchantRequest is the merchant mute payload.
 type MuteMerchantRequest struct {
-	Pattern string `json:"pattern" example:"Swiggy" binding:"required"`
-	Reason  string `json:"reason,omitempty" example:"contract check"`
+	Pattern string `json:"pattern" validate:"required,no_control_chars" example:"Swiggy"`
+	Reason  string `json:"reason,omitempty" validate:"no_control_chars" example:"contract check"`
 }
 
 // MuteMerchantResponse is the merchant mute response payload.
@@ -580,7 +649,7 @@ type MuteMerchantResponse struct {
 
 // MerchantReasonRequest is the muted merchant reason update payload.
 type MerchantReasonRequest struct {
-	Reason string `json:"reason" example:"contract check"`
+	Reason string `json:"reason" validate:"no_control_chars" example:"contract check"`
 }
 
 // MerchantReasonResponse is the muted merchant reason response payload.
@@ -590,9 +659,9 @@ type MerchantReasonResponse struct {
 
 // CategorizeMerchantRequest is the merchant-wide categorization payload.
 type CategorizeMerchantRequest struct {
-	Merchant string `json:"merchant" example:"Swiggy" binding:"required"`
-	Category string `json:"category" example:"Food & Dining"`
-	Bucket   string `json:"bucket" example:"Wants"`
+	Merchant string `json:"merchant" validate:"required,no_control_chars" example:"Swiggy"`
+	Category string `json:"category" validate:"no_control_chars" example:"Food & Dining"`
+	Bucket   string `json:"bucket" validate:"no_control_chars" example:"Wants"`
 }
 
 // CategorizeMerchantResponse is the merchant-wide categorization response payload.

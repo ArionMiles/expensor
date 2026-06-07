@@ -701,6 +701,7 @@ definitions:
       sender_emails:
         items:
           type: string
+        minItems: 1
         type: array
       source:
         $ref: '#/definitions/api.RuleSourceResponse'
@@ -723,6 +724,8 @@ definitions:
           $ref: '#/definitions/api.RuleDocumentEntryResponse'
         type: array
       version:
+        enum:
+        - 2
         example: 2
         type: integer
     required:
@@ -752,6 +755,7 @@ definitions:
       sender_emails:
         items:
           type: string
+        minItems: 1
         type: array
       source:
         $ref: '#/definitions/api.RuleSourceResponse'
@@ -951,6 +955,7 @@ definitions:
       labels:
         items:
           type: string
+        minItems: 1
         type: array
     required:
     - labels
@@ -1055,6 +1060,28 @@ definitions:
     properties:
       path:
         example: db://reader_runtime/gmail/client_secret
+        type: string
+    type: object
+  api.ValidationErrorDetail:
+    properties:
+      field:
+        example: page_size
+        type: string
+      location:
+        example: query
+        type: string
+      message:
+        example: must be at most 100
+        type: string
+    type: object
+  api.ValidationErrorResponse:
+    properties:
+      details:
+        items:
+          $ref: '#/definitions/api.ValidationErrorDetail'
+        type: array
+      error:
+        example: request validation failed
         type: string
     type: object
   api.VersionResponse:
@@ -1191,10 +1218,14 @@ paths:
           description: Created
           schema:
             $ref: '#/definitions/api.NameResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -1215,9 +1246,17 @@ paths:
         name: name
         required: true
         type: string
+      - description: Clear the bucket from existing transactions
+        in: query
+        name: remove_from_transactions
+        type: boolean
       responses:
         "204":
           description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -1226,6 +1265,10 @@ paths:
           description: Conflict
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "503":
           description: Service Unavailable
           schema:
@@ -1387,10 +1430,14 @@ paths:
           description: Created
           schema:
             $ref: '#/definitions/api.NameResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -1411,9 +1458,17 @@ paths:
         name: name
         required: true
         type: string
+      - description: Clear the category from existing transactions
+        in: query
+        name: remove_from_transactions
+        type: boolean
       responses:
         "204":
           description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -1422,6 +1477,10 @@ paths:
           description: Conflict
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "503":
           description: Service Unavailable
           schema:
@@ -1583,10 +1642,14 @@ paths:
           description: Created
           schema:
             $ref: '#/definitions/api.LabelMutationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -1607,9 +1670,21 @@ paths:
         name: name
         required: true
         type: string
+      - description: Remove the label from existing transactions
+        in: query
+        name: remove_from_transactions
+        type: boolean
       responses:
         "204":
           description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -1644,6 +1719,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.LabelMutationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -1651,7 +1730,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -1818,7 +1897,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -1957,6 +2036,10 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "501":
           description: Not Implemented
           schema:
@@ -1989,7 +2072,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "501":
           description: Not Implemented
           schema:
@@ -2028,7 +2111,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2115,7 +2198,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2161,6 +2244,10 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2215,6 +2302,10 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2251,6 +2342,10 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2294,6 +2389,10 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2395,6 +2494,10 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2557,10 +2660,6 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/api.ErrorResponse'
-        "422":
-          description: Unprocessable Entity
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2711,14 +2810,14 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.ThunderbirdMailboxesResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2779,6 +2878,10 @@ paths:
           description: Created
           schema:
             $ref: '#/definitions/api.RuleResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "409":
           description: Conflict
           schema:
@@ -2786,7 +2889,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2875,7 +2978,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2927,10 +3030,14 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.RuleImportResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3007,10 +3114,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.HeatmapResponse'
-        "400":
-          description: Bad Request
+        "422":
+          description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3041,10 +3148,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.MonthlyBreakdownResponse'
-        "400":
-          description: Bad Request
+        "422":
+          description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3072,13 +3179,16 @@ paths:
     get:
       parameters:
       - default: 1
-        description: 1-based page number
+        description: 1-based page number; 0 defaults to 1
         in: query
+        minimum: 0
         name: page
         type: integer
       - default: 20
         description: Page size
         in: query
+        maximum: 100
+        minimum: 1
         name: page_size
         type: integer
       - description: Merchant filter
@@ -3195,10 +3305,14 @@ paths:
         type: integer
       - description: Minimum hour filter (0-23)
         in: query
+        maximum: 23
+        minimum: 0
         name: hour_from
         type: integer
       - description: Maximum hour filter (0-23)
         in: query
+        maximum: 23
+        minimum: 0
         name: hour_to
         type: integer
       - description: IANA timezone used for weekday/hour filters
@@ -3233,6 +3347,10 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3315,7 +3433,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3359,7 +3477,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/api.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:

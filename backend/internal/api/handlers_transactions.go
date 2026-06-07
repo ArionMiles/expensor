@@ -1,13 +1,10 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
-	"unicode"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
@@ -18,8 +15,8 @@ import (
 // @Summary List transactions
 // @Tags Transactions
 // @Produce json
-// @Param page query int false "1-based page number" default(1)
-// @Param page_size query int false "Page size" default(20)
+// @Param page query int false "1-based page number; 0 defaults to 1" default(1) minimum(0)
+// @Param page_size query int false "Page size" default(20) minimum(1) maximum(100)
 // @Param merchant query string false "Merchant filter"
 // @Param category query string false "Category filter"
 // @Param category_missing query int false "Only transactions without a category when set to 1" Enums(1)
@@ -43,29 +40,26 @@ import (
 // @Param muted_only query int false "Return only muted transactions when set to 1" Enums(1)
 // @Param individual_only query int false "Return only individually muted transactions when set to 1" Enums(1)
 // @Param weekday query int false "PostgreSQL DOW weekday filter (0=Sunday...6=Saturday)" Enums(0,1,2,3,4,5,6)
-// @Param hour_from query int false "Minimum hour filter (0-23)"
-// @Param hour_to query int false "Maximum hour filter (0-23)"
+// @Param hour_from query int false "Minimum hour filter (0-23)" minimum(0) maximum(23)
+// @Param hour_to query int false "Maximum hour filter (0-23)" minimum(0) maximum(23)
 // @Param tz query string false "IANA timezone used for weekday/hour filters"
 // @Param q query string false "Free-text search over merchant and description"
 // @Param sort_by query string false "Sort field" Enums(timestamp)
 // @Param sort_dir query string false "Sort direction" Enums(asc,desc)
 // @Success 200 {object} TransactionsListResponse
 // @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions [get]
 func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
-	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	if containsControlChars(q) {
-		writeError(w, http.StatusBadRequest, "invalid q filter")
-		return
-	}
-	if invalidKey, ok := invalidTransactionFilter(r); ok {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid %s filter", invalidKey))
+	query, ok := decodeAndValidateQuery[transactionListQuery](h, w, r)
+	if !ok {
 		return
 	}
 
-	f := h.transactionListFilter(r)
+	f := query.listFilter(h.resolveTimezone(r.Context(), query.Timezone))
+	q := strings.TrimSpace(query.Query)
 
 	var (
 		txns   []store.Transaction
@@ -96,77 +90,51 @@ func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func invalidTransactionFilter(r *http.Request) (string, bool) {
-	return firstInvalidFilterParam(
-		r,
-		"merchant",
-		"category",
-		"currency",
-		"source",
-		"source_type",
-		"bank",
-		"label",
-		"bucket",
-		"exclude_categories",
-		"exclude_sources",
-		"exclude_source_types",
-		"exclude_banks",
-		"exclude_labels",
-		"exclude_buckets",
-	)
+func (query transactionListQuery) listFilter(timezone string) store.ListFilter {
+	page := query.Page
+	if page == 0 {
+		page = 1
+	}
+	pageSize := 20
+	if query.PageSize != nil {
+		pageSize = *query.PageSize
+	}
+	return store.ListFilter{
+		Page:               page,
+		PageSize:           pageSize,
+		Merchant:           query.Merchant,
+		Category:           query.Category,
+		CategoryMissing:    query.CategoryMissing == "1",
+		ExcludeCategories:  queryCSV(query.ExcludeCategories),
+		Currency:           query.Currency,
+		Source:             query.Source,
+		ExcludeSources:     queryCSV(query.ExcludeSources),
+		SourceType:         query.SourceType,
+		ExcludeSourceTypes: queryCSV(query.ExcludeSourceTypes),
+		Bank:               query.Bank,
+		ExcludeBanks:       queryCSV(query.ExcludeBanks),
+		Label:              query.Label,
+		ExcludeLabels:      queryCSV(query.ExcludeLabels),
+		Bucket:             query.Bucket,
+		BucketMissing:      query.BucketMissing == "1",
+		ExcludeBuckets:     queryCSV(query.ExcludeBuckets),
+		LabelMissing:       query.LabelMissing == "1",
+		ShowMuted:          query.ShowMuted == "1",
+		MutedOnly:          query.MutedOnly == "1",
+		IndividualOnly:     query.IndividualOnly == "1",
+		Weekday:            query.Weekday,
+		HourFrom:           query.HourFrom,
+		HourTo:             query.HourTo,
+		Timezone:           timezone,
+		From:               query.DateFrom,
+		To:                 query.DateTo,
+		SortBy:             query.SortBy,
+		SortDir:            query.SortDir,
+	}
 }
 
-func (h *Handlers) transactionListFilter(r *http.Request) store.ListFilter {
-	f := store.ListFilter{
-		Page:               queryInt(r, "page", 1),
-		PageSize:           queryInt(r, "page_size", 20),
-		Merchant:           r.URL.Query().Get("merchant"),
-		Category:           r.URL.Query().Get("category"),
-		CategoryMissing:    r.URL.Query().Get("category_missing") == "1",
-		ExcludeCategories:  queryCSV(r, "exclude_categories"),
-		Currency:           r.URL.Query().Get("currency"),
-		Source:             r.URL.Query().Get("source"),
-		ExcludeSources:     queryCSV(r, "exclude_sources"),
-		SourceType:         r.URL.Query().Get("source_type"),
-		ExcludeSourceTypes: queryCSV(r, "exclude_source_types"),
-		Bank:               r.URL.Query().Get("bank"),
-		ExcludeBanks:       queryCSV(r, "exclude_banks"),
-		Label:              r.URL.Query().Get("label"),
-		ExcludeLabels:      queryCSV(r, "exclude_labels"),
-		Bucket:             r.URL.Query().Get("bucket"),
-		BucketMissing:      r.URL.Query().Get("bucket_missing") == "1",
-		ExcludeBuckets:     queryCSV(r, "exclude_buckets"),
-		LabelMissing:       r.URL.Query().Get("label_missing") == "1",
-		ShowMuted:          r.URL.Query().Get("show_muted") == "1",
-		MutedOnly:          r.URL.Query().Get("muted_only") == "1",
-		IndividualOnly:     r.URL.Query().Get("individual_only") == "1",
-		Weekday:            queryWeekday(r, "weekday"),
-		HourFrom:           queryHour(r, "hour_from"),
-		HourTo:             queryHour(r, "hour_to"),
-		Timezone:           h.resolveTimezone(r.Context(), r.URL.Query().Get("tz")),
-	}
-	if v := r.URL.Query().Get("date_from"); v != "" {
-		// JavaScript toISOString() includes milliseconds (RFC3339Nano); try that first.
-		if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
-			f.From = &t
-		} else if t, err := time.Parse(time.RFC3339, v); err == nil {
-			f.From = &t
-		}
-	}
-	if v := r.URL.Query().Get("date_to"); v != "" {
-		if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
-			f.To = &t
-		} else if t, err := time.Parse(time.RFC3339, v); err == nil {
-			f.To = &t
-		}
-	}
-	f.SortBy = r.URL.Query().Get("sort_by")
-	f.SortDir = r.URL.Query().Get("sort_dir")
-	return f
-}
-
-func queryCSV(r *http.Request, key string) []string {
-	raw := strings.TrimSpace(r.URL.Query().Get(key))
+func queryCSV(raw string) []string {
+	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil
 	}
@@ -182,24 +150,6 @@ func queryCSV(r *http.Request, key string) []string {
 		return nil
 	}
 	return values
-}
-
-func firstInvalidFilterParam(r *http.Request, keys ...string) (string, bool) {
-	for _, key := range keys {
-		if containsControlChars(r.URL.Query().Get(key)) {
-			return key, true
-		}
-	}
-	return "", false
-}
-
-func containsControlChars(value string) bool {
-	for _, r := range value {
-		if unicode.IsControl(r) {
-			return true
-		}
-	}
-	return false
 }
 
 // GetTransaction handles GET /api/transactions/{id}.
@@ -277,7 +227,7 @@ func (h *Handlers) validateBucket(w http.ResponseWriter, r *http.Request, name s
 // @Success 200 {object} TransactionResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions/{id} [patch]
@@ -286,9 +236,8 @@ func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var body TransactionUpdateRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
+	body, ok := decodeAndValidateJSON[TransactionUpdateRequest](h, w, r)
+	if !ok {
 		return
 	}
 
@@ -386,16 +335,13 @@ func (h *Handlers) ListMutedMerchants(w http.ResponseWriter, r *http.Request) {
 // @Param request body MuteMerchantRequest true "Merchant mute payload"
 // @Success 201 {object} MuteMerchantResponse
 // @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /muted-merchants [post]
 func (h *Handlers) MuteByMerchant(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Pattern string `json:"pattern"`
-		Reason  string `json:"reason"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Pattern == "" {
-		writeError(w, http.StatusBadRequest, "request body must be JSON with a non-empty \"pattern\" field")
+	body, ok := decodeAndValidateJSON[MuteMerchantRequest](h, w, r)
+	if !ok {
 		return
 	}
 	if err := h.muteStore.MuteByMerchant(r.Context(), body.Pattern, body.Reason); err != nil {
@@ -418,6 +364,7 @@ func (h *Handlers) MuteByMerchant(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} MerchantReasonResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /muted-merchants/{id} [patch]
@@ -426,11 +373,8 @@ func (h *Handlers) UpdateMerchantReason(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	var body struct {
-		Reason string `json:"reason"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	body, ok := decodeAndValidateJSON[MerchantReasonRequest](h, w, r)
+	if !ok {
 		return
 	}
 	if err := h.muteStore.UpdateMerchantReason(r.Context(), id, body.Reason); err != nil {
@@ -456,6 +400,7 @@ func (h *Handlers) UpdateMerchantReason(w http.ResponseWriter, r *http.Request) 
 // @Success 204
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /muted-merchants/{id} [delete]
@@ -464,9 +409,13 @@ func (h *Handlers) DeleteMutedMerchant(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	query, ok := decodeAndValidateQuery[deleteMutedMerchantQuery](h, w, r)
+	if !ok {
+		return
+	}
 
 	var err error
-	if r.URL.Query().Get("unmute") == queryValueTrue {
+	if query.Unmute {
 		err = h.muteStore.DeleteMutedMerchantAndUnmute(r.Context(), id)
 	} else {
 		err = h.muteStore.DeleteMutedMerchant(r.Context(), id)
@@ -496,21 +445,13 @@ func (h *Handlers) DeleteMutedMerchant(w http.ResponseWriter, r *http.Request) {
 // @Param request body CategorizeMerchantRequest true "Merchant categorization payload"
 // @Success 200 {object} CategorizeMerchantResponse
 // @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /merchants/categorize [post]
 func (h *Handlers) CategorizeMerchant(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Merchant string `json:"merchant"`
-		Category string `json:"category"`
-		Bucket   string `json:"bucket"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "request body must be valid JSON")
-		return
-	}
-	if body.Merchant == "" {
-		writeError(w, http.StatusBadRequest, "\"merchant\" must not be empty")
+	body, ok := decodeAndValidateJSON[CategorizeMerchantRequest](h, w, r)
+	if !ok {
 		return
 	}
 	n, err := h.muteStore.CategorizeMerchant(r.Context(), body.Merchant, body.Category, body.Bucket)

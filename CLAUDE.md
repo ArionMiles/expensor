@@ -28,6 +28,10 @@ When fixing GitHub-reported vulnerabilities, read the GitHub Security Advisory o
 
 Do not add optional plugin interfaces for required metadata. If every reader must provide it, put it in the main metadata struct.
 
+Use Go generics when they improve compile-time type safety or remove meaningful repeated algorithms across concrete types. Do not introduce generics solely to replace `any` when the underlying library still relies on reflection or when call sites do not become clearer. Do not claim a generics performance benefit without measuring the relevant path. For tag-driven decoders and validators, cache unavoidable local reflection metadata by concrete DTO type when it is reused.
+
+Prefer standard-library constants and helpers over manually derived equivalents. For example, use `math.MaxInt` instead of calculating the platform maximum integer with bit operations.
+
 Avoid long constructor signatures. Use a small input/deps struct once a constructor exceeds 4-5 parameters.
 
 `internal/plugins.Registry` is a catalog, not an application assembler. Daemon/runtime wiring belongs outside the registry.
@@ -49,6 +53,24 @@ Keep `slog` as the application logging API. Use OpenTelemetry for traces and met
 Do not add stdout trace or metric exporters. Stdout is for logs only; Expensor telemetry exporters are `none` or `otlp`.
 
 Do not put high-cardinality or sensitive values in metrics, trace attributes, span events, or span status descriptions, including email bodies, snippets, sender addresses, message IDs, transaction IDs, merchant names, raw error strings, and raw SQL.
+
+### HTTP API design
+
+Model resources and collections before adding routes. Prefer standard HTTP methods over action-oriented endpoint suffixes:
+
+- Use collection query parameters for search, filtering, sorting, and pagination. Do not add a parallel `/search` route for the same collection.
+- Use `POST` to create collection members, `PUT` to replace a resource or idempotently create one at a known URI, `PATCH` for partial updates, and `DELETE` for removal.
+- Model related state as subresources. Do not put identity-bearing fields in a `DELETE` request body; put the identity in the path or query string.
+- Model application settings as singleton resources with `GET` and `PATCH` or `PUT`, rather than separate getter/setter routes for each field.
+- Do not introduce stable IDs unless the resource has a real independent identity or lifecycle need. URL-encoded natural identifiers are acceptable while router and proxy behavior remains adequate.
+- Keep genuinely distinct read models such as facets, dashboards, and charts separate. Commands and protocol transitions such as OAuth, daemon control, import, and export may remain action-oriented when resource semantics would be artificial.
+- When consolidating internal routes, update handlers, frontend clients, mocks, OpenAPI, contract allowlists, and documentation together. Do not retain compatibility aliases unless compatibility is an explicit requirement.
+
+Decode and validate request DTOs at the HTTP boundary, close to the handler that owns their semantics. Do not use generic middleware for request-specific DTO validation or register every DTO globally. Return `400 Bad Request` for malformed syntax and `422 Unprocessable Entity` for well-formed requests that fail semantic validation.
+
+Validation errors must use the structured `field`, `location`, and `message` detail schema. Do not expose validator tag names or other implementation details as error codes. Validate the complete request before persistence so multi-field updates cannot partially apply.
+
+HTTP validation improves contracts and error reporting; it is not SQL-injection protection. Continue using parameterized SQL at the repository boundary, and retain domain/store invariants needed by non-HTTP callers or required for data integrity.
 
 ### Plugin system
 Reader and writer plugins implement interfaces in `pkg/api`. Plugins are registered in `cmd/server/main.go` and selected at runtime via the web UI (not env vars). Adding a new reader means implementing `plugins.ReaderPlugin` and registering it in the registry.

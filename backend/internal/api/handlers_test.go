@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -48,6 +49,7 @@ type mockStore struct {
 	listResult            store.TransactionListResult
 	listErr               error
 	listFilter            store.ListFilter
+	listCalls             int
 	getResult             *store.Transaction
 	getErr                error
 	updateErr             error
@@ -65,6 +67,7 @@ type mockStore struct {
 	searchListResult      store.TransactionListResult
 	searchErr             error
 	searchFilter          store.ListFilter
+	searchCalls           int
 	stats                 *store.Stats
 	statsErr              error
 	dashboardData         *store.DashboardData
@@ -116,6 +119,7 @@ func (m *mockStore) ListTransactions(
 	_ context.Context,
 	f store.ListFilter,
 ) ([]store.Transaction, store.TransactionListResult, error) {
+	m.listCalls++
 	m.listFilter = f
 	if m.listErr != nil {
 		return nil, store.TransactionListResult{}, m.listErr
@@ -140,6 +144,7 @@ func (m *mockStore) SearchTransactions(
 	_ string,
 	f store.ListFilter,
 ) ([]store.Transaction, store.TransactionListResult, error) {
+	m.searchCalls++
 	m.searchFilter = f
 	if m.searchErr != nil {
 		return nil, store.TransactionListResult{}, m.searchErr
@@ -642,6 +647,28 @@ func decodeJSON(t *testing.T, body string, v any) {
 	t.Helper()
 	if err := json.Unmarshal([]byte(body), v); err != nil {
 		t.Fatalf("decodeJSON: %v (body=%q)", err, body)
+	}
+}
+
+func assertValidationError(
+	t *testing.T,
+	rr *httptest.ResponseRecorder,
+	field string,
+	location string,
+	message string,
+) {
+	t.Helper()
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	var response ValidationErrorResponse
+	decodeJSON(t, rr.Body.String(), &response)
+	if response.Error != "request validation failed" {
+		t.Fatalf("error = %q", response.Error)
+	}
+	want := []ValidationErrorDetail{{Field: field, Location: location, Message: message}}
+	if !reflect.DeepEqual(response.Details, want) {
+		t.Fatalf("details = %#v, want %#v", response.Details, want)
 	}
 }
 
@@ -1315,29 +1342,93 @@ func TestListTransactions_StoreError(t *testing.T) {
 	}
 }
 
-func TestListTransactions_InvalidControlCharFilter(t *testing.T) {
-	st := &mockStore{}
-	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.ListTransactions, "/api/transactions?currency=%00bad")
+func TestListTransactions_RejectsInvalidQuery(t *testing.T) {
+	tests := []struct {
+		name    string
+		query   string
+		field   string
+		message string
+	}{
+		{name: "page overflow", query: "page=99999999999999999999999999999", field: "page", message: "must be an integer"},
+		{name: "negative page", query: "page=-1", field: "page", message: "must be at least 0"},
+		{name: "page size too large", query: "page_size=101", field: "page_size", message: "must be at most 100"},
+		{name: "invalid date", query: "date_from=yesterday", field: "date_from", message: "must be an RFC3339 timestamp"},
+		{name: "invalid weekday", query: "weekday=7", field: "weekday", message: "must be at most 6"},
+		{name: "invalid hour", query: "hour_from=24", field: "hour_from", message: "must be at most 23"},
+		{name: "invalid boolean flag", query: "show_muted=true", field: "show_muted", message: "must be 1 when present"},
+		{name: "invalid sort", query: "sort_dir=sideways", field: "sort_dir", message: "must be one of: asc, desc"},
+		{name: "invalid timezone", query: "tz=Mars/Olympus", field: "tz", message: "must be a valid IANA timezone"},
+		{name: "control character", query: "currency=%00bad", field: "currency", message: "must not contain control characters"},
+		{name: "invalid search query", query: "q=%00bad", field: "q", message: "must not contain control characters"},
+	}
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := &mockStore{}
+			h := newTestHandlers(t, st, &mockDaemon{})
+			rr := get(h.ListTransactions, "/api/transactions?"+tt.query)
+
+			assertValidationError(t, rr, tt.field, "query", tt.message)
+			if st.listCalls != 0 || st.searchCalls != 0 {
+				t.Fatalf("store calls = list:%d search:%d", st.listCalls, st.searchCalls)
+			}
+		})
 	}
 }
 
-func TestListTransactions_HugePaginationFallsBackToDefaults(t *testing.T) {
+func TestListTransactions_AcceptsLargePageAndMaximumPageSize(t *testing.T) {
+	st := &mockStore{transactions: []store.Transaction{}}
+	h := newTestHandlers(t, st, &mockDaemon{})
+
+	rr := get(h.ListTransactions, "/api/transactions?page=10001&page_size=100")
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if st.listFilter.Page != 10001 || st.listFilter.PageSize != 100 {
+		t.Fatalf("pagination = page:%d page_size:%d", st.listFilter.Page, st.listFilter.PageSize)
+	}
+}
+
+func TestListTransactions_RejectsOffsetOverflow(t *testing.T) {
+	st := &mockStore{}
+	h := newTestHandlers(t, st, &mockDaemon{})
+
+	rr := get(h.ListTransactions, fmt.Sprintf(
+		"/api/transactions?page=%d&page_size=100",
+		math.MaxInt,
+	))
+
+	assertValidationError(t, rr, "page", "query", "is too large for page_size")
+	if st.listCalls != 0 || st.searchCalls != 0 {
+		t.Fatalf("store calls = list:%d search:%d", st.listCalls, st.searchCalls)
+	}
+}
+
+func TestListTransactions_DefaultsPagination(t *testing.T) {
 	st := &mockStore{transactions: []store.Transaction{}, listResult: store.TransactionListResult{Total: 0}}
 	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.ListTransactions, "/api/transactions?page=576460752303423488&page_size=999999")
+	rr := get(h.ListTransactions, "/api/transactions")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	if st.listFilter.Page != 1 {
-		t.Fatalf("expected page to fall back to 1, got %d", st.listFilter.Page)
+	if st.listFilter.Page != 1 || st.listFilter.PageSize != 20 {
+		t.Fatalf("pagination = page:%d page_size:%d", st.listFilter.Page, st.listFilter.PageSize)
 	}
-	if st.listFilter.PageSize != 20 {
-		t.Fatalf("expected page_size to fall back to 20, got %d", st.listFilter.PageSize)
+}
+
+func TestListTransactions_ZeroPageDefaultsToFirstPage(t *testing.T) {
+	st := &mockStore{transactions: []store.Transaction{}}
+	h := newTestHandlers(t, st, &mockDaemon{})
+
+	rr := get(h.ListTransactions, "/api/transactions?page=0")
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if st.listFilter.Page != 1 {
+		t.Fatalf("page = %d, want 1", st.listFilter.Page)
 	}
 }
 
@@ -1499,8 +1590,8 @@ func TestUpdateTransaction_InvalidJSON(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.UpdateTransaction(rr, req)
 
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422, got %d", rr.Code)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 
@@ -1544,27 +1635,32 @@ func TestListExtractionDiagnostics_StatusAllAndLimit(t *testing.T) {
 	}
 }
 
-func TestListExtractionDiagnostics_InvalidStatus(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/extraction-diagnostics?status=pending", nil)
-	rr := httptest.NewRecorder()
-	h.ListExtractionDiagnostics(rr, req)
-
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422, got %d", rr.Code)
+func TestListExtractionDiagnostics_RejectsInvalidQuery(t *testing.T) {
+	tests := []struct {
+		name    string
+		query   string
+		field   string
+		message string
+	}{
+		{name: "status", query: "status=pending", field: "status", message: "must be one of: open, resolved, ignored, all"},
+		{name: "limit syntax", query: "limit=bad", field: "limit", message: "must be an integer"},
+		{name: "limit range", query: "limit=0", field: "limit", message: "must be at least 1"},
 	}
-}
 
-func TestListExtractionDiagnostics_InvalidLimit(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+			req := httptest.NewRequestWithContext(
+				context.Background(),
+				http.MethodGet,
+				"/api/extraction-diagnostics?"+tt.query,
+				nil,
+			)
+			rr := httptest.NewRecorder()
+			h.ListExtractionDiagnostics(rr, req)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/extraction-diagnostics?limit=bad", nil)
-	rr := httptest.NewRecorder()
-	h.ListExtractionDiagnostics(rr, req)
-
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422, got %d", rr.Code)
+			assertValidationError(t, rr, tt.field, "query", tt.message)
+		})
 	}
 }
 
@@ -1626,8 +1722,40 @@ func TestUpdateExtractionDiagnosticStatus_InvalidStatus(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.UpdateExtractionDiagnosticStatus(rr, req)
 
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422, got %d", rr.Code)
+	assertValidationError(t, rr, "status", "body", "must be one of: open, resolved, ignored")
+}
+
+func TestUpdateExtractionDiagnosticStatus_MissingStatus(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPatch,
+		"/api/extraction-diagnostics/11111111-1111-1111-1111-111111111111",
+		strings.NewReader(`{}`),
+	)
+	req.SetPathValue("id", "11111111-1111-1111-1111-111111111111")
+	rr := httptest.NewRecorder()
+	h.UpdateExtractionDiagnosticStatus(rr, req)
+
+	assertValidationError(t, rr, "status", "body", "is required")
+}
+
+func TestUpdateExtractionDiagnosticStatus_InvalidJSON(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPatch,
+		"/api/extraction-diagnostics/11111111-1111-1111-1111-111111111111",
+		strings.NewReader("not-json"),
+	)
+	req.SetPathValue("id", "11111111-1111-1111-1111-111111111111")
+	rr := httptest.NewRecorder()
+	h.UpdateExtractionDiagnosticStatus(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d (body=%s)", rr.Code, rr.Body.String())
 	}
 }
 
@@ -1705,9 +1833,24 @@ func TestAddLabels_InvalidJSON(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.AddLabels(rr, req)
 
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422, got %d", rr.Code)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
 	}
+}
+
+func TestAddLabels_RejectsEmptyLabels(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/api/transactions/"+testTransactionID+"/labels",
+		strings.NewReader(`{"labels":[]}`),
+	)
+	req.SetPathValue("id", testTransactionID)
+	rr := httptest.NewRecorder()
+	h.AddLabels(rr, req)
+
+	assertValidationError(t, rr, "labels", "body", "must be at least 1")
 }
 
 func TestAddLabels_InvalidID(t *testing.T) {
@@ -1910,35 +2053,6 @@ func TestListTransactions_SearchParsesListFilters(t *testing.T) {
 	}
 	if st.searchFilter.SortDir != "asc" {
 		t.Fatalf("sort_dir = %q, want asc", st.searchFilter.SortDir)
-	}
-}
-
-func TestListTransactions_InvalidControlCharQuery(t *testing.T) {
-	st := &mockStore{}
-	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.ListTransactions, "/api/transactions?q=%00bad")
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
-	}
-}
-
-func TestListTransactions_SearchHugePaginationFallsBackToDefaults(t *testing.T) {
-	st := &mockStore{
-		searchResult:     []store.Transaction{},
-		searchListResult: store.TransactionListResult{Total: 0},
-	}
-	h := newTestHandlers(t, st, &mockDaemon{})
-	rr := get(h.ListTransactions, "/api/transactions?q=test&page=576460752303423488&page_size=999999")
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
-	}
-	if st.searchFilter.Page != 1 {
-		t.Fatalf("expected page to fall back to 1, got %d", st.searchFilter.Page)
-	}
-	if st.searchFilter.PageSize != 20 {
-		t.Fatalf("expected page_size to fall back to 20, got %d", st.searchFilter.PageSize)
 	}
 }
 
@@ -2240,9 +2354,7 @@ func TestGetMonthlyBreakdown_InvalidDimension(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.GetLabelMonthlySpend(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
-	}
+	assertValidationError(t, rr, "dimension", "query", "must be one of: labels, categories, buckets")
 }
 
 func TestPatchPreferencesUpdatesSuppliedFields(t *testing.T) {
@@ -2276,17 +2388,80 @@ func TestPatchPreferencesUpdatesSuppliedFields(t *testing.T) {
 	}
 }
 
-func TestPatchPreferencesValidatesBeforeWriting(t *testing.T) {
+func TestPatchPreferencesRejectsInvalidFieldsBeforeWriting(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		field   string
+		message string
+	}{
+		{
+			name:    "currency",
+			body:    `{"base_currency":"US1"}`,
+			field:   "base_currency",
+			message: "must be a 3-letter ISO 4217 code",
+		},
+		{
+			name:    "scan interval",
+			body:    `{"base_currency":"USD","scan_interval":5}`,
+			field:   "scan_interval",
+			message: "must be at least 10",
+		},
+		{
+			name:    "lookback days",
+			body:    `{"lookback_days":3651}`,
+			field:   "lookback_days",
+			message: "must be at most 3650",
+		},
+		{
+			name:    "timezone",
+			body:    `{"timezone":"Mars/Olympus"}`,
+			field:   "timezone",
+			message: "must be a valid IANA timezone",
+		},
+		{
+			name:    "time format",
+			body:    `{"time_format":"24h"}`,
+			field:   "time_format",
+			message: "must be one of: HH:mm, HH:mm:ss, h:mm a, h:mm:ss a",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ms := &mockStore{}
+			h := newTestHandlers(t, ms, &mockDaemon{})
+			req := httptest.NewRequestWithContext(
+				context.Background(),
+				http.MethodPatch,
+				"/api/config/preferences",
+				strings.NewReader(tt.body),
+			)
+			rr := httptest.NewRecorder()
+			h.PatchPreferences(rr, req)
+
+			assertValidationError(t, rr, tt.field, "body", tt.message)
+			if len(ms.appConfig) != 0 {
+				t.Fatalf("invalid patch persisted values: %#v", ms.appConfig)
+			}
+		})
+	}
+}
+
+func TestPatchPreferencesRejectsInvalidJSON(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-
-	body := strings.NewReader(`{"base_currency":"USD","scan_interval":5}`)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/api/config/preferences", body)
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPatch,
+		"/api/config/preferences",
+		strings.NewReader("not-json"),
+	)
 	rr := httptest.NewRecorder()
 	h.PatchPreferences(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d (body: %s)", rr.Code, rr.Body.String())
+		t.Fatalf("expected 400, got %d (body=%s)", rr.Code, rr.Body.String())
 	}
 	if len(ms.appConfig) != 0 {
 		t.Fatalf("invalid patch persisted values: %#v", ms.appConfig)
@@ -2392,6 +2567,20 @@ func TestCreateLabel_Success(t *testing.T) {
 	}
 }
 
+func TestCreateLabel_RejectsInvalidColor(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/api/config/labels",
+		strings.NewReader(`{"name":"groceries","color":"blue"}`),
+	)
+	rr := httptest.NewRecorder()
+	h.CreateLabel(rr, req)
+
+	assertValidationError(t, rr, "color", "body", "must be a valid hexadecimal color")
+}
+
 func TestDeleteLabel_NotFound(t *testing.T) {
 	ms := &mockStore{labelsErr: store.ErrNotFound}
 	h := newTestHandlers(t, ms, &mockDaemon{})
@@ -2447,6 +2636,21 @@ func TestDeleteLabel_RemoveFromTransactionsQueryOption(t *testing.T) {
 	if !ms.deleteLabelCleanup {
 		t.Fatal("expected delete label query parameter to request transaction label cleanup")
 	}
+}
+
+func TestDeleteLabel_RejectsInvalidCleanupFlag(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodDelete,
+		"/api/config/labels/food?remove_from_transactions=sometimes",
+		nil,
+	)
+	req.SetPathValue("name", "food")
+	rr := httptest.NewRecorder()
+	h.DeleteLabel(rr, req)
+
+	assertValidationError(t, rr, "remove_from_transactions", "query", "must be a boolean")
 }
 
 // --- categories ---
@@ -2736,9 +2940,14 @@ func TestGetHeatmap_InvalidFrom_Returns400(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.GetHeatmap(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
+	assertValidationError(t, rr, "from", "query", "must be an RFC3339 timestamp")
+}
+
+func TestGetHeatmap_RejectsInvalidYear(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	rr := get(h.GetHeatmap, "/api/stats/heatmap?year=invalid")
+
+	assertValidationError(t, rr, "year", "query", "must be an integer")
 }
 
 func TestGetHeatmap_WithYear_ReturnsAnnualData(t *testing.T) {
@@ -2796,9 +3005,7 @@ func TestGetHeatmap_RejectsYearWithRange(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.GetHeatmap(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
-	}
+	assertValidationError(t, rr, "year", "query", "cannot be combined with from or to")
 }
 
 func TestListRules_ReturnsSourceObjectAndSenderEmails(t *testing.T) {
@@ -3233,9 +3440,7 @@ func TestDiscoverMailboxes_MissingParam_Returns400(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.DiscoverMailboxes(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
-	}
+	assertValidationError(t, rr, "profile", "query", "is required")
 }
 
 func TestDiscoverMailboxes_NonexistentProfile_Returns404(t *testing.T) {
@@ -3317,6 +3522,16 @@ func TestStartDaemon_DaemonRunning_CallsStartFnWithRequestedReader(t *testing.T)
 	}
 }
 
+func TestStartDaemon_RejectsMissingReader(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	h.startFn = func(string) {}
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/daemon/start", strings.NewReader(`{}`))
+	rr := httptest.NewRecorder()
+	h.StartDaemon(rr, req)
+
+	assertValidationError(t, rr, "reader", "body", "is required")
+}
+
 func TestRescan_DaemonRunning_Returns202Rescanning(t *testing.T) {
 	called := false
 	ms := &mockStore{}
@@ -3376,9 +3591,7 @@ func TestAuthExchange_MissingURL_Returns400(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.AuthExchange(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for missing url, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
+	assertValidationError(t, rr, "url", "body", "is required")
 }
 
 func TestAuthExchange_MalformedURL_Returns400(t *testing.T) {
@@ -3388,9 +3601,7 @@ func TestAuthExchange_MalformedURL_Returns400(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.AuthExchange(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for malformed url, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
+	assertValidationError(t, rr, "url", "body", "must be a valid URL")
 }
 
 func TestAuthExchange_MissingCode_Returns400(t *testing.T) {
@@ -3658,24 +3869,6 @@ func TestListTransactions_MissingTaxonomyParams(t *testing.T) {
 	}
 }
 
-func TestListTransactions_InvalidTimezoneFallsBackToAppTimezone(t *testing.T) {
-	st := &mockStore{
-		transactions: []store.Transaction{},
-		listResult:   store.TransactionListResult{Total: 0},
-		appConfig:    map[string]string{"app.timezone": "Asia/Kolkata"},
-	}
-	h := newTestHandlers(t, st, &mockDaemon{})
-
-	rr := get(h.ListTransactions, "/api/transactions?weekday=5&hour_from=9&hour_to=9&tz=Not/AZone")
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if st.listFilter.Timezone != "Asia/Kolkata" {
-		t.Fatalf("expected fallback timezone Asia/Kolkata, got %q", st.listFilter.Timezone)
-	}
-}
-
 func TestListTransactions_MissingTimezoneFallsBackToAppTimezone(t *testing.T) {
 	st := &mockStore{
 		transactions: []store.Transaction{},
@@ -3771,9 +3964,7 @@ func TestCategorizeMerchant_EmptyMerchant(t *testing.T) {
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.CategorizeMerchant(w, r)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("want 400, got %d", w.Code)
-	}
+	assertValidationError(t, w, "merchant", "body", "is required")
 }
 
 func TestCategorizeMerchant_InvalidJSON(t *testing.T) {
@@ -3842,4 +4033,19 @@ func TestDeleteMutedMerchant_InvalidID(t *testing.T) {
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
+}
+
+func TestDeleteMutedMerchant_RejectsInvalidUnmuteFlag(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodDelete,
+		"/api/muted-merchants/"+testTransactionID+"?unmute=sometimes",
+		nil,
+	)
+	req.SetPathValue("id", testTransactionID)
+	rr := httptest.NewRecorder()
+	h.DeleteMutedMerchant(rr, req)
+
+	assertValidationError(t, rr, "unmute", "query", "must be a boolean")
 }

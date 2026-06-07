@@ -1,10 +1,8 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/google/uuid"
 
@@ -18,28 +16,22 @@ import (
 // @Param status query string false "Diagnostic status filter" Enums(open,resolved,ignored,all) default(open)
 // @Param limit query int false "Maximum rows to return" minimum(1) default(20)
 // @Success 200 {array} ExtractionDiagnosticResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /extraction-diagnostics [get]
 func (h *Handlers) ListExtractionDiagnostics(w http.ResponseWriter, r *http.Request) {
-	status := r.URL.Query().Get("status")
-	if status == "" {
-		status = store.DiagnosticStatusOpen
-	}
-	if err := store.ValidateDiagnosticFilterStatus(status); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "invalid diagnostic status")
+	query, ok := decodeAndValidateQuery[diagnosticListQuery](h, w, r)
+	if !ok {
 		return
 	}
+	if query.Status == "" {
+		query.Status = store.DiagnosticStatusOpen
+	}
 
-	filter := store.DiagnosticFilter{Status: status}
-	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
-		limit, err := strconv.Atoi(rawLimit)
-		if err != nil || limit <= 0 {
-			writeError(w, http.StatusUnprocessableEntity, "invalid limit")
-			return
-		}
-		filter.Limit = limit
+	filter := store.DiagnosticFilter{Status: query.Status}
+	if query.Limit != nil {
+		filter.Limit = *query.Limit
 	}
 
 	rows, err := h.diagnosticStore.ListExtractionDiagnostics(r.Context(), filter)
@@ -96,7 +88,7 @@ func (h *Handlers) GetExtractionDiagnostic(w http.ResponseWriter, r *http.Reques
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /extraction-diagnostics/{id} [patch]
@@ -107,13 +99,8 @@ func (h *Handlers) UpdateExtractionDiagnosticStatus(w http.ResponseWriter, r *ht
 		return
 	}
 
-	var body ExtractionDiagnosticStatusRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
-		return
-	}
-	if !validDiagnosticUpdateStatus(body.Status) {
-		writeError(w, http.StatusUnprocessableEntity, "invalid diagnostic status")
+	body, ok := decodeAndValidateJSON[ExtractionDiagnosticStatusRequest](h, w, r)
+	if !ok {
 		return
 	}
 
@@ -132,13 +119,4 @@ func (h *Handlers) UpdateExtractionDiagnosticStatus(w http.ResponseWriter, r *ht
 		return
 	}
 	writeJSON(w, http.StatusOK, row)
-}
-
-func validDiagnosticUpdateStatus(status string) bool {
-	switch status {
-	case store.DiagnosticStatusOpen, store.DiagnosticStatusResolved, store.DiagnosticStatusIgnored:
-		return true
-	default:
-		return false
-	}
 }

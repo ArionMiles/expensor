@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"math"
 	"os"
 	"reflect"
 	"testing"
@@ -629,6 +630,18 @@ func TestListTransactions_Pagination(t *testing.T) {
 	}
 }
 
+func TestListTransactions_RejectsOffsetOverflow(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	_, _, err := ts.ListTransactions(
+		context.Background(),
+		store.ListFilter{Page: math.MaxInt, PageSize: 100},
+	)
+	if !errors.Is(err, store.ErrPaginationOverflow) {
+		t.Fatalf("expected ErrPaginationOverflow, got %v", err)
+	}
+}
+
 func TestListTransactions_FilterByCategory(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
@@ -1147,6 +1160,19 @@ func TestSearchTransactions(t *testing.T) {
 	}
 	if result.TotalAmount != 150 {
 		t.Errorf("want totalAmount=150, got %v", result.TotalAmount)
+	}
+}
+
+func TestSearchTransactions_RejectsOffsetOverflow(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	_, _, err := ts.SearchTransactions(
+		context.Background(),
+		"coffee",
+		store.ListFilter{Page: math.MaxInt, PageSize: 100},
+	)
+	if !errors.Is(err, store.ErrPaginationOverflow) {
+		t.Fatalf("expected ErrPaginationOverflow, got %v", err)
 	}
 }
 

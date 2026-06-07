@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -45,6 +46,10 @@ func (r *pgTransactionsRepository) queryTransactions(
 	request transactionQueryRequest,
 ) ([]Transaction, TransactionListResult, error) {
 	f := normalizeTransactionListFilter(request.filter)
+	offset, err := transactionOffset(f)
+	if err != nil {
+		return nil, TransactionListResult{}, err
+	}
 	query := strings.TrimSpace(request.search)
 
 	where, args := buildListWhere(f)
@@ -53,7 +58,6 @@ func (r *pgTransactionsRepository) queryTransactions(
 		where = combineWhere(searchCond, where)
 	}
 
-	offset := (f.Page - 1) * f.PageSize
 	join := joinLabel(f.Label)
 
 	result, err := r.queryTransactionTotals(ctx, join, where, args)
@@ -92,6 +96,18 @@ func (r *pgTransactionsRepository) queryTransactions(
 	}
 
 	return txns, result, nil
+}
+
+func transactionOffset(filter ListFilter) (int, error) {
+	if filter.Page-1 > math.MaxInt/filter.PageSize {
+		return 0, fmt.Errorf(
+			"%w: page=%d page_size=%d",
+			ErrPaginationOverflow,
+			filter.Page,
+			filter.PageSize,
+		)
+	}
+	return (filter.Page - 1) * filter.PageSize, nil
 }
 
 func normalizeTransactionListFilter(f ListFilter) ListFilter {
