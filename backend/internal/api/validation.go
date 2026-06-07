@@ -37,6 +37,7 @@ func validateTransactionPagination(level validator.StructLevel) {
 	if !ok {
 		return
 	}
+	// Pages 0 and 1 both resolve to the first page and have offset 0.
 	if query.Page <= 1 {
 		return
 	}
