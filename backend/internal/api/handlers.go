@@ -17,7 +17,6 @@ import (
 
 const (
 	defaultBaseCurrency = "INR"
-	queryValueTrue      = "true"
 	maxCredentialsSize  = 5 << 20 // 5 MB
 	oauthStateTTL       = 10 * time.Minute
 )

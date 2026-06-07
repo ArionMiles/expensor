@@ -1,11 +1,13 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"net/http"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -28,7 +30,9 @@ func newRequestValidator() *validator.Validate {
 	mustRegisterValidation(validate, "iana_timezone", isIANATimezone)
 	mustRegisterValidation(validate, "currency_code", isCurrencyCode)
 	mustRegisterValidation(validate, "time_format", isTimeFormat)
+	mustRegisterValidation(validate, "regexp", isRegularExpression)
 	validate.RegisterStructValidation(validateTransactionPagination, transactionListQuery{})
+	validate.RegisterStructValidation(validateHeatmapQuery, heatmapQuery{})
 	return validate
 }
 
@@ -91,6 +95,11 @@ func isTimeFormat(field validator.FieldLevel) bool {
 	}
 }
 
+func isRegularExpression(field validator.FieldLevel) bool {
+	_, err := regexp.Compile(field.Field().String())
+	return err == nil
+}
+
 func mustRegisterValidation(validate *validator.Validate, tag string, fn validator.Func) {
 	if err := validate.RegisterValidation(tag, fn); err != nil {
 		panic(err)
@@ -113,13 +122,45 @@ func (h *Handlers) validateRequest(w http.ResponseWriter, location string, reque
 	details := make([]ValidationErrorDetail, 0, len(validationErrors))
 	for _, fieldError := range validationErrors {
 		details = append(details, ValidationErrorDetail{
-			Field:    fieldError.Field(),
+			Field:    validationFieldPath(fieldError),
 			Location: location,
 			Message:  validationMessage(fieldError),
 		})
 	}
 	writeValidationErrors(w, details)
 	return false
+}
+
+func validationFieldPath(fieldError validator.FieldError) string {
+	namespace := fieldError.Namespace()
+	if _, path, ok := strings.Cut(namespace, "."); ok {
+		return path
+	}
+	return fieldError.Field()
+}
+
+func decodeAndValidateJSON[T any](
+	h *Handlers,
+	w http.ResponseWriter,
+	r *http.Request,
+) (T, bool) {
+	request, ok := decodeJSONRequest[T](w, r)
+	if !ok {
+		return request, false
+	}
+	if !h.validateRequest(w, "body", request) {
+		return request, false
+	}
+	return request, true
+}
+
+func decodeJSONRequest[T any](w http.ResponseWriter, r *http.Request) (T, bool) {
+	var request T
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return request, false
+	}
+	return request, true
 }
 
 func validationMessage(fieldError validator.FieldError) string {
@@ -137,6 +178,14 @@ func validationMessage(fieldError validator.FieldError) string {
 		return fmt.Sprintf("must be at most %s", fieldError.Param())
 	case "len":
 		return fmt.Sprintf("must be exactly %s characters", fieldError.Param())
+	case "hexcolor":
+		return "must be a valid hexadecimal color"
+	case "url":
+		return "must be a valid URL"
+	case "email":
+		return "must be a valid email address"
+	case "regexp":
+		return "must be a valid regular expression"
 	case "no_control_chars":
 		return "must not contain control characters"
 	case "iana_timezone":
@@ -147,6 +196,8 @@ func validationMessage(fieldError validator.FieldError) string {
 		return "must be one of: HH:mm, HH:mm:ss, h:mm a, h:mm:ss a"
 	case "page_offset":
 		return "is too large for page_size"
+	case "heatmap_range":
+		return "cannot be combined with from or to"
 	default:
 		return "is invalid"
 	}

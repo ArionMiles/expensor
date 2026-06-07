@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 )
@@ -19,7 +18,7 @@ import (
 // @Param request body DaemonReaderRequest true "Daemon start request"
 // @Success 202 {object} StatusOnlyResponse "Daemon starting"
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 501 {object} ErrorResponse
 // @Router /daemon/start [post]
 func (h *Handlers) StartDaemon(w http.ResponseWriter, r *http.Request) {
@@ -28,11 +27,8 @@ func (h *Handlers) StartDaemon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		Reader string `json:"reader"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Reader == "" {
-		writeError(w, http.StatusUnprocessableEntity, "body must be {\"reader\": \"<name>\"}")
+	body, ok := decodeAndValidateJSON[DaemonReaderRequest](h, w, r)
+	if !ok {
 		return
 	}
 	if _, err := h.registry.GetReader(body.Reader); err != nil {
@@ -56,14 +52,12 @@ func (h *Handlers) StartDaemon(w http.ResponseWriter, r *http.Request) {
 // @Param request body DaemonReaderRequest true "Daemon rescan request"
 // @Success 202 {object} StatusOnlyResponse
 // @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 501 {object} ErrorResponse
 // @Router /daemon/rescan [post]
 func (h *Handlers) Rescan(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Reader string `json:"reader"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Reader == "" {
-		writeError(w, http.StatusBadRequest, `body must be {"reader": "<name>"}`)
+	body, ok := decodeAndValidateJSON[DaemonReaderRequest](h, w, r)
+	if !ok {
 		return
 	}
 	if _, err := h.registry.GetReader(body.Reader); err != nil {

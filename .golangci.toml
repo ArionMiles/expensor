@@ -106,6 +106,9 @@ name = 'deep-exit'
 
 [[linters.settings.revive.rules]]
 name = 'struct-tag'
+arguments = [
+  'validate,no_control_chars,iana_timezone,currency_code,time_format,regexp'
+]
 
 [[linters.settings.revive.rules]]
 name = 'modifies-value-receiver'

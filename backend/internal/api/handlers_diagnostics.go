@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -45,11 +44,6 @@ func (h *Handlers) ListExtractionDiagnostics(w http.ResponseWriter, r *http.Requ
 		rows = []store.ExtractionDiagnosticRow{}
 	}
 	writeJSON(w, http.StatusOK, rows)
-}
-
-type diagnosticListQuery struct {
-	Status string `form:"status" validate:"omitempty,oneof=open resolved ignored all"`
-	Limit  *int   `form:"limit" validate:"omitempty,min=1"`
 }
 
 // GetExtractionDiagnostic handles GET /api/extraction-diagnostics/{id}.
@@ -105,12 +99,8 @@ func (h *Handlers) UpdateExtractionDiagnosticStatus(w http.ResponseWriter, r *ht
 		return
 	}
 
-	var body ExtractionDiagnosticStatusRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	if !h.validateRequest(w, "body", body) {
+	body, ok := decodeAndValidateJSON[ExtractionDiagnosticStatusRequest](h, w, r)
+	if !ok {
 		return
 	}
 

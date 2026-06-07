@@ -38,17 +38,14 @@ func (h *Handlers) ListLabels(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param request body CreateLabelRequest true "Label payload"
 // @Success 201 {object} LabelMutationResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/labels [post]
 func (h *Handlers) CreateLabel(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Name  string `json:"name"`
-		Color string `json:"color"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
-		writeError(w, http.StatusUnprocessableEntity, "body must be {\"name\": \"<name>\", \"color\": \"<hex>\"}")
+	body, ok := decodeAndValidateJSON[CreateLabelRequest](h, w, r)
+	if !ok {
 		return
 	}
 	if body.Color == "" {
@@ -72,17 +69,15 @@ func (h *Handlers) CreateLabel(w http.ResponseWriter, r *http.Request) {
 // @Param request body UpdateLabelRequest true "Label color payload"
 // @Success 200 {object} LabelMutationResponse
 // @Failure 404 {object} ErrorResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/labels/{name} [put]
 func (h *Handlers) UpdateLabel(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	var body struct {
-		Color string `json:"color"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Color == "" {
-		writeError(w, http.StatusUnprocessableEntity, "body must be {\"color\": \"<hex>\"}")
+	body, ok := decodeAndValidateJSON[UpdateLabelRequest](h, w, r)
+	if !ok {
 		return
 	}
 	if err := h.taxonomyStore.UpdateLabel(r.Context(), name, body.Color); err != nil {
@@ -102,13 +97,16 @@ func (h *Handlers) UpdateLabel(w http.ResponseWriter, r *http.Request) {
 // @Summary Delete a label
 // @Tags Taxonomy
 // @Param name path string true "Label name" example(ContractLabel)
+// @Param remove_from_transactions query bool false "Remove the label from existing transactions"
 // @Success 204 "No Content"
+// @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/labels/{name} [delete]
 func (h *Handlers) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	removeFromTransactions, ok := taxonomyCleanupFlag(w, r)
+	removeFromTransactions, ok := h.taxonomyCleanupFlag(w, r)
 	if !ok {
 		return
 	}
@@ -164,20 +162,18 @@ func (h *Handlers) RemoveLabelByMerchant(w http.ResponseWriter, r *http.Request)
 // @Produce json
 // @Param dimension query string false "Breakdown dimension" Enums(labels,categories,buckets) default(labels)
 // @Success 200 {object} MonthlyBreakdownResponse
-// @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /stats/labels/monthly [get]
 func (h *Handlers) GetLabelMonthlySpend(w http.ResponseWriter, r *http.Request) {
-	dimension := strings.TrimSpace(r.URL.Query().Get("dimension"))
+	query, ok := decodeAndValidateQuery[monthlyBreakdownQuery](h, w, r)
+	if !ok {
+		return
+	}
+	dimension := strings.TrimSpace(query.Dimension)
 	if dimension == "" {
 		dimension = "labels"
-	}
-	switch dimension {
-	case "labels", "categories", "buckets":
-	default:
-		writeError(w, http.StatusBadRequest, "invalid dimension")
-		return
 	}
 
 	data, err := h.analyticsStore.GetMonthlyBreakdownSpend(r.Context(), dimension, 12)
@@ -315,17 +311,14 @@ func (h *Handlers) ListCategories(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param request body CreateCategoryRequest true "Category payload"
 // @Success 201 {object} NameResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/categories [post]
 func (h *Handlers) CreateCategory(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
-		writeError(w, http.StatusUnprocessableEntity, "body must include \"name\"")
+	body, ok := decodeAndValidateJSON[CreateCategoryRequest](h, w, r)
+	if !ok {
 		return
 	}
 	if err := h.taxonomyStore.CreateCategory(r.Context(), body.Name, body.Description); err != nil {
@@ -340,14 +333,17 @@ func (h *Handlers) CreateCategory(w http.ResponseWriter, r *http.Request) {
 // @Summary Delete a category
 // @Tags Taxonomy
 // @Param name path string true "Category name" example(ContractCategory)
+// @Param remove_from_transactions query bool false "Clear the category from existing transactions"
 // @Success 204 "No Content"
+// @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/categories/{name} [delete]
 func (h *Handlers) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	removeFromTransactions, ok := taxonomyCleanupFlag(w, r)
+	removeFromTransactions, ok := h.taxonomyCleanupFlag(w, r)
 	if !ok {
 		return
 	}
@@ -422,17 +418,14 @@ func (h *Handlers) ListBuckets(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param request body CreateBucketRequest true "Bucket payload"
 // @Success 201 {object} NameResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/buckets [post]
 func (h *Handlers) CreateBucket(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
-		writeError(w, http.StatusUnprocessableEntity, "body must include \"name\"")
+	body, ok := decodeAndValidateJSON[CreateBucketRequest](h, w, r)
+	if !ok {
 		return
 	}
 	if err := h.taxonomyStore.CreateBucket(r.Context(), body.Name, body.Description); err != nil {
@@ -447,14 +440,17 @@ func (h *Handlers) CreateBucket(w http.ResponseWriter, r *http.Request) {
 // @Summary Delete a bucket
 // @Tags Taxonomy
 // @Param name path string true "Bucket name" example(ContractBucket)
+// @Param remove_from_transactions query bool false "Clear the bucket from existing transactions"
 // @Success 204 "No Content"
+// @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/buckets/{name} [delete]
 func (h *Handlers) DeleteBucket(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	removeFromTransactions, ok := taxonomyCleanupFlag(w, r)
+	removeFromTransactions, ok := h.taxonomyCleanupFlag(w, r)
 	if !ok {
 		return
 	}
@@ -544,18 +540,19 @@ func (h *Handlers) RemoveBucketByMerchant(w http.ResponseWriter, r *http.Request
 	})
 }
 
-func taxonomyCleanupFlag(w http.ResponseWriter, r *http.Request) (bool, bool) {
-	var body struct {
-		RemoveFromTransactions bool `json:"remove_from_transactions"`
+func (h *Handlers) taxonomyCleanupFlag(w http.ResponseWriter, r *http.Request) (bool, bool) {
+	query, ok := decodeAndValidateQuery[taxonomyCleanupQuery](h, w, r)
+	if !ok {
+		return false, false
 	}
-	removeFromTransactions := r.URL.Query().Get("remove_from_transactions") == queryValueTrue
+	var body TaxonomyCleanupRequest
 	if r.Body != nil {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-			writeError(w, http.StatusUnprocessableEntity, "body must be {\"remove_from_transactions\": <bool>}")
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
 			return false, false
 		}
 	}
-	return removeFromTransactions || body.RemoveFromTransactions, true
+	return query.RemoveFromTransactions || body.RemoveFromTransactions, true
 }
 
 type taxonomyExportRow struct {
@@ -667,7 +664,7 @@ func (h *Handlers) handleTaxonomyMerchant(
 // @Param request body TransactionLabelsRequest true "Labels payload"
 // @Success 200 {object} StatusOnlyResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions/{id}/labels [post]
@@ -676,11 +673,8 @@ func (h *Handlers) AddLabels(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var body struct {
-		Labels []string `json:"labels"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
+	body, ok := decodeAndValidateJSON[TransactionLabelsRequest](h, w, r)
+	if !ok {
 		return
 	}
 

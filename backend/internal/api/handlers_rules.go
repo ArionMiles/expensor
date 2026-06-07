@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
@@ -117,6 +115,22 @@ func ruleHTTPToRow(body ruleHTTPJSON) store.RuleRow {
 	return row
 }
 
+func ruleMutationToRow(body RuleMutationRequest) store.RuleRow {
+	return ruleHTTPToRow(ruleHTTPJSON{
+		Name:            body.Name,
+		SenderEmails:    body.SenderEmails,
+		SubjectContains: body.SubjectContains,
+		AmountRegex:     body.AmountRegex,
+		MerchantRegex:   body.MerchantRegex,
+		CurrencyRegex:   body.CurrencyRegex,
+		Source: pkgapi.Source{
+			Type:  body.Source.Type,
+			Label: body.Source.Label,
+			Bank:  body.Source.Bank,
+		},
+	})
+}
+
 func normalizedHTTPSenders(senders []string, fallback string) []string {
 	seen := make(map[string]struct{}, len(senders)+1)
 	out := make([]string, 0, len(senders)+1)
@@ -196,49 +210,6 @@ func presetValuesFromRules(entries []ruleDocumentEntry, value func(pkgapi.Source
 	return out
 }
 
-// validateRuleRegexes compiles the three regex fields on a RuleRow and returns the first error.
-// An empty pattern is skipped (optional fields are allowed to be unset for updates).
-func validateRuleRegexes(amountRegex, merchantRegex, currencyRegex string) error {
-	if amountRegex != "" {
-		if _, err := regexp.Compile(amountRegex); err != nil {
-			return fmt.Errorf("invalid amount_regex: %w", err)
-		}
-	}
-	if merchantRegex != "" {
-		if _, err := regexp.Compile(merchantRegex); err != nil {
-			return fmt.Errorf("invalid merchant_regex: %w", err)
-		}
-	}
-	if currencyRegex != "" {
-		if _, err := regexp.Compile(currencyRegex); err != nil {
-			return fmt.Errorf("invalid currency_regex: %w", err)
-		}
-	}
-	return nil
-}
-
-func validateRuleRow(row store.RuleRow) error {
-	if row.Name == "" {
-		return errors.New("name is required")
-	}
-	if len(row.SenderEmails) == 0 {
-		return errors.New("sender_emails is required")
-	}
-	if row.AmountRegex == "" {
-		return errors.New("amount_regex is required")
-	}
-	if row.MerchantRegex == "" {
-		return errors.New("merchant_regex is required")
-	}
-	if row.SourceType == "" {
-		return errors.New("source.type is required")
-	}
-	if row.Bank == "" {
-		return errors.New("source.bank is required")
-	}
-	return validateRuleRegexes(row.AmountRegex, row.MerchantRegex, row.CurrencyRegex)
-}
-
 // ListRules handles GET /api/rules.
 //
 // @Summary List rules
@@ -267,22 +238,18 @@ func (h *Handlers) ListRules(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param request body RuleMutationRequest true "Rule payload"
 // @Success 201 {object} RuleResponse
+// @Failure 400 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /rules [post]
 func (h *Handlers) CreateRule(w http.ResponseWriter, r *http.Request) {
-	var body ruleHTTPJSON
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
+	body, ok := decodeAndValidateJSON[RuleMutationRequest](h, w, r)
+	if !ok {
 		return
 	}
-	row := ruleHTTPToRow(body)
-	if err := validateRuleRow(row); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
-		return
-	}
+	row := ruleMutationToRow(body)
 	created, err := h.ruleStore.CreateRule(r.Context(), row)
 	if err != nil {
 		if errors.Is(err, store.ErrRuleNameConflict) {
@@ -329,7 +296,7 @@ func (h *Handlers) readActiveReader(ctx context.Context) (string, error) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /rules/{id} [put]
@@ -338,16 +305,11 @@ func (h *Handlers) UpdateRule(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var body ruleHTTPJSON
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
+	body, ok := decodeAndValidateJSON[RuleMutationRequest](h, w, r)
+	if !ok {
 		return
 	}
-	row := ruleHTTPToRow(body)
-	if err := validateRuleRow(row); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
-		return
-	}
+	row := ruleMutationToRow(body)
 	updated, err := h.ruleStore.UpdateRule(r.Context(), id, row)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -449,7 +411,8 @@ func (h *Handlers) ExportRules(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param request body RuleDocumentResponse true "Rules document"
 // @Success 200 {object} RuleImportResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /rules/import [post]
@@ -457,12 +420,16 @@ func (h *Handlers) ImportRules(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 5<<20)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if !json.Valid(body) {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 	doc, err := pkgrules.ParseDocument(body)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		writeValidationErrors(w, []ValidationErrorDetail{ruleImportValidationError(err)})
 		return
 	}
 	rows := make([]store.RuleRow, 0, len(doc.Rules))
@@ -475,4 +442,16 @@ func (h *Handlers) ImportRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"imported": len(rows)})
+}
+
+func ruleImportValidationError(err error) ValidationErrorDetail {
+	message := err.Error()
+	field := "rules"
+	for _, candidate := range []string{"version", "sender_emails", "amount_regex", "merchant_regex", "currency_regex", "source", "name"} {
+		if strings.Contains(message, candidate) {
+			field = candidate
+			break
+		}
+	}
+	return ValidationErrorDetail{Field: field, Location: "body", Message: message}
 }

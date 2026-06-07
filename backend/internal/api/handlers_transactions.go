@@ -1,12 +1,10 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
@@ -90,42 +88,6 @@ func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
 		"page":          f.Page,
 		"page_size":     f.PageSize,
 	})
-}
-
-//nolint:revive // validate tags include custom rules registered by newRequestValidator.
-type transactionListQuery struct {
-	// Page intentionally uses zero for both omission and page=0; both normalize to page 1.
-	Page               int        `form:"page" validate:"min=0"`
-	PageSize           *int       `form:"page_size" validate:"omitempty,min=1,max=100"`
-	Merchant           string     `form:"merchant" validate:"no_control_chars"`
-	Category           string     `form:"category" validate:"no_control_chars"`
-	CategoryMissing    string     `form:"category_missing" validate:"omitempty,oneof=1"`
-	ExcludeCategories  string     `form:"exclude_categories" validate:"no_control_chars"`
-	Currency           string     `form:"currency" validate:"no_control_chars"`
-	Source             string     `form:"source" validate:"no_control_chars"`
-	ExcludeSources     string     `form:"exclude_sources" validate:"no_control_chars"`
-	SourceType         string     `form:"source_type" validate:"no_control_chars"`
-	ExcludeSourceTypes string     `form:"exclude_source_types" validate:"no_control_chars"`
-	Bank               string     `form:"bank" validate:"no_control_chars"`
-	ExcludeBanks       string     `form:"exclude_banks" validate:"no_control_chars"`
-	Label              string     `form:"label" validate:"no_control_chars"`
-	LabelMissing       string     `form:"label_missing" validate:"omitempty,oneof=1"`
-	ExcludeLabels      string     `form:"exclude_labels" validate:"no_control_chars"`
-	Bucket             string     `form:"bucket" validate:"no_control_chars"`
-	BucketMissing      string     `form:"bucket_missing" validate:"omitempty,oneof=1"`
-	ExcludeBuckets     string     `form:"exclude_buckets" validate:"no_control_chars"`
-	DateFrom           *time.Time `form:"date_from"`
-	DateTo             *time.Time `form:"date_to"`
-	ShowMuted          string     `form:"show_muted" validate:"omitempty,oneof=1"`
-	MutedOnly          string     `form:"muted_only" validate:"omitempty,oneof=1"`
-	IndividualOnly     string     `form:"individual_only" validate:"omitempty,oneof=1"`
-	Weekday            *int       `form:"weekday" validate:"omitempty,min=0,max=6"`
-	HourFrom           *int       `form:"hour_from" validate:"omitempty,min=0,max=23"`
-	HourTo             *int       `form:"hour_to" validate:"omitempty,min=0,max=23"`
-	Timezone           string     `form:"tz" validate:"omitempty,iana_timezone"`
-	Query              string     `form:"q" validate:"no_control_chars"`
-	SortBy             string     `form:"sort_by" validate:"omitempty,oneof=timestamp"`
-	SortDir            string     `form:"sort_dir" validate:"omitempty,oneof=asc desc"`
 }
 
 func (query transactionListQuery) listFilter(timezone string) store.ListFilter {
@@ -265,7 +227,7 @@ func (h *Handlers) validateBucket(w http.ResponseWriter, r *http.Request, name s
 // @Success 200 {object} TransactionResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Failure 422 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions/{id} [patch]
@@ -274,9 +236,8 @@ func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var body TransactionUpdateRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "invalid JSON body")
+	body, ok := decodeAndValidateJSON[TransactionUpdateRequest](h, w, r)
+	if !ok {
 		return
 	}
 
@@ -374,16 +335,13 @@ func (h *Handlers) ListMutedMerchants(w http.ResponseWriter, r *http.Request) {
 // @Param request body MuteMerchantRequest true "Merchant mute payload"
 // @Success 201 {object} MuteMerchantResponse
 // @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /muted-merchants [post]
 func (h *Handlers) MuteByMerchant(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Pattern string `json:"pattern"`
-		Reason  string `json:"reason"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Pattern == "" {
-		writeError(w, http.StatusBadRequest, "request body must be JSON with a non-empty \"pattern\" field")
+	body, ok := decodeAndValidateJSON[MuteMerchantRequest](h, w, r)
+	if !ok {
 		return
 	}
 	if err := h.muteStore.MuteByMerchant(r.Context(), body.Pattern, body.Reason); err != nil {
@@ -406,6 +364,7 @@ func (h *Handlers) MuteByMerchant(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} MerchantReasonResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /muted-merchants/{id} [patch]
@@ -414,11 +373,8 @@ func (h *Handlers) UpdateMerchantReason(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	var body struct {
-		Reason string `json:"reason"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	body, ok := decodeAndValidateJSON[MerchantReasonRequest](h, w, r)
+	if !ok {
 		return
 	}
 	if err := h.muteStore.UpdateMerchantReason(r.Context(), id, body.Reason); err != nil {
@@ -444,6 +400,7 @@ func (h *Handlers) UpdateMerchantReason(w http.ResponseWriter, r *http.Request) 
 // @Success 204
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /muted-merchants/{id} [delete]
@@ -452,9 +409,13 @@ func (h *Handlers) DeleteMutedMerchant(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	query, ok := decodeAndValidateQuery[deleteMutedMerchantQuery](h, w, r)
+	if !ok {
+		return
+	}
 
 	var err error
-	if r.URL.Query().Get("unmute") == queryValueTrue {
+	if query.Unmute {
 		err = h.muteStore.DeleteMutedMerchantAndUnmute(r.Context(), id)
 	} else {
 		err = h.muteStore.DeleteMutedMerchant(r.Context(), id)
@@ -484,21 +445,13 @@ func (h *Handlers) DeleteMutedMerchant(w http.ResponseWriter, r *http.Request) {
 // @Param request body CategorizeMerchantRequest true "Merchant categorization payload"
 // @Success 200 {object} CategorizeMerchantResponse
 // @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /merchants/categorize [post]
 func (h *Handlers) CategorizeMerchant(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Merchant string `json:"merchant"`
-		Category string `json:"category"`
-		Bucket   string `json:"bucket"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "request body must be valid JSON")
-		return
-	}
-	if body.Merchant == "" {
-		writeError(w, http.StatusBadRequest, "\"merchant\" must not be empty")
+	body, ok := decodeAndValidateJSON[CategorizeMerchantRequest](h, w, r)
+	if !ok {
 		return
 	}
 	n, err := h.muteStore.CategorizeMerchant(r.Context(), body.Merchant, body.Category, body.Bucket)

@@ -1590,8 +1590,8 @@ func TestUpdateTransaction_InvalidJSON(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.UpdateTransaction(rr, req)
 
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422, got %d", rr.Code)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 
@@ -1833,9 +1833,24 @@ func TestAddLabels_InvalidJSON(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.AddLabels(rr, req)
 
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422, got %d", rr.Code)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
 	}
+}
+
+func TestAddLabels_RejectsEmptyLabels(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/api/transactions/"+testTransactionID+"/labels",
+		strings.NewReader(`{"labels":[]}`),
+	)
+	req.SetPathValue("id", testTransactionID)
+	rr := httptest.NewRecorder()
+	h.AddLabels(rr, req)
+
+	assertValidationError(t, rr, "labels", "body", "must be at least 1")
 }
 
 func TestAddLabels_InvalidID(t *testing.T) {
@@ -2339,9 +2354,7 @@ func TestGetMonthlyBreakdown_InvalidDimension(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.GetLabelMonthlySpend(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
-	}
+	assertValidationError(t, rr, "dimension", "query", "must be one of: labels, categories, buckets")
 }
 
 func TestPatchPreferencesUpdatesSuppliedFields(t *testing.T) {
@@ -2554,6 +2567,20 @@ func TestCreateLabel_Success(t *testing.T) {
 	}
 }
 
+func TestCreateLabel_RejectsInvalidColor(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/api/config/labels",
+		strings.NewReader(`{"name":"groceries","color":"blue"}`),
+	)
+	rr := httptest.NewRecorder()
+	h.CreateLabel(rr, req)
+
+	assertValidationError(t, rr, "color", "body", "must be a valid hexadecimal color")
+}
+
 func TestDeleteLabel_NotFound(t *testing.T) {
 	ms := &mockStore{labelsErr: store.ErrNotFound}
 	h := newTestHandlers(t, ms, &mockDaemon{})
@@ -2609,6 +2636,21 @@ func TestDeleteLabel_RemoveFromTransactionsQueryOption(t *testing.T) {
 	if !ms.deleteLabelCleanup {
 		t.Fatal("expected delete label query parameter to request transaction label cleanup")
 	}
+}
+
+func TestDeleteLabel_RejectsInvalidCleanupFlag(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodDelete,
+		"/api/config/labels/food?remove_from_transactions=sometimes",
+		nil,
+	)
+	req.SetPathValue("name", "food")
+	rr := httptest.NewRecorder()
+	h.DeleteLabel(rr, req)
+
+	assertValidationError(t, rr, "remove_from_transactions", "query", "must be a boolean")
 }
 
 // --- categories ---
@@ -2898,9 +2940,14 @@ func TestGetHeatmap_InvalidFrom_Returns400(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.GetHeatmap(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
+	assertValidationError(t, rr, "from", "query", "must be an RFC3339 timestamp")
+}
+
+func TestGetHeatmap_RejectsInvalidYear(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	rr := get(h.GetHeatmap, "/api/stats/heatmap?year=invalid")
+
+	assertValidationError(t, rr, "year", "query", "must be an integer")
 }
 
 func TestGetHeatmap_WithYear_ReturnsAnnualData(t *testing.T) {
@@ -2958,9 +3005,7 @@ func TestGetHeatmap_RejectsYearWithRange(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.GetHeatmap(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
-	}
+	assertValidationError(t, rr, "year", "query", "cannot be combined with from or to")
 }
 
 func TestListRules_ReturnsSourceObjectAndSenderEmails(t *testing.T) {
@@ -3395,9 +3440,7 @@ func TestDiscoverMailboxes_MissingParam_Returns400(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.DiscoverMailboxes(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
-	}
+	assertValidationError(t, rr, "profile", "query", "is required")
 }
 
 func TestDiscoverMailboxes_NonexistentProfile_Returns404(t *testing.T) {
@@ -3479,6 +3522,16 @@ func TestStartDaemon_DaemonRunning_CallsStartFnWithRequestedReader(t *testing.T)
 	}
 }
 
+func TestStartDaemon_RejectsMissingReader(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	h.startFn = func(string) {}
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/daemon/start", strings.NewReader(`{}`))
+	rr := httptest.NewRecorder()
+	h.StartDaemon(rr, req)
+
+	assertValidationError(t, rr, "reader", "body", "is required")
+}
+
 func TestRescan_DaemonRunning_Returns202Rescanning(t *testing.T) {
 	called := false
 	ms := &mockStore{}
@@ -3538,9 +3591,7 @@ func TestAuthExchange_MissingURL_Returns400(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.AuthExchange(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for missing url, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
+	assertValidationError(t, rr, "url", "body", "is required")
 }
 
 func TestAuthExchange_MalformedURL_Returns400(t *testing.T) {
@@ -3550,9 +3601,7 @@ func TestAuthExchange_MalformedURL_Returns400(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.AuthExchange(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for malformed url, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
+	assertValidationError(t, rr, "url", "body", "must be a valid URL")
 }
 
 func TestAuthExchange_MissingCode_Returns400(t *testing.T) {
@@ -3915,9 +3964,7 @@ func TestCategorizeMerchant_EmptyMerchant(t *testing.T) {
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.CategorizeMerchant(w, r)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("want 400, got %d", w.Code)
-	}
+	assertValidationError(t, w, "merchant", "body", "is required")
 }
 
 func TestCategorizeMerchant_InvalidJSON(t *testing.T) {
@@ -3986,4 +4033,19 @@ func TestDeleteMutedMerchant_InvalidID(t *testing.T) {
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
+}
+
+func TestDeleteMutedMerchant_RejectsInvalidUnmuteFlag(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodDelete,
+		"/api/muted-merchants/"+testTransactionID+"?unmute=sometimes",
+		nil,
+	)
+	req.SetPathValue("id", testTransactionID)
+	rr := httptest.NewRecorder()
+	h.DeleteMutedMerchant(rr, req)
+
+	assertValidationError(t, rr, "unmute", "query", "must be a boolean")
 }

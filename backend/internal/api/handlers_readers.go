@@ -390,16 +390,14 @@ func (h *Handlers) writeOAuthClosePage(w http.ResponseWriter, name string) {
 // @Param request body AuthExchangeRequest true "OAuth callback URL payload"
 // @Success 200 {object} AuthExchangeResponse
 // @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /readers/{name}/auth/exchange [post]
 func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 
-	var body struct {
-		URL string `json:"url"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.URL == "" {
-		writeError(w, http.StatusBadRequest, "request body must be JSON with a non-empty \"url\" field")
+	body, ok := decodeAndValidateJSON[AuthExchangeRequest](h, w, r)
+	if !ok {
 		return
 	}
 
@@ -696,7 +694,6 @@ func (h *Handlers) GetReaderConfig(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} ReaderConfigSaveResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /readers/{name}/config [put]
@@ -717,7 +714,7 @@ func (h *Handlers) SaveReaderConfig(w http.ResponseWriter, r *http.Request) {
 	// Validate JSON.
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "body is not valid JSON")
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 
@@ -835,17 +832,17 @@ func (h *Handlers) DiscoverProfiles(w http.ResponseWriter, _ *http.Request) {
 // @Produce json
 // @Param profile query string true "Thunderbird profile path"
 // @Success 200 {object} ThunderbirdMailboxesResponse
-// @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /readers/thunderbird/discover/mailboxes [get]
 func (h *Handlers) DiscoverMailboxes(w http.ResponseWriter, r *http.Request) {
-	profile := r.URL.Query().Get("profile")
-	if profile == "" {
-		writeError(w, http.StatusBadRequest, "profile query parameter is required")
+	query, ok := decodeAndValidateQuery[mailboxDiscoveryQuery](h, w, r)
+	if !ok {
 		return
 	}
-	if _, err := os.Stat(profile); os.IsNotExist(err) { //nolint:gosec // profile from query param, existence checked
+	profile := query.Profile
+	if _, err := os.Stat(profile); os.IsNotExist(err) {
 		writeError(w, http.StatusNotFound, "profile directory not found")
 		return
 	}

@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -52,9 +51,8 @@ func (h *Handlers) GetPreferences(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/preferences [patch]
 func (h *Handlers) PatchPreferences(w http.ResponseWriter, r *http.Request) {
-	var body PreferencesPatchRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	body, ok := decodeJSONRequest[PreferencesPatchRequest](w, r)
+	if !ok {
 		return
 	}
 	normalizePreferencesPatch(&body)
