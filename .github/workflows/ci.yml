@@ -7,6 +7,7 @@ on:
     branches: [ "main" ]
     paths-ignore:
       - '.claude/**'
+      - 'api/openapi/README.md'
       - 'backend/README.md'
       - 'deploy/**'
       - 'docs/**'
@@ -22,6 +23,7 @@ on:
     branches: [ "main" ]
     paths-ignore:
       - '.claude/**'
+      - 'api/openapi/README.md'
       - 'backend/README.md'
       - 'deploy/**'
       - 'docs/**'
