@@ -1,10 +1,10 @@
-package client_test
+package oauth_test
 
 import (
 	"context"
 	"testing"
 
-	oauthclient "github.com/ArionMiles/expensor/backend/pkg/client"
+	"github.com/ArionMiles/expensor/backend/internal/oauth"
 )
 
 const testSecretJSON = `{
@@ -32,7 +32,7 @@ func (f *fakeTokenStore) SetReaderToken(_ context.Context, _ string, token []byt
 
 func TestNewFromJSONAndStoreLoadsToken(t *testing.T) {
 	store := &fakeTokenStore{token: []byte(`{"access_token":"a","token_type":"Bearer","expiry":"2999-01-01T00:00:00Z"}`)}
-	client, err := oauthclient.NewFromJSONAndStore(context.Background(), []byte(testSecretJSON), store, "gmail", "https://www.googleapis.com/auth/gmail.readonly")
+	client, err := oauth.NewFromJSONAndStore(context.Background(), []byte(testSecretJSON), store, "gmail", "https://www.googleapis.com/auth/gmail.readonly")
 	if err != nil {
 		t.Fatalf("NewFromJSONAndStore: %v", err)
 	}

@@ -59,7 +59,8 @@
 - [ ] Run `task fmt:be`.
 - [ ] Run `task test:be`.
 - [ ] Run `task lint:be:prod` and confirm it reports zero issues.
-- [ ] Run `task openapi:check`.
+- [ ] Run `task openapi:generate`, review the expected `api.*` to `httpapi.*`
+      component identifier changes, then run `task openapi:check`.
 - [ ] Run `task test`.
 - [ ] Review `git diff --check` and the final diff for accidental behavior changes.
 - [ ] Commit using imperative mood and `--no-gpg-sign`.

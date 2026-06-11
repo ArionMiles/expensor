@@ -1,5 +1,5 @@
 // Package client provides OAuth2 client setup for Google APIs.
-package client
+package oauth
 
 import (
 	"context"

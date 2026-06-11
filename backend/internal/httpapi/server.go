@@ -1,5 +1,5 @@
 // Package api provides the HTTP server and route definitions for Expensor.
-package api
+package httpapi
 
 import (
 	"context"
@@ -30,7 +30,7 @@ func NewServer(port int, handlers *Handlers, staticDir string, logger *slog.Logg
 		mux.HandleFunc("/", spaHandler(staticDir))
 	}
 
-	scope := observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/internal/api")
+	scope := observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/internal/httpapi")
 	chain := corsMiddleware(loggingMiddleware(logger, observabilityMiddleware(scope, recoveryMiddleware(logger, mux))))
 
 	return &Server{

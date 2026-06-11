@@ -1,4 +1,4 @@
-package api
+package httpapi
 
 import (
 	"github.com/ArionMiles/expensor/backend/internal/store"

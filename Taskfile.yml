@@ -285,7 +285,7 @@ tasks:
     dir: backend
     cmd: |
       mkdir -p ../api/openapi
-      go run github.com/swaggo/swag/cmd/swag@v1.16.4 init -g openapi.go -d ./cmd/server,./internal/api --output ../api/openapi --outputTypes yaml
+      go run github.com/swaggo/swag/cmd/swag@v1.16.4 init -g openapi.go -d ./cmd/server,./internal/httpapi --output ../api/openapi --outputTypes yaml
       mv -f ../api/openapi/swagger.yaml ../api/openapi/expensor.openapi.yaml
 
   openapi:check:

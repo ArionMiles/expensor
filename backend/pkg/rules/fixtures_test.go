@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ArionMiles/expensor/backend/internal/extractor"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
-	"github.com/ArionMiles/expensor/backend/pkg/extractor"
 	"github.com/ArionMiles/expensor/backend/pkg/rules"
 )
 

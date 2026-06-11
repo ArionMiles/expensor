@@ -20,8 +20,8 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
+	"github.com/ArionMiles/expensor/backend/internal/extractor"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
-	"github.com/ArionMiles/expensor/backend/pkg/extractor"
 	"github.com/ArionMiles/expensor/backend/pkg/observability"
 	"github.com/ArionMiles/expensor/backend/pkg/state"
 )

@@ -1,4 +1,4 @@
-package api
+package httpapi
 
 import (
 	"log/slog"
@@ -28,7 +28,7 @@ func loggingMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 // observabilityMiddleware records low-cardinality HTTP request telemetry.
 func observabilityMiddleware(scope *observability.Scope, next http.Handler) http.Handler {
 	if scope == nil {
-		scope = observability.NewScope(slog.Default(), "github.com/ArionMiles/expensor/backend/internal/api")
+		scope = observability.NewScope(slog.Default(), "github.com/ArionMiles/expensor/backend/internal/httpapi")
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, span := scope.Start(r.Context(), "http.server.request")

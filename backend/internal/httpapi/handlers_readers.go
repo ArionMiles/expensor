@@ -1,4 +1,4 @@
-package api
+package httpapi
 
 import (
 	"context"
@@ -16,8 +16,8 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/ArionMiles/expensor/backend/internal/oauth"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
-	"github.com/ArionMiles/expensor/backend/pkg/client"
 	tbreader "github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
 )
 
@@ -226,7 +226,7 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 	redirectURL := h.baseURL + "/api/auth/callback"
 	scopes := plugin.Metadata().Auth.RequiredScopes
 	h.logger.Debug("building OAuth config", "reader", name, "redirect_url", redirectURL, "scopes", scopes)
-	oauthCfg, err := client.GetOAuthConfig(secretJSON, redirectURL, scopes...)
+	oauthCfg, err := oauth.GetOAuthConfig(secretJSON, redirectURL, scopes...)
 	if err != nil {
 		h.logger.Error("failed to parse credentials", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to parse credentials: "+err.Error())
@@ -281,7 +281,7 @@ func (h *Handlers) exchangeAndSaveToken(ctx context.Context, name, code, redirec
 		return errCredentialsMissing
 	}
 
-	oauthCfg, err := client.GetOAuthConfig(secretJSON, redirectURL, plugin.Metadata().Auth.RequiredScopes...)
+	oauthCfg, err := oauth.GetOAuthConfig(secretJSON, redirectURL, plugin.Metadata().Auth.RequiredScopes...)
 	if err != nil {
 		return fmt.Errorf("failed to parse credentials: %w", err)
 	}
@@ -521,7 +521,7 @@ func (h *Handlers) resolveOAuthTokenState(ctx context.Context, name string, scop
 	if !ok {
 		return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, nil
 	}
-	oauthCfg, err := client.GetOAuthConfig(secretJSON, h.baseURL+"/api/auth/callback", scopes...)
+	oauthCfg, err := oauth.GetOAuthConfig(secretJSON, h.baseURL+"/api/auth/callback", scopes...)
 	if err != nil {
 		return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, fmt.Errorf("parsing credentials for token refresh: %w", err)
 	}

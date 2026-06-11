@@ -20,14 +20,14 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	httpapi "github.com/ArionMiles/expensor/backend/internal/api"
 	"github.com/ArionMiles/expensor/backend/internal/daemon"
+	"github.com/ArionMiles/expensor/backend/internal/httpapi"
 	"github.com/ArionMiles/expensor/backend/internal/migration"
+	"github.com/ArionMiles/expensor/backend/internal/oauth"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
-	"github.com/ArionMiles/expensor/backend/pkg/client"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 	"github.com/ArionMiles/expensor/backend/pkg/observability"
 	gmailplugin "github.com/ArionMiles/expensor/backend/pkg/plugins/readers/gmail"
@@ -506,7 +506,7 @@ func runDaemon( //nolint:revive // all parameters are required; splitting furthe
 			return
 		}
 		logger.Debug("creating OAuth HTTP client", "reader", readerName)
-		httpClient, err = client.NewFromJSONAndStore(ctx, secretJSON, runtimeStore, readerName, scopes...)
+		httpClient, err = oauth.NewFromJSONAndStore(ctx, secretJSON, runtimeStore, readerName, scopes...)
 		if err != nil {
 			logger.Error("failed to create OAuth client — run onboarding first", "error", err)
 			dm.setStopped(err)

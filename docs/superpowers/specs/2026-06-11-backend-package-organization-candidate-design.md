@@ -19,7 +19,7 @@ Create a small, behavior-neutral package organization candidate that makes three
 - Merge plugin wrappers into reader or writer packages.
 - Change `backend/pkg/state` or processed-message semantics.
 - Move migrations or consolidate PostgreSQL pools.
-- Change HTTP routes, JSON contracts, runtime behavior, or test behavior.
+- Change HTTP routes, JSON payload schemas, runtime behavior, or test behavior.
 
 ## Dependency Direction
 
@@ -41,7 +41,10 @@ This refactor does not introduce new behavior, so existing tests are the appropr
 - `task openapi:check`
 - `task test`
 
-The OpenAPI check ensures the package rename does not alter generated API output.
+The HTTP package rename changes Swaggo component identifiers from `api.*` to
+`httpapi.*`. Routes and JSON payload schemas remain unchanged. The generated
+artifact is committed so reviewers can explicitly assess that tooling-visible
+consequence.
 
 ## Deferred Review Questions
 
