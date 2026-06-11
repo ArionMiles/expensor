@@ -7,7 +7,7 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
-	postgresplugin "github.com/ArionMiles/expensor/backend/pkg/plugins/writers/postgres"
+	"github.com/ArionMiles/expensor/backend/pkg/writer/postgres"
 )
 
 func testLogger() *slog.Logger {
@@ -15,7 +15,7 @@ func testLogger() *slog.Logger {
 }
 
 func TestPlugin_Metadata(t *testing.T) {
-	p := &postgresplugin.Plugin{}
+	p := &postgres.Plugin{}
 	metadata := p.Metadata()
 	if metadata.Name != "postgres" {
 		t.Errorf("Name: got %q, want \"postgres\"", metadata.Name)
@@ -29,7 +29,7 @@ func TestPlugin_Metadata(t *testing.T) {
 }
 
 func TestPlugin_NewWriter_ConnectionFailure(t *testing.T) {
-	p := &postgresplugin.Plugin{}
+	p := &postgres.Plugin{}
 	cfg := &config.App{
 		Postgres: config.Postgres{
 			Host:          "nonexistent-host-12345",

@@ -1,4 +1,4 @@
-// Package postgres provides a plugin wrapper for the PostgreSQL writer.
+// Package postgres provides the PostgreSQL writer and its plugin integration.
 package postgres
 
 import (
@@ -8,7 +8,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
-	pgwriter "github.com/ArionMiles/expensor/backend/pkg/writer/postgres"
 )
 
 // Plugin implements the WriterPlugin interface for PostgreSQL.
@@ -43,7 +42,7 @@ func (p *Plugin) NewWriter(input plugins.WriterInput) (api.Writer, error) {
 	// Convert flush interval to duration
 	flushInterval := time.Duration(cfg.Postgres.FlushInterval) * time.Second
 
-	writerCfg := pgwriter.Config{
+	writerCfg := Config{
 		Host:          cfg.Postgres.Host,
 		Port:          cfg.Postgres.Port,
 		Database:      cfg.Postgres.Database,
@@ -55,5 +54,5 @@ func (p *Plugin) NewWriter(input plugins.WriterInput) (api.Writer, error) {
 		MaxPoolSize:   cfg.Postgres.MaxPoolSize,
 	}
 
-	return pgwriter.New(writerCfg, logger)
+	return New(writerCfg, logger)
 }

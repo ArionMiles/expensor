@@ -9,7 +9,7 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
-	gmailplugin "github.com/ArionMiles/expensor/backend/pkg/plugins/readers/gmail"
+	"github.com/ArionMiles/expensor/backend/pkg/reader/gmail"
 )
 
 func testLogger() *slog.Logger {
@@ -17,7 +17,7 @@ func testLogger() *slog.Logger {
 }
 
 func TestPlugin_Metadata(t *testing.T) {
-	p := &gmailplugin.Plugin{}
+	p := &gmail.Plugin{}
 	p.SetGuideData([]byte(`{"sections":[]}`))
 
 	metadata := p.Metadata()
@@ -56,7 +56,7 @@ func TestPlugin_Metadata(t *testing.T) {
 }
 
 func TestPlugin_NewReader_NilHTTPClient(t *testing.T) {
-	p := &gmailplugin.Plugin{}
+	p := &gmail.Plugin{}
 	cfg := &config.App{
 		ScanInterval: 60,
 	}

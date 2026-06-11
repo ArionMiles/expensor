@@ -1,4 +1,4 @@
-// Package thunderbird provides a plugin wrapper for the Thunderbird reader.
+// Package thunderbird provides the Thunderbird reader and its plugin integration.
 package thunderbird
 
 import (
@@ -8,7 +8,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
-	tbreader "github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
 )
 
 // Plugin implements the ReaderPlugin interface for Thunderbird.
@@ -87,7 +86,7 @@ func (p *Plugin) NewReader(input plugins.ReaderInput) (api.Reader, error) {
 		}
 	}
 
-	readerCfg := tbreader.Config{
+	readerCfg := Config{
 		ProfilePath:    cfg.Thunderbird.ProfilePath,
 		Mailboxes:      cfg.Thunderbird.GetMailboxes(),
 		Rules:          input.Rules,
@@ -99,5 +98,5 @@ func (p *Plugin) NewReader(input plugins.ReaderInput) (api.Reader, error) {
 		OnCheckpoint:   cfg.OnCheckpoint,
 		DiagnosticSink: input.DiagnosticSink,
 	}
-	return tbreader.New(readerCfg, input.Logger)
+	return New(readerCfg, input.Logger)
 }

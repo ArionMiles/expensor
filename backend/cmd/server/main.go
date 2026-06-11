@@ -30,11 +30,11 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 	"github.com/ArionMiles/expensor/backend/pkg/observability"
-	gmailplugin "github.com/ArionMiles/expensor/backend/pkg/plugins/readers/gmail"
-	thunderbirdplugin "github.com/ArionMiles/expensor/backend/pkg/plugins/readers/thunderbird"
-	postgresplugin "github.com/ArionMiles/expensor/backend/pkg/plugins/writers/postgres"
+	gmailreader "github.com/ArionMiles/expensor/backend/pkg/reader/gmail"
+	thunderbirdreader "github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
 	pkgrules "github.com/ArionMiles/expensor/backend/pkg/rules"
 	"github.com/ArionMiles/expensor/backend/pkg/state"
+	postgreswriter "github.com/ArionMiles/expensor/backend/pkg/writer/postgres"
 )
 
 var (
@@ -737,8 +737,8 @@ func parseRules(rulesJSON string) ([]api.Rule, error) {
 // registerPlugins loads guide data from the embedded FS into each reader plugin,
 // then registers all readers and the postgres writer in the registry.
 func registerPlugins(registry *plugins.Registry, fs embed.FS, logger *slog.Logger) error {
-	gmailPlugin := &gmailplugin.Plugin{}
-	tbPlugin := &thunderbirdplugin.Plugin{}
+	gmailPlugin := &gmailreader.Plugin{}
+	tbPlugin := &thunderbirdreader.Plugin{}
 
 	if data, err := fs.ReadFile("content/readers/gmail/guide.json"); err == nil {
 		gmailPlugin.SetGuideData(data)
@@ -756,7 +756,7 @@ func registerPlugins(registry *plugins.Registry, fs embed.FS, logger *slog.Logge
 			return fmt.Errorf("registering reader %s: %w", p.Metadata().Name, err)
 		}
 	}
-	postgresPlugin := &postgresplugin.Plugin{}
+	postgresPlugin := &postgreswriter.Plugin{}
 	if err := registry.RegisterWriter(postgresPlugin); err != nil {
 		return fmt.Errorf("registering writer %s: %w", postgresPlugin.Metadata().Name, err)
 	}

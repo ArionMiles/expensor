@@ -1,4 +1,4 @@
-// Package gmail provides a plugin wrapper for the Gmail reader.
+// Package gmail provides the Gmail reader and its plugin integration.
 package gmail
 
 import (
@@ -9,7 +9,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
-	gmailreader "github.com/ArionMiles/expensor/backend/pkg/reader/gmail"
 )
 
 // Plugin implements the ReaderPlugin interface for Gmail.
@@ -46,7 +45,7 @@ func (p *Plugin) NewReader(input plugins.ReaderInput) (api.Reader, error) {
 	if interval == 0 {
 		interval = 60 * time.Second
 	}
-	readerCfg := gmailreader.Config{
+	readerCfg := Config{
 		Rules:          input.Rules,
 		Resolver:       input.Resolver,
 		Interval:       interval,
@@ -57,5 +56,5 @@ func (p *Plugin) NewReader(input plugins.ReaderInput) (api.Reader, error) {
 		OnCheckpoint:   cfg.OnCheckpoint,
 		DiagnosticSink: input.DiagnosticSink,
 	}
-	return gmailreader.New(input.HTTPClient, readerCfg, input.Logger)
+	return New(input.HTTPClient, readerCfg, input.Logger)
 }
