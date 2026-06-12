@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	mailpkg "net/mail"
+	"net/mail"
 	"strings"
 	"sync"
 	"time"
@@ -588,7 +588,7 @@ func gmailMessageHeaders(msg *gmail.Message) map[string]string {
 }
 
 func senderEmail(sender string) string {
-	address, err := mailpkg.ParseAddress(sender)
+	address, err := mail.ParseAddress(sender)
 	if err != nil {
 		return ""
 	}

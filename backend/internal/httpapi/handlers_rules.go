@@ -9,50 +9,50 @@ import (
 	"strings"
 	"time"
 
-	pkgrules "github.com/ArionMiles/expensor/backend/internal/rules"
+	"github.com/ArionMiles/expensor/backend/internal/rules"
 	"github.com/ArionMiles/expensor/backend/internal/store"
-	pkgapi "github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
 // --- rules ---
 
 type ruleHTTPJSON struct {
-	ID                string        `json:"id,omitempty"`
-	Name              string        `json:"name"`
-	SenderEmail       string        `json:"sender_email,omitempty"`
-	SenderEmails      []string      `json:"sender_emails"`
-	SubjectContains   string        `json:"subject_contains"`
-	AmountRegex       string        `json:"amount_regex"`
-	MerchantRegex     string        `json:"merchant_regex"`
-	CurrencyRegex     string        `json:"currency_regex"`
-	TransactionSource string        `json:"transaction_source,omitempty"`
-	SourceType        string        `json:"source_type,omitempty"`
-	SourceLabel       string        `json:"source_label,omitempty"`
-	Bank              string        `json:"bank,omitempty"`
-	Source            pkgapi.Source `json:"source"`
-	Predefined        bool          `json:"predefined"`
-	CreatedAt         time.Time     `json:"created_at,omitempty"`
-	UpdatedAt         time.Time     `json:"updated_at,omitempty"`
+	ID                string     `json:"id,omitempty"`
+	Name              string     `json:"name"`
+	SenderEmail       string     `json:"sender_email,omitempty"`
+	SenderEmails      []string   `json:"sender_emails"`
+	SubjectContains   string     `json:"subject_contains"`
+	AmountRegex       string     `json:"amount_regex"`
+	MerchantRegex     string     `json:"merchant_regex"`
+	CurrencyRegex     string     `json:"currency_regex"`
+	TransactionSource string     `json:"transaction_source,omitempty"`
+	SourceType        string     `json:"source_type,omitempty"`
+	SourceLabel       string     `json:"source_label,omitempty"`
+	Bank              string     `json:"bank,omitempty"`
+	Source            api.Source `json:"source"`
+	Predefined        bool       `json:"predefined"`
+	CreatedAt         time.Time  `json:"created_at,omitempty"`
+	UpdatedAt         time.Time  `json:"updated_at,omitempty"`
 }
 
 type ruleDocumentJSON struct {
 	Version int                 `json:"version"`
-	Presets pkgrules.Presets    `json:"presets"`
+	Presets rules.Presets       `json:"presets"`
 	Rules   []ruleDocumentEntry `json:"rules"`
 }
 
 type ruleDocumentEntry struct {
-	Name            string        `json:"name"`
-	SenderEmails    []string      `json:"sender_emails"`
-	SubjectContains string        `json:"subject_contains"`
-	AmountRegex     string        `json:"amount_regex"`
-	MerchantRegex   string        `json:"merchant_regex"`
-	CurrencyRegex   string        `json:"currency_regex"`
-	Source          pkgapi.Source `json:"source"`
+	Name            string     `json:"name"`
+	SenderEmails    []string   `json:"sender_emails"`
+	SubjectContains string     `json:"subject_contains"`
+	AmountRegex     string     `json:"amount_regex"`
+	MerchantRegex   string     `json:"merchant_regex"`
+	CurrencyRegex   string     `json:"currency_regex"`
+	Source          api.Source `json:"source"`
 }
 
 func ruleRowToHTTP(row store.RuleRow) ruleHTTPJSON {
-	source := pkgapi.Source{Type: row.SourceType, Label: row.SourceLabel, Bank: row.Bank}
+	source := api.Source{Type: row.SourceType, Label: row.SourceLabel, Bank: row.Bank}
 	return ruleHTTPJSON{
 		ID:                row.ID,
 		Name:              row.Name,
@@ -110,7 +110,7 @@ func ruleHTTPToRow(body ruleHTTPJSON) store.RuleRow {
 		row.SenderEmail = senders[0]
 	}
 	if row.TransactionSource == "" {
-		row.TransactionSource = pkgapi.Source{Type: row.SourceType, Label: row.SourceLabel, Bank: row.Bank}.Display()
+		row.TransactionSource = api.Source{Type: row.SourceType, Label: row.SourceLabel, Bank: row.Bank}.Display()
 	}
 	return row
 }
@@ -123,7 +123,7 @@ func ruleMutationToRow(body RuleMutationRequest) store.RuleRow {
 		AmountRegex:     body.AmountRegex,
 		MerchantRegex:   body.MerchantRegex,
 		CurrencyRegex:   body.CurrencyRegex,
-		Source: pkgapi.Source{
+		Source: api.Source{
 			Type:  body.Source.Type,
 			Label: body.Source.Label,
 			Bank:  body.Source.Bank,
@@ -148,7 +148,7 @@ func normalizedHTTPSenders(senders []string, fallback string) []string {
 	return out
 }
 
-func ruleToRow(rule pkgapi.Rule) store.RuleRow {
+func ruleToRow(rule api.Rule) store.RuleRow {
 	row := store.RuleRow{
 		Name:            rule.Name,
 		SenderEmail:     rule.SenderEmail,
@@ -182,20 +182,20 @@ func ruleDocumentEntryFromRow(row store.RuleRow) ruleDocumentEntry {
 		AmountRegex:     row.AmountRegex,
 		MerchantRegex:   row.MerchantRegex,
 		CurrencyRegex:   row.CurrencyRegex,
-		Source:          pkgapi.Source{Type: row.SourceType, Label: row.SourceLabel, Bank: row.Bank},
+		Source:          api.Source{Type: row.SourceType, Label: row.SourceLabel, Bank: row.Bank},
 	}
 }
 
-func ruleDocumentPresets(entries []ruleDocumentEntry) pkgrules.Presets {
-	return pkgrules.Presets{
-		SourceTypes: presetValuesFromRules(entries, func(source pkgapi.Source) string { return source.Type }),
-		Banks:       presetValuesFromRules(entries, func(source pkgapi.Source) string { return source.Bank }),
+func ruleDocumentPresets(entries []ruleDocumentEntry) rules.Presets {
+	return rules.Presets{
+		SourceTypes: presetValuesFromRules(entries, func(source api.Source) string { return source.Type }),
+		Banks:       presetValuesFromRules(entries, func(source api.Source) string { return source.Bank }),
 	}
 }
 
-func presetValuesFromRules(entries []ruleDocumentEntry, value func(pkgapi.Source) string) []pkgrules.PresetValue {
+func presetValuesFromRules(entries []ruleDocumentEntry, value func(api.Source) string) []rules.PresetValue {
 	seen := map[string]struct{}{}
-	out := []pkgrules.PresetValue{}
+	out := []rules.PresetValue{}
 	for _, entry := range entries {
 		v := strings.TrimSpace(value(entry.Source))
 		if v == "" {
@@ -205,7 +205,7 @@ func presetValuesFromRules(entries []ruleDocumentEntry, value func(pkgapi.Source
 			continue
 		}
 		seen[v] = struct{}{}
-		out = append(out, pkgrules.PresetValue{Value: v, Origin: "custom"})
+		out = append(out, rules.PresetValue{Value: v, Origin: "custom"})
 	}
 	return out
 }
@@ -221,13 +221,13 @@ func presetValuesFromRules(entries []ruleDocumentEntry, value func(pkgapi.Source
 // @Failure 503 {object} ErrorResponse
 // @Router /rules [get]
 func (h *Handlers) ListRules(w http.ResponseWriter, r *http.Request) {
-	rules, err := h.ruleStore.ListRules(r.Context())
+	ruleRows, err := h.ruleStore.ListRules(r.Context())
 	if err != nil {
 		h.logger.Error("list rules", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list rules")
 		return
 	}
-	writeJSON(w, http.StatusOK, ruleRowsToHTTP(rules))
+	writeJSON(w, http.StatusOK, ruleRowsToHTTP(ruleRows))
 }
 
 // CreateRule handles POST /api/rules.
@@ -427,7 +427,7 @@ func (h *Handlers) ImportRules(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	doc, err := pkgrules.ParseDocument(body)
+	doc, err := rules.ParseDocument(body)
 	if err != nil {
 		writeValidationErrors(w, []ValidationErrorDetail{ruleImportValidationError(err)})
 		return

@@ -25,15 +25,15 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/oauth"
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
-	pkgrules "github.com/ArionMiles/expensor/backend/internal/rules"
+	"github.com/ArionMiles/expensor/backend/internal/rules"
 	"github.com/ArionMiles/expensor/backend/internal/state"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
-	gmailreader "github.com/ArionMiles/expensor/backend/pkg/reader/gmail"
-	thunderbirdreader "github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
-	postgreswriter "github.com/ArionMiles/expensor/backend/pkg/writer/postgres"
+	"github.com/ArionMiles/expensor/backend/pkg/reader/gmail"
+	"github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
+	"github.com/ArionMiles/expensor/backend/pkg/writer/postgres"
 )
 
 var (
@@ -179,7 +179,7 @@ func (c *daemonCoordinator) launch(readerName string, forceRescan bool) {
 		}
 	}
 
-	merged := pkgrules.MergeRules(c.systemRules, loadUserRules(c.ctx, c.st, c.logger))
+	merged := rules.MergeRules(c.systemRules, loadUserRules(c.ctx, c.st, c.logger))
 	go func() {
 		defer cancel()
 		runDaemon(runCtx, c.registry, readerName, runtimeCfg, merged, c.resolver, c.diagnostics, c.runtimeStore, c.dm, c.logger, forceRescan)
@@ -465,7 +465,7 @@ func runDaemon( //nolint:revive // all parameters are required; splitting furthe
 	registry *plugins.Registry,
 	readerName string,
 	cfg config.App,
-	rules []api.Rule,
+	compiledRules []api.Rule,
 	resolver api.CategoryResolver,
 	diagnosticSink api.DiagnosticSink,
 	runtimeStore daemonRuntimeStore,
@@ -527,7 +527,7 @@ func runDaemon( //nolint:revive // all parameters are required; splitting furthe
 		ReaderName:     readerName,
 		WriterName:     writerName,
 		Config:         &cfg,
-		Rules:          rules,
+		Rules:          compiledRules,
 		Resolver:       resolver,
 		StateManager:   stateManager,
 		DiagnosticSink: diagnosticSink,
@@ -726,7 +726,7 @@ func uniqueCategoryNames(entries []store.MCCEntry) []string {
 
 // parseRules parses the embedded rules JSON into []api.Rule.
 func parseRules(rulesJSON string) ([]api.Rule, error) {
-	doc, err := pkgrules.ParseDocument([]byte(rulesJSON))
+	doc, err := rules.ParseDocument([]byte(rulesJSON))
 	if err != nil {
 		return nil, fmt.Errorf("parsing rules JSON: %w", err)
 	}
@@ -736,8 +736,8 @@ func parseRules(rulesJSON string) ([]api.Rule, error) {
 // registerPlugins loads guide data from the embedded FS into each reader plugin,
 // then registers all readers and the postgres writer in the registry.
 func registerPlugins(registry *plugins.Registry, fs embed.FS, logger *slog.Logger) error {
-	gmailPlugin := &gmailreader.Plugin{}
-	tbPlugin := &thunderbirdreader.Plugin{}
+	gmailPlugin := &gmail.Plugin{}
+	tbPlugin := &thunderbird.Plugin{}
 
 	if data, err := fs.ReadFile("content/readers/gmail/guide.json"); err == nil {
 		gmailPlugin.SetGuideData(data)
@@ -755,7 +755,7 @@ func registerPlugins(registry *plugins.Registry, fs embed.FS, logger *slog.Logge
 			return fmt.Errorf("registering reader %s: %w", p.Metadata().Name, err)
 		}
 	}
-	postgresPlugin := &postgreswriter.Plugin{}
+	postgresPlugin := &postgres.Plugin{}
 	if err := registry.RegisterWriter(postgresPlugin); err != nil {
 		return fmt.Errorf("registering writer %s: %w", postgresPlugin.Metadata().Name, err)
 	}

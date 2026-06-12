@@ -18,7 +18,7 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/oauth"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
-	tbreader "github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
+	"github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
 )
 
 // --- plugin listing ---
@@ -811,7 +811,7 @@ func (h *Handlers) DiscoverProfiles(w http.ResponseWriter, _ *http.Request) {
 		}
 	}
 
-	if discovered, err := tbreader.FindProfiles(); err == nil {
+	if discovered, err := thunderbird.FindProfiles(); err == nil {
 		for _, p := range discovered {
 			addIfExists(p)
 		}
@@ -846,7 +846,7 @@ func (h *Handlers) DiscoverMailboxes(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "profile directory not found")
 		return
 	}
-	mailboxes, err := tbreader.ListMailboxes(profile)
+	mailboxes, err := thunderbird.ListMailboxes(profile)
 	if err != nil {
 		h.logger.Error("discovering mailboxes", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to discover mailboxes")

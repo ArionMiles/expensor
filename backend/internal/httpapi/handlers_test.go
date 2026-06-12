@@ -21,7 +21,7 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
-	pkgapi "github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
 const (
@@ -618,7 +618,7 @@ func (p *testReaderPlugin) Metadata() plugins.ReaderMetadata {
 	}
 }
 
-func (p *testReaderPlugin) NewReader(_ plugins.ReaderInput) (pkgapi.Reader, error) {
+func (p *testReaderPlugin) NewReader(_ plugins.ReaderInput) (api.Reader, error) {
 	return nil, errors.New("not implemented in test stub")
 }
 
@@ -632,7 +632,7 @@ func (p *testWriterPlugin) Metadata() plugins.WriterMetadata {
 	}
 }
 
-func (p *testWriterPlugin) NewWriter(_ plugins.WriterInput) (pkgapi.Writer, error) {
+func (p *testWriterPlugin) NewWriter(_ plugins.WriterInput) (api.Writer, error) {
 	return nil, errors.New("not implemented in test stub")
 }
 
@@ -3030,9 +3030,9 @@ func TestListRules_ReturnsSourceObjectAndSenderEmails(t *testing.T) {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 	var resp []struct {
-		Name         string        `json:"name"`
-		SenderEmails []string      `json:"sender_emails"`
-		Source       pkgapi.Source `json:"source"`
+		Name         string     `json:"name"`
+		SenderEmails []string   `json:"sender_emails"`
+		Source       api.Source `json:"source"`
 	}
 	decodeJSON(t, rr.Body.String(), &resp)
 	if len(resp) != 1 {
@@ -3041,7 +3041,7 @@ func TestListRules_ReturnsSourceObjectAndSenderEmails(t *testing.T) {
 	if want := []string{"alerts@hdfcbank.net", "alerts@hdfcbank.bank.in"}; !reflect.DeepEqual(want, resp[0].SenderEmails) {
 		t.Fatalf("sender_emails = %#v, want %#v", resp[0].SenderEmails, want)
 	}
-	if want := (pkgapi.Source{Type: "Credit Card", Label: "HDFC Credit Card", Bank: "HDFC"}); resp[0].Source != want {
+	if want := (api.Source{Type: "Credit Card", Label: "HDFC Credit Card", Bank: "HDFC"}); resp[0].Source != want {
 		t.Fatalf("source = %#v, want %#v", resp[0].Source, want)
 	}
 }
@@ -3084,14 +3084,14 @@ func TestCreateRule_AcceptsSourceObjectAndSenderEmails(t *testing.T) {
 		t.Fatalf("expected 201, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 	var resp struct {
-		SenderEmails []string      `json:"sender_emails"`
-		Source       pkgapi.Source `json:"source"`
+		SenderEmails []string   `json:"sender_emails"`
+		Source       api.Source `json:"source"`
 	}
 	decodeJSON(t, rr.Body.String(), &resp)
 	if want := []string{"alerts@hdfcbank.net", "alerts@hdfcbank.bank.in"}; !reflect.DeepEqual(want, resp.SenderEmails) {
 		t.Fatalf("sender_emails = %#v, want %#v", resp.SenderEmails, want)
 	}
-	if want := (pkgapi.Source{Type: "Credit Card", Label: "HDFC Credit Card", Bank: "HDFC"}); resp.Source != want {
+	if want := (api.Source{Type: "Credit Card", Label: "HDFC Credit Card", Bank: "HDFC"}); resp.Source != want {
 		t.Fatalf("source = %#v, want %#v", resp.Source, want)
 	}
 }
@@ -3350,9 +3350,9 @@ func TestExportRules_UsesVersionedDocument(t *testing.T) {
 	var exported struct {
 		Version int `json:"version"`
 		Rules   []struct {
-			Name         string        `json:"name"`
-			SenderEmails []string      `json:"sender_emails"`
-			Source       pkgapi.Source `json:"source"`
+			Name         string     `json:"name"`
+			SenderEmails []string   `json:"sender_emails"`
+			Source       api.Source `json:"source"`
 		} `json:"rules"`
 	}
 	decodeJSON(t, rr.Body.String(), &exported)
