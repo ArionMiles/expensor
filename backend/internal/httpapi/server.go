@@ -1,4 +1,4 @@
-// Package api provides the HTTP server and route definitions for Expensor.
+// Package httpapi provides Expensor's HTTP server, routes, handlers, and transport types.
 package httpapi
 
 import (
