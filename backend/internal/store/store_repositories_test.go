@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/store"
-	"github.com/ArionMiles/expensor/backend/pkg/observability"
 )
 
 func TestStoreEmitsRepresentativeDebugInstrumentation(t *testing.T) {

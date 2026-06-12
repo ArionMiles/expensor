@@ -23,16 +23,16 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/daemon"
 	"github.com/ArionMiles/expensor/backend/internal/httpapi"
 	"github.com/ArionMiles/expensor/backend/internal/oauth"
+	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
+	pkgrules "github.com/ArionMiles/expensor/backend/internal/rules"
 	"github.com/ArionMiles/expensor/backend/internal/state"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
-	"github.com/ArionMiles/expensor/backend/pkg/observability"
 	gmailreader "github.com/ArionMiles/expensor/backend/pkg/reader/gmail"
 	thunderbirdreader "github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
-	pkgrules "github.com/ArionMiles/expensor/backend/pkg/rules"
 	postgreswriter "github.com/ArionMiles/expensor/backend/pkg/writer/postgres"
 )
 

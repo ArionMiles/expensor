@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/ArionMiles/expensor/backend/pkg/observability"
+	"github.com/ArionMiles/expensor/backend/internal/observability"
 )
 
 // Server wraps the HTTP server and its dependencies.

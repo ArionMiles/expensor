@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	pkgrules "github.com/ArionMiles/expensor/backend/internal/rules"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	pkgapi "github.com/ArionMiles/expensor/backend/pkg/api"
-	pkgrules "github.com/ArionMiles/expensor/backend/pkg/rules"
 )
 
 // --- rules ---

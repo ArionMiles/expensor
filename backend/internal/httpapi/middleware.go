@@ -7,7 +7,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/ArionMiles/expensor/backend/pkg/observability"
+	"github.com/ArionMiles/expensor/backend/internal/observability"
 )
 
 // loggingMiddleware logs method, path, status, and duration for every request.

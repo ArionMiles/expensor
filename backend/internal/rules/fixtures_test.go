@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/extractor"
+	"github.com/ArionMiles/expensor/backend/internal/rules"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
-	"github.com/ArionMiles/expensor/backend/pkg/rules"
 )
 
 var fixedFixtureTime = time.Date(2026, time.April, 12, 10, 30, 0, 0, time.UTC)

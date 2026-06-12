@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
-	"github.com/ArionMiles/expensor/backend/pkg/observability"
 )
 
 // InstrumentedStore records telemetry around the full store surface.

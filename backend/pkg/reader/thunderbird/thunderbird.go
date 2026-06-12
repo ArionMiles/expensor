@@ -16,9 +16,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/ArionMiles/expensor/backend/internal/extractor"
+	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/state"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
-	"github.com/ArionMiles/expensor/backend/pkg/observability"
 )
 
 // Reader reads transactions from Thunderbird MBOX mailboxes.

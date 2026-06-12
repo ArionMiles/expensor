@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/ArionMiles/expensor/backend/internal/rules"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
-	"github.com/ArionMiles/expensor/backend/pkg/rules"
 )
 
 func r(name string) api.Rule { return api.Rule{Name: name} }

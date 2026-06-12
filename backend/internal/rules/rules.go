@@ -1,4 +1,4 @@
-// Package rules provides utilities for merging and filtering extraction rules.
+// Package rules provides Expensor rule document, fixture, and merge utilities.
 package rules
 
 import "github.com/ArionMiles/expensor/backend/pkg/api"
