@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/ArionMiles/expensor/backend/internal/migration"
 	"github.com/ArionMiles/expensor/backend/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/observability"
@@ -23,7 +22,7 @@ import (
 // directory. Exported so integration tests can bootstrap a schema without
 // importing the full Writer.
 func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
-	return migration.Run(ctx, pool, migrations.FS, log)
+	return migrations.Run(ctx, pool, log)
 }
 
 // log is a package-level logger used only for RunMigrations bootstrap calls
@@ -143,7 +142,7 @@ func New(cfg Config, logger *slog.Logger) (*Writer, error) {
 // runMigrations applies all pending numbered SQL migrations.
 func (w *Writer) runMigrations(ctx context.Context) error {
 	w.logger.Info("running database migrations")
-	if err := migration.Run(ctx, w.pool, migrations.FS, w.logger); err != nil {
+	if err := migrations.Run(ctx, w.pool, w.logger); err != nil {
 		return fmt.Errorf("running migrations: %w", err)
 	}
 	w.logger.Info("migrations completed successfully")

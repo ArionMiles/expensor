@@ -22,9 +22,9 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/daemon"
 	"github.com/ArionMiles/expensor/backend/internal/httpapi"
-	"github.com/ArionMiles/expensor/backend/internal/migration"
 	"github.com/ArionMiles/expensor/backend/internal/oauth"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
+	"github.com/ArionMiles/expensor/backend/internal/state"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
@@ -33,7 +33,6 @@ import (
 	gmailreader "github.com/ArionMiles/expensor/backend/pkg/reader/gmail"
 	thunderbirdreader "github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
 	pkgrules "github.com/ArionMiles/expensor/backend/pkg/rules"
-	"github.com/ArionMiles/expensor/backend/pkg/state"
 	postgreswriter "github.com/ArionMiles/expensor/backend/pkg/writer/postgres"
 )
 
@@ -639,7 +638,7 @@ func runMigrations(pgCfg config.Postgres, logger *slog.Logger) error {
 	}
 	defer pool.Close()
 
-	return migration.Run(ctx, pool, migrations.FS, logger)
+	return migrations.Run(ctx, pool, logger)
 }
 
 // waitForPostgres retries a postgres ping until the connection succeeds or the

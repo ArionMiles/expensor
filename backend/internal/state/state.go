@@ -1,4 +1,4 @@
-// Package state provides unified state management for tracking processed messages.
+// Package state provides processed-message deduplication for Expensor readers.
 package state
 
 import (
