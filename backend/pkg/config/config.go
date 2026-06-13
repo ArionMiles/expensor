@@ -2,6 +2,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -121,7 +122,7 @@ type Postgres struct {
 	// MaxPoolSize is the maximum number of connections in the pool.
 	// Environment variable: POSTGRES_MAX_POOL_SIZE
 	// Default: 10
-	MaxPoolSize int `envconfig:"POSTGRES_MAX_POOL_SIZE" default:"10"`
+	MaxPoolSize int32 `envconfig:"POSTGRES_MAX_POOL_SIZE" default:"10"`
 
 	// ConnectTimeout is the maximum time to wait for PostgreSQL at startup.
 	ConnectTimeout time.Duration `envconfig:"POSTGRES_CONNECT_TIMEOUT" default:"30s"`
@@ -158,6 +159,9 @@ func Load() (App, error) {
 	var cfg App
 	if err := envconfig.Process("", &cfg); err != nil {
 		return App{}, fmt.Errorf("loading environment configuration: %w", err)
+	}
+	if cfg.Postgres.MaxPoolSize < 0 {
+		return App{}, errors.New("POSTGRES_MAX_POOL_SIZE must be non-negative")
 	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = fmt.Sprintf("http://localhost:%d", cfg.Port)

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -32,7 +31,7 @@ type Config struct {
 	FlushInterval time.Duration
 
 	// MaxPoolSize is the maximum number of connections in the pool.
-	MaxPoolSize int
+	MaxPoolSize int32
 }
 
 // Writer writes transactions to a PostgreSQL database.
@@ -82,8 +81,7 @@ func New(cfg Config, logger *slog.Logger) (*Writer, error) {
 		return nil, fmt.Errorf("parsing connection string: %w", err)
 	}
 
-	maxConns := min(cfg.MaxPoolSize, math.MaxInt32)
-	poolConfig.MaxConns = int32(maxConns) //nolint:gosec // G115: value is bounded by min(cfg.MaxPoolSize, math.MaxInt32)
+	poolConfig.MaxConns = cfg.MaxPoolSize
 	poolConfig.MinConns = 2
 	poolConfig.MaxConnLifetime = 1 * time.Hour
 	poolConfig.MaxConnIdleTime = 30 * time.Minute
