@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
-	"github.com/ArionMiles/expensor/backend/pkg/observability"
 )
 
 // InstrumentedStore records telemetry around the full store surface.
@@ -574,7 +574,7 @@ func (s *InstrumentedStore) GetMutedMerchantPatterns(ctx context.Context) ([]str
 	return patterns, err
 }
 
-func (s *InstrumentedStore) CategorizeMerchant(ctx context.Context, merchant, category, bucket string) (int, error) {
+func (s *InstrumentedStore) CategorizeMerchant(ctx context.Context, merchant, category, bucket string) (int64, error) {
 	ctx, span := s.scope.Start(ctx, "store.community.categorize_merchant")
 	defer span.End()
 
@@ -655,7 +655,7 @@ func (s *InstrumentedStore) SeedMCCCodes(ctx context.Context, entries []MCCEntry
 	return err
 }
 
-func (s *InstrumentedStore) SeedMerchantCategories(ctx context.Context, entries []MerchantCategoryEntry) (int, error) {
+func (s *InstrumentedStore) SeedMerchantCategories(ctx context.Context, entries []MerchantCategoryEntry) (int64, error) {
 	ctx, span := s.scope.Start(ctx, "store.community.seed_merchant_categories")
 	defer span.End()
 

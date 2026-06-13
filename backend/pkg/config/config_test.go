@@ -122,6 +122,16 @@ func TestLoadRejectsInvalidObservabilityValues(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsNegativePostgresMaxPoolSize(t *testing.T) {
+	setRequiredConfigEnv(t)
+	t.Setenv("POSTGRES_MAX_POOL_SIZE", "-1")
+
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), "POSTGRES_MAX_POOL_SIZE") {
+		t.Fatalf("expected invalid POSTGRES_MAX_POOL_SIZE error, got %v", err)
+	}
+}
+
 func TestThunderbirdConfig_GetMailboxes(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -6,29 +6,15 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/ArionMiles/expensor/backend/internal/migration"
-	"github.com/ArionMiles/expensor/backend/migrations"
+	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
-	"github.com/ArionMiles/expensor/backend/pkg/observability"
 )
-
-// RunMigrations applies all numbered SQL migrations from the embedded migrations
-// directory. Exported so integration tests can bootstrap a schema without
-// importing the full Writer.
-func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
-	return migration.Run(ctx, pool, migrations.FS, log)
-}
-
-// log is a package-level logger used only for RunMigrations bootstrap calls
-// (e.g. from tests). The Writer itself uses the logger injected via New.
-var log = slog.Default()
 
 // Config holds the PostgreSQL writer configuration.
 type Config struct {
@@ -45,7 +31,7 @@ type Config struct {
 	FlushInterval time.Duration
 
 	// MaxPoolSize is the maximum number of connections in the pool.
-	MaxPoolSize int
+	MaxPoolSize int32
 }
 
 // Writer writes transactions to a PostgreSQL database.
@@ -95,8 +81,7 @@ func New(cfg Config, logger *slog.Logger) (*Writer, error) {
 		return nil, fmt.Errorf("parsing connection string: %w", err)
 	}
 
-	maxConns := min(cfg.MaxPoolSize, math.MaxInt32)
-	poolConfig.MaxConns = int32(maxConns) //nolint:gosec // G115: value is bounded by min(cfg.MaxPoolSize, math.MaxInt32)
+	poolConfig.MaxConns = cfg.MaxPoolSize
 	poolConfig.MinConns = 2
 	poolConfig.MaxConnLifetime = 1 * time.Hour
 	poolConfig.MaxConnIdleTime = 30 * time.Minute
@@ -131,23 +116,7 @@ func New(cfg Config, logger *slog.Logger) (*Writer, error) {
 		scope:         observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/pkg/writer/postgres"),
 	}
 
-	// Run migrations
-	if err := w.runMigrations(context.Background()); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("running migrations: %w", err)
-	}
-
 	return w, nil
-}
-
-// runMigrations applies all pending numbered SQL migrations.
-func (w *Writer) runMigrations(ctx context.Context) error {
-	w.logger.Info("running database migrations")
-	if err := migration.Run(ctx, w.pool, migrations.FS, w.logger); err != nil {
-		return fmt.Errorf("running migrations: %w", err)
-	}
-	w.logger.Info("migrations completed successfully")
-	return nil
 }
 
 // flushBatch writes the current batch to PostgreSQL and sends acknowledgments.

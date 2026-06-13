@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	mailpkg "net/mail"
+	"net/mail"
 	"strings"
 	"sync"
 	"time"
@@ -20,10 +20,10 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
+	"github.com/ArionMiles/expensor/backend/internal/extractor"
+	"github.com/ArionMiles/expensor/backend/internal/observability"
+	"github.com/ArionMiles/expensor/backend/internal/state"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
-	"github.com/ArionMiles/expensor/backend/pkg/extractor"
-	"github.com/ArionMiles/expensor/backend/pkg/observability"
-	"github.com/ArionMiles/expensor/backend/pkg/state"
 )
 
 // Reader reads transactions from Gmail messages.
@@ -588,7 +588,7 @@ func gmailMessageHeaders(msg *gmail.Message) map[string]string {
 }
 
 func senderEmail(sender string) string {
-	address, err := mailpkg.ParseAddress(sender)
+	address, err := mail.ParseAddress(sender)
 	if err != nil {
 		return ""
 	}

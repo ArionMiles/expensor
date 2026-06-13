@@ -9,9 +9,9 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/ArionMiles/expensor/backend/internal/state"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
-	"github.com/ArionMiles/expensor/backend/pkg/state"
 )
 
 // AuthType describes how a reader plugin authenticates.

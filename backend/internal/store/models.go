@@ -174,7 +174,7 @@ type MerchantCategoryEntry struct {
 type SyncStatus struct {
 	LastSyncedAt   *time.Time `json:"last_synced_at"`
 	Error          *string    `json:"error"`
-	EntriesUpdated int        `json:"entries_updated"`
+	EntriesUpdated int64      `json:"entries_updated"`
 }
 
 // RuleRow is a rule as stored in the database.

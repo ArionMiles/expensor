@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -49,8 +48,7 @@ func New(cfg config.Postgres, logger *slog.Logger) (*Store, error) {
 		return nil, fmt.Errorf("parsing store connection string: %w", err)
 	}
 
-	maxConns := min(cfg.MaxPoolSize, math.MaxInt32)
-	poolCfg.MaxConns = int32(maxConns) //nolint:gosec // G115: bounded by min
+	poolCfg.MaxConns = cfg.MaxPoolSize
 	poolCfg.MinConns = 1
 	poolCfg.MaxConnLifetime = 1 * time.Hour
 	poolCfg.MaxConnIdleTime = 30 * time.Minute
@@ -476,7 +474,7 @@ func (s *Store) MuteByMerchant(ctx context.Context, pattern, reason string) erro
 // CategorizeMerchant atomically updates all transactions with the given merchant_info
 // (exact case-sensitive equality match, not substring) and upserts a user_locked entry
 // in merchant_categories for future scans. Returns the number of transaction rows updated.
-func (s *Store) CategorizeMerchant(ctx context.Context, merchant, category, bucket string) (int, error) {
+func (s *Store) CategorizeMerchant(ctx context.Context, merchant, category, bucket string) (int64, error) {
 	return s.community.CategorizeMerchant(ctx, merchant, category, bucket)
 }
 
@@ -526,7 +524,7 @@ func (s *Store) SeedMCCCodes(ctx context.Context, entries []MCCEntry) error {
 
 // SeedMerchantCategories upserts community merchant fragment mappings, skipping
 // rows where user_locked = true (user has explicitly modified the entry).
-func (s *Store) SeedMerchantCategories(ctx context.Context, entries []MerchantCategoryEntry) (int, error) {
+func (s *Store) SeedMerchantCategories(ctx context.Context, entries []MerchantCategoryEntry) (int64, error) {
 	return s.community.SeedMerchantCategories(ctx, entries)
 }
 

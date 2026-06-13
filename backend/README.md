@@ -71,20 +71,20 @@ type WriterPlugin interface {
 ### New Reader
 
 1. Implement the reader in `backend/pkg/reader/{name}/`
-2. Create the plugin wrapper in `backend/pkg/plugins/readers/{name}/plugin.go`
+2. Add the plugin metadata and constructor adapter in `backend/pkg/reader/{name}/plugin.go`
 3. Register in `backend/cmd/server/main.go`:
    ```go
-   registry.RegisterReader(&newreaderplugin.Plugin{})
+   registry.RegisterReader(&newreader.Plugin{})
    ```
 4. Add any required config fields to `backend/pkg/config/config.go`
 
 ### New Writer
 
 1. Implement the writer in `backend/pkg/writer/{name}/`
-2. Create the plugin wrapper in `backend/pkg/plugins/writers/{name}/plugin.go`
+2. Add the plugin metadata and constructor adapter in `backend/pkg/writer/{name}/plugin.go`
 3. Register in `backend/cmd/server/main.go`:
    ```go
-   registry.RegisterWriter(&newwriterplugin.Plugin{})
+   registry.RegisterWriter(&newwriter.Plugin{})
    ```
 
 ## Building

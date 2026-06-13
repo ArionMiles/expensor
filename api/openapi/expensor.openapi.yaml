@@ -1,17 +1,17 @@
 basePath: /api
 definitions:
-  api.ActiveReaderResponse:
+  httpapi.ActiveReaderResponse:
     properties:
       reader:
         example: gmail
         type: string
     type: object
-  api.AppliedCountResponse:
+  httpapi.AppliedCountResponse:
     properties:
       applied:
         type: integer
     type: object
-  api.AuthExchangeRequest:
+  httpapi.AuthExchangeRequest:
     properties:
       url:
         example: http://localhost:8080/api/auth/callback?state=state&code=code
@@ -19,13 +19,13 @@ definitions:
     required:
     - url
     type: object
-  api.AuthExchangeResponse:
+  httpapi.AuthExchangeResponse:
     properties:
       status:
         example: authorized
         type: string
     type: object
-  api.AuthStartResponse:
+  httpapi.AuthStartResponse:
     properties:
       redirect_uri:
         example: http://localhost:8080/api/auth/callback
@@ -34,7 +34,7 @@ definitions:
         example: https://accounts.google.com/o/oauth2/auth
         type: string
     type: object
-  api.AuthStatusResponse:
+  httpapi.AuthStatusResponse:
     properties:
       auth_state:
         example: connected
@@ -48,7 +48,7 @@ definitions:
         type: string
         x-nullable: true
     type: object
-  api.BankColorResponse:
+  httpapi.BankColorResponse:
     properties:
       color:
         example: '#2563eb'
@@ -60,7 +60,7 @@ definitions:
         example: HDFC Bank
         type: string
     type: object
-  api.BucketResponse:
+  httpapi.BucketResponse:
     properties:
       description:
         example: Essential spending
@@ -71,7 +71,7 @@ definitions:
         example: Needs
         type: string
     type: object
-  api.CategorizeMerchantRequest:
+  httpapi.CategorizeMerchantRequest:
     properties:
       bucket:
         example: Wants
@@ -85,12 +85,12 @@ definitions:
     required:
     - merchant
     type: object
-  api.CategorizeMerchantResponse:
+  httpapi.CategorizeMerchantResponse:
     properties:
       updated:
         type: integer
     type: object
-  api.CategoryMonthlyEntryResponse:
+  httpapi.CategoryMonthlyEntryResponse:
     properties:
       current:
         example: 1200.5
@@ -99,7 +99,7 @@ definitions:
         example: 950.25
         type: number
     type: object
-  api.CategoryResponse:
+  httpapi.CategoryResponse:
     properties:
       description:
         example: Restaurants and groceries
@@ -110,7 +110,7 @@ definitions:
         example: Food
         type: string
     type: object
-  api.ChartDataResponse:
+  httpapi.ChartDataResponse:
     properties:
       by_bank:
         additionalProperties:
@@ -126,7 +126,7 @@ definitions:
         type: object
       by_category_monthly:
         additionalProperties:
-          $ref: '#/definitions/api.CategoryMonthlyEntryResponse'
+          $ref: '#/definitions/httpapi.CategoryMonthlyEntryResponse'
         type: object
       by_label:
         additionalProperties:
@@ -142,14 +142,14 @@ definitions:
         type: object
       daily_spend:
         items:
-          $ref: '#/definitions/api.TimeBucketResponse'
+          $ref: '#/definitions/httpapi.TimeBucketResponse'
         type: array
       monthly_spend:
         items:
-          $ref: '#/definitions/api.TimeBucketResponse'
+          $ref: '#/definitions/httpapi.TimeBucketResponse'
         type: array
     type: object
-  api.ConfigFieldResponse:
+  httpapi.ConfigFieldResponse:
     properties:
       depends_on:
         example: profilePath
@@ -169,7 +169,7 @@ definitions:
         example: text
         type: string
     type: object
-  api.CreateBucketRequest:
+  httpapi.CreateBucketRequest:
     properties:
       description:
         example: Contract bucket
@@ -180,7 +180,7 @@ definitions:
     required:
     - name
     type: object
-  api.CreateCategoryRequest:
+  httpapi.CreateCategoryRequest:
     properties:
       description:
         example: Contract category
@@ -191,7 +191,7 @@ definitions:
     required:
     - name
     type: object
-  api.CreateLabelRequest:
+  httpapi.CreateLabelRequest:
     properties:
       color:
         example: '#f59e0b'
@@ -202,12 +202,12 @@ definitions:
     required:
     - name
     type: object
-  api.CredentialsStatusResponse:
+  httpapi.CredentialsStatusResponse:
     properties:
       exists:
         type: boolean
     type: object
-  api.DaemonReaderRequest:
+  httpapi.DaemonReaderRequest:
     properties:
       reader:
         example: thunderbird
@@ -215,7 +215,7 @@ definitions:
     required:
     - reader
     type: object
-  api.DaemonStatus:
+  httpapi.DaemonStatus:
     properties:
       last_error:
         type: string
@@ -224,7 +224,7 @@ definitions:
       started_at:
         type: string
     type: object
-  api.DailyBucketResponse:
+  httpapi.DailyBucketResponse:
     properties:
       amount:
         example: 249.5
@@ -235,24 +235,24 @@ definitions:
       date:
         type: string
     type: object
-  api.DashboardDataResponse:
+  httpapi.DashboardDataResponse:
     properties:
       all_time:
-        $ref: '#/definitions/api.DashboardSectionResponse'
+        $ref: '#/definitions/httpapi.DashboardSectionResponse'
       current_month:
-        $ref: '#/definitions/api.DashboardSectionResponse'
+        $ref: '#/definitions/httpapi.DashboardSectionResponse'
     type: object
-  api.DashboardSectionResponse:
+  httpapi.DashboardSectionResponse:
     properties:
       charts:
-        $ref: '#/definitions/api.ChartDataResponse'
+        $ref: '#/definitions/httpapi.ChartDataResponse'
       label:
         example: Current Month
         type: string
       stats:
-        $ref: '#/definitions/api.StatsResponse'
+        $ref: '#/definitions/httpapi.StatsResponse'
     type: object
-  api.DayOfMonthBucketResponse:
+  httpapi.DayOfMonthBucketResponse:
     properties:
       amount:
         example: 249.5
@@ -264,13 +264,13 @@ definitions:
         example: 15
         type: integer
     type: object
-  api.ErrorResponse:
+  httpapi.ErrorResponse:
     properties:
       error:
         example: internal server error
         type: string
     type: object
-  api.ExtractionDiagnosticResponse:
+  httpapi.ExtractionDiagnosticResponse:
     properties:
       amount_regex:
         example: INR\s+([0-9,.]+)
@@ -332,7 +332,7 @@ definitions:
       updated_at:
         type: string
     type: object
-  api.ExtractionDiagnosticStatusRequest:
+  httpapi.ExtractionDiagnosticStatusRequest:
     properties:
       status:
         enum:
@@ -344,7 +344,7 @@ definitions:
     required:
     - status
     type: object
-  api.FacetsResponse:
+  httpapi.FacetsResponse:
     properties:
       buckets:
         items:
@@ -371,7 +371,7 @@ definitions:
           type: string
         type: array
     type: object
-  api.GuideLinkResponse:
+  httpapi.GuideLinkResponse:
     properties:
       label:
         example: Thunderbird profiles
@@ -380,7 +380,7 @@ definitions:
         example: https://support.mozilla.org/kb/profiles-where-thunderbird-stores-user-data
         type: string
     type: object
-  api.GuideNoteResponse:
+  httpapi.GuideNoteResponse:
     properties:
       text:
         example: Docker deployments need the Thunderbird profile mounted into the
@@ -390,19 +390,19 @@ definitions:
         example: info
         type: string
     type: object
-  api.GuideSectionResponse:
+  httpapi.GuideSectionResponse:
     properties:
       link:
-        $ref: '#/definitions/api.GuideLinkResponse'
+        $ref: '#/definitions/httpapi.GuideLinkResponse'
       steps:
         items:
-          $ref: '#/definitions/api.GuideStepResponse'
+          $ref: '#/definitions/httpapi.GuideStepResponse'
         type: array
       title:
         example: Connect Thunderbird
         type: string
     type: object
-  api.GuideStepResponse:
+  httpapi.GuideStepResponse:
     properties:
       sub_steps:
         items:
@@ -412,37 +412,37 @@ definitions:
         example: Select your Thunderbird profile
         type: string
     type: object
-  api.HealthResponse:
+  httpapi.HealthResponse:
     properties:
       status:
         example: ok
         type: string
     type: object
-  api.HeatmapResponse:
+  httpapi.HeatmapResponse:
     properties:
       buckets:
         items:
-          $ref: '#/definitions/api.DailyBucketResponse'
+          $ref: '#/definitions/httpapi.DailyBucketResponse'
         type: array
       by_day_of_month:
         items:
-          $ref: '#/definitions/api.DayOfMonthBucketResponse'
+          $ref: '#/definitions/httpapi.DayOfMonthBucketResponse'
         type: array
       by_weekday_hour:
         items:
-          $ref: '#/definitions/api.WeekdayHourBucketResponse'
+          $ref: '#/definitions/httpapi.WeekdayHourBucketResponse'
         type: array
       year:
         example: 2026
         type: integer
     type: object
-  api.LabelMappingsResponse:
+  httpapi.LabelMappingsResponse:
     additionalProperties:
       items:
         type: string
       type: array
     type: object
-  api.LabelMutationResponse:
+  httpapi.LabelMutationResponse:
     properties:
       color:
         example: '#f59e0b'
@@ -451,7 +451,7 @@ definitions:
         example: ContractLabel
         type: string
     type: object
-  api.LabelResponse:
+  httpapi.LabelResponse:
     properties:
       color:
         example: '#f59e0b'
@@ -462,7 +462,7 @@ definitions:
         example: food
         type: string
     type: object
-  api.LabelTaxonomyExportRowResponse:
+  httpapi.LabelTaxonomyExportRowResponse:
     properties:
       color:
         example: '#f59e0b'
@@ -475,19 +475,19 @@ definitions:
         example: Online
         type: string
     type: object
-  api.MerchantReasonRequest:
+  httpapi.MerchantReasonRequest:
     properties:
       reason:
         example: contract check
         type: string
     type: object
-  api.MerchantReasonResponse:
+  httpapi.MerchantReasonResponse:
     properties:
       reason:
         example: Internal transfer
         type: string
     type: object
-  api.MonthlyBreakdownResponse:
+  httpapi.MonthlyBreakdownResponse:
     properties:
       labels:
         items:
@@ -499,10 +499,10 @@ definitions:
         type: array
       series:
         items:
-          $ref: '#/definitions/api.MonthlyBreakdownSeriesResponse'
+          $ref: '#/definitions/httpapi.MonthlyBreakdownSeriesResponse'
         type: array
     type: object
-  api.MonthlyBreakdownSeriesResponse:
+  httpapi.MonthlyBreakdownSeriesResponse:
     properties:
       data:
         items:
@@ -512,7 +512,7 @@ definitions:
         example: Food
         type: string
     type: object
-  api.MuteMerchantRequest:
+  httpapi.MuteMerchantRequest:
     properties:
       pattern:
         example: Swiggy
@@ -523,13 +523,13 @@ definitions:
     required:
     - pattern
     type: object
-  api.MuteMerchantResponse:
+  httpapi.MuteMerchantResponse:
     properties:
       pattern:
         example: Swiggy
         type: string
     type: object
-  api.MutedMerchantResponse:
+  httpapi.MutedMerchantResponse:
     properties:
       created_at:
         type: string
@@ -545,13 +545,13 @@ definitions:
         example: contract check
         type: string
     type: object
-  api.NameResponse:
+  httpapi.NameResponse:
     properties:
       name:
         example: ContractCategory
         type: string
     type: object
-  api.PreferencesPatchRequest:
+  httpapi.PreferencesPatchRequest:
     properties:
       base_currency:
         example: USD
@@ -580,7 +580,7 @@ definitions:
         example: Asia/Kolkata
         type: string
     type: object
-  api.PreferencesResponse:
+  httpapi.PreferencesResponse:
     properties:
       base_currency:
         example: USD
@@ -598,26 +598,26 @@ definitions:
         example: Asia/Kolkata
         type: string
     type: object
-  api.ReaderCheckpointResponse:
+  httpapi.ReaderCheckpointResponse:
     properties:
       last_scan_at:
         example: "2026-04-14T09:00:00Z"
         type: string
         x-nullable: true
     type: object
-  api.ReaderConfigRequest:
+  httpapi.ReaderConfigRequest:
     additionalProperties: {}
     type: object
-  api.ReaderConfigResponse:
+  httpapi.ReaderConfigResponse:
     additionalProperties: {}
     type: object
-  api.ReaderConfigSaveResponse:
+  httpapi.ReaderConfigSaveResponse:
     properties:
       status:
         example: saved
         type: string
     type: object
-  api.ReaderDisconnectResponse:
+  httpapi.ReaderDisconnectResponse:
     properties:
       files_removed:
         items:
@@ -627,25 +627,25 @@ definitions:
         example: disconnected
         type: string
     type: object
-  api.ReaderGuideResponse:
+  httpapi.ReaderGuideResponse:
     properties:
       notes:
         items:
-          $ref: '#/definitions/api.GuideNoteResponse'
+          $ref: '#/definitions/httpapi.GuideNoteResponse'
         type: array
       sections:
         items:
-          $ref: '#/definitions/api.GuideSectionResponse'
+          $ref: '#/definitions/httpapi.GuideSectionResponse'
         type: array
     type: object
-  api.ReaderInfoResponse:
+  httpapi.ReaderInfoResponse:
     properties:
       auth_type:
         example: config
         type: string
       config_schema:
         items:
-          $ref: '#/definitions/api.ConfigFieldResponse'
+          $ref: '#/definitions/httpapi.ConfigFieldResponse'
         type: array
       description:
         example: Read transaction emails from Thunderbird
@@ -656,7 +656,7 @@ definitions:
       requires_credentials_upload:
         type: boolean
     type: object
-  api.ReaderStatusResponse:
+  httpapi.ReaderStatusResponse:
     properties:
       auth_state:
         example: connected
@@ -673,18 +673,18 @@ definitions:
       ready:
         type: boolean
     type: object
-  api.ReaderTokenRevokeResponse:
+  httpapi.ReaderTokenRevokeResponse:
     properties:
       status:
         example: revoked
         type: string
     type: object
-  api.RemovedCountResponse:
+  httpapi.RemovedCountResponse:
     properties:
       removed:
         type: integer
     type: object
-  api.RuleDocumentEntryResponse:
+  httpapi.RuleDocumentEntryResponse:
     properties:
       amount_regex:
         example: INR\s+([0-9,.]+)
@@ -704,7 +704,7 @@ definitions:
         minItems: 1
         type: array
       source:
-        $ref: '#/definitions/api.RuleSourceResponse'
+        $ref: '#/definitions/httpapi.RuleSourceResponse'
       subject_contains:
         example: Contract transaction
         type: string
@@ -715,13 +715,13 @@ definitions:
     - sender_emails
     - source
     type: object
-  api.RuleDocumentResponse:
+  httpapi.RuleDocumentResponse:
     properties:
       presets:
-        $ref: '#/definitions/api.RulePresetsResponse'
+        $ref: '#/definitions/httpapi.RulePresetsResponse'
       rules:
         items:
-          $ref: '#/definitions/api.RuleDocumentEntryResponse'
+          $ref: '#/definitions/httpapi.RuleDocumentEntryResponse'
         type: array
       version:
         enum:
@@ -732,13 +732,13 @@ definitions:
     - rules
     - version
     type: object
-  api.RuleImportResponse:
+  httpapi.RuleImportResponse:
     properties:
       imported:
         example: 1
         type: integer
     type: object
-  api.RuleMutationRequest:
+  httpapi.RuleMutationRequest:
     properties:
       amount_regex:
         example: INR\s+([0-9,.]+)
@@ -758,7 +758,7 @@ definitions:
         minItems: 1
         type: array
       source:
-        $ref: '#/definitions/api.RuleSourceResponse'
+        $ref: '#/definitions/httpapi.RuleSourceResponse'
       subject_contains:
         example: Contract transaction
         type: string
@@ -769,7 +769,7 @@ definitions:
     - sender_emails
     - source
     type: object
-  api.RulePresetValueResponse:
+  httpapi.RulePresetValueResponse:
     properties:
       origin:
         example: custom
@@ -778,18 +778,18 @@ definitions:
         example: Email
         type: string
     type: object
-  api.RulePresetsResponse:
+  httpapi.RulePresetsResponse:
     properties:
       banks:
         items:
-          $ref: '#/definitions/api.RulePresetValueResponse'
+          $ref: '#/definitions/httpapi.RulePresetValueResponse'
         type: array
       source_types:
         items:
-          $ref: '#/definitions/api.RulePresetValueResponse'
+          $ref: '#/definitions/httpapi.RulePresetValueResponse'
         type: array
     type: object
-  api.RuleResponse:
+  httpapi.RuleResponse:
     properties:
       amount_regex:
         example: INR\s+([0-9,.]+)
@@ -821,7 +821,7 @@ definitions:
           type: string
         type: array
       source:
-        $ref: '#/definitions/api.RuleSourceResponse'
+        $ref: '#/definitions/httpapi.RuleSourceResponse'
       source_label:
         example: Contract
         type: string
@@ -837,7 +837,7 @@ definitions:
       updated_at:
         type: string
     type: object
-  api.RuleSourceResponse:
+  httpapi.RuleSourceResponse:
     properties:
       bank:
         example: Contract Bank
@@ -852,7 +852,7 @@ definitions:
     - bank
     - type
     type: object
-  api.SetupStatusResponse:
+  httpapi.SetupStatusResponse:
     properties:
       missing:
         example:
@@ -866,7 +866,7 @@ definitions:
         example: true
         type: boolean
     type: object
-  api.StatsResponse:
+  httpapi.StatsResponse:
     properties:
       base_currency:
         example: INR
@@ -884,20 +884,20 @@ definitions:
       total_count:
         type: integer
     type: object
-  api.StatusOnlyResponse:
+  httpapi.StatusOnlyResponse:
     properties:
       status:
         example: ok
         type: string
     type: object
-  api.StatusResponse:
+  httpapi.StatusResponse:
     properties:
       daemon:
-        $ref: '#/definitions/api.DaemonStatus'
+        $ref: '#/definitions/httpapi.DaemonStatus'
       stats:
-        $ref: '#/definitions/api.StatsResponse'
+        $ref: '#/definitions/httpapi.StatsResponse'
     type: object
-  api.SyncStatusResponse:
+  httpapi.SyncStatusResponse:
     properties:
       entries_updated:
         type: integer
@@ -908,7 +908,7 @@ definitions:
         type: string
         x-nullable: true
     type: object
-  api.TaxonomyExportRowResponse:
+  httpapi.TaxonomyExportRowResponse:
     properties:
       merchants:
         items:
@@ -918,27 +918,27 @@ definitions:
         example: Food & Dining
         type: string
     type: object
-  api.TaxonomyMappingsResponse:
+  httpapi.TaxonomyMappingsResponse:
     additionalProperties:
       items:
         type: string
       type: array
     type: object
-  api.ThunderbirdMailboxesResponse:
+  httpapi.ThunderbirdMailboxesResponse:
     properties:
       mailboxes:
         items:
           type: string
         type: array
     type: object
-  api.ThunderbirdProfilesResponse:
+  httpapi.ThunderbirdProfilesResponse:
     properties:
       profiles:
         items:
           type: string
         type: array
     type: object
-  api.TimeBucketResponse:
+  httpapi.TimeBucketResponse:
     properties:
       amount:
         example: 249.5
@@ -950,7 +950,7 @@ definitions:
         example: 2026-05
         type: string
     type: object
-  api.TransactionLabelsRequest:
+  httpapi.TransactionLabelsRequest:
     properties:
       labels:
         items:
@@ -960,7 +960,7 @@ definitions:
     required:
     - labels
     type: object
-  api.TransactionResponse:
+  httpapi.TransactionResponse:
     properties:
       amount:
         example: 249.5
@@ -1006,13 +1006,13 @@ definitions:
       original_currency:
         type: string
       source:
-        $ref: '#/definitions/api.RuleSourceResponse'
+        $ref: '#/definitions/httpapi.RuleSourceResponse'
       timestamp:
         type: string
       updated_at:
         type: string
     type: object
-  api.TransactionUpdateRequest:
+  httpapi.TransactionUpdateRequest:
     properties:
       bucket:
         example: Wants
@@ -1030,7 +1030,7 @@ definitions:
         example: true
         type: boolean
     type: object
-  api.TransactionsListResponse:
+  httpapi.TransactionsListResponse:
     properties:
       base_currency:
         example: INR
@@ -1045,10 +1045,10 @@ definitions:
         type: number
       transactions:
         items:
-          $ref: '#/definitions/api.TransactionResponse'
+          $ref: '#/definitions/httpapi.TransactionResponse'
         type: array
     type: object
-  api.UpdateLabelRequest:
+  httpapi.UpdateLabelRequest:
     properties:
       color:
         example: '#f59e0b'
@@ -1056,13 +1056,13 @@ definitions:
     required:
     - color
     type: object
-  api.UploadCredentialsResponse:
+  httpapi.UploadCredentialsResponse:
     properties:
       path:
         example: db://reader_runtime/gmail/client_secret
         type: string
     type: object
-  api.ValidationErrorDetail:
+  httpapi.ValidationErrorDetail:
     properties:
       field:
         example: page_size
@@ -1074,23 +1074,23 @@ definitions:
         example: must be at most 100
         type: string
     type: object
-  api.ValidationErrorResponse:
+  httpapi.ValidationErrorResponse:
     properties:
       details:
         items:
-          $ref: '#/definitions/api.ValidationErrorDetail'
+          $ref: '#/definitions/httpapi.ValidationErrorDetail'
         type: array
       error:
         example: request validation failed
         type: string
     type: object
-  api.VersionResponse:
+  httpapi.VersionResponse:
     properties:
       version:
         example: dev
         type: string
     type: object
-  api.WeekdayHourBucketResponse:
+  httpapi.WeekdayHourBucketResponse:
     properties:
       amount:
         example: 249.5
@@ -1105,7 +1105,7 @@ definitions:
         example: 1
         type: integer
     type: object
-  api.WriterInfoResponse:
+  httpapi.WriterInfoResponse:
     properties:
       description:
         example: Store transactions in PostgreSQL
@@ -1141,11 +1141,11 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Handle reader OAuth callback
       tags:
       - Readers
@@ -1157,11 +1157,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.ActiveReaderResponse'
+            $ref: '#/definitions/httpapi.ActiveReaderResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get the active reader
       tags:
       - Config
@@ -1174,7 +1174,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/api.BankColorResponse'
+              $ref: '#/definitions/httpapi.BankColorResponse'
             type: array
       summary: List bank color mappings
       tags:
@@ -1188,16 +1188,16 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/api.BucketResponse'
+              $ref: '#/definitions/httpapi.BucketResponse'
             type: array
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: List buckets
       tags:
       - Taxonomy
@@ -1210,30 +1210,30 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.CreateBucketRequest'
+          $ref: '#/definitions/httpapi.CreateBucketRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/api.NameResponse'
+            $ref: '#/definitions/httpapi.NameResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Create a bucket
       tags:
       - Taxonomy
@@ -1256,23 +1256,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Delete a bucket
       tags:
       - Taxonomy
@@ -1297,19 +1297,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.RemovedCountResponse'
+            $ref: '#/definitions/httpapi.RemovedCountResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Remove a bucket by merchant pattern
       tags:
       - Taxonomy
@@ -1333,19 +1333,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.AppliedCountResponse'
+            $ref: '#/definitions/httpapi.AppliedCountResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Apply a bucket by merchant pattern
       tags:
       - Taxonomy
@@ -1358,16 +1358,16 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/api.TaxonomyExportRowResponse'
+              $ref: '#/definitions/httpapi.TaxonomyExportRowResponse'
             type: array
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Export buckets
       tags:
       - Taxonomy
@@ -1379,15 +1379,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.TaxonomyMappingsResponse'
+            $ref: '#/definitions/httpapi.TaxonomyMappingsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get bucket mappings
       tags:
       - Taxonomy
@@ -1400,16 +1400,16 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/api.CategoryResponse'
+              $ref: '#/definitions/httpapi.CategoryResponse'
             type: array
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: List categories
       tags:
       - Taxonomy
@@ -1422,30 +1422,30 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.CreateCategoryRequest'
+          $ref: '#/definitions/httpapi.CreateCategoryRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/api.NameResponse'
+            $ref: '#/definitions/httpapi.NameResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Create a category
       tags:
       - Taxonomy
@@ -1468,23 +1468,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Delete a category
       tags:
       - Taxonomy
@@ -1509,19 +1509,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.RemovedCountResponse'
+            $ref: '#/definitions/httpapi.RemovedCountResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Remove a category by merchant pattern
       tags:
       - Taxonomy
@@ -1545,19 +1545,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.AppliedCountResponse'
+            $ref: '#/definitions/httpapi.AppliedCountResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Apply a category by merchant pattern
       tags:
       - Taxonomy
@@ -1570,16 +1570,16 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/api.TaxonomyExportRowResponse'
+              $ref: '#/definitions/httpapi.TaxonomyExportRowResponse'
             type: array
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Export categories
       tags:
       - Taxonomy
@@ -1591,15 +1591,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.TaxonomyMappingsResponse'
+            $ref: '#/definitions/httpapi.TaxonomyMappingsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get category mappings
       tags:
       - Taxonomy
@@ -1612,16 +1612,16 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/api.LabelResponse'
+              $ref: '#/definitions/httpapi.LabelResponse'
             type: array
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: List labels
       tags:
       - Taxonomy
@@ -1634,30 +1634,30 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.CreateLabelRequest'
+          $ref: '#/definitions/httpapi.CreateLabelRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/api.LabelMutationResponse'
+            $ref: '#/definitions/httpapi.LabelMutationResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Create a label
       tags:
       - Taxonomy
@@ -1680,19 +1680,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Delete a label
       tags:
       - Taxonomy
@@ -1711,34 +1711,34 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.UpdateLabelRequest'
+          $ref: '#/definitions/httpapi.UpdateLabelRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.LabelMutationResponse'
+            $ref: '#/definitions/httpapi.LabelMutationResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Update a label
       tags:
       - Taxonomy
@@ -1763,19 +1763,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.RemovedCountResponse'
+            $ref: '#/definitions/httpapi.RemovedCountResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Remove a label by merchant pattern
       tags:
       - Taxonomy
@@ -1799,19 +1799,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.AppliedCountResponse'
+            $ref: '#/definitions/httpapi.AppliedCountResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Apply a label by merchant pattern
       tags:
       - Taxonomy
@@ -1824,16 +1824,16 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/api.LabelTaxonomyExportRowResponse'
+              $ref: '#/definitions/httpapi.LabelTaxonomyExportRowResponse'
             type: array
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Export labels
       tags:
       - Taxonomy
@@ -1845,15 +1845,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.LabelMappingsResponse'
+            $ref: '#/definitions/httpapi.LabelMappingsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get label mappings
       tags:
       - Taxonomy
@@ -1865,11 +1865,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.PreferencesResponse'
+            $ref: '#/definitions/httpapi.PreferencesResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get application preferences
       tags:
       - Config
@@ -1882,30 +1882,30 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.PreferencesPatchRequest'
+          $ref: '#/definitions/httpapi.PreferencesPatchRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.PreferencesResponse'
+            $ref: '#/definitions/httpapi.PreferencesResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Update application preferences
       tags:
       - Config
@@ -1927,11 +1927,11 @@ paths:
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Clear a reader checkpoint
       tags:
       - Config
@@ -1952,11 +1952,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.ReaderCheckpointResponse'
+            $ref: '#/definitions/httpapi.ReaderCheckpointResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get a reader checkpoint
       tags:
       - Config
@@ -1968,11 +1968,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.SetupStatusResponse'
+            $ref: '#/definitions/httpapi.SetupStatusResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get first-run setup status
       tags:
       - Config
@@ -1986,11 +1986,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.StatusOnlyResponse'
+            $ref: '#/definitions/httpapi.StatusOnlyResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Trigger community content sync
       tags:
       - Config
@@ -2002,15 +2002,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.SyncStatusResponse'
+            $ref: '#/definitions/httpapi.SyncStatusResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get community sync status
       tags:
       - Config
@@ -2024,26 +2024,26 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.DaemonReaderRequest'
+          $ref: '#/definitions/httpapi.DaemonReaderRequest'
       produces:
       - application/json
       responses:
         "202":
           description: Accepted
           schema:
-            $ref: '#/definitions/api.StatusOnlyResponse'
+            $ref: '#/definitions/httpapi.StatusOnlyResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "501":
           description: Not Implemented
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Trigger a full rescan
       tags:
       - Bootstrap
@@ -2057,26 +2057,26 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.DaemonReaderRequest'
+          $ref: '#/definitions/httpapi.DaemonReaderRequest'
       produces:
       - application/json
       responses:
         "202":
           description: Daemon starting
           schema:
-            $ref: '#/definitions/api.StatusOnlyResponse'
+            $ref: '#/definitions/httpapi.StatusOnlyResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "501":
           description: Not Implemented
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Start the daemon
       tags:
       - Bootstrap
@@ -2106,20 +2106,20 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/api.ExtractionDiagnosticResponse'
+              $ref: '#/definitions/httpapi.ExtractionDiagnosticResponse'
             type: array
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: List extraction diagnostics
       tags:
       - Extraction Diagnostics
@@ -2139,23 +2139,23 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.ExtractionDiagnosticResponse'
+            $ref: '#/definitions/httpapi.ExtractionDiagnosticResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get an extraction diagnostic
       tags:
       - Extraction Diagnostics
@@ -2175,38 +2175,38 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.ExtractionDiagnosticStatusRequest'
+          $ref: '#/definitions/httpapi.ExtractionDiagnosticStatusRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.ExtractionDiagnosticResponse'
+            $ref: '#/definitions/httpapi.ExtractionDiagnosticResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Update extraction diagnostic status
       tags:
       - Extraction Diagnostics
@@ -2218,7 +2218,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.HealthResponse'
+            $ref: '#/definitions/httpapi.HealthResponse'
       summary: Health check
       tags:
       - Bootstrap
@@ -2232,30 +2232,30 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.CategorizeMerchantRequest'
+          $ref: '#/definitions/httpapi.CategorizeMerchantRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.CategorizeMerchantResponse'
+            $ref: '#/definitions/httpapi.CategorizeMerchantResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Categorize all matching merchant transactions
       tags:
       - Transactions
@@ -2268,16 +2268,16 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/api.MutedMerchantResponse'
+              $ref: '#/definitions/httpapi.MutedMerchantResponse'
             type: array
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: List muted merchant patterns
       tags:
       - Transactions
@@ -2290,30 +2290,30 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.MuteMerchantRequest'
+          $ref: '#/definitions/httpapi.MuteMerchantRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/api.MuteMerchantResponse'
+            $ref: '#/definitions/httpapi.MuteMerchantResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Mute transactions by merchant pattern
       tags:
       - Transactions
@@ -2337,23 +2337,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Delete a muted merchant pattern
       tags:
       - Transactions
@@ -2373,34 +2373,34 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.MerchantReasonRequest'
+          $ref: '#/definitions/httpapi.MerchantReasonRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.MerchantReasonResponse'
+            $ref: '#/definitions/httpapi.MerchantReasonResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Update a muted merchant reason
       tags:
       - Transactions
@@ -2413,7 +2413,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/api.ReaderInfoResponse'
+              $ref: '#/definitions/httpapi.ReaderInfoResponse'
             type: array
       summary: List reader plugins
       tags:
@@ -2427,7 +2427,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/api.WriterInfoResponse'
+              $ref: '#/definitions/httpapi.WriterInfoResponse'
             type: array
       summary: List writer plugins
       tags:
@@ -2450,19 +2450,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.ReaderDisconnectResponse'
+            $ref: '#/definitions/httpapi.ReaderDisconnectResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Disconnect a reader
       tags:
       - Readers
@@ -2482,26 +2482,26 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.AuthExchangeRequest'
+          $ref: '#/definitions/httpapi.AuthExchangeRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.AuthExchangeResponse'
+            $ref: '#/definitions/httpapi.AuthExchangeResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Exchange a pasted reader OAuth callback URL
       tags:
       - Readers
@@ -2520,27 +2520,27 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.AuthStartResponse'
+            $ref: '#/definitions/httpapi.AuthStartResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "412":
           description: Precondition Failed
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Start reader OAuth authorization
       tags:
       - Readers
@@ -2559,15 +2559,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.AuthStatusResponse'
+            $ref: '#/definitions/httpapi.AuthStatusResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get reader auth status
       tags:
       - Readers
@@ -2586,19 +2586,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.ReaderTokenRevokeResponse'
+            $ref: '#/definitions/httpapi.ReaderTokenRevokeResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Revoke a reader OAuth token
       tags:
       - Readers
@@ -2617,15 +2617,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.ReaderConfigResponse'
+            $ref: '#/definitions/httpapi.ReaderConfigResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get reader runtime config
       tags:
       - Readers
@@ -2644,30 +2644,30 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.ReaderConfigRequest'
+          $ref: '#/definitions/httpapi.ReaderConfigRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.ReaderConfigSaveResponse'
+            $ref: '#/definitions/httpapi.ReaderConfigSaveResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Save reader runtime config
       tags:
       - Readers
@@ -2694,31 +2694,31 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.UploadCredentialsResponse'
+            $ref: '#/definitions/httpapi.UploadCredentialsResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "413":
           description: Request Entity Too Large
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Upload reader OAuth credentials
       tags:
       - Readers
@@ -2737,15 +2737,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.CredentialsStatusResponse'
+            $ref: '#/definitions/httpapi.CredentialsStatusResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get reader credentials status
       tags:
       - Readers
@@ -2764,11 +2764,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.ReaderGuideResponse'
+            $ref: '#/definitions/httpapi.ReaderGuideResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get reader setup guide
       tags:
       - Readers
@@ -2787,11 +2787,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.ReaderStatusResponse'
+            $ref: '#/definitions/httpapi.ReaderStatusResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get reader readiness status
       tags:
       - Readers
@@ -2809,19 +2809,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.ThunderbirdMailboxesResponse'
+            $ref: '#/definitions/httpapi.ThunderbirdMailboxesResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Discover Thunderbird mailboxes
       tags:
       - Readers
@@ -2833,7 +2833,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.ThunderbirdProfilesResponse'
+            $ref: '#/definitions/httpapi.ThunderbirdProfilesResponse'
       summary: Discover Thunderbird profiles
       tags:
       - Readers
@@ -2848,16 +2848,16 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/api.RuleResponse'
+              $ref: '#/definitions/httpapi.RuleResponse'
             type: array
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: List rules
       tags:
       - Rules
@@ -2870,34 +2870,34 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.RuleMutationRequest'
+          $ref: '#/definitions/httpapi.RuleMutationRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/api.RuleResponse'
+            $ref: '#/definitions/httpapi.RuleResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Create a rule
       tags:
       - Rules
@@ -2919,23 +2919,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Delete a rule
       tags:
       - Rules
@@ -2955,38 +2955,38 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.RuleMutationRequest'
+          $ref: '#/definitions/httpapi.RuleMutationRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.RuleResponse'
+            $ref: '#/definitions/httpapi.RuleResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Update a rule
       tags:
       - Rules
@@ -3000,15 +3000,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.RuleDocumentResponse'
+            $ref: '#/definitions/httpapi.RuleDocumentResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Export rules
       tags:
       - Rules
@@ -3022,30 +3022,30 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.RuleDocumentResponse'
+          $ref: '#/definitions/httpapi.RuleDocumentResponse'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.RuleImportResponse'
+            $ref: '#/definitions/httpapi.RuleImportResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Import rules
       tags:
       - Rules
@@ -3057,15 +3057,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.ChartDataResponse'
+            $ref: '#/definitions/httpapi.ChartDataResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get chart data
       tags:
       - Stats
@@ -3077,15 +3077,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.DashboardDataResponse'
+            $ref: '#/definitions/httpapi.DashboardDataResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get dashboard data
       tags:
       - Stats
@@ -3113,19 +3113,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.HeatmapResponse'
+            $ref: '#/definitions/httpapi.HeatmapResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get spending heatmap
       tags:
       - Stats
@@ -3147,19 +3147,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.MonthlyBreakdownResponse'
+            $ref: '#/definitions/httpapi.MonthlyBreakdownResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get label monthly spend
       tags:
       - Stats
@@ -3171,7 +3171,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.StatusResponse'
+            $ref: '#/definitions/httpapi.StatusResponse'
       summary: Get daemon and stats status
       tags:
       - Bootstrap
@@ -3342,23 +3342,23 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.TransactionsListResponse'
+            $ref: '#/definitions/httpapi.TransactionsListResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: List transactions
       tags:
       - Transactions
@@ -3378,23 +3378,23 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.TransactionResponse'
+            $ref: '#/definitions/httpapi.TransactionResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get a transaction
       tags:
       - Transactions
@@ -3414,34 +3414,34 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.TransactionUpdateRequest'
+          $ref: '#/definitions/httpapi.TransactionUpdateRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.TransactionResponse'
+            $ref: '#/definitions/httpapi.TransactionResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Update a transaction
       tags:
       - Transactions
@@ -3462,30 +3462,30 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/api.TransactionLabelsRequest'
+          $ref: '#/definitions/httpapi.TransactionLabelsRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.StatusOnlyResponse'
+            $ref: '#/definitions/httpapi.StatusOnlyResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/api.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Add labels to a transaction
       tags:
       - Transactions
@@ -3511,23 +3511,23 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.StatusOnlyResponse'
+            $ref: '#/definitions/httpapi.StatusOnlyResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Remove a label from a transaction
       tags:
       - Transactions
@@ -3539,15 +3539,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.FacetsResponse'
+            $ref: '#/definitions/httpapi.FacetsResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.ErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get transaction facets
       tags:
       - Transactions
@@ -3559,7 +3559,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.VersionResponse'
+            $ref: '#/definitions/httpapi.VersionResponse'
       summary: Get backend version
       tags:
       - Bootstrap

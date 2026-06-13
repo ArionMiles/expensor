@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -18,10 +19,10 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace/noop"
 
+	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
-	"github.com/ArionMiles/expensor/backend/pkg/observability"
 )
 
 // mockReader implements api.Reader for testing.
@@ -645,10 +646,9 @@ func TestRunnerWriterErrorDeadlock(t *testing.T) {
 	// Safety net: cancel context after 3s to prevent the goroutine hanging forever.
 	time.AfterFunc(3*time.Second, cancel)
 
-	done := make(chan struct{})
+	result := make(chan error, 1)
 	go func() {
-		runner.Run(ctx, runCfg) //nolint:errcheck
-		close(done)
+		result <- runner.Run(ctx, runCfg)
 	}()
 
 	// With errgroup the runner cancels the reader's context as soon as the writer
@@ -656,8 +656,10 @@ func TestRunnerWriterErrorDeadlock(t *testing.T) {
 	// for the reader which is blocked on a full channel until the 3s safety cancel
 	// fires — missing this deadline.
 	select {
-	case <-done:
-		// Run returned quickly — no deadlock.
+	case err := <-result:
+		if err == nil || !strings.Contains(err.Error(), "writer failed after 5 transactions") {
+			t.Fatalf("Run returned unexpected error: %v", err)
+		}
 	case <-time.After(1 * time.Second):
 		t.Fatal("Run did not return: deadlock suspected")
 	}

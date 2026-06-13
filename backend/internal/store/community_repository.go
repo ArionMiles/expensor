@@ -50,7 +50,7 @@ func (r *pgCommunityRepository) GetBucketMappings(ctx context.Context) (map[stri
 	return r.getTaxonomyMappings(ctx, "bucket")
 }
 
-func (r *pgCommunityRepository) CategorizeMerchant(ctx context.Context, merchant, category, bucket string) (int, error) {
+func (r *pgCommunityRepository) CategorizeMerchant(ctx context.Context, merchant, category, bucket string) (int64, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("beginning categorize-merchant transaction: %w", err)
@@ -66,7 +66,7 @@ func (r *pgCommunityRepository) CategorizeMerchant(ctx context.Context, merchant
 	if err != nil {
 		return 0, fmt.Errorf("updating transactions for merchant %q: %w", merchant, err)
 	}
-	rowsUpdated := int(tag.RowsAffected())
+	rowsUpdated := tag.RowsAffected()
 
 	_, err = tx.Exec(ctx,
 		`INSERT INTO merchant_categories (fragment, category, bucket, user_locked)
@@ -190,8 +190,8 @@ func (r *pgCommunityRepository) SeedMCCCodes(ctx context.Context, entries []MCCE
 	return nil
 }
 
-func (r *pgCommunityRepository) SeedMerchantCategories(ctx context.Context, entries []MerchantCategoryEntry) (int, error) {
-	updated := 0
+func (r *pgCommunityRepository) SeedMerchantCategories(ctx context.Context, entries []MerchantCategoryEntry) (int64, error) {
+	var updated int64
 	for _, entry := range entries {
 		tag, err := r.pool.Exec(ctx, `
 			INSERT INTO merchant_categories (fragment, mcc_code, category, bucket, source)
@@ -206,7 +206,7 @@ func (r *pgCommunityRepository) SeedMerchantCategories(ctx context.Context, entr
 		if err != nil {
 			return 0, fmt.Errorf("upserting merchant category %s: %w", entry.Fragment, err)
 		}
-		updated += int(tag.RowsAffected())
+		updated += tag.RowsAffected()
 	}
 	return updated, nil
 }
