@@ -8,10 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/ArionMiles/expensor/backend/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
@@ -54,14 +56,30 @@ func TestMain(m *testing.M) {
 		SSLMode:  "disable",
 	}
 
+	pool, err := pgxpool.New(ctx, fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		testDB.Host, testDB.Port, testDB.User, testDB.Password, testDB.Database, testDB.SSLMode,
+	))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to connect for migrations: %v\n", err)
+		_ = ctr.Terminate(ctx)
+		os.Exit(1)
+	}
+	if err := migrations.Run(ctx, pool, slog.Default()); err != nil {
+		pool.Close()
+		fmt.Fprintf(os.Stderr, "failed to run migrations: %v\n", err)
+		_ = ctr.Terminate(ctx)
+		os.Exit(1)
+	}
+	pool.Close()
+
 	code := m.Run()
 
 	_ = ctr.Terminate(ctx)
 	os.Exit(code)
 }
 
-// newTestWriter creates a writer using the shared test container.
-// Each call creates a fresh Writer (and re-runs idempotent migrations).
+// newTestWriter creates a writer using the migrated shared test database.
 func newTestWriter(t *testing.T, overrides Config) *Writer {
 	t.Helper()
 	if testing.Short() || testDB == nil {

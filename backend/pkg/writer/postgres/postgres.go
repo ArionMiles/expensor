@@ -14,20 +14,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/ArionMiles/expensor/backend/internal/observability"
-	"github.com/ArionMiles/expensor/backend/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
-
-// RunMigrations applies all numbered SQL migrations from the embedded migrations
-// directory. Exported so integration tests can bootstrap a schema without
-// importing the full Writer.
-func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
-	return migrations.Run(ctx, pool, log)
-}
-
-// log is a package-level logger used only for RunMigrations bootstrap calls
-// (e.g. from tests). The Writer itself uses the logger injected via New.
-var log = slog.Default()
 
 // Config holds the PostgreSQL writer configuration.
 type Config struct {
@@ -130,23 +118,7 @@ func New(cfg Config, logger *slog.Logger) (*Writer, error) {
 		scope:         observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/pkg/writer/postgres"),
 	}
 
-	// Run migrations
-	if err := w.runMigrations(context.Background()); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("running migrations: %w", err)
-	}
-
 	return w, nil
-}
-
-// runMigrations applies all pending numbered SQL migrations.
-func (w *Writer) runMigrations(ctx context.Context) error {
-	w.logger.Info("running database migrations")
-	if err := migrations.Run(ctx, w.pool, w.logger); err != nil {
-		return fmt.Errorf("running migrations: %w", err)
-	}
-	w.logger.Info("migrations completed successfully")
-	return nil
 }
 
 // flushBatch writes the current batch to PostgreSQL and sends acknowledgments.

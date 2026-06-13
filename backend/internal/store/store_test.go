@@ -23,7 +23,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
-	pgwriter "github.com/ArionMiles/expensor/backend/pkg/writer/postgres"
 )
 
 // testStore holds a live *store.Store and the container DSN for teardown.
@@ -74,7 +73,7 @@ func newTestStoreWithLogger(t *testing.T, logs *bytes.Buffer) *testStore {
 		_ = ctr.Terminate(ctx)
 		t.Fatalf("failed to connect for migration: %v", err)
 	}
-	if err := pgwriter.RunMigrations(ctx, pool); err != nil {
+	if err := migrations.Run(ctx, pool, slog.Default()); err != nil {
 		pool.Close()
 		_ = ctr.Terminate(ctx)
 		t.Fatalf("migration failed: %v", err)
