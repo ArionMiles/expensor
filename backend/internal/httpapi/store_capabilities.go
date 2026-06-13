@@ -40,7 +40,7 @@ type muteStore interface {
 	GetMutedMerchantsWithCount(ctx context.Context) ([]store.MutedMerchantWithCount, error)
 	DeleteMutedMerchant(ctx context.Context, id string) error
 	DeleteMutedMerchantAndUnmute(ctx context.Context, id string) error
-	CategorizeMerchant(ctx context.Context, merchant, category, bucket string) (int, error)
+	CategorizeMerchant(ctx context.Context, merchant, category, bucket string) (int64, error)
 }
 
 type taxonomyStore interface {

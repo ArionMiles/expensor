@@ -104,7 +104,7 @@ type mockStore struct {
 	annualErr             error
 	monthlyBreakdown      *store.MonthlyBreakdownData
 	monthlyBreakdownErr   error
-	categorizeMerchantN   int
+	categorizeMerchantN   int64
 	diagnostics           []store.ExtractionDiagnosticRow
 	diagnosticFilter      store.DiagnosticFilter
 	diagnosticResult      *store.ExtractionDiagnosticRow
@@ -502,7 +502,7 @@ func (m *mockStore) GetMutedMerchantsWithCount(_ context.Context) ([]store.Muted
 }
 func (m *mockStore) DeleteMutedMerchant(_ context.Context, _ string) error          { return nil }
 func (m *mockStore) DeleteMutedMerchantAndUnmute(_ context.Context, _ string) error { return nil }
-func (m *mockStore) CategorizeMerchant(_ context.Context, _, _, _ string) (int, error) {
+func (m *mockStore) CategorizeMerchant(_ context.Context, _, _, _ string) (int64, error) {
 	if m.categorizeMerchantN != 0 {
 		return m.categorizeMerchantN, m.updateErr
 	}

@@ -442,7 +442,7 @@ type ReaderCheckpointResponse struct {
 type SyncStatusResponse struct {
 	LastSyncedAt   *time.Time `json:"last_synced_at,omitempty" extensions:"x-nullable"`
 	Error          *string    `json:"error,omitempty" extensions:"x-nullable"`
-	EntriesUpdated int        `json:"entries_updated"`
+	EntriesUpdated int64      `json:"entries_updated"`
 }
 
 // LabelResponse documents a managed label.
@@ -666,5 +666,5 @@ type CategorizeMerchantRequest struct {
 
 // CategorizeMerchantResponse is the merchant-wide categorization response payload.
 type CategorizeMerchantResponse struct {
-	Updated int `json:"updated"`
+	Updated int64 `json:"updated"`
 }

@@ -32,6 +32,8 @@ Use Go generics when they improve compile-time type safety or remove meaningful 
 
 Prefer standard-library constants and helpers over manually derived equivalents. For example, use `math.MaxInt` instead of calculating the platform maximum integer with bit operations.
 
+Prefer carrying a dependency's native type through configuration and internal APIs when it represents the same domain value. Convert only at genuine representation or unit boundaries; avoid repeated narrowing casts and lint suppressions.
+
 Avoid long constructor signatures. Use a small input/deps struct once a constructor exceeds 4-5 parameters.
 
 `internal/plugins.Registry` is a catalog, not an application assembler. Daemon/runtime wiring belongs outside the registry.

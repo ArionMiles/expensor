@@ -16,7 +16,7 @@ import (
 
 type communitySyncStore interface {
 	SeedMCCCodes(ctx context.Context, entries []store.MCCEntry) error
-	SeedMerchantCategories(ctx context.Context, entries []store.MerchantCategoryEntry) (int, error)
+	SeedMerchantCategories(ctx context.Context, entries []store.MerchantCategoryEntry) (int64, error)
 	SetSyncStatus(ctx context.Context, status store.SyncStatus) error
 }
 

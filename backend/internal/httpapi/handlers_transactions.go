@@ -460,7 +460,7 @@ func (h *Handlers) CategorizeMerchant(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to categorize merchant")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]int{"updated": n})
+	writeJSON(w, http.StatusOK, CategorizeMerchantResponse{Updated: n})
 }
 
 // GetFacets handles GET /api/transactions/facets.
