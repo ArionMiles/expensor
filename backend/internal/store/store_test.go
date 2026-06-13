@@ -117,32 +117,15 @@ func newTestStoreWithLogger(t *testing.T, logs *bytes.Buffer) *testStore {
 	}
 }
 
-// seedTransaction inserts one transaction directly via pgxpool and returns its UUID.
-func seedTransaction(t *testing.T, ctx context.Context, st *store.Store, msg string, amount float64, currency, merchant, category string) string { //nolint:revive // test helper requires many params to cover all fixture dimensions
+// seedTransaction inserts one transaction and returns its UUID.
+func seedTransaction(ctx context.Context, t *testing.T, st *store.Store, params store.InsertParams) string {
 	t.Helper()
-	// We use the store's exported pool indirectly by going through a helper writer query.
-	// Instead, expose a small seed helper in the test package using a raw pgx query.
-	// Since store.Store wraps a pgxpool that we cannot access, we use the ListTransactions
-	// round-trip pattern: insert via the postgres writer package.
-	// For simplicity in tests, we insert directly via a separate pool.
-	return seedTxn(t, ctx, st, msg, amount, currency, merchant, category, "")
-}
-
-// seedTxn uses a hack-free approach: it calls the store's internal pool via a
-// package-level helper exposed only in tests (see seed_test.go).
-func seedTxn(t *testing.T, ctx context.Context, st *store.Store, msgID string, amount float64, currency, merchant, category, description string) string { //nolint:revive // test helper requires many params to cover all fixture dimensions
-	t.Helper()
-	id, err := st.InsertForTest(ctx, store.InsertParams{
-		MessageID:    msgID,
-		Amount:       amount,
-		Currency:     currency,
-		MerchantInfo: merchant,
-		Category:     category,
-		Description:  description,
-		Timestamp:    time.Now(),
-	})
+	if params.Timestamp.IsZero() {
+		params.Timestamp = time.Now()
+	}
+	id, err := st.InsertForTest(ctx, params)
 	if err != nil {
-		t.Fatalf("seedTxn: %v", err)
+		t.Fatalf("seedTransaction: %v", err)
 	}
 	return id
 }
@@ -604,7 +587,13 @@ func TestListTransactions_Pagination(t *testing.T) {
 	ctx := context.Background()
 
 	for i := range 5 {
-		seedTransaction(t, ctx, ts.Store, fmt.Sprintf("msg-%d", i), float64(100*(i+1)), "INR", fmt.Sprintf("Merchant%d", i), "Food")
+		seedTransaction(ctx, t, ts.Store, store.InsertParams{
+			MessageID:    fmt.Sprintf("msg-%d", i),
+			Amount:       float64(100 * (i + 1)),
+			Currency:     "INR",
+			MerchantInfo: fmt.Sprintf("Merchant%d", i),
+			Category:     "Food",
+		})
 	}
 
 	// Page 1, size 2.
@@ -646,8 +635,13 @@ func TestListTransactions_FilterByCategory(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	seedTransaction(t, ctx, ts.Store, "food-1", 100, "INR", "Zomato", "Food")
-	seedTransaction(t, ctx, ts.Store, "travel-1", 500, "INR", "Uber", "Travel")
+	seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "food-1", Amount: 100, Currency: "INR", MerchantInfo: "Zomato", Category: "Food",
+	})
+
+	seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "travel-1", Amount: 500, Currency: "INR", MerchantInfo: "Uber", Category: "Travel",
+	})
 
 	txns, result, err := ts.ListTransactions(
 		ctx,
@@ -769,8 +763,13 @@ func TestListTransactions_FilterByCurrency(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	seedTransaction(t, ctx, ts.Store, "inr-1", 100, "INR", "Amazon IN", "Shopping")
-	seedTransaction(t, ctx, ts.Store, "usd-1", 20, "USD", "Amazon US", "Shopping")
+	seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "inr-1", Amount: 100, Currency: "INR", MerchantInfo: "Amazon IN", Category: "Shopping",
+	})
+
+	seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "usd-1", Amount: 20, Currency: "USD", MerchantInfo: "Amazon US", Category: "Shopping",
+	})
 
 	txns, result, err := ts.ListTransactions(ctx, store.ListFilter{Currency: "USD", PageSize: 10})
 	if err != nil {
@@ -786,8 +785,13 @@ func TestListTransactions_FilterByLabel(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	id := seedTransaction(t, ctx, ts.Store, "lbl-1", 200, "INR", "Netflix", "Entertainment")
-	seedTransaction(t, ctx, ts.Store, "nolbl-1", 100, "INR", "Spotify", "Entertainment")
+	id := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "lbl-1", Amount: 200, Currency: "INR", MerchantInfo: "Netflix", Category: "Entertainment",
+	})
+
+	seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "nolbl-1", Amount: 100, Currency: "INR", MerchantInfo: "Spotify", Category: "Entertainment",
+	})
 
 	// Add label to first transaction.
 	if err := ts.AddLabel(ctx, id, "subscription"); err != nil {
@@ -808,9 +812,17 @@ func TestListTransactions_ExcludeCategoriesAndLabels(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	foodID := seedTransaction(t, ctx, ts.Store, "misc-food", 100, "INR", "Zomato", "Food")
-	travelID := seedTransaction(t, ctx, ts.Store, "misc-travel", 200, "INR", "Uber", "Travel")
-	booksID := seedTransaction(t, ctx, ts.Store, "misc-books", 300, "INR", "Bookshop", "Books")
+	foodID := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "misc-food", Amount: 100, Currency: "INR", MerchantInfo: "Zomato", Category: "Food",
+	})
+
+	travelID := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "misc-travel", Amount: 200, Currency: "INR", MerchantInfo: "Uber", Category: "Travel",
+	})
+
+	booksID := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "misc-books", Amount: 300, Currency: "INR", MerchantInfo: "Bookshop", Category: "Books",
+	})
 
 	if err := ts.AddLabel(ctx, foodID, "top"); err != nil {
 		t.Fatalf("AddLabel food: %v", err)
@@ -850,7 +862,14 @@ func TestGetTransaction_Found(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	id := seedTxn(t, ctx, ts.Store, "get-1", 999, "INR", "Apple Store", "Tech", "iPad Pro")
+	id := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID:    "get-1",
+		Amount:       999,
+		Currency:     "INR",
+		MerchantInfo: "Apple Store",
+		Category:     "Tech",
+		Description:  "iPad Pro",
+	})
 
 	txn, err := ts.GetTransaction(ctx, id)
 	if err != nil {
@@ -883,7 +902,9 @@ func TestUpdateDescription(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	id := seedTransaction(t, ctx, ts.Store, "upd-1", 50, "INR", "Swiggy", "Food")
+	id := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "upd-1", Amount: 50, Currency: "INR", MerchantInfo: "Swiggy", Category: "Food",
+	})
 
 	if err := ts.UpdateDescription(ctx, id, "Lunch with team"); err != nil {
 		t.Fatalf("UpdateDescription: %v", err)
@@ -914,7 +935,9 @@ func TestAddLabel_Idempotent(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	id := seedTransaction(t, ctx, ts.Store, "addlbl-1", 300, "INR", "BookMyShow", "Entertainment")
+	id := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "addlbl-1", Amount: 300, Currency: "INR", MerchantInfo: "BookMyShow", Category: "Entertainment",
+	})
 
 	// Add same label twice — should not error.
 	if err := ts.AddLabel(ctx, id, "leisure"); err != nil {
@@ -935,7 +958,10 @@ func TestRemoveLabel(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	id := seedTransaction(t, ctx, ts.Store, "rmlbl-1", 250, "INR", "Myntra", "Shopping")
+	id := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "rmlbl-1", Amount: 250, Currency: "INR", MerchantInfo: "Myntra", Category: "Shopping",
+	})
+
 	_ = ts.AddLabel(ctx, id, "clothing")
 
 	if err := ts.RemoveLabel(ctx, id, "clothing"); err != nil {
@@ -953,7 +979,10 @@ func TestRemoveLabel_NotFound(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	id := seedTransaction(t, ctx, ts.Store, "rmlbl-nf", 100, "INR", "Store", "Misc")
+	id := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "rmlbl-nf", Amount: 100, Currency: "INR", MerchantInfo: "Store", Category: "Misc",
+	})
+
 	err := ts.RemoveLabel(ctx, id, "nonexistent")
 	if err == nil {
 		t.Fatal("expected ErrNotFound, got nil")
@@ -996,7 +1025,9 @@ func TestRemoveLabelByMerchant_RemovesMappingAndBackfilledLabels(t *testing.T) {
 		t.Fatalf("CreateLabel: %v", err)
 	}
 
-	id := seedTransaction(t, ctx, ts.Store, "lbl-merchant-1", 200, "INR", "Netflix", "Entertainment")
+	id := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "lbl-merchant-1", Amount: 200, Currency: "INR", MerchantInfo: "Netflix", Category: "Entertainment",
+	})
 
 	affected, err := ts.ApplyLabelByMerchant(ctx, "subscription", "Netflix")
 	if err != nil {
@@ -1048,7 +1079,9 @@ func TestRemoveLabelByMerchant_PreservesManualLabelSources(t *testing.T) {
 		t.Fatalf("CreateLabel: %v", err)
 	}
 
-	id := seedTransaction(t, ctx, ts.Store, "lbl-manual-merchant-1", 200, "INR", "Netflix", "Entertainment")
+	id := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "lbl-manual-merchant-1", Amount: 200, Currency: "INR", MerchantInfo: "Netflix", Category: "Entertainment",
+	})
 
 	if err := ts.AddLabel(ctx, id, "subscription"); err != nil {
 		t.Fatalf("AddLabel: %v", err)
@@ -1096,7 +1129,9 @@ func TestRemoveLabelByMerchant_PreservesOtherMerchantSources(t *testing.T) {
 		t.Fatalf("CreateLabel: %v", err)
 	}
 
-	id := seedTransaction(t, ctx, ts.Store, "lbl-overlap-merchant-1", 350, "INR", "Uber Eats Pass", "Entertainment")
+	id := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "lbl-overlap-merchant-1", Amount: 350, Currency: "INR", MerchantInfo: "Uber Eats Pass", Category: "Entertainment",
+	})
 
 	if affected, err := ts.ApplyLabelByMerchant(ctx, "delivery", "Uber"); err != nil {
 		t.Fatalf("ApplyLabelByMerchant Uber: %v", err)
@@ -1140,8 +1175,13 @@ func TestSearchTransactions(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	seedTransaction(t, ctx, ts.Store, "srch-1", 150, "INR", "Starbucks Coffee", "Food")
-	seedTransaction(t, ctx, ts.Store, "srch-2", 200, "INR", "Pizza Hut", "Food")
+	seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "srch-1", Amount: 150, Currency: "INR", MerchantInfo: "Starbucks Coffee", Category: "Food",
+	})
+
+	seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "srch-2", Amount: 200, Currency: "INR", MerchantInfo: "Pizza Hut", Category: "Food",
+	})
 
 	txns, result, err := ts.SearchTransactions(
 		ctx,
@@ -1276,8 +1316,13 @@ func TestSearchTransactions_EmptyQuery(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	seedTransaction(t, ctx, ts.Store, "srch-all-1", 100, "INR", "Any Shop", "Misc")
-	seedTransaction(t, ctx, ts.Store, "srch-all-2", 200, "INR", "Another Shop", "Misc")
+	seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "srch-all-1", Amount: 100, Currency: "INR", MerchantInfo: "Any Shop", Category: "Misc",
+	})
+
+	seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "srch-all-2", Amount: 200, Currency: "INR", MerchantInfo: "Another Shop", Category: "Misc",
+	})
 
 	// Empty query should return all.
 	_, result, err := ts.SearchTransactions(ctx, "", store.ListFilter{PageSize: 10})
@@ -1294,7 +1339,9 @@ func TestSearchTransactions_SpecialCharactersDoNotError(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	seedTransaction(t, ctx, ts.Store, "srch-special-1", 100, "INR", "Cafe Delight", "Food")
+	seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "srch-special-1", Amount: 100, Currency: "INR", MerchantInfo: "Cafe Delight", Category: "Food",
+	})
 
 	_, _, err := ts.SearchTransactions(ctx, "í)", store.ListFilter{PageSize: 10})
 	if err != nil {
@@ -1307,7 +1354,14 @@ func TestSearchTransactions_SubstringMerchantMatch(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	seedTxn(t, ctx, ts.Store, "srch-substring-1", 250, "INR", "Swiggy Instamart", "Food", "groceries")
+	seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID:    "srch-substring-1",
+		Amount:       250,
+		Currency:     "INR",
+		MerchantInfo: "Swiggy Instamart",
+		Category:     "Food",
+		Description:  "groceries",
+	})
 
 	rows, _, err := ts.SearchTransactions(ctx, "insta", store.ListFilter{Page: 1, PageSize: 20})
 	if err != nil {
@@ -1323,7 +1377,14 @@ func TestSearchTransactions_WebStyleQuery(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	seedTxn(t, ctx, ts.Store, "srch-web-1", 1499, "INR", "Amazon Pay", "Shopping", "prime membership")
+	seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID:    "srch-web-1",
+		Amount:       1499,
+		Currency:     "INR",
+		MerchantInfo: "Amazon Pay",
+		Category:     "Shopping",
+		Description:  "prime membership",
+	})
 
 	rows, _, err := ts.SearchTransactions(ctx, "amazon prime", store.ListFilter{Page: 1, PageSize: 20})
 	if err != nil {
@@ -1339,9 +1400,19 @@ func TestGetStats(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	seedTransaction(t, ctx, ts.Store, "stats-1", 100, "INR", "M1", "Food")
-	seedTransaction(t, ctx, ts.Store, "stats-2", 200, "INR", "M2", "Food")
-	seedTransaction(t, ctx, ts.Store, "stats-3", 50, "USD", "M3", "Other") // excluded from INR total
+	seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "stats-1", Amount: 100, Currency: "INR", MerchantInfo: "M1", Category: "Food",
+	})
+
+	seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "stats-2", Amount: 200, Currency: "INR", MerchantInfo: "M2", Category: "Food",
+	})
+
+	seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "stats-3", Amount: 50, Currency: "USD", MerchantInfo: "M3", Category: "Other",
+	})
+
+	// excluded from INR total
 
 	stats, err := ts.GetStats(ctx, "INR")
 	if err != nil {
@@ -1946,8 +2017,13 @@ func TestGetFacets_IncludesLabelCounts(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	id1 := seedTransaction(t, ctx, ts.Store, "facet-label-count-1", 100, "INR", "Merchant A", "Food")
-	id2 := seedTransaction(t, ctx, ts.Store, "facet-label-count-2", 200, "INR", "Merchant B", "Food")
+	id1 := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "facet-label-count-1", Amount: 100, Currency: "INR", MerchantInfo: "Merchant A", Category: "Food",
+	})
+
+	id2 := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "facet-label-count-2", Amount: 200, Currency: "INR", MerchantInfo: "Merchant B", Category: "Food",
+	})
 
 	if err := ts.AddLabels(ctx, id1, []string{"counted-label"}); err != nil {
 		t.Fatalf("AddLabels id1: %v", err)
@@ -2231,10 +2307,21 @@ func TestCategorizeMerchant(t *testing.T) {
 	ctx := context.Background()
 
 	// Seed 3 Netflix transactions, 1 from a different merchant.
-	id1 := seedTransaction(t, ctx, ts.Store, "msg-cat-1", 500, "INR", "Netflix", "")
-	id2 := seedTransaction(t, ctx, ts.Store, "msg-cat-2", 500, "INR", "Netflix", "Shopping")
-	id3 := seedTransaction(t, ctx, ts.Store, "msg-cat-3", 500, "INR", "Netflix", "")
-	_ = seedTransaction(t, ctx, ts.Store, "msg-cat-4", 200, "INR", "Spotify", "")
+	id1 := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "msg-cat-1", Amount: 500, Currency: "INR", MerchantInfo: "Netflix",
+	})
+
+	id2 := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "msg-cat-2", Amount: 500, Currency: "INR", MerchantInfo: "Netflix", Category: "Shopping",
+	})
+
+	id3 := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "msg-cat-3", Amount: 500, Currency: "INR", MerchantInfo: "Netflix",
+	})
+
+	_ = seedTransaction(ctx, t, ts.Store, store.InsertParams{
+		MessageID: "msg-cat-4", Amount: 200, Currency: "INR", MerchantInfo: "Spotify",
+	})
 
 	n, err := ts.CategorizeMerchant(ctx, "Netflix", "Entertainment", "Wants")
 	if err != nil {

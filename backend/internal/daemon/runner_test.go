@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -645,10 +646,9 @@ func TestRunnerWriterErrorDeadlock(t *testing.T) {
 	// Safety net: cancel context after 3s to prevent the goroutine hanging forever.
 	time.AfterFunc(3*time.Second, cancel)
 
-	done := make(chan struct{})
+	result := make(chan error, 1)
 	go func() {
-		runner.Run(ctx, runCfg) //nolint:errcheck
-		close(done)
+		result <- runner.Run(ctx, runCfg)
 	}()
 
 	// With errgroup the runner cancels the reader's context as soon as the writer
@@ -656,8 +656,10 @@ func TestRunnerWriterErrorDeadlock(t *testing.T) {
 	// for the reader which is blocked on a full channel until the 3s safety cancel
 	// fires — missing this deadline.
 	select {
-	case <-done:
-		// Run returned quickly — no deadlock.
+	case err := <-result:
+		if err == nil || !strings.Contains(err.Error(), "writer failed after 5 transactions") {
+			t.Fatalf("Run returned unexpected error: %v", err)
+		}
 	case <-time.After(1 * time.Second):
 		t.Fatal("Run did not return: deadlock suspected")
 	}

@@ -91,6 +91,14 @@ type daemonCoordinator struct {
 	logger        *slog.Logger
 }
 
+type daemonRun struct {
+	readerName    string
+	cfg           config.App
+	compiledRules []api.Rule
+	resolver      api.CategoryResolver
+	forceRescan   bool
+}
+
 // launch builds runtime config and merged rules then spawns runDaemon in a goroutine.
 // Must be called with c.mu held.
 func (c *daemonCoordinator) launch(readerName string, forceRescan bool) {
@@ -119,9 +127,16 @@ func (c *daemonCoordinator) launch(readerName string, forceRescan bool) {
 	}
 
 	merged := rules.MergeRules(c.systemRules, loadUserRules(c.ctx, c.st, c.logger))
+	run := daemonRun{
+		readerName:    readerName,
+		cfg:           runtimeCfg,
+		compiledRules: merged,
+		resolver:      c.resolver,
+		forceRescan:   forceRescan,
+	}
 	go func() {
 		defer cancel()
-		runDaemon(runCtx, c.registry, readerName, runtimeCfg, merged, c.resolver, c.diagnostics, c.runtimeStore, c.dm, c.logger, forceRescan)
+		c.runDaemon(runCtx, run)
 	}()
 }
 
@@ -253,87 +268,78 @@ func (c *daemonCoordinator) refreshResolver(ctx context.Context) {
 }
 
 // runDaemon builds the OAuth client and daemon runner, then blocks until ctx is done.
-func runDaemon( //nolint:revive // all parameters are required; splitting further would obscure the call site
+func (c *daemonCoordinator) runDaemon(
 	ctx context.Context,
-	registry *plugins.Registry,
-	readerName string,
-	cfg config.App,
-	compiledRules []api.Rule,
-	resolver api.CategoryResolver,
-	diagnosticSink api.DiagnosticSink,
-	runtimeStore daemonRuntimeStore,
-	dm *daemonManager,
-	logger *slog.Logger,
-	forceRescan bool,
+	run daemonRun,
 ) {
 	const writerName = "postgres"
-	logger.Debug("runDaemon starting", "reader", readerName, "writer", writerName)
+	c.logger.Debug("runDaemon starting", "reader", run.readerName, "writer", writerName)
 
-	scopes, err := registry.GetAllScopes(readerName, writerName)
+	scopes, err := c.registry.GetAllScopes(run.readerName, writerName)
 	if err != nil {
-		logger.Error("failed to resolve OAuth scopes", "reader", readerName, "writer", writerName, "error", err)
-		dm.setStopped(err)
+		c.logger.Error("failed to resolve OAuth scopes", "reader", run.readerName, "writer", writerName, "error", err)
+		c.dm.setStopped(err)
 		return
 	}
-	logger.Debug("resolved OAuth scopes", "scopes", scopes)
+	c.logger.Debug("resolved OAuth scopes", "scopes", scopes)
 
 	var httpClient *http.Client
 	if len(scopes) > 0 {
-		if runtimeStore == nil {
+		if c.runtimeStore == nil {
 			err := errors.New("runtime store is nil")
-			logger.Error("failed to create OAuth client", "error", err)
-			dm.setStopped(err)
+			c.logger.Error("failed to create OAuth client", "error", err)
+			c.dm.setStopped(err)
 			return
 		}
-		secretJSON, ok, err := runtimeStore.GetReaderSecret(ctx, readerName)
+		secretJSON, ok, err := c.runtimeStore.GetReaderSecret(ctx, run.readerName)
 		if err != nil {
-			logger.Error("failed to load OAuth credentials", "reader", readerName, "error", err)
-			dm.setStopped(err)
+			c.logger.Error("failed to load OAuth credentials", "reader", run.readerName, "error", err)
+			c.dm.setStopped(err)
 			return
 		}
 		if !ok {
-			err := fmt.Errorf("credentials not uploaded for reader %q", readerName)
-			logger.Error("failed to create OAuth client — run onboarding first", "error", err)
-			dm.setStopped(err)
+			err := fmt.Errorf("credentials not uploaded for reader %q", run.readerName)
+			c.logger.Error("failed to create OAuth client — run onboarding first", "error", err)
+			c.dm.setStopped(err)
 			return
 		}
-		logger.Debug("creating OAuth HTTP client", "reader", readerName)
-		httpClient, err = oauth.NewFromJSONAndStore(ctx, secretJSON, runtimeStore, readerName, scopes...)
+		c.logger.Debug("creating OAuth HTTP client", "reader", run.readerName)
+		httpClient, err = oauth.NewFromJSONAndStore(ctx, secretJSON, c.runtimeStore, run.readerName, scopes...)
 		if err != nil {
-			logger.Error("failed to create OAuth client — run onboarding first", "error", err)
-			dm.setStopped(err)
+			c.logger.Error("failed to create OAuth client — run onboarding first", "error", err)
+			c.dm.setStopped(err)
 			return
 		}
-		logger.Debug("OAuth HTTP client created successfully")
+		c.logger.Debug("OAuth HTTP client created successfully")
 	}
 
 	// Forced rescans intentionally bypass processed-message deduplication.
 	var stateManager *state.Manager
-	if !forceRescan {
-		stateManager = state.NewDBManager(runtimeStore, logger)
+	if !run.forceRescan {
+		stateManager = state.NewDBManager(c.runtimeStore, c.logger)
 	}
 
-	runner := daemon.New(registry, httpClient, logger)
+	runner := daemon.New(c.registry, httpClient, c.logger)
 	runCfg := daemon.RunConfig{
-		ReaderName:     readerName,
+		ReaderName:     run.readerName,
 		WriterName:     writerName,
-		Config:         &cfg,
-		Rules:          compiledRules,
-		Resolver:       resolver,
+		Config:         &run.cfg,
+		Rules:          run.compiledRules,
+		Resolver:       run.resolver,
 		StateManager:   stateManager,
-		DiagnosticSink: diagnosticSink,
-		RuntimeStore:   runtimeStore,
-		ForceRescan:    forceRescan,
+		DiagnosticSink: c.diagnostics,
+		RuntimeStore:   c.runtimeStore,
+		ForceRescan:    run.forceRescan,
 	}
 
-	logger.Info("daemon starting", "reader", readerName, "writer", writerName)
-	dm.setRunning(time.Now())
+	c.logger.Info("daemon starting", "reader", run.readerName, "writer", writerName)
+	c.dm.setRunning(time.Now())
 
 	runErr := runner.Run(ctx, runCfg)
 	if runErr != nil {
-		logger.Error("daemon stopped with error", "error", runErr)
+		c.logger.Error("daemon stopped with error", "error", runErr)
 	}
-	dm.setStopped(runErr)
+	c.dm.setStopped(runErr)
 }
 
 // saveActiveReader persists the reader name so startup can resume it.

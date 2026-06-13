@@ -50,7 +50,7 @@ func New(cfg config.Postgres, logger *slog.Logger) (*Store, error) {
 	}
 
 	maxConns := min(cfg.MaxPoolSize, math.MaxInt32)
-	poolCfg.MaxConns = int32(maxConns) //nolint:gosec // G115: bounded by min
+	poolCfg.MaxConns = int32(maxConns) //nolint:gosec // G115: value is bounded by min(cfg.MaxPoolSize, math.MaxInt32)
 	poolCfg.MinConns = 1
 	poolCfg.MaxConnLifetime = 1 * time.Hour
 	poolCfg.MaxConnIdleTime = 30 * time.Minute
