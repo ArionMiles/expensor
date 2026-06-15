@@ -22,12 +22,12 @@ var FS embed.FS
 func Run(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger) error {
 	// Bootstrap the tracking table before anything else.
 	if _, err := pool.Exec(ctx, `
-		CREATE TABLE IF NOT EXISTS schema_migrations (
+		CREATE TABLE IF NOT EXISTS legacy_schema_migrations (
 			filename   TEXT PRIMARY KEY,
 			applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)
 	`); err != nil {
-		return fmt.Errorf("creating schema_migrations table: %w", err)
+		return fmt.Errorf("creating legacy_schema_migrations table: %w", err)
 	}
 
 	entries, err := fs.ReadDir(FS, ".")
@@ -46,7 +46,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger) error {
 	for _, filename := range files {
 		var applied bool
 		if err := pool.QueryRow(ctx,
-			`SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE filename = $1)`, filename,
+			`SELECT EXISTS(SELECT 1 FROM legacy_schema_migrations WHERE filename = $1)`, filename,
 		).Scan(&applied); err != nil {
 			return fmt.Errorf("checking migration %s: %w", filename, err)
 		}
@@ -65,7 +65,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger) error {
 			return fmt.Errorf("applying migration %s: %w", filename, err)
 		}
 		if _, err := pool.Exec(ctx,
-			`INSERT INTO schema_migrations (filename) VALUES ($1) ON CONFLICT DO NOTHING`, filename,
+			`INSERT INTO legacy_schema_migrations (filename) VALUES ($1) ON CONFLICT DO NOTHING`, filename,
 		); err != nil {
 			return fmt.Errorf("recording migration %s: %w", filename, err)
 		}
