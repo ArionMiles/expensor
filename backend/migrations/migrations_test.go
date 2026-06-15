@@ -11,6 +11,8 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/ArionMiles/expensor/backend/internal/dbconn"
 )
 
 func newMigrationTestPool(t *testing.T) *pgxpool.Pool {
@@ -37,7 +39,14 @@ func newMigrationTestPool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("connection string: %v", err)
 	}
 
-	pool, err := pgxpool.New(ctx, dsn)
+	poolCfg, err := dbconn.ParseConfig(dsn)
+	if err != nil {
+		_ = ctr.Terminate(ctx)
+		t.Fatalf("parse pool config: %v", err)
+	}
+	poolCfg.MaxConns = 2
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		_ = ctr.Terminate(ctx)
 		t.Fatalf("open pool: %v", err)
@@ -51,7 +60,7 @@ func newMigrationTestPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-func TestRunUsesLegacySchemaMigrationsTable(t *testing.T) {
+func TestRunUsesSchemaMigrationsInExpensor(t *testing.T) {
 	ctx := context.Background()
 	pool := newMigrationTestPool(t)
 
@@ -59,26 +68,54 @@ func TestRunUsesLegacySchemaMigrationsTable(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	var exists bool
+	var expensorExists bool
+	if err := pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM information_schema.schemata
+			WHERE schema_name = 'expensor'
+		)
+	`).Scan(&expensorExists); err != nil {
+		t.Fatalf("check expensor schema: %v", err)
+	}
+	if !expensorExists {
+		t.Fatal("expensor schema not created")
+	}
+
+	var schemaMigrationsExists bool
 	if err := pool.QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT 1
 			FROM information_schema.tables
-			WHERE table_schema = 'public'
-			  AND table_name = 'legacy_schema_migrations'
+			WHERE table_schema = 'expensor'
+			  AND table_name = 'schema_migrations'
 		)
-	`).Scan(&exists); err != nil {
-		t.Fatalf("check table exists: %v", err)
+	`).Scan(&schemaMigrationsExists); err != nil {
+		t.Fatalf("check schema_migrations table: %v", err)
 	}
-	if !exists {
-		t.Fatal("legacy_schema_migrations table not created")
+	if !schemaMigrationsExists {
+		t.Fatal("schema_migrations table not created in expensor")
 	}
 
-	var count int
-	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM legacy_schema_migrations`).Scan(&count); err != nil {
-		t.Fatalf("count legacy migrations: %v", err)
+	var version int
+	var dirty bool
+	if err := pool.QueryRow(ctx, `SELECT version, dirty FROM expensor.schema_migrations`).Scan(&version, &dirty); err != nil {
+		t.Fatalf("read schema_migrations state: %v", err)
 	}
-	if count == 0 {
-		t.Fatal("expected at least one recorded migration")
+	if dirty {
+		t.Fatal("schema_migrations marked dirty after migration run")
+	}
+	if version != 3 {
+		t.Fatalf("schema_migrations version = %d, want 3", version)
+	}
+}
+
+func TestLatestVersionMatchesEmbeddedFiles(t *testing.T) {
+	v, err := LatestVersion()
+	if err != nil {
+		t.Fatalf("LatestVersion: %v", err)
+	}
+	if v != 3 {
+		t.Fatalf("latest version = %d, want 3", v)
 	}
 }

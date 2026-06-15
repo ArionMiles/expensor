@@ -204,6 +204,8 @@ func PrepareWithHooks(ctx context.Context, cfg config.Postgres, logger *slog.Log
 
 `openPool` should live inside `backend/internal/bootstrapdb` and use `dbconn.ParseConfig` so the startup bridge uses the same connection behavior as the store and writer pools, just with the admin pool size set to `1`.
 
+`baselineMigrations` should create or open the `expensor.schema_migrations` table through the `golang-migrate` postgres driver and force the recorded version to the latest embedded migration version without replaying older migrations.
+
 The bridge should stay transactional for the copy-and-validate window. A failure before commit must leave `public` usable. Use an injected hook or equivalent test seam for the failure test so the production path stays clean.
 
 Update `backend/cmd/server/bootstrap.go` so `runMigrations` becomes a thin wrapper around `bootstrapdb.Prepare`, and keep the startup order the same: wait for Postgres, then prepare the schema, then build the store.
@@ -343,6 +345,8 @@ func Run(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger) error {
 ```
 
 Add a `LatestVersion()` helper that reads the embedded filenames, extracts the highest numeric prefix, and returns that version so the startup bridge can baseline the database after the copy.
+
+Add a `Baseline(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger) error` helper that uses the same embedded source and postgres driver, then calls `Force(int(version))` with `LatestVersion()` so existing databases are marked at the current schema version after the bridge copy.
 
 Convert the existing SQL into standard `golang-migrate` pairs:
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ArionMiles/expensor/backend/internal/dbconn"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 )
@@ -43,7 +44,7 @@ func New(cfg config.Postgres, logger *slog.Logger) (*Store, error) {
 		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.SSLMode,
 	)
 
-	poolCfg, err := pgxpool.ParseConfig(connStr)
+	poolCfg, err := dbconn.ParseConfig(connStr)
 	if err != nil {
 		return nil, fmt.Errorf("parsing store connection string: %w", err)
 	}

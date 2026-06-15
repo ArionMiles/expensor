@@ -14,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/ArionMiles/expensor/backend/internal/bootstrapdb"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
@@ -61,25 +61,6 @@ func newTestStoreWithLogger(t *testing.T, logs *bytes.Buffer) *testStore {
 		t.Fatalf("failed to start postgres container: %v", err)
 	}
 
-	dsn, err := ctr.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		_ = ctr.Terminate(ctx)
-		t.Fatalf("failed to get connection string: %v", err)
-	}
-
-	// Run migrations via pgxpool so the schema is ready before the Store connects.
-	pool, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		_ = ctr.Terminate(ctx)
-		t.Fatalf("failed to connect for migration: %v", err)
-	}
-	if err := migrations.Run(ctx, pool, slog.Default()); err != nil {
-		pool.Close()
-		_ = ctr.Terminate(ctx)
-		t.Fatalf("migration failed: %v", err)
-	}
-	pool.Close()
-
 	cfg := config.Postgres{
 		Host:        "localhost",
 		Database:    "expensor_test",
@@ -95,6 +76,10 @@ func newTestStoreWithLogger(t *testing.T, logs *bytes.Buffer) *testStore {
 		t.Fatalf("failed to get mapped port: %v", err)
 	}
 	cfg.Port = int(mappedPort.Num())
+	if err := bootstrapdb.Prepare(ctx, cfg, slog.Default()); err != nil {
+		_ = ctr.Terminate(ctx)
+		t.Fatalf("bootstrap failed: %v", err)
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	if logs != nil {
@@ -1856,7 +1841,7 @@ func TestV2MigrationBackfillsRulesAndTransactions(t *testing.T) {
 		t.Fatalf("seed legacy transactions: %v", err)
 	}
 
-	migrationSQL, err := fs.ReadFile(migrations.FS, "003_predefined_rules_v2.sql")
+	migrationSQL, err := fs.ReadFile(migrations.FS, "003_predefined_rules_v2.up.sql")
 	if err != nil {
 		t.Fatalf("read migration: %v", err)
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/attribute"
 
+	"github.com/ArionMiles/expensor/backend/internal/dbconn"
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
@@ -76,7 +77,7 @@ func New(cfg Config, logger *slog.Logger) (*Writer, error) {
 	)
 
 	// Configure connection pool
-	poolConfig, err := pgxpool.ParseConfig(connStr)
+	poolConfig, err := dbconn.ParseConfig(connStr)
 	if err != nil {
 		return nil, fmt.Errorf("parsing connection string: %w", err)
 	}
