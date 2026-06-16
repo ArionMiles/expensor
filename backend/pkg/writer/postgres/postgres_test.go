@@ -8,13 +8,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/ArionMiles/expensor/backend/internal/bootstrapdb"
+	"github.com/ArionMiles/expensor/backend/internal/dbconn"
+	"github.com/ArionMiles/expensor/backend/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
-	"github.com/ArionMiles/expensor/backend/pkg/config"
 )
 
 // testDB holds the shared container config for all integration tests.
@@ -56,17 +57,8 @@ func TestMain(m *testing.M) {
 		SSLMode:  "disable",
 	}
 
-	cfg := config.Postgres{
-		Host:        testDB.Host,
-		Port:        testDB.Port,
-		Database:    testDB.Database,
-		User:        testDB.User,
-		Password:    testDB.Password,
-		SSLMode:     testDB.SSLMode,
-		MaxPoolSize: 2,
-	}
-	if err := bootstrapdb.Prepare(ctx, cfg, slog.Default()); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to bootstrap database: %v\n", err)
+	if err := runWriterTestMigrations(ctx, *testDB); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to run migrations: %v\n", err)
 		_ = ctr.Terminate(ctx)
 		os.Exit(1)
 	}
@@ -75,6 +67,26 @@ func TestMain(m *testing.M) {
 
 	_ = ctr.Terminate(ctx)
 	os.Exit(code)
+}
+
+func runWriterTestMigrations(ctx context.Context, cfg Config) error {
+	connStr := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s pool_max_conns=1",
+		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.SSLMode,
+	)
+	poolCfg, err := dbconn.ParseConfig(connStr)
+	if err != nil {
+		return fmt.Errorf("parse migration pool config: %w", err)
+	}
+	poolCfg.MaxConns = 1
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	if err != nil {
+		return fmt.Errorf("open migration pool: %w", err)
+	}
+	defer pool.Close()
+
+	return migrations.Run(ctx, pool, slog.Default())
 }
 
 // newTestWriter creates a writer using the migrated shared test database.

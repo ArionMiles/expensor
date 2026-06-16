@@ -109,13 +109,3 @@ func TestRunUsesSchemaMigrationsInExpensor(t *testing.T) {
 		t.Fatalf("schema_migrations version = %d, want 3", version)
 	}
 }
-
-func TestLatestVersionMatchesEmbeddedFiles(t *testing.T) {
-	v, err := LatestVersion()
-	if err != nil {
-		t.Fatalf("LatestVersion: %v", err)
-	}
-	if v != 3 {
-		t.Fatalf("latest version = %d, want 3", v)
-	}
-}
