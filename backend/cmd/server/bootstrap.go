@@ -9,9 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ArionMiles/expensor/backend/internal/bootstrapdb"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
-	"github.com/ArionMiles/expensor/backend/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 	"github.com/ArionMiles/expensor/backend/pkg/reader/gmail"
@@ -21,20 +21,9 @@ import (
 
 // runMigrations applies migrations through a short-lived startup pool.
 func runMigrations(pgCfg config.Postgres, logger *slog.Logger) error {
-	connStr := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s pool_max_conns=1",
-		pgCfg.Host, pgCfg.Port, pgCfg.User, pgCfg.Password, pgCfg.Database, pgCfg.SSLMode,
-	)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	pool, err := pgxpool.New(ctx, connStr)
-	if err != nil {
-		return fmt.Errorf("opening migration pool: %w", err)
-	}
-	defer pool.Close()
-
-	return migrations.Run(ctx, pool, logger)
+	return bootstrapdb.Prepare(ctx, pgCfg, logger)
 }
 
 // waitForPostgres retries connectivity until the configured startup deadline.
