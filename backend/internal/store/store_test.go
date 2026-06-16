@@ -14,11 +14,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/ArionMiles/expensor/backend/internal/bootstrapdb"
+	"github.com/ArionMiles/expensor/backend/internal/dbconn"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
@@ -76,10 +77,7 @@ func newTestStoreWithLogger(t *testing.T, logs *bytes.Buffer) *testStore {
 		t.Fatalf("failed to get mapped port: %v", err)
 	}
 	cfg.Port = int(mappedPort.Num())
-	if err := bootstrapdb.Prepare(ctx, cfg, slog.Default()); err != nil {
-		_ = ctr.Terminate(ctx)
-		t.Fatalf("bootstrap failed: %v", err)
-	}
+	runStoreTestMigrations(ctx, t, cfg, ctr)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	if logs != nil {
@@ -99,6 +97,33 @@ func newTestStoreWithLogger(t *testing.T, logs *bytes.Buffer) *testStore {
 			st.Close()
 			_ = ctr.Terminate(context.Background())
 		},
+	}
+}
+
+func runStoreTestMigrations(ctx context.Context, t *testing.T, cfg config.Postgres, ctr testcontainers.Container) {
+	t.Helper()
+
+	connStr := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s pool_max_conns=1",
+		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.SSLMode,
+	)
+	poolCfg, err := dbconn.ParseConfig(connStr)
+	if err != nil {
+		_ = ctr.Terminate(ctx)
+		t.Fatalf("parse migration pool config: %v", err)
+	}
+	poolCfg.MaxConns = 1
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	if err != nil {
+		_ = ctr.Terminate(ctx)
+		t.Fatalf("open migration pool: %v", err)
+	}
+	defer pool.Close()
+
+	if err := migrations.Run(ctx, pool, slog.Default()); err != nil {
+		_ = ctr.Terminate(ctx)
+		t.Fatalf("run migrations: %v", err)
 	}
 }
 

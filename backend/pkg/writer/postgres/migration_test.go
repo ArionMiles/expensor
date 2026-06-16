@@ -22,7 +22,7 @@ func TestNewWriterUsesSchemaMigrationsInExpensor(t *testing.T) {
 		t.Fatalf("check schema_migrations table exists: %v", err)
 	}
 	if !schemaMigrationsExists {
-		t.Fatal("schema_migrations table not present in expensor after writer bootstrap")
+		t.Fatal("schema_migrations table not present in expensor after test migrations")
 	}
 
 	var legacyExists bool
@@ -37,6 +37,6 @@ func TestNewWriterUsesSchemaMigrationsInExpensor(t *testing.T) {
 		t.Fatalf("check legacy table exists: %v", err)
 	}
 	if legacyExists {
-		t.Fatal("legacy_schema_migrations table should not be present after phase 2")
+		t.Fatal("legacy_schema_migrations table should not be present after final migrations")
 	}
 }
