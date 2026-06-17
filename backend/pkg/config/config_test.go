@@ -1,8 +1,11 @@
 package config_test
 
 import (
+	"bytes"
+	"encoding/base64"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -49,9 +52,60 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.Persisted.ReadTimeout != 3*time.Second {
 		t.Fatalf("app config read timeout: got %s", cfg.Persisted.ReadTimeout)
 	}
+	if cfg.Security.SessionTTL != 168*time.Hour || cfg.Security.SetupTokenTTL != 24*time.Hour {
+		t.Fatalf("security defaults: %#v", cfg.Security)
+	}
 	if cfg.Observability.LogLevel != slog.LevelInfo || cfg.Observability.LogJSON ||
 		cfg.Observability.Enabled || cfg.Observability.Exporter != "none" {
 		t.Fatalf("observability defaults: %#v", cfg.Observability)
+	}
+}
+
+func TestLoadAuthEncryptionKey(t *testing.T) {
+	setRequiredConfigEnv(t)
+	t.Setenv("EXPENSOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{9}, 32)))
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if len(cfg.Security.SecretKey) != 32 {
+		t.Fatalf("SecretKey length = %d, want 32", len(cfg.Security.SecretKey))
+	}
+}
+
+func TestLoadAuthEncryptionKeyFile(t *testing.T) {
+	setRequiredConfigEnv(t)
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "expensor_secret_key")
+	if err := os.WriteFile(keyPath, []byte(base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{8}, 32))+"\n"), 0o600); err != nil {
+		t.Fatalf("write key file: %v", err)
+	}
+	t.Setenv("EXPENSOR_SECRET_KEY_FILE", keyPath)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if len(cfg.Security.SecretKey) != 32 {
+		t.Fatalf("SecretKey length = %d, want 32", len(cfg.Security.SecretKey))
+	}
+}
+
+func TestLoadRejectsBothSecretKeyInputs(t *testing.T) {
+	setRequiredConfigEnv(t)
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "expensor_secret_key")
+	if err := os.WriteFile(keyPath, []byte(base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{8}, 32))), 0o600); err != nil {
+		t.Fatalf("write key file: %v", err)
+	}
+	t.Setenv("EXPENSOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{9}, 32)))
+	t.Setenv("EXPENSOR_SECRET_KEY_FILE", keyPath)
+
+	if _, err := config.Load(); err == nil {
+		t.Fatal("Load() succeeded with both EXPENSOR_SECRET_KEY and EXPENSOR_SECRET_KEY_FILE")
 	}
 }
 
@@ -66,6 +120,8 @@ func TestLoadUsesEnvironmentOverrides(t *testing.T) {
 	t.Setenv("EXPENSOR_CONTENT_SYNC_INTERVAL", "12h")
 	t.Setenv("EXPENSOR_CONTENT_SYNC_TIMEOUT", "90s")
 	t.Setenv("EXPENSOR_APP_CONFIG_READ_TIMEOUT", "7s")
+	t.Setenv("EXPENSOR_SESSION_TTL", "72h")
+	t.Setenv("EXPENSOR_SETUP_TOKEN_TTL", "12h")
 	t.Setenv("LOG_LEVEL", "debug")
 	t.Setenv("LOG_JSON", "true")
 	t.Setenv("EXPENSOR_OBSERVABILITY_ENABLED", "true")
@@ -90,6 +146,9 @@ func TestLoadUsesEnvironmentOverrides(t *testing.T) {
 	}
 	if cfg.Persisted.ReadTimeout != 7*time.Second {
 		t.Fatalf("app config read timeout: got %s", cfg.Persisted.ReadTimeout)
+	}
+	if cfg.Security.SessionTTL != 72*time.Hour || cfg.Security.SetupTokenTTL != 12*time.Hour {
+		t.Fatalf("security overrides: %#v", cfg.Security)
 	}
 	if cfg.Observability.LogLevel != slog.LevelDebug || !cfg.Observability.LogJSON ||
 		!cfg.Observability.Enabled || cfg.Observability.Exporter != "otlp" ||
@@ -181,6 +240,10 @@ func clearConfigEnv(t *testing.T) {
 		"EXPENSOR_CONTENT_SYNC_INTERVAL",
 		"EXPENSOR_CONTENT_SYNC_TIMEOUT",
 		"EXPENSOR_APP_CONFIG_READ_TIMEOUT",
+		"EXPENSOR_SECRET_KEY",
+		"EXPENSOR_SECRET_KEY_FILE",
+		"EXPENSOR_SESSION_TTL",
+		"EXPENSOR_SETUP_TOKEN_TTL",
 		"LOG_LEVEL",
 		"LOG_JSON",
 		"EXPENSOR_OBSERVABILITY_ENABLED",

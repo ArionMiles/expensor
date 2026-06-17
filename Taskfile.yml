@@ -246,6 +246,11 @@ tasks:
       - task: audit:be
       - task: audit:fe
 
+  secrets:generate:
+    summary: Generate an encryption secret key.
+    desc: Generate a base64-encoded 32-byte secret key for credential encryption.
+    cmd: scripts/secrets/generate-key.sh
+
   # ── BUILD ────────────────────────────────────────────────────────────────────
 
   build:
