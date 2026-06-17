@@ -569,7 +569,6 @@ func newTestHandlers(t *testing.T, st Storer, dm DaemonStatusProvider, banksData
 	_ = registry.RegisterReader(&testReaderPlugin{name: "thunderbird", authType: plugins.AuthTypeConfig, requiresCreds: false, schema: []plugins.ConfigField{
 		{Key: "profilePath", Label: "Profile Directory", Type: "path", Required: true},
 	}})
-	_ = registry.RegisterWriter(&testWriterPlugin{name: "postgres"})
 	var banks []byte
 	if len(banksData) > 0 {
 		banks = banksData[0]
@@ -619,20 +618,6 @@ func (p *testReaderPlugin) Metadata() plugins.ReaderMetadata {
 }
 
 func (p *testReaderPlugin) NewReader(_ plugins.ReaderInput) (api.Reader, error) {
-	return nil, errors.New("not implemented in test stub")
-}
-
-type testWriterPlugin struct{ name string }
-
-func (p *testWriterPlugin) Metadata() plugins.WriterMetadata {
-	return plugins.WriterMetadata{
-		Name:           p.name,
-		Description:    p.name + " writer",
-		RequiredScopes: []string{},
-	}
-}
-
-func (p *testWriterPlugin) NewWriter(_ plugins.WriterInput) (api.Writer, error) {
 	return nil, errors.New("not implemented in test stub")
 }
 
@@ -777,20 +762,6 @@ func TestListReaders_NormalizesNilConfigSchema(t *testing.T) {
 	}
 	if len(readers[0].ConfigSchema) != 0 {
 		t.Fatalf("config_schema len = %d, want 0", len(readers[0].ConfigSchema))
-	}
-}
-
-func TestListWriters(t *testing.T) {
-	h := newTestHandlers(t, nil, &mockDaemon{})
-	rr := get(h.ListWriters, "/api/plugins/writers")
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
-	}
-	var writers []WriterInfo
-	decodeJSON(t, rr.Body.String(), &writers)
-	if len(writers) != 1 || writers[0].Name != "postgres" {
-		t.Errorf("expected postgres writer, got %v", writers)
 	}
 }
 

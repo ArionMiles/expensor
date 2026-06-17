@@ -70,12 +70,6 @@ type Reader interface {
 	Read(ctx context.Context, out chan<- *TransactionDetails, ackChan <-chan string) error
 }
 
-// Writer consumes transactions from a channel and writes them to a destination.
-// Successfully written transaction message IDs are sent to the ackChan.
-type Writer interface {
-	Write(ctx context.Context, in <-chan *TransactionDetails, ackChan chan<- string) error
-}
-
 // Rule defines an email matching rule for transaction extraction.
 // Rules are reader-agnostic: each reader uses the fields appropriate to its context.
 type Rule struct {

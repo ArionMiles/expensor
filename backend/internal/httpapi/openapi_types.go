@@ -290,12 +290,6 @@ type ThunderbirdMailboxesResponse struct {
 	Mailboxes []string `json:"mailboxes"`
 }
 
-// WriterInfoResponse documents writer plugin metadata.
-type WriterInfoResponse struct {
-	Name        string `json:"name" example:"postgres"`
-	Description string `json:"description" example:"Store transactions in PostgreSQL"`
-}
-
 // ReaderGuideResponse documents a reader setup guide payload.
 type ReaderGuideResponse struct {
 	Sections []GuideSectionResponse `json:"sections"`

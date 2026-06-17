@@ -21,7 +21,7 @@ var htmlTagPattern = regexp.MustCompile(`<[^>]+>`)
 //
 // Currency extraction: group 1 of currencyRegex is used as the ISO 4217 currency code
 // (e.g. "INR", "USD", "EUR"). If currencyRegex is nil or produces no match, Currency is
-// left empty and the writer will apply its own default (currently "INR").
+// left empty and store ingestion will apply its own default (currently "INR").
 func ExtractTransactionDetails(
 	emailBody string,
 	amountRegex, merchantRegex, currencyRegex *regexp.Regexp,

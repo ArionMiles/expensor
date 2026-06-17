@@ -38,13 +38,13 @@ func (m *mockReader) Read(ctx context.Context, out chan<- *api.TransactionDetail
 	return nil
 }
 
-// mockWriter implements api.Writer for testing.
-type mockWriter struct {
+// mockSink implements TransactionSink for testing.
+type mockSink struct {
 	writeFunc func(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error
 	closeFunc func() error
 }
 
-func (m *mockWriter) Write(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error {
+func (m *mockSink) Write(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error {
 	if m.writeFunc != nil {
 		return m.writeFunc(ctx, in, ackChan)
 	}
@@ -54,7 +54,7 @@ func (m *mockWriter) Write(ctx context.Context, in <-chan *api.TransactionDetail
 	return nil
 }
 
-func (m *mockWriter) Close() error {
+func (m *mockSink) Close() error {
 	if m.closeFunc != nil {
 		return m.closeFunc()
 	}
@@ -88,30 +88,6 @@ func (m *mockReaderPlugin) NewReader(input plugins.ReaderInput) (api.Reader, err
 	return m.reader, nil
 }
 
-// mockWriterPlugin implements plugins.WriterPlugin for testing.
-type mockWriterPlugin struct {
-	name        string
-	writer      api.Writer
-	createError error
-	input       plugins.WriterInput
-}
-
-func (m *mockWriterPlugin) Metadata() plugins.WriterMetadata {
-	return plugins.WriterMetadata{
-		Name:           m.name,
-		Description:    "mock writer",
-		RequiredScopes: []string{"scope2"},
-	}
-}
-
-func (m *mockWriterPlugin) NewWriter(input plugins.WriterInput) (api.Writer, error) {
-	m.input = input
-	if m.createError != nil {
-		return nil, m.createError
-	}
-	return m.writer, nil
-}
-
 type mockRuntimeStore struct {
 	readerConfig json.RawMessage
 	hasConfig    bool
@@ -122,22 +98,31 @@ func (m *mockRuntimeStore) GetReaderConfig(ctx context.Context, reader string) (
 	return m.readerConfig, m.hasConfig, m.err
 }
 
+func newMockSinkFactory(sink TransactionSink, err error) TransactionSinkFactory {
+	return func(cfg *config.App, logger *slog.Logger) (TransactionSink, error) {
+		return sink, err
+	}
+}
+
 func TestNew(t *testing.T) {
 	tests := []struct {
 		name       string
 		registry   *plugins.Registry
+		factory    TransactionSinkFactory
 		httpClient *http.Client
 		logger     *slog.Logger
 	}{
 		{
 			name:       "with all parameters",
 			registry:   plugins.NewRegistry(),
+			factory:    newMockSinkFactory(&mockSink{}, nil),
 			httpClient: &http.Client{},
 			logger:     slog.Default(),
 		},
 		{
 			name:       "with nil logger",
 			registry:   plugins.NewRegistry(),
+			factory:    newMockSinkFactory(&mockSink{}, nil),
 			httpClient: &http.Client{},
 			logger:     nil,
 		},
@@ -145,7 +130,7 @@ func TestNew(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			runner := New(tt.registry, tt.httpClient, tt.logger)
+			runner := New(tt.registry, tt.factory, tt.httpClient, tt.logger)
 
 			if runner == nil {
 				t.Fatal("expected non-nil runner")
@@ -155,6 +140,9 @@ func TestNew(t *testing.T) {
 			}
 			if runner.logger == nil {
 				t.Error("expected logger to be set (default if nil)")
+			}
+			if runner.sinkFactory == nil {
+				t.Error("expected sink factory to be set")
 			}
 		})
 	}
@@ -173,16 +161,12 @@ func TestRunCreatesDaemonLifecycleSpan(t *testing.T) {
 	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: &mockReader{}}); err != nil {
 		t.Fatalf("RegisterReader() error = %v", err)
 	}
-	if err := registry.RegisterWriter(&mockWriterPlugin{name: "test-writer", writer: &mockWriter{}}); err != nil {
-		t.Fatalf("RegisterWriter() error = %v", err)
-	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	scope := observability.NewScope(logger, "test/daemon")
-	runner := NewWithScope(registry, &http.Client{}, logger, scope)
+	runner := NewWithScope(registry, newMockSinkFactory(&mockSink{}, nil), &http.Client{}, logger, scope)
 
 	err := runner.Run(t.Context(), RunConfig{
 		ReaderName: "test-reader",
-		WriterName: "test-writer",
 		Config:     &config.App{},
 	})
 	if err != nil {
@@ -202,9 +186,9 @@ func TestRun_SuccessfulRun(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	// Use channels to signal when reader/writer have started
+	// Use channels to signal when reader/sink have started
 	readerStartedCh := make(chan struct{})
-	writerStartedCh := make(chan struct{})
+	sinkStartedCh := make(chan struct{})
 
 	reader := &mockReader{
 		readFunc: func(ctx context.Context, out chan<- *api.TransactionDetails, ackChan <-chan string) error {
@@ -229,9 +213,9 @@ func TestRun_SuccessfulRun(t *testing.T) {
 		},
 	}
 
-	writer := &mockWriter{
+	sink := &mockSink{
 		writeFunc: func(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error {
-			close(writerStartedCh)
+			close(sinkStartedCh)
 
 			for {
 				select {
@@ -259,25 +243,21 @@ func TestRun_SuccessfulRun(t *testing.T) {
 	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: reader}); err != nil {
 		t.Fatalf("RegisterReader: %v", err)
 	}
-	if err := registry.RegisterWriter(&mockWriterPlugin{name: "test-writer", writer: writer}); err != nil {
-		t.Fatalf("RegisterWriter: %v", err)
-	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, &http.Client{}, logger)
+	runner := New(registry, newMockSinkFactory(sink, nil), &http.Client{}, logger)
 
 	cfg := &config.App{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
-		WriterName:   "test-writer",
 		Config:       cfg,
 		Rules:        []api.Rule{},
 		Resolver:     nil,
 		StateManager: nil,
 	}
 
-	// Wait for reader and writer to start before Run completes
+	// Wait for reader and sink to start before Run completes
 	go func() {
 		select {
 		case <-readerStartedCh:
@@ -285,9 +265,9 @@ func TestRun_SuccessfulRun(t *testing.T) {
 			t.Error("reader did not start in time")
 		}
 		select {
-		case <-writerStartedCh:
+		case <-sinkStartedCh:
 		case <-time.After(100 * time.Millisecond):
-			t.Error("writer did not start in time")
+			t.Error("sink did not start in time")
 		}
 	}()
 
@@ -308,7 +288,7 @@ func TestRun_ReaderError(t *testing.T) {
 		},
 	}
 
-	writer := &mockWriter{
+	sink := &mockSink{
 		writeFunc: func(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error {
 			for range in {
 			}
@@ -320,18 +300,14 @@ func TestRun_ReaderError(t *testing.T) {
 	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: reader}); err != nil {
 		t.Fatalf("RegisterReader: %v", err)
 	}
-	if err := registry.RegisterWriter(&mockWriterPlugin{name: "test-writer", writer: writer}); err != nil {
-		t.Fatalf("RegisterWriter: %v", err)
-	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, &http.Client{}, logger)
+	runner := New(registry, newMockSinkFactory(sink, nil), &http.Client{}, logger)
 
 	cfg := &config.App{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
-		WriterName:   "test-writer",
 		Config:       cfg,
 		Rules:        []api.Rule{},
 		Resolver:     nil,
@@ -344,9 +320,9 @@ func TestRun_ReaderError(t *testing.T) {
 	}
 }
 
-func TestRun_WriterError(t *testing.T) {
+func TestRun_SinkError(t *testing.T) {
 	ctx := context.Background()
-	wantErr := errors.New("writer failed")
+	wantErr := errors.New("sink failed")
 
 	reader := &mockReader{
 		readFunc: func(ctx context.Context, out chan<- *api.TransactionDetails, ackChan <-chan string) error {
@@ -355,7 +331,7 @@ func TestRun_WriterError(t *testing.T) {
 		},
 	}
 
-	writer := &mockWriter{
+	sink := &mockSink{
 		writeFunc: func(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error {
 			for range in {
 			}
@@ -367,18 +343,14 @@ func TestRun_WriterError(t *testing.T) {
 	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: reader}); err != nil {
 		t.Fatalf("RegisterReader: %v", err)
 	}
-	if err := registry.RegisterWriter(&mockWriterPlugin{name: "test-writer", writer: writer}); err != nil {
-		t.Fatalf("RegisterWriter: %v", err)
-	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, &http.Client{}, logger)
+	runner := New(registry, newMockSinkFactory(sink, nil), &http.Client{}, logger)
 
 	cfg := &config.App{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
-		WriterName:   "test-writer",
 		Config:       cfg,
 		Rules:        []api.Rule{},
 		Resolver:     nil,
@@ -398,15 +370,11 @@ func TestRun_PassesPersistedReaderConfigToPlugin(t *testing.T) {
 			return nil
 		},
 	}
-	writer := &mockWriter{}
+	sink := &mockSink{}
 	readerPlugin := &mockReaderPlugin{name: "test-reader", reader: reader}
-	writerPlugin := &mockWriterPlugin{name: "test-writer", writer: writer}
 	registry := plugins.NewRegistry()
 	if err := registry.RegisterReader(readerPlugin); err != nil {
 		t.Fatalf("RegisterReader() error = %v", err)
-	}
-	if err := registry.RegisterWriter(writerPlugin); err != nil {
-		t.Fatalf("RegisterWriter() error = %v", err)
 	}
 
 	runtimeStore := &mockRuntimeStore{
@@ -414,11 +382,10 @@ func TestRun_PassesPersistedReaderConfigToPlugin(t *testing.T) {
 		hasConfig:    true,
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, &http.Client{}, logger)
+	runner := New(registry, newMockSinkFactory(sink, nil), &http.Client{}, logger)
 
 	err := runner.Run(context.Background(), RunConfig{
 		ReaderName:   "test-reader",
-		WriterName:   "test-writer",
 		Config:       &config.App{},
 		RuntimeStore: runtimeStore,
 	})
@@ -434,7 +401,7 @@ func TestRun_PassesPersistedReaderConfigToPlugin(t *testing.T) {
 func TestRun_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	var readerStopped, writerStopped bool
+	var readerStopped, sinkStopped bool
 	var mu sync.Mutex
 
 	reader := &mockReader{
@@ -448,12 +415,12 @@ func TestRun_ContextCancellation(t *testing.T) {
 		},
 	}
 
-	writer := &mockWriter{
+	sink := &mockSink{
 		writeFunc: func(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error {
 			for range in {
 			}
 			mu.Lock()
-			writerStopped = true
+			sinkStopped = true
 			mu.Unlock()
 			return context.Canceled
 		},
@@ -463,18 +430,14 @@ func TestRun_ContextCancellation(t *testing.T) {
 	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: reader}); err != nil {
 		t.Fatalf("RegisterReader: %v", err)
 	}
-	if err := registry.RegisterWriter(&mockWriterPlugin{name: "test-writer", writer: writer}); err != nil {
-		t.Fatalf("RegisterWriter: %v", err)
-	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, &http.Client{}, logger)
+	runner := New(registry, newMockSinkFactory(sink, nil), &http.Client{}, logger)
 
 	cfg := &config.App{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
-		WriterName:   "test-writer",
 		Config:       cfg,
 		Rules:        []api.Rule{},
 		Resolver:     nil,
@@ -498,8 +461,8 @@ func TestRun_ContextCancellation(t *testing.T) {
 	if !readerStopped {
 		t.Error("reader did not stop on context cancellation")
 	}
-	if !writerStopped {
-		t.Error("writer did not stop after reader completion")
+	if !sinkStopped {
+		t.Error("sink did not stop after reader completion")
 	}
 }
 
@@ -511,18 +474,14 @@ func TestRun_NewReaderError(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("RegisterReader: %v", err)
 	}
-	if err := registry.RegisterWriter(&mockWriterPlugin{name: "test-writer", writer: &mockWriter{}}); err != nil {
-		t.Fatalf("RegisterWriter: %v", err)
-	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, &http.Client{}, logger)
+	runner := New(registry, newMockSinkFactory(&mockSink{}, nil), &http.Client{}, logger)
 
 	cfg := &config.App{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
-		WriterName:   "test-writer",
 		Config:       cfg,
 		Rules:        []api.Rule{},
 		Resolver:     nil,
@@ -540,7 +499,7 @@ func TestRun_NewReaderError(t *testing.T) {
 	}
 }
 
-func TestRun_NewWriterError(t *testing.T) {
+func TestRun_NewSinkError(t *testing.T) {
 	reader := &mockReader{
 		readFunc: func(ctx context.Context, out chan<- *api.TransactionDetails, ackChan <-chan string) error {
 			close(out)
@@ -552,21 +511,14 @@ func TestRun_NewWriterError(t *testing.T) {
 	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: reader}); err != nil {
 		t.Fatalf("RegisterReader: %v", err)
 	}
-	if err := registry.RegisterWriter(&mockWriterPlugin{
-		name:        "test-writer",
-		createError: errors.New("failed to create writer"),
-	}); err != nil {
-		t.Fatalf("RegisterWriter: %v", err)
-	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, &http.Client{}, logger)
+	runner := New(registry, newMockSinkFactory(nil, errors.New("failed to create sink")), &http.Client{}, logger)
 
 	cfg := &config.App{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
-		WriterName:   "test-writer",
 		Config:       cfg,
 		Rules:        []api.Rule{},
 		Resolver:     nil,
@@ -579,15 +531,15 @@ func TestRun_NewWriterError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if err.Error() != "creating writer: failed to create writer" {
+	if err.Error() != "creating transaction sink: failed to create sink" {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
 
-// TestRunnerWriterErrorDeadlock reproduces the deadlock: the writer exits with an error while the reader
+// TestRunnerSinkErrorDeadlock reproduces the deadlock: the sink exits with an error while the reader
 // is still producing more transactions than the channel can buffer. Without errgroup the runner hangs
 // forever because the external context is never canceled, so the reader never unblocks.
-func TestRunnerWriterErrorDeadlock(t *testing.T) {
+func TestRunnerSinkErrorDeadlock(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -607,8 +559,8 @@ func TestRunnerWriterErrorDeadlock(t *testing.T) {
 		},
 	}
 
-	// Writer returns an error after 5 transactions, leaving the reader blocked on a full channel.
-	writer := &mockWriter{
+	// Sink returns an error after 5 transactions, leaving the reader blocked on a full channel.
+	sink := &mockSink{
 		writeFunc: func(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error {
 			for i := range 5 {
 				select {
@@ -621,7 +573,7 @@ func TestRunnerWriterErrorDeadlock(t *testing.T) {
 					return ctx.Err()
 				}
 			}
-			return errors.New("writer failed after 5 transactions")
+			return errors.New("sink failed after 5 transactions")
 		},
 	}
 
@@ -629,16 +581,12 @@ func TestRunnerWriterErrorDeadlock(t *testing.T) {
 	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: reader}); err != nil {
 		t.Fatalf("RegisterReader: %v", err)
 	}
-	if err := registry.RegisterWriter(&mockWriterPlugin{name: "test-writer", writer: writer}); err != nil {
-		t.Fatalf("RegisterWriter: %v", err)
-	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, &http.Client{}, logger)
+	runner := New(registry, newMockSinkFactory(sink, nil), &http.Client{}, logger)
 
 	runCfg := RunConfig{
 		ReaderName: "test-reader",
-		WriterName: "test-writer",
 		Config:     &config.App{},
 		Rules:      []api.Rule{},
 	}
@@ -651,13 +599,13 @@ func TestRunnerWriterErrorDeadlock(t *testing.T) {
 		result <- runner.Run(ctx, runCfg)
 	}()
 
-	// With errgroup the runner cancels the reader's context as soon as the writer
+	// With errgroup the runner cancels the reader's context as soon as the sink
 	// fails, so Run returns well within 1 second. Without the fix, the runner waits
 	// for the reader which is blocked on a full channel until the 3s safety cancel
 	// fires — missing this deadline.
 	select {
 	case err := <-result:
-		if err == nil || !strings.Contains(err.Error(), "writer failed after 5 transactions") {
+		if err == nil || !strings.Contains(err.Error(), "sink failed after 5 transactions") {
 			t.Fatalf("Run returned unexpected error: %v", err)
 		}
 	case <-time.After(1 * time.Second):
@@ -665,11 +613,11 @@ func TestRunnerWriterErrorDeadlock(t *testing.T) {
 	}
 }
 
-// TestRun_WriterResourceCleanup tests that the writer's Close method is called if it implements io.Closer.
-// Note: This tests implementation details - the real CSV/JSON writers implement Close() properly.
-func TestRun_WriterResourceCleanup(t *testing.T) {
-	// This test verifies that if a writer implements Close(), it gets called.
-	// The actual behavior is tested in integration tests with real writers.
+// TestRun_SinkResourceCleanup tests that the sink's Close method is called if it implements io.Closer.
+// Note: This tests implementation details - the real CSV/JSON sinks implement Close() properly.
+func TestRun_SinkResourceCleanup(t *testing.T) {
+	// This test verifies that if a sink implements Close(), it gets called.
+	// The actual behavior is tested in integration tests with real sinks.
 	// For unit testing, we verify that the code path exists and doesn't panic.
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -683,7 +631,7 @@ func TestRun_WriterResourceCleanup(t *testing.T) {
 		},
 	}
 
-	writer := &mockWriter{
+	sink := &mockSink{
 		writeFunc: func(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error {
 			for range in {
 			}
@@ -695,25 +643,21 @@ func TestRun_WriterResourceCleanup(t *testing.T) {
 	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: reader}); err != nil {
 		t.Fatalf("RegisterReader: %v", err)
 	}
-	if err := registry.RegisterWriter(&mockWriterPlugin{name: "test-writer", writer: writer}); err != nil {
-		t.Fatalf("RegisterWriter: %v", err)
-	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, &http.Client{}, logger)
+	runner := New(registry, newMockSinkFactory(sink, nil), &http.Client{}, logger)
 
 	cfg := &config.App{}
 
 	runCfg := RunConfig{
 		ReaderName:   "test-reader",
-		WriterName:   "test-writer",
 		Config:       cfg,
 		Rules:        []api.Rule{},
 		Resolver:     nil,
 		StateManager: nil,
 	}
 
-	// Should not panic even if Close() exists on writer
+	// Should not panic even if Close() exists on sink
 	err := runner.Run(ctx, runCfg)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)

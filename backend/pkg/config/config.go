@@ -19,7 +19,7 @@ const ServiceName = "expensor"
 var Version = "dev"
 
 // App holds the application configuration loaded from environment variables.
-// Reader and writer plugin selection is driven by the web UI, not env vars.
+// Reader plugin selection is driven by the web UI, not env vars.
 type App struct {
 	// Port is the HTTP server port.
 	// Environment variable: PORT

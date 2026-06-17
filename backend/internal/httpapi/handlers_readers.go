@@ -32,12 +32,6 @@ type ReaderInfo struct {
 	ConfigSchema              []plugins.ConfigField `json:"config_schema"`
 }
 
-// WriterInfo is the API representation of a writer plugin.
-type WriterInfo struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}
-
 // ListReaders handles GET /api/plugins/readers.
 // @Summary List reader plugins
 // @Tags Readers
@@ -59,25 +53,6 @@ func (h *Handlers) ListReaders(w http.ResponseWriter, _ *http.Request) {
 			AuthType:                  meta.Auth.Type,
 			RequiresCredentialsUpload: meta.Auth.RequiresCredentialsUpload,
 			ConfigSchema:              configSchema,
-		})
-	}
-	writeJSON(w, http.StatusOK, infos)
-}
-
-// ListWriters handles GET /api/plugins/writers.
-// @Summary List writer plugins
-// @Tags Readers
-// @Produce json
-// @Success 200 {array} WriterInfoResponse
-// @Router /plugins/writers [get]
-func (h *Handlers) ListWriters(w http.ResponseWriter, _ *http.Request) {
-	wps := h.registry.ListWriters()
-	infos := make([]WriterInfo, 0, len(wps))
-	for _, p := range wps {
-		meta := p.Metadata()
-		infos = append(infos, WriterInfo{
-			Name:        meta.Name,
-			Description: meta.Description,
 		})
 	}
 	writeJSON(w, http.StatusOK, infos)

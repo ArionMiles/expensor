@@ -1,148 +1,32 @@
-package postgres
+package store_test
 
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/testcontainers/testcontainers-go"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
-
-	"github.com/ArionMiles/expensor/backend/internal/dbconn"
-	"github.com/ArionMiles/expensor/backend/migrations"
+	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
-// testDB holds the shared container config for all integration tests.
-// It is populated by TestMain before any test runs.
-var testDB *Config
-
-// TestMain starts a single Postgres container for all integration tests in this
-// package, avoiding the overhead of spinning up a new container per test.
-func TestMain(m *testing.M) {
-	ctx := context.Background()
-	ctr, err := tcpostgres.Run(ctx, "postgres:16-alpine",
-		tcpostgres.WithDatabase("expensor_test"),
-		tcpostgres.WithUsername("expensor"),
-		tcpostgres.WithPassword("expensor"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(60*time.Second),
-		),
-	)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to start postgres container: %v\n", err)
-		os.Exit(1)
-	}
-
-	mappedPort, err := ctr.MappedPort(ctx, "5432")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to get mapped port: %v\n", err)
-		_ = ctr.Terminate(ctx)
-		os.Exit(1)
-	}
-
-	testDB = &Config{
-		Host:     "localhost",
-		Port:     int(mappedPort.Num()),
-		Database: "expensor_test",
-		User:     "expensor",
-		Password: "expensor",
-		SSLMode:  "disable",
-	}
-
-	if err := runWriterTestMigrations(ctx, *testDB); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to run migrations: %v\n", err)
-		_ = ctr.Terminate(ctx)
-		os.Exit(1)
-	}
-
-	code := m.Run()
-
-	_ = ctr.Terminate(ctx)
-	os.Exit(code)
+type testIngestor struct {
+	*store.TransactionIngestor
+	st *store.Store
 }
 
-func runWriterTestMigrations(ctx context.Context, cfg Config) error {
-	connStr := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s pool_max_conns=1",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.SSLMode,
-	)
-	poolCfg, err := dbconn.ParseConfig(connStr)
-	if err != nil {
-		return fmt.Errorf("parse migration pool config: %w", err)
-	}
-	poolCfg.MaxConns = 1
-
-	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
-	if err != nil {
-		return fmt.Errorf("open migration pool: %w", err)
-	}
-	defer pool.Close()
-
-	return migrations.Run(ctx, pool, slog.Default())
-}
-
-// newTestWriter creates a writer using the migrated shared test database.
-func newTestWriter(t *testing.T, overrides Config) *Writer {
+func newTestIngestor(t *testing.T, overrides store.IngestionConfig) *testIngestor {
 	t.Helper()
-	if testing.Short() || testDB == nil {
-		t.Skip("skipping integration test (-short or container unavailable)")
-	}
+	ts := newTestStore(t)
+	t.Cleanup(ts.cleanup)
 
-	cfg := *testDB
-	if overrides.BatchSize > 0 {
-		cfg.BatchSize = overrides.BatchSize
-	}
-	if overrides.FlushInterval > 0 {
-		cfg.FlushInterval = overrides.FlushInterval
-	}
-
-	w, err := New(cfg, slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})))
-	if err != nil {
-		t.Fatalf("failed to create writer: %v", err)
-	}
-	t.Cleanup(func() { _ = w.Close() })
-	return w
-}
-
-// TestNewWriter_ConnectionFailure verifies the writer returns an error for an unreachable host.
-func TestNewWriter_ConnectionFailure(t *testing.T) {
-	cfg := Config{
-		Host:     "nonexistent-host",
-		Port:     5432,
-		Database: "expensor",
-		User:     "expensor",
-		Password: "password",
-		SSLMode:  "disable",
-	}
-	_, err := New(cfg, slog.New(slog.NewTextHandler(os.Stderr, nil)))
-	if err == nil {
-		t.Error("expected error when connecting to nonexistent host, got nil")
-	}
-}
-
-// TestNewWriter_Defaults verifies that zero-value config fields are populated with defaults.
-func TestNewWriter_Defaults(t *testing.T) {
-	w := newTestWriter(t, Config{})
-
-	if w.batchSize != 10 {
-		t.Errorf("expected default batchSize=10, got %d", w.batchSize)
-	}
-	if w.flushInterval != 30*time.Second {
-		t.Errorf("expected default flushInterval=30s, got %v", w.flushInterval)
-	}
+	ingestor := ts.NewTransactionIngestor(overrides, nil)
+	return &testIngestor{TransactionIngestor: ingestor, st: ts.Store}
 }
 
 // TestWrite_SingleTransaction verifies a single transaction is written and acknowledged.
 func TestWrite_SingleTransaction(t *testing.T) {
-	w := newTestWriter(t, Config{BatchSize: 1, FlushInterval: time.Second})
+	w := newTestIngestor(t, store.IngestionConfig{BatchSize: 1, FlushInterval: time.Second})
 
 	txn := &api.TransactionDetails{
 		MessageID:    fmt.Sprintf("test-msg-%d", time.Now().UnixNano()),
@@ -160,7 +44,7 @@ func TestWrite_SingleTransaction(t *testing.T) {
 }
 
 func TestWrite_PersistsStructuredSourceFields(t *testing.T) {
-	w := newTestWriter(t, Config{BatchSize: 1, FlushInterval: time.Second})
+	w := newTestIngestor(t, store.IngestionConfig{BatchSize: 1, FlushInterval: time.Second})
 	ctx := context.Background()
 
 	txn := &api.TransactionDetails{
@@ -177,7 +61,7 @@ func TestWrite_PersistsStructuredSourceFields(t *testing.T) {
 	assertWrite(t, w, []*api.TransactionDetails{txn}, 5*time.Second)
 
 	var source, sourceType, sourceLabel, bank string
-	err := w.pool.QueryRow(ctx, `
+	err := w.st.PoolForTest().QueryRow(ctx, `
 		SELECT source, source_type, source_label, bank
 		FROM transactions
 		WHERE message_id = $1
@@ -195,7 +79,7 @@ func TestWrite_PersistsStructuredSourceFields(t *testing.T) {
 
 // TestWrite_MultiCurrency verifies a transaction with currency conversion fields is stored correctly.
 func TestWrite_MultiCurrency(t *testing.T) {
-	w := newTestWriter(t, Config{BatchSize: 1, FlushInterval: time.Second})
+	w := newTestIngestor(t, store.IngestionConfig{BatchSize: 1, FlushInterval: time.Second})
 
 	originalAmount := 100.00
 	originalCurrency := "USD"
@@ -220,7 +104,7 @@ func TestWrite_MultiCurrency(t *testing.T) {
 
 // TestWrite_WithLabels verifies that labels are persisted alongside the transaction.
 func TestWrite_WithLabels(t *testing.T) {
-	w := newTestWriter(t, Config{BatchSize: 1, FlushInterval: time.Second})
+	w := newTestIngestor(t, store.IngestionConfig{BatchSize: 1, FlushInterval: time.Second})
 
 	txn := &api.TransactionDetails{
 		MessageID:    fmt.Sprintf("test-labels-%d", time.Now().UnixNano()),
@@ -241,7 +125,7 @@ func TestWrite_WithLabels(t *testing.T) {
 // TestWrite_PersistsManualLabelProvenanceForPayloadLabels verifies that labels
 // supplied in the transaction payload are tracked as manual provenance.
 func TestWrite_PersistsManualLabelProvenanceForPayloadLabels(t *testing.T) {
-	w := newTestWriter(t, Config{BatchSize: 1, FlushInterval: time.Second})
+	w := newTestIngestor(t, store.IngestionConfig{BatchSize: 1, FlushInterval: time.Second})
 	ctx := context.Background()
 
 	txn := &api.TransactionDetails{
@@ -259,7 +143,7 @@ func TestWrite_PersistsManualLabelProvenanceForPayloadLabels(t *testing.T) {
 	assertWrite(t, w, []*api.TransactionDetails{txn}, 5*time.Second)
 
 	var provenanceCount int
-	err := w.pool.QueryRow(ctx, `
+	err := w.st.PoolForTest().QueryRow(ctx, `
 		SELECT COUNT(*)
 		FROM transaction_label_sources tls
 		JOIN transactions t ON t.id = tls.transaction_id
@@ -278,7 +162,7 @@ func TestWrite_PersistsManualLabelProvenanceForPayloadLabels(t *testing.T) {
 
 // TestWrite_Batch verifies that multiple transactions are written and all acknowledged.
 func TestWrite_Batch(t *testing.T) {
-	w := newTestWriter(t, Config{BatchSize: 5, FlushInterval: time.Second})
+	w := newTestIngestor(t, store.IngestionConfig{BatchSize: 5, FlushInterval: time.Second})
 
 	txns := make([]*api.TransactionDetails, 10)
 	for i := range txns {
@@ -301,7 +185,7 @@ func TestWrite_Batch(t *testing.T) {
 // (same message_id) does not overwrite user-edited description, category, or bucket.
 // Extracted fields (amount, merchant_info) must still be updated.
 func TestWrite_Upsert_PreservesUserEdits(t *testing.T) {
-	w := newTestWriter(t, Config{BatchSize: 1, FlushInterval: time.Second})
+	w := newTestIngestor(t, store.IngestionConfig{BatchSize: 1, FlushInterval: time.Second})
 	ctx := context.Background()
 
 	msgID := fmt.Sprintf("upsert-user-edits-%d", time.Now().UnixNano())
@@ -321,7 +205,7 @@ func TestWrite_Upsert_PreservesUserEdits(t *testing.T) {
 	assertWrite(t, w, []*api.TransactionDetails{initial}, 5*time.Second)
 
 	// Step 2: simulate user edits directly in the DB.
-	_, err := w.pool.Exec(ctx,
+	_, err := w.st.PoolForTest().Exec(ctx,
 		`UPDATE transactions SET description = $1, category = $2, bucket = $3 WHERE message_id = $4`,
 		"Anniversary dinner", "Dining Out", "Needs", msgID,
 	)
@@ -347,7 +231,7 @@ func TestWrite_Upsert_PreservesUserEdits(t *testing.T) {
 	var gotDesc, gotCategory, gotBucket string
 	var gotAmount float64
 	var gotMerchant string
-	err = w.pool.QueryRow(ctx,
+	err = w.st.PoolForTest().QueryRow(ctx,
 		`SELECT description, category, bucket, amount, merchant_info FROM transactions WHERE message_id = $1`,
 		msgID,
 	).Scan(&gotDesc, &gotCategory, &gotBucket, &gotAmount, &gotMerchant)
@@ -378,7 +262,7 @@ func TestWrite_Upsert_PreservesUserEdits(t *testing.T) {
 // TestWrite_Upsert_PopulatesEmptyCategoryBucket verifies that when a transaction has
 // no user-set category or bucket, re-processing updates them from the extracted values.
 func TestWrite_Upsert_PopulatesEmptyCategoryBucket(t *testing.T) {
-	w := newTestWriter(t, Config{BatchSize: 1, FlushInterval: time.Second})
+	w := newTestIngestor(t, store.IngestionConfig{BatchSize: 1, FlushInterval: time.Second})
 
 	msgID := fmt.Sprintf("upsert-empty-fields-%d", time.Now().UnixNano())
 
@@ -409,7 +293,7 @@ func TestWrite_Upsert_PopulatesEmptyCategoryBucket(t *testing.T) {
 	assertWrite(t, w, []*api.TransactionDetails{reprocessed}, 5*time.Second)
 
 	var gotCategory, gotBucket string
-	err := w.pool.QueryRow(context.Background(),
+	err := w.st.PoolForTest().QueryRow(context.Background(),
 		`SELECT category, bucket FROM transactions WHERE message_id = $1`, msgID,
 	).Scan(&gotCategory, &gotBucket)
 	if err != nil {
@@ -426,20 +310,20 @@ func TestWrite_Upsert_PopulatesEmptyCategoryBucket(t *testing.T) {
 // TestWrite_AutoAppliesMerchantLabelToFutureTransactions verifies that a merchant
 // label mapping is applied to newly written transactions.
 func TestWrite_AutoAppliesMerchantLabelToFutureTransactions(t *testing.T) {
-	w := newTestWriter(t, Config{BatchSize: 1, FlushInterval: time.Second})
+	w := newTestIngestor(t, store.IngestionConfig{BatchSize: 1, FlushInterval: time.Second})
 	ctx := context.Background()
 
 	const merchant = "Netflix"
 	const label = "subscription"
 
-	_, err := w.pool.Exec(ctx, `
+	_, err := w.st.PoolForTest().Exec(ctx, `
 		INSERT INTO labels (name, color) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING
 	`, label, "#f59e0b")
 	if err != nil {
 		t.Fatalf("seed label row: %v", err)
 	}
 
-	_, err = w.pool.Exec(ctx, `
+	_, err = w.st.PoolForTest().Exec(ctx, `
 		INSERT INTO label_merchants (label, merchant_pattern) VALUES ($1, $2)
 		ON CONFLICT (label, merchant_pattern) DO NOTHING
 	`, label, merchant)
@@ -460,7 +344,7 @@ func TestWrite_AutoAppliesMerchantLabelToFutureTransactions(t *testing.T) {
 	assertWrite(t, w, []*api.TransactionDetails{txn}, 5*time.Second)
 
 	var labels []string
-	err = w.pool.QueryRow(ctx, `
+	err = w.st.PoolForTest().QueryRow(ctx, `
 		SELECT COALESCE(array_agg(label ORDER BY label), '{}')
 		FROM transaction_labels tl
 		JOIN transactions t ON t.id = tl.transaction_id
@@ -477,10 +361,10 @@ func TestWrite_AutoAppliesMerchantLabelToFutureTransactions(t *testing.T) {
 // TestWrite_AutoAppliesMerchantCategoryBucketToFutureTransactions verifies that
 // merchant category rules follow resolver semantics for future transactions.
 func TestWrite_AutoAppliesMerchantCategoryBucketToFutureTransactions(t *testing.T) {
-	w := newTestWriter(t, Config{BatchSize: 1, FlushInterval: time.Second})
+	w := newTestIngestor(t, store.IngestionConfig{BatchSize: 1, FlushInterval: time.Second})
 	ctx := context.Background()
 
-	_, err := w.pool.Exec(ctx, `
+	_, err := w.st.PoolForTest().Exec(ctx, `
 		INSERT INTO mcc_codes (code, description, category, bucket)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (code) DO UPDATE
@@ -493,7 +377,7 @@ func TestWrite_AutoAppliesMerchantCategoryBucketToFutureTransactions(t *testing.
 		t.Fatalf("seed mcc code: %v", err)
 	}
 
-	_, err = w.pool.Exec(ctx, `
+	_, err = w.st.PoolForTest().Exec(ctx, `
 		INSERT INTO merchant_categories (fragment, mcc_code, category, bucket, user_locked)
 		VALUES ($1, $2, NULL, NULL, true)
 		ON CONFLICT (fragment) DO UPDATE
@@ -506,7 +390,7 @@ func TestWrite_AutoAppliesMerchantCategoryBucketToFutureTransactions(t *testing.
 		t.Fatalf("seed MCC-backed merchant category: %v", err)
 	}
 
-	_, err = w.pool.Exec(ctx, `
+	_, err = w.st.PoolForTest().Exec(ctx, `
 		INSERT INTO merchant_categories (fragment, category, bucket, user_locked)
 		VALUES ($1, $2, $3, true)
 		ON CONFLICT (fragment) DO UPDATE
@@ -545,7 +429,7 @@ func TestWrite_AutoAppliesMerchantCategoryBucketToFutureTransactions(t *testing.
 	check := func(messageID, wantCategory, wantBucket string) {
 		t.Helper()
 		var category, bucket string
-		err = w.pool.QueryRow(ctx, `
+		err = w.st.PoolForTest().QueryRow(ctx, `
 			SELECT category, bucket FROM transactions WHERE message_id = $1
 		`, messageID).Scan(&category, &bucket)
 		if err != nil {
@@ -559,8 +443,8 @@ func TestWrite_AutoAppliesMerchantCategoryBucketToFutureTransactions(t *testing.
 	check(txns[1].MessageID, "Food Delivery", "Wants")
 }
 
-// assertWrite sends txns through the writer and verifies every message is acknowledged.
-func assertWrite(t *testing.T, w *Writer, txns []*api.TransactionDetails, timeout time.Duration) {
+// assertWrite sends txns through the ingestor and verifies every message is acknowledged.
+func assertWrite(t *testing.T, w *testIngestor, txns []*api.TransactionDetails, timeout time.Duration) {
 	t.Helper()
 
 	in := make(chan *api.TransactionDetails, len(txns))
@@ -603,6 +487,6 @@ func assertWrite(t *testing.T, w *Writer, txns []*api.TransactionDetails, timeou
 	}
 
 	if err := <-errCh; err != nil {
-		t.Errorf("writer returned error: %v", err)
+		t.Errorf("ingestor returned error: %v", err)
 	}
 }

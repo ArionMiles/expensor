@@ -96,7 +96,6 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 
 	// Plugin listing
 	mux.HandleFunc("GET /api/plugins/readers", h.ListReaders)
-	mux.HandleFunc("GET /api/plugins/writers", h.ListWriters)
 
 	// Thunderbird profile/mailbox discovery (must precede wildcard /api/readers/{name}/... routes)
 	mux.HandleFunc("GET /api/readers/thunderbird/discover/profiles", h.DiscoverProfiles)

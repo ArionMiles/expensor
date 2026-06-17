@@ -1,6 +1,4 @@
-// Package store provides database query operations for the Expensor API.
-// It is separate from the writer plugin's pool — the store is used exclusively
-// by HTTP handlers for reads and user-initiated writes (descriptions, labels).
+// Package store provides database query and persistence operations for Expensor.
 package store
 
 import (
