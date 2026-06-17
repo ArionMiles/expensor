@@ -9,7 +9,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ArionMiles/expensor/backend/internal/dbconn"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/migrations"
@@ -28,7 +27,7 @@ func runMigrations(pgCfg config.Postgres, logger *slog.Logger) error {
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s pool_max_conns=1",
 		pgCfg.Host, pgCfg.Port, pgCfg.User, pgCfg.Password, pgCfg.Database, pgCfg.SSLMode,
 	)
-	poolCfg, err := dbconn.ParseConfig(connStr)
+	poolCfg, err := store.ParsePoolConfig(connStr)
 	if err != nil {
 		return fmt.Errorf("parsing migration connection string: %w", err)
 	}
