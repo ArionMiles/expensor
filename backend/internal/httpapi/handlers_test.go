@@ -115,6 +115,78 @@ type mockStore struct {
 	syncStatusErr         error
 }
 
+func (m *mockStore) BootstrapRequired(_ context.Context) (bool, error) {
+	return false, nil
+}
+
+func (m *mockStore) CreateBootstrapAdmin(_ context.Context, input store.CreateBootstrapAdminInput) (*store.User, error) {
+	return &store.User{
+		ID:           "admin-user-id",
+		TenantID:     "admin-user-id",
+		Email:        input.Email,
+		DisplayName:  input.DisplayName,
+		PasswordHash: input.PasswordHash,
+		Role:         store.UserRoleAdmin,
+		AvatarKey:    input.AvatarKey,
+	}, nil
+}
+
+func (m *mockStore) CreateUser(_ context.Context, input store.CreateUserInput) (*store.User, error) {
+	return &store.User{
+		ID:           "user-id",
+		TenantID:     "user-id",
+		Email:        input.Email,
+		DisplayName:  input.DisplayName,
+		PasswordHash: input.PasswordHash,
+		Role:         input.Role,
+		AvatarKey:    input.AvatarKey,
+	}, nil
+}
+
+func (m *mockStore) FindUserByEmail(_ context.Context, _ string) (*store.User, error) {
+	return nil, store.ErrNotFound
+}
+
+func (m *mockStore) FindUserByID(_ context.Context, _ string) (*store.User, error) {
+	return nil, store.ErrNotFound
+}
+
+func (m *mockStore) CreateSession(_ context.Context, input store.CreateSessionInput) (*store.Session, error) {
+	return &store.Session{ID: "session-id", UserID: input.UserID, TokenHash: input.TokenHash, ExpiresAt: input.ExpiresAt}, nil
+}
+
+func (m *mockStore) FindSessionByHash(_ context.Context, _ string) (*store.Session, error) {
+	return nil, store.ErrNotFound
+}
+
+func (m *mockStore) RevokeSession(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *mockStore) CreateAccessToken(_ context.Context, input store.CreateAccessTokenInput) (*store.AccessToken, error) {
+	return &store.AccessToken{ID: "access-token-id", UserID: input.UserID, Name: input.Name, TokenHash: input.TokenHash, ExpiresAt: input.ExpiresAt}, nil
+}
+
+func (m *mockStore) FindAccessTokenByHash(_ context.Context, _ string) (*store.AccessToken, error) {
+	return nil, store.ErrNotFound
+}
+
+func (m *mockStore) RevokeAccessToken(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (m *mockStore) CreateAccountSetupToken(_ context.Context, input store.CreateAccountSetupTokenInput) (*store.AccountSetupToken, error) {
+	return &store.AccountSetupToken{ID: "setup-token-id", UserID: input.UserID, TokenHash: input.TokenHash, ExpiresAt: input.ExpiresAt}, nil
+}
+
+func (m *mockStore) FindAccountSetupTokenByHash(_ context.Context, _ string) (*store.AccountSetupToken, error) {
+	return nil, store.ErrNotFound
+}
+
+func (m *mockStore) MarkAccountSetupTokenUsed(_ context.Context, _ string) error {
+	return nil
+}
+
 func (m *mockStore) ListTransactions(
 	_ context.Context,
 	f store.ListFilter,

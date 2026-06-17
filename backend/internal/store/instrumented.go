@@ -34,6 +34,132 @@ func (s *InstrumentedStore) recordOperation(ctx context.Context, name string, er
 	})
 }
 
+func (s *InstrumentedStore) BootstrapRequired(ctx context.Context) (bool, error) {
+	ctx, span := s.scope.Start(ctx, "store.auth.bootstrap_required")
+	defer span.End()
+
+	required, err := s.next.BootstrapRequired(ctx)
+	s.recordOperation(ctx, "auth.bootstrap_required", err)
+	return required, err
+}
+
+func (s *InstrumentedStore) CreateBootstrapAdmin(ctx context.Context, input CreateBootstrapAdminInput) (*User, error) {
+	ctx, span := s.scope.Start(ctx, "store.auth.create_bootstrap_admin")
+	defer span.End()
+
+	user, err := s.next.CreateBootstrapAdmin(ctx, input)
+	s.recordOperation(ctx, "auth.create_bootstrap_admin", err)
+	return user, err
+}
+
+func (s *InstrumentedStore) CreateUser(ctx context.Context, input CreateUserInput) (*User, error) {
+	ctx, span := s.scope.Start(ctx, "store.auth.create_user")
+	defer span.End()
+
+	user, err := s.next.CreateUser(ctx, input)
+	s.recordOperation(ctx, "auth.create_user", err)
+	return user, err
+}
+
+func (s *InstrumentedStore) FindUserByEmail(ctx context.Context, email string) (*User, error) {
+	ctx, span := s.scope.Start(ctx, "store.auth.find_user_by_email")
+	defer span.End()
+
+	user, err := s.next.FindUserByEmail(ctx, email)
+	s.recordOperation(ctx, "auth.find_user_by_email", err)
+	return user, err
+}
+
+func (s *InstrumentedStore) FindUserByID(ctx context.Context, id string) (*User, error) {
+	ctx, span := s.scope.Start(ctx, "store.auth.find_user_by_id")
+	defer span.End()
+
+	user, err := s.next.FindUserByID(ctx, id)
+	s.recordOperation(ctx, "auth.find_user_by_id", err)
+	return user, err
+}
+
+func (s *InstrumentedStore) CreateSession(ctx context.Context, input CreateSessionInput) (*Session, error) {
+	ctx, span := s.scope.Start(ctx, "store.auth.create_session")
+	defer span.End()
+
+	session, err := s.next.CreateSession(ctx, input)
+	s.recordOperation(ctx, "auth.create_session", err)
+	return session, err
+}
+
+func (s *InstrumentedStore) FindSessionByHash(ctx context.Context, tokenHash string) (*Session, error) {
+	ctx, span := s.scope.Start(ctx, "store.auth.find_session_by_hash")
+	defer span.End()
+
+	session, err := s.next.FindSessionByHash(ctx, tokenHash)
+	s.recordOperation(ctx, "auth.find_session_by_hash", err)
+	return session, err
+}
+
+func (s *InstrumentedStore) RevokeSession(ctx context.Context, id string) error {
+	ctx, span := s.scope.Start(ctx, "store.auth.revoke_session")
+	defer span.End()
+
+	err := s.next.RevokeSession(ctx, id)
+	s.recordOperation(ctx, "auth.revoke_session", err)
+	return err
+}
+
+func (s *InstrumentedStore) CreateAccessToken(ctx context.Context, input CreateAccessTokenInput) (*AccessToken, error) {
+	ctx, span := s.scope.Start(ctx, "store.auth.create_access_token")
+	defer span.End()
+
+	token, err := s.next.CreateAccessToken(ctx, input)
+	s.recordOperation(ctx, "auth.create_access_token", err)
+	return token, err
+}
+
+func (s *InstrumentedStore) FindAccessTokenByHash(ctx context.Context, tokenHash string) (*AccessToken, error) {
+	ctx, span := s.scope.Start(ctx, "store.auth.find_access_token_by_hash")
+	defer span.End()
+
+	token, err := s.next.FindAccessTokenByHash(ctx, tokenHash)
+	s.recordOperation(ctx, "auth.find_access_token_by_hash", err)
+	return token, err
+}
+
+func (s *InstrumentedStore) RevokeAccessToken(ctx context.Context, id, userID string) error {
+	ctx, span := s.scope.Start(ctx, "store.auth.revoke_access_token")
+	defer span.End()
+
+	err := s.next.RevokeAccessToken(ctx, id, userID)
+	s.recordOperation(ctx, "auth.revoke_access_token", err)
+	return err
+}
+
+func (s *InstrumentedStore) CreateAccountSetupToken(ctx context.Context, input CreateAccountSetupTokenInput) (*AccountSetupToken, error) {
+	ctx, span := s.scope.Start(ctx, "store.auth.create_account_setup_token")
+	defer span.End()
+
+	token, err := s.next.CreateAccountSetupToken(ctx, input)
+	s.recordOperation(ctx, "auth.create_account_setup_token", err)
+	return token, err
+}
+
+func (s *InstrumentedStore) FindAccountSetupTokenByHash(ctx context.Context, tokenHash string) (*AccountSetupToken, error) {
+	ctx, span := s.scope.Start(ctx, "store.auth.find_account_setup_token_by_hash")
+	defer span.End()
+
+	token, err := s.next.FindAccountSetupTokenByHash(ctx, tokenHash)
+	s.recordOperation(ctx, "auth.find_account_setup_token_by_hash", err)
+	return token, err
+}
+
+func (s *InstrumentedStore) MarkAccountSetupTokenUsed(ctx context.Context, id string) error {
+	ctx, span := s.scope.Start(ctx, "store.auth.mark_account_setup_token_used")
+	defer span.End()
+
+	err := s.next.MarkAccountSetupTokenUsed(ctx, id)
+	s.recordOperation(ctx, "auth.mark_account_setup_token_used", err)
+	return err
+}
+
 func (s *InstrumentedStore) ListTransactions(ctx context.Context, f ListFilter) ([]Transaction, TransactionListResult, error) {
 	ctx, span := s.scope.Start(ctx, "store.transactions.list")
 	defer span.End()

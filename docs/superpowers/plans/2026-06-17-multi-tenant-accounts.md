@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement Phase 1 of issue #24: secure multi-tenant accounts with browser sessions, programmatic tokens, tenant-scoped data, encrypted per-tenant reader runtime, admin-created users, bundled SVG avatars, and removable single-user migration.
+**Goal:** Implement Phase 1 of issue #24: secure multi-tenant accounts with browser sessions, programmatic tokens, user-as-tenant data scoping, encrypted per-user reader runtime, admin-created users, bundled SVG avatars, and removable single-user migration.
 
-**Architecture:** Add a dedicated `backend/internal/auth` package for principals, password/session/token helpers, and request context helpers. Add tenant-aware auth/runtime repositories under `backend/internal/store`, then require explicit tenant/principal arguments across tenant-owned store capabilities. The frontend adds an auth gate and account/profile/admin surfaces before entering the existing app shell.
+**Architecture:** Add a dedicated `backend/internal/auth` package for principals, password/session/token helpers, and request context helpers. Add auth/runtime repositories under `backend/internal/store`, then require explicit tenant/principal arguments across tenant-owned store capabilities. In Phase 1 each user is the tenant, so `tenant_id` values are `users.id`; no separate tenant hierarchy is introduced. The frontend adds an auth gate and account/profile/admin surfaces before entering the existing app shell.
 
 **Tech Stack:** Go 1.26, net/http ServeMux, pgx/PostgreSQL, golang-migrate, envconfig, React, TanStack Query, React Router, Vitest, Playwright, OpenAPI/Schemathesis.
 
@@ -28,11 +28,11 @@ Create:
 - `backend/internal/auth/*_test.go`: unit tests for auth primitives.
 - `backend/internal/httpapi/handlers_auth.go`: bootstrap, session, profile, token, account setup, admin user, and avatar handlers.
 - `backend/internal/httpapi/auth_middleware.go`: public route allowlist and authenticated principal injection.
-- `backend/internal/store/auth_repository.go`: users, tenants, sessions, access tokens, and setup tokens.
+- `backend/internal/store/auth_repository.go`: users, sessions, access tokens, and setup tokens.
 - `backend/internal/store/secretbox.go`: repository helper for encrypting and decrypting reader runtime secrets.
 - `backend/internal/bootstrap/legacy.go`: isolated legacy single-user claim/import flow.
 - `backend/internal/bootstrap/legacy_test.go`: isolated legacy migration tests.
-- `backend/migrations/004_multi_tenant_accounts.up.sql`: permanent auth and tenant schema.
+- `backend/migrations/004_multi_tenant_accounts.up.sql`: permanent auth schema.
 - `backend/migrations/004_multi_tenant_accounts.down.sql`: rollback for migration tests.
 - `docs/deployment/secrets.md`: deployment guidance for `EXPENSOR_SECRET_KEY` and `EXPENSOR_SECRET_KEY_FILE`.
 - `scripts/secrets/generate-key.sh`: helper that prints a base64-encoded 32-byte key.
@@ -253,7 +253,7 @@ func TestAuthRepositoryBootstrapAndSessionLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateBootstrapAdmin() error = %v", err)
 	}
-	if admin.TenantID == "" || admin.Role != store.UserRoleAdmin {
+	if admin.TenantID != admin.ID || admin.Role != store.UserRoleAdmin {
 		t.Fatalf("admin = %#v", admin)
 	}
 
@@ -299,19 +299,11 @@ Expected: FAIL because auth tables and methods do not exist.
 
 - [ ] **Step 3: Add migration**
 
-Create permanent schema with these tables and constraints:
+Create permanent schema with these tables and constraints. There is no `tenants` table in Phase 1; the user is the tenant. The authenticated principal exposes `tenant_id`, but it is equal to `users.id`.
 
 ```sql
-CREATE TABLE IF NOT EXISTS tenants (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     email TEXT NOT NULL,
     password_hash TEXT,
     display_name TEXT NOT NULL,
@@ -370,15 +362,12 @@ const (
 )
 
 type Tenant struct {
-	ID        string
-	Name      string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID string
 }
 
 type User struct {
 	ID           string
-	TenantID     string
+	TenantID     string // equal to ID in Phase 1
 	Email        string
 	PasswordHash string
 	DisplayName  string
@@ -558,8 +547,8 @@ Create `docs/deployment/secrets.md` documenting:
 Extend the migration from Task 2 or add `005_tenant_runtime.up.sql` if Task 2 is already merged:
 
 ```sql
-ALTER TABLE reader_runtime ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id);
-ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id);
+ALTER TABLE reader_runtime ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES users(id);
+ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES users(id);
 CREATE UNIQUE INDEX IF NOT EXISTS reader_runtime_tenant_reader_key ON reader_runtime (tenant_id, reader);
 CREATE UNIQUE INDEX IF NOT EXISTS processed_messages_tenant_key ON processed_messages (tenant_id, message_key);
 ```
@@ -987,7 +976,7 @@ func TestLegacyClaimPreviewCountsRows(t *testing.T) {
 	}
 }
 
-func TestLegacyClaimAssignsRowsToInitialTenant(t *testing.T) {
+func TestLegacyClaimAssignsRowsToFirstAdminTenantID(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStoreWithLegacyRows(t)
 	admin := createTestUserWithTenant(t, st, "admin@example.com")
@@ -1297,6 +1286,6 @@ Expected:
 
 ## Plan Self-Review
 
-- Spec coverage: Phase 1 auth, tokens, admin-created users, avatars, tenant scoping, encrypted reader runtime, removable legacy migration, frontend, OpenAPI, and tests are covered. Phase 2 households remain intentionally excluded from implementation tasks.
+- Spec coverage: Phase 1 auth, tokens, admin-created users, avatars, user-as-tenant scoping, encrypted reader runtime, removable legacy migration, frontend, OpenAPI, and tests are covered. Cross-user grouping and sharing features remain intentionally excluded from implementation tasks.
 - Placeholder scan: no unspecified implementation placeholders are required to execute the tasks; each task names files, commands, and expected outcomes.
 - Type consistency: the plan uses `tenant_id`, `store.Tenant`, `auth.Principal`, and `/api/tokens` consistently.

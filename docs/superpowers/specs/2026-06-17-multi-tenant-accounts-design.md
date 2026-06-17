@@ -1,10 +1,10 @@
-# Multi-Tenant Accounts And Household Sharing Design
+# Multi-Tenant Accounts Design
 
 ## Context
 
-GitHub issue #24 asks Expensor to support authenticated multi-tenant accounts and optional household transaction sharing. Today Expensor assumes one user per installation: transactions, reader configuration, credentials, rules, runtime state, and preferences are effectively global.
+GitHub issue #24 asks Expensor to support authenticated multi-tenant accounts. Today Expensor assumes one user per installation: transactions, reader configuration, credentials, rules, runtime state, and preferences are effectively global.
 
-This design treats the issue as a phased security program. Phase 1 is the implementation-ready slice and focuses strictly on secure multi-tenancy. Household sharing is Phase 2 and must be built on top of a proven tenant boundary.
+This design focuses strictly on secure multi-tenancy. Phase 1 does not model any cross-user grouping, sharing, or ownership hierarchy.
 
 ## Goals
 
@@ -26,9 +26,9 @@ This design treats the issue as a phased security program. Phase 1 is the implem
 - No custom avatar uploads, linked image URLs, binary media storage, crop, zoom, or image transforms.
 - No token scopes in Phase 1; programmatic tokens are full user-equivalent tokens.
 - No key rotation in Phase 1.
-- No shared household taxonomies in Phase 2.
 - No transaction co-ownership.
 - No backup/restore implementation in this spec.
+- No sharing or group-membership data model in Phase 1.
 
 ## Phase 1 Scope
 
@@ -47,29 +47,17 @@ Phase 1 adds secure multi-tenancy:
 - Application-layer authenticated encryption for reader secrets and OAuth tokens.
 - Existing single-user installation migration into the first administrator tenant.
 
-## Phase 2 Scope
-
-Phase 2 adds household sharing after Phase 1 proves tenant isolation:
-
-- A user may belong to at most one household initially.
-- Household owners can create, rename, invite members, remove members, and disband a household.
-- Members can leave a household.
-- Members control whether their transactions are shared.
-- A household transaction collection supports the same filters as the user's private transaction collection.
-- Shared transactions are annotated with their owner.
-- Household access is read-only for transactions owned by another member.
-- Labels, rules, categories, buckets, credentials, app settings, and reader runtime remain private to each tenant.
-
 ## Identity Model
 
-Phase 1 introduces `tenants` and `users`.
+Phase 1 introduces `users`. There is no separate `tenants` table in Phase 1.
 
-Each user belongs to exactly one personal tenant in Phase 1. The schema uses `tenant_id`, not `owner_user_id`, so later sharing models can evolve without renaming every tenant-owned table.
+Each user is their own tenant in Phase 1. Tenant-owned tables use a `tenant_id` column, and that value is the owning user's `users.id`. The authenticated principal still exposes both `user_id` and `tenant_id`; in Phase 1 they are equal.
+
+Future collaboration features may introduce their own hierarchy or group model when those requirements are designed. Phase 1 must not add tables or abstractions solely to anticipate that future work.
 
 User profile fields:
 
 - `id`
-- `tenant_id`
 - `email`
 - `password_hash`
 - `display_name`
@@ -94,7 +82,7 @@ The frontend must not provide any upload, external URL, crop, zoom, or transform
 Bootstrap:
 
 - `GET /api/bootstrap` returns whether first-admin bootstrap is available or required.
-- `POST /api/bootstrap` creates the first admin user and initial tenant.
+- `POST /api/bootstrap` creates the first admin account.
 - Bootstrap is disabled once any user exists.
 
 Admin user management:
@@ -162,7 +150,7 @@ Phase 1 tokens are full user-equivalent tokens. Scoped tokens are a future enhan
 Authentication middleware resolves either a valid session cookie or bearer token into an authenticated principal:
 
 - `user_id`
-- `tenant_id`
+- `tenant_id` (equal to `user_id` in Phase 1)
 - `role`
 - authentication method
 
@@ -271,7 +259,7 @@ Never include these values in logs, API responses, traces, metrics, span events,
 
 The daemon can no longer assume a single global active reader loop. Reader operations are per authenticated tenant. Daemon coordination must include tenant identity when starting, rescanning, checkpointing, reading runtime state, and persisting processed messages.
 
-If continuous background scanning for many tenants is too large for Phase 1, Phase 1 may limit daemon behavior to secure per-tenant manual starts and rescans. It must not keep global reader state that can mix tenants.
+If continuous background scanning for many users is too large for Phase 1, Phase 1 may limit daemon behavior to secure per-user manual starts and rescans. It must not keep global reader state that can mix users.
 
 ## Existing Installation Migration
 
@@ -279,7 +267,7 @@ The migration must protect existing users without becoming permanent architectur
 
 Permanent schema changes live in normal SQL migrations under `backend/migrations/`.
 
-Existing rows are assigned to one initial tenant during migration:
+Existing rows are assigned to the first admin user's tenant ID during migration:
 
 - transactions
 - transaction labels and label sources
@@ -296,15 +284,15 @@ Existing rows are assigned to one initial tenant during migration:
 
 Bundled/system data remains global.
 
-On existing installations with data but no users, startup enters a restricted bootstrap-required state. The first admin creation flow also creates the initial tenant and claims or migrates existing single-user data.
+On existing installations with data but no users, startup enters a restricted bootstrap-required state. The first admin creation flow claims or migrates existing single-user data to the first admin user's tenant ID.
 
-The migration should provide a dry-run or preview result before commit when feasible. The preview reports row counts that will be assigned to the initial tenant and any blocking validation errors.
+The migration should provide a dry-run or preview result before commit when feasible. The preview reports row counts that will be assigned to the first admin user's tenant ID and any blocking validation errors.
 
 The committed migration is transactional where possible. Legacy credential/runtime file import, if still relevant at implementation time, lives in one isolated importer. Legacy files are never deleted until DB migration/import commits and verification passes.
 
 Failure behavior:
 
-- If migration cannot safely assign all existing user-owned rows to the initial tenant, startup remains in bootstrap-required mode.
+- If migration cannot safely assign all existing user-owned rows to the first admin user's tenant ID, startup remains in bootstrap-required mode.
 - Partial migration must not leave mixed global and tenant-owned private data.
 - Legacy secret import failures must not silently drop credentials. The flow should either block or clearly mark the affected reader setup incomplete.
 
@@ -351,7 +339,7 @@ Phase 1 routes:
 
 Existing private resource routes remain stable where possible and become authenticated and tenant-scoped.
 
-Household endpoints are Phase 2 and are not implemented in Phase 1.
+Cross-user grouping or sharing endpoints are not implemented or modeled in Phase 1.
 
 ## Frontend Design
 
@@ -460,11 +448,10 @@ Before Phase 1 ships:
 
 ## Follow-Ups
 
-- Phase 2 household sharing.
+- Future collaboration features, with their own requirements and data model.
 - Multi-tenant background scheduler if Phase 1 limits daemon behavior to per-tenant manual starts/rescans.
 - Token scopes.
 - Key rotation.
 - Backup/restore format that is tenant-aware and excludes OAuth secrets.
-- Shared household taxonomies.
 - Transaction co-ownership.
 - Removal of the legacy single-user migration path after current installations have migrated.

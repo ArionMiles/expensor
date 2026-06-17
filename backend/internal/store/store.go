@@ -19,6 +19,7 @@ type Store struct {
 	pool      *pgxpool.Pool
 	logger    *slog.Logger
 	now       func() time.Time
+	auth      *pgAuthRepository
 	community *pgCommunityRepository
 	diag      *pgDiagnosticsRepository
 	readModel *pgReadModelRepository
@@ -76,6 +77,7 @@ func (s *Store) initRepositories() {
 		logger: s.logger,
 		now:    s.now,
 	}
+	s.auth = newPGAuthRepository(deps)
 	s.community = newPGCommunityRepository(deps)
 	s.diag = newPGDiagnosticsRepository(deps)
 	s.rules = newPGRulesRepository(deps)
@@ -88,6 +90,62 @@ func (s *Store) initRepositories() {
 // Close releases the store's connection pool.
 func (s *Store) Close() {
 	s.pool.Close()
+}
+
+func (s *Store) BootstrapRequired(ctx context.Context) (bool, error) {
+	return s.auth.BootstrapRequired(ctx)
+}
+
+func (s *Store) CreateBootstrapAdmin(ctx context.Context, input CreateBootstrapAdminInput) (*User, error) {
+	return s.auth.CreateBootstrapAdmin(ctx, input)
+}
+
+func (s *Store) CreateUser(ctx context.Context, input CreateUserInput) (*User, error) {
+	return s.auth.CreateUser(ctx, input)
+}
+
+func (s *Store) FindUserByEmail(ctx context.Context, email string) (*User, error) {
+	return s.auth.FindUserByEmail(ctx, email)
+}
+
+func (s *Store) FindUserByID(ctx context.Context, id string) (*User, error) {
+	return s.auth.FindUserByID(ctx, id)
+}
+
+func (s *Store) CreateSession(ctx context.Context, input CreateSessionInput) (*Session, error) {
+	return s.auth.CreateSession(ctx, input)
+}
+
+func (s *Store) FindSessionByHash(ctx context.Context, tokenHash string) (*Session, error) {
+	return s.auth.FindSessionByHash(ctx, tokenHash)
+}
+
+func (s *Store) RevokeSession(ctx context.Context, id string) error {
+	return s.auth.RevokeSession(ctx, id)
+}
+
+func (s *Store) CreateAccessToken(ctx context.Context, input CreateAccessTokenInput) (*AccessToken, error) {
+	return s.auth.CreateAccessToken(ctx, input)
+}
+
+func (s *Store) FindAccessTokenByHash(ctx context.Context, tokenHash string) (*AccessToken, error) {
+	return s.auth.FindAccessTokenByHash(ctx, tokenHash)
+}
+
+func (s *Store) RevokeAccessToken(ctx context.Context, id, userID string) error {
+	return s.auth.RevokeAccessToken(ctx, id, userID)
+}
+
+func (s *Store) CreateAccountSetupToken(ctx context.Context, input CreateAccountSetupTokenInput) (*AccountSetupToken, error) {
+	return s.auth.CreateAccountSetupToken(ctx, input)
+}
+
+func (s *Store) FindAccountSetupTokenByHash(ctx context.Context, tokenHash string) (*AccountSetupToken, error) {
+	return s.auth.FindAccountSetupTokenByHash(ctx, tokenHash)
+}
+
+func (s *Store) MarkAccountSetupTokenUsed(ctx context.Context, id string) error {
+	return s.auth.MarkAccountSetupTokenUsed(ctx, id)
 }
 
 func (s *Store) queryTransactionTotals(
