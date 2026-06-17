@@ -1,64 +1,39 @@
-// Package postgres provides a PostgreSQL writer for transaction storage.
-package postgres
+package store
 
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/ArionMiles/expensor/backend/internal/dbconn"
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
-// Config holds the PostgreSQL writer configuration.
-type Config struct {
-	Host     string
-	Port     int
-	Database string
-	User     string
-	Password string
-	SSLMode  string
-
+// IngestionConfig controls daemon transaction ingestion batching.
+type IngestionConfig struct {
 	// BatchSize is the number of transactions to buffer before writing.
 	BatchSize int
 	// FlushInterval is the time between automatic flushes.
 	FlushInterval time.Duration
-
-	// MaxPoolSize is the maximum number of connections in the pool.
-	MaxPoolSize int32
 }
 
-// Writer writes transactions to a PostgreSQL database.
-type Writer struct {
-	pool          *pgxpool.Pool
+// TransactionIngestor writes extracted daemon transactions to the application store.
+type TransactionIngestor struct {
+	pool          poolBeginner
 	logger        *slog.Logger
 	batchSize     int
 	flushInterval time.Duration
 	scope         *observability.Scope
 }
 
-// compile-time check: *Writer must satisfy io.Closer.
-var _ io.Closer = (*Writer)(nil)
-
-// New creates a new PostgreSQL writer.
-func New(cfg Config, logger *slog.Logger) (*Writer, error) {
+// NewTransactionIngestor creates a transaction ingestor backed by the store pool.
+func (s *Store) NewTransactionIngestor(cfg IngestionConfig, logger *slog.Logger) *TransactionIngestor {
 	if logger == nil {
-		logger = slog.Default()
-	}
-
-	// Set defaults
-	if cfg.Port == 0 {
-		cfg.Port = 5432
-	}
-	if cfg.SSLMode == "" {
-		cfg.SSLMode = "disable"
+		logger = s.logger
 	}
 	if cfg.BatchSize == 0 {
 		cfg.BatchSize = 10
@@ -66,63 +41,23 @@ func New(cfg Config, logger *slog.Logger) (*Writer, error) {
 	if cfg.FlushInterval == 0 {
 		cfg.FlushInterval = 30 * time.Second
 	}
-	if cfg.MaxPoolSize == 0 {
-		cfg.MaxPoolSize = 10
-	}
 
-	// Build connection string
-	connStr := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.SSLMode,
-	)
-
-	// Configure connection pool
-	poolConfig, err := dbconn.ParseConfig(connStr)
-	if err != nil {
-		return nil, fmt.Errorf("parsing connection string: %w", err)
-	}
-
-	poolConfig.MaxConns = cfg.MaxPoolSize
-	poolConfig.MinConns = 2
-	poolConfig.MaxConnLifetime = 1 * time.Hour
-	poolConfig.MaxConnIdleTime = 30 * time.Minute
-	poolConfig.HealthCheckPeriod = 1 * time.Minute
-
-	// Create connection pool
-	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
-	if err != nil {
-		return nil, fmt.Errorf("creating connection pool: %w", err)
-	}
-
-	// Test connection
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("pinging database: %w", err)
-	}
-
-	logger.Info("connected to PostgreSQL",
-		"host", cfg.Host,
-		"port", cfg.Port,
-		"database", cfg.Database,
-	)
-
-	w := &Writer{
-		pool:          pool,
+	return &TransactionIngestor{
+		pool:          s.pool,
 		logger:        logger,
 		batchSize:     cfg.BatchSize,
 		flushInterval: cfg.FlushInterval,
-		scope:         observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/pkg/writer/postgres"),
+		scope:         observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/internal/store/ingestion"),
 	}
+}
 
-	return w, nil
+type poolBeginner interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
 // flushBatch writes the current batch to PostgreSQL and sends acknowledgments.
 // It resets the batch slice to empty on success.
-func (w *Writer) flushBatch(ctx context.Context, batch *[]*api.TransactionDetails, ackChan chan<- string) error {
+func (w *TransactionIngestor) flushBatch(ctx context.Context, batch *[]*api.TransactionDetails, ackChan chan<- string) error {
 	if len(*batch) == 0 {
 		return nil
 	}
@@ -149,7 +84,7 @@ func (w *Writer) flushBatch(ctx context.Context, batch *[]*api.TransactionDetail
 
 // Write consumes transactions from the channel and writes them to PostgreSQL.
 // It implements batch writing with periodic flushes for performance.
-func (w *Writer) Write(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error {
+func (w *TransactionIngestor) Write(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error {
 	batch := make([]*api.TransactionDetails, 0, w.batchSize)
 	ticker := time.NewTicker(w.flushInterval)
 	defer ticker.Stop()
@@ -183,18 +118,18 @@ func (w *Writer) Write(ctx context.Context, in <-chan *api.TransactionDetails, a
 
 // writeBatch writes a batch of transactions to the database.
 // Uses INSERT ON CONFLICT to handle duplicate message_id (upsert logic).
-func (w *Writer) writeBatch(ctx context.Context, transactions []*api.TransactionDetails) error {
+func (w *TransactionIngestor) writeBatch(ctx context.Context, transactions []*api.TransactionDetails) error {
 	if len(transactions) == 0 {
 		return nil
 	}
-	ctx, span := w.observabilityScope().Start(ctx, "postgres_writer.batch_write")
+	ctx, span := w.observabilityScope().Start(ctx, "store_ingestion.batch_write")
 	defer span.End()
 	start := time.Now()
-	span.SetAttributes(attribute.Int("postgres_writer.batch_size", len(transactions)))
+	span.SetAttributes(attribute.Int("store_ingestion.batch_size", len(transactions)))
 	var writeErr error
 	defer func() {
 		w.observabilityScope().RecordDuration(ctx, observability.DurationOperation{
-			Namespace: "postgres_writer",
+			Namespace: "store_ingestion",
 			Name:      "batch_write",
 			Duration:  time.Since(start),
 			Err:       writeErr,
@@ -311,14 +246,14 @@ func (w *Writer) writeBatch(ctx context.Context, transactions []*api.Transaction
 	return nil
 }
 
-func (w *Writer) observabilityScope() *observability.Scope {
+func (w *TransactionIngestor) observabilityScope() *observability.Scope {
 	if w.scope == nil {
-		w.scope = observability.NewScope(w.logger, "github.com/ArionMiles/expensor/backend/pkg/writer/postgres")
+		w.scope = observability.NewScope(w.logger, "github.com/ArionMiles/expensor/backend/internal/store/ingestion")
 	}
 	return w.scope
 }
 
-func (w *Writer) normalizeWriteInput(txn *api.TransactionDetails) (string, time.Time) {
+func (w *TransactionIngestor) normalizeWriteInput(txn *api.TransactionDetails) (string, time.Time) {
 	currency := txn.Currency
 	if currency == "" {
 		currency = "INR"
@@ -337,7 +272,7 @@ func (w *Writer) normalizeWriteInput(txn *api.TransactionDetails) (string, time.
 }
 
 // applyMerchantLabels attaches labels from merchant label mappings to transactions.
-func (w *Writer) applyMerchantLabels(ctx context.Context, tx pgx.Tx, txnIDs []string) error {
+func (w *TransactionIngestor) applyMerchantLabels(ctx context.Context, tx pgx.Tx, txnIDs []string) error {
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO transaction_label_sources (transaction_id, label, source_type, merchant_pattern)
 		SELECT t.id, lm.label, 'merchant', lm.merchant_pattern
@@ -361,7 +296,7 @@ func (w *Writer) applyMerchantLabels(ctx context.Context, tx pgx.Tx, txnIDs []st
 }
 
 // applyMerchantCategories fills in category and bucket from merchant category mappings.
-func (w *Writer) applyMerchantCategories(ctx context.Context, tx pgx.Tx, txnIDs []string) error {
+func (w *TransactionIngestor) applyMerchantCategories(ctx context.Context, tx pgx.Tx, txnIDs []string) error {
 	_, err := tx.Exec(ctx, `
 		WITH ranked_matches AS (
 			SELECT
@@ -391,7 +326,7 @@ func (w *Writer) applyMerchantCategories(ctx context.Context, tx pgx.Tx, txnIDs 
 }
 
 // applyMutedMerchants marks transactions as muted when they match muted merchant patterns.
-func (w *Writer) applyMutedMerchants(ctx context.Context, tx pgx.Tx, txnIDs []string) error {
+func (w *TransactionIngestor) applyMutedMerchants(ctx context.Context, tx pgx.Tx, txnIDs []string) error {
 	_, err := tx.Exec(ctx, `
 		UPDATE transactions t
 		SET muted = true,
@@ -406,7 +341,7 @@ func (w *Writer) applyMutedMerchants(ctx context.Context, tx pgx.Tx, txnIDs []st
 }
 
 // insertLabels inserts labels for a transaction.
-func (w *Writer) insertLabels(ctx context.Context, tx pgx.Tx, txnID string, labels []string) error {
+func (w *TransactionIngestor) insertLabels(ctx context.Context, tx pgx.Tx, txnID string, labels []string) error {
 	if len(labels) == 0 {
 		return nil
 	}
@@ -427,14 +362,5 @@ func (w *Writer) insertLabels(ctx context.Context, tx pgx.Tx, txnID string, labe
 		return fmt.Errorf("executing label insert: %w", err)
 	}
 
-	return nil
-}
-
-// Close releases the writer's connection pool. It implements io.Closer.
-func (w *Writer) Close() error {
-	if w.pool != nil {
-		w.pool.Close()
-		w.logger.Info("closed PostgreSQL connection pool")
-	}
 	return nil
 }

@@ -1,4 +1,4 @@
-// Package plugins provides a plugin registry for readers and writers.
+// Package plugins provides a plugin registry for transaction readers.
 package plugins
 
 import (
@@ -50,13 +50,6 @@ type ReaderMetadata struct {
 	SetupGuide   json.RawMessage `json:"setup_guide,omitempty"`
 }
 
-// WriterMetadata describes a writer plugin for catalog display and selection.
-type WriterMetadata struct {
-	Name           string   `json:"name"`
-	Description    string   `json:"description"`
-	RequiredScopes []string `json:"required_scopes"`
-}
-
 // ReaderInput contains dependencies required to create a reader instance.
 type ReaderInput struct {
 	HTTPClient     *http.Client
@@ -67,13 +60,6 @@ type ReaderInput struct {
 	StateManager   *state.Manager
 	DiagnosticSink api.DiagnosticSink
 	Logger         *slog.Logger
-}
-
-// WriterInput contains dependencies required to create a writer instance.
-type WriterInput struct {
-	HTTPClient *http.Client
-	AppConfig  *config.App
-	Logger     *slog.Logger
 }
 
 // ReaderGuide is the structured setup guide for a reader plugin.
@@ -114,23 +100,15 @@ type ReaderPlugin interface {
 	NewReader(input ReaderInput) (api.Reader, error)
 }
 
-// WriterPlugin defines the interface for transaction writer plugins.
-type WriterPlugin interface {
-	Metadata() WriterMetadata
-	NewWriter(input WriterInput) (api.Writer, error)
-}
-
-// Registry manages available reader and writer plugins.
+// Registry manages available reader plugins.
 type Registry struct {
 	readers map[string]ReaderPlugin
-	writers map[string]WriterPlugin
 }
 
 // NewRegistry creates a new plugin registry.
 func NewRegistry() *Registry {
 	return &Registry{
 		readers: make(map[string]ReaderPlugin),
-		writers: make(map[string]WriterPlugin),
 	}
 }
 
@@ -155,37 +133,11 @@ func (r *Registry) RegisterReader(plugin ReaderPlugin) error {
 	return nil
 }
 
-// RegisterWriter registers a writer plugin.
-func (r *Registry) RegisterWriter(plugin WriterPlugin) error {
-	if isNilPlugin(plugin) {
-		return fmt.Errorf("writer plugin is nil")
-	}
-
-	name := plugin.Metadata().Name
-	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("writer plugin name is required")
-	}
-	if _, exists := r.writers[name]; exists {
-		return fmt.Errorf("writer plugin %q already registered", name)
-	}
-	r.writers[name] = plugin
-	return nil
-}
-
 // GetReader returns a reader plugin by name.
 func (r *Registry) GetReader(name string) (ReaderPlugin, error) {
 	plugin, exists := r.readers[name]
 	if !exists {
 		return nil, fmt.Errorf("reader plugin %q not found", name)
-	}
-	return plugin, nil
-}
-
-// GetWriter returns a writer plugin by name.
-func (r *Registry) GetWriter(name string) (WriterPlugin, error) {
-	plugin, exists := r.writers[name]
-	if !exists {
-		return nil, fmt.Errorf("writer plugin %q not found", name)
 	}
 	return plugin, nil
 }
@@ -199,33 +151,15 @@ func (r *Registry) ListReaders() []ReaderPlugin {
 	return plugins
 }
 
-// ListWriters returns all registered writer plugins.
-func (r *Registry) ListWriters() []WriterPlugin {
-	plugins := make([]WriterPlugin, 0, len(r.writers))
-	for _, plugin := range r.writers {
-		plugins = append(plugins, plugin)
-	}
-	return plugins
-}
-
-// GetAllScopes returns all OAuth scopes required by the given reader and writer names.
-func (r *Registry) GetAllScopes(readerName, writerName string) ([]string, error) {
+// GetAllScopes returns all OAuth scopes required by the given reader.
+func (r *Registry) GetAllScopes(readerName string) ([]string, error) {
 	reader, err := r.GetReader(readerName)
 	if err != nil {
 		return nil, err
 	}
 
-	writer, err := r.GetWriter(writerName)
-	if err != nil {
-		return nil, err
-	}
-
-	// Combine and deduplicate scopes
 	scopeSet := make(map[string]struct{})
 	for _, scope := range reader.Metadata().Auth.RequiredScopes {
-		scopeSet[scope] = struct{}{}
-	}
-	for _, scope := range writer.Metadata().RequiredScopes {
 		scopeSet[scope] = struct{}{}
 	}
 

@@ -75,7 +75,7 @@ Validation errors must use the structured `field`, `location`, and `message` det
 HTTP validation improves contracts and error reporting; it is not SQL-injection protection. Continue using parameterized SQL at the repository boundary, and retain domain/store invariants needed by non-HTTP callers or required for data integrity.
 
 ### Plugin system
-Reader and writer plugins implement interfaces in `pkg/api`. Plugins are registered in `cmd/server/main.go` and selected at runtime via the web UI (not env vars). Adding a new reader means implementing `plugins.ReaderPlugin` and registering it in the registry.
+Reader plugins implement interfaces in `pkg/api`. Plugins are registered in `cmd/server/main.go` and selected at runtime via the web UI (not env vars). Adding a new reader means implementing `plugins.ReaderPlugin` and registering it in the registry.
 
 ### Storer interface
 `internal/api/store.go` defines `Storer` — a narrow interface over `*store.Store` used by HTTP handlers. It is **not** `*store.Store` itself. When adding a new store method that a handler needs, add it to `Storer` first, then implement it on `*store.Store`. The compile-time assertion `var _ Storer = (*store.Store)(nil)` at the bottom of `store.go` will catch mismatches.
@@ -84,7 +84,7 @@ Reader and writer plugins implement interfaces in `pkg/api`. Plugins are registe
 Unit tests in `internal/api/handlers_test.go` use `mockStore` (not a real DB). When adding a new `Storer` method, add the corresponding mock method too. Use `httptest.NewRequestWithContext(context.Background(), ...)` — not `httptest.NewRequest`.
 
 ### Integration tests
-`internal/store/store_test.go` and `pkg/writer/postgres/postgres_test.go` spin up a real Postgres container via testcontainers-go. Skip with `-short`. These tests live in `package store_test` / `package postgres_test` (external test packages).
+`internal/store/store_test.go` and `internal/store/ingestion_test.go` spin up a real Postgres container via testcontainers-go. Skip with `-short`. These tests live in `package store_test` as external tests.
 
 ### Migrations
 SQL files in `backend/migrations/` are embedded into the binary and run automatically on startup. Name new files `NNN_description.sql` (next sequential number). Migrations use `IF NOT EXISTS` and `ON CONFLICT DO NOTHING` — they must be idempotent.
@@ -182,4 +182,4 @@ Choose the narrowest test that proves the behavior, then run the broader relevan
 
 Do not create tests just to satisfy TDD for mechanical refactors, dead-code removal, interface cleanup, constructor signature cleanup, or other changes whose correctness is already proven by compilation, linting, and existing behavior tests. In those cases, use the existing suite as the safety net. Add a new test only when the refactor exposes or preserves a meaningful public behavior, contract, parsing rule, persistence rule, routing behavior, or accessible user flow that is not already covered.
 
-Unit tests mock the store via `mockStore`. Integration tests hit a real container — run them explicitly when changing `store/` or `writer/postgres/`.
+Unit tests mock the store via `mockStore`. Integration tests hit a real container — run them explicitly when changing `store/` or ingestion behavior.

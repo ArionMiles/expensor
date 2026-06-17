@@ -26,8 +26,8 @@ type InsertParams struct {
 }
 
 // InsertForTest inserts a single transaction and returns its UUID.
-// This is intended for use in tests only; production code should use the
-// postgres writer plugin which handles batching and acknowledgements.
+// This is intended for use in tests only; production ingestion should use
+// TransactionIngestor, which handles batching and acknowledgements.
 func (s *Store) InsertForTest(ctx context.Context, p InsertParams) (string, error) {
 	if p.Currency == "" {
 		p.Currency = "INR"

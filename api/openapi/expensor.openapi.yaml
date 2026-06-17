@@ -1105,15 +1105,6 @@ definitions:
         example: 1
         type: integer
     type: object
-  httpapi.WriterInfoResponse:
-    properties:
-      description:
-        example: Store transactions in PostgreSQL
-        type: string
-      name:
-        example: postgres
-        type: string
-    type: object
 info:
   contact: {}
   description: This is the generated API contract for the Expensor backend.
@@ -2416,20 +2407,6 @@ paths:
               $ref: '#/definitions/httpapi.ReaderInfoResponse'
             type: array
       summary: List reader plugins
-      tags:
-      - Readers
-  /plugins/writers:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/httpapi.WriterInfoResponse'
-            type: array
-      summary: List writer plugins
       tags:
       - Readers
   /readers/{name}:

@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/ArionMiles/expensor/backend/internal/daemon"
 	"github.com/ArionMiles/expensor/backend/internal/httpapi"
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
@@ -47,7 +49,6 @@ func run() int {
 	}
 	logger.Info("plugins registered",
 		"readers", len(registry.ListReaders()),
-		"writers", len(registry.ListWriters()),
 	)
 
 	if err := waitForPostgres(cfg.Postgres, logger); err != nil {
@@ -96,10 +97,20 @@ func run() int {
 	var st httpapi.Storer = instrumentedStore
 
 	dm := &daemonManager{}
+	sinkFactory := func(appCfg *config.App, sinkLogger *slog.Logger) (daemon.TransactionSink, error) {
+		if appCfg == nil {
+			appCfg = &cfg
+		}
+		return pgStore.NewTransactionIngestor(store.IngestionConfig{
+			BatchSize:     appCfg.Postgres.BatchSize,
+			FlushInterval: time.Duration(appCfg.Postgres.FlushInterval) * time.Second,
+		}, sinkLogger), nil
+	}
 	dc := &daemonCoordinator{
 		ctx: ctx, registry: registry, cfg: cfg,
 		systemRules: content.rules, resolver: resolver,
-		st: st, runtimeStore: instrumentedStore, resolverStore: instrumentedStore, diagnostics: instrumentedStore, dm: dm, logger: logger,
+		st: st, runtimeStore: instrumentedStore, resolverStore: instrumentedStore,
+		diagnostics: instrumentedStore, sinkFactory: sinkFactory, dm: dm, logger: logger,
 	}
 
 	if savedReader := loadActiveReader(ctx, st, logger); savedReader != "" {

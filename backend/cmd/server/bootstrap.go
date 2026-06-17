@@ -9,7 +9,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ArionMiles/expensor/backend/internal/dbconn"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/migrations"
@@ -17,7 +16,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 	"github.com/ArionMiles/expensor/backend/pkg/reader/gmail"
 	"github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
-	"github.com/ArionMiles/expensor/backend/pkg/writer/postgres"
 )
 
 // runMigrations applies migrations through a short-lived startup pool.
@@ -29,7 +27,7 @@ func runMigrations(pgCfg config.Postgres, logger *slog.Logger) error {
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s pool_max_conns=1",
 		pgCfg.Host, pgCfg.Port, pgCfg.User, pgCfg.Password, pgCfg.Database, pgCfg.SSLMode,
 	)
-	poolCfg, err := dbconn.ParseConfig(connStr)
+	poolCfg, err := store.ParsePoolConfig(connStr)
 	if err != nil {
 		return fmt.Errorf("parsing migration connection string: %w", err)
 	}
@@ -73,7 +71,7 @@ func waitForPostgres(pgCfg config.Postgres, logger *slog.Logger) error {
 	}
 }
 
-// registerPlugins assembles the application's concrete reader and writer catalog.
+// registerPlugins assembles the application's concrete reader catalog.
 func registerPlugins(registry *plugins.Registry, fs embed.FS, logger *slog.Logger) error {
 	gmailPlugin := &gmail.Plugin{}
 	tbPlugin := &thunderbird.Plugin{}
@@ -93,10 +91,6 @@ func registerPlugins(registry *plugins.Registry, fs embed.FS, logger *slog.Logge
 		if err := registry.RegisterReader(p); err != nil {
 			return fmt.Errorf("registering reader %s: %w", p.Metadata().Name, err)
 		}
-	}
-	postgresPlugin := &postgres.Plugin{}
-	if err := registry.RegisterWriter(postgresPlugin); err != nil {
-		return fmt.Errorf("registering writer %s: %w", postgresPlugin.Metadata().Name, err)
 	}
 	return nil
 }

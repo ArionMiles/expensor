@@ -19,7 +19,6 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/ArionMiles/expensor/backend/internal/dbconn"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
@@ -107,7 +106,7 @@ func runStoreTestMigrations(ctx context.Context, t *testing.T, cfg config.Postgr
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s pool_max_conns=1",
 		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.SSLMode,
 	)
-	poolCfg, err := dbconn.ParseConfig(connStr)
+	poolCfg, err := store.ParsePoolConfig(connStr)
 	if err != nil {
 		_ = ctr.Terminate(ctx)
 		t.Fatalf("parse migration pool config: %v", err)

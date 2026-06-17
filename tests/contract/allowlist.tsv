@@ -19,7 +19,6 @@ PATCH	/transactions/{id}	update transaction
 POST	/transactions/{id}/labels	add transaction labels
 DELETE	/transactions/{id}/labels/{label}	remove transaction label
 GET	/plugins/readers	reader plugin metadata
-GET	/plugins/writers	writer plugin metadata
 GET	/readers/{name}/guide	reader setup guide
 GET	/rules	rule listing
 POST	/rules	create rule

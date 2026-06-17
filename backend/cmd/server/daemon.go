@@ -87,6 +87,7 @@ type daemonCoordinator struct {
 	runtimeStore  daemonRuntimeStore
 	resolverStore categorySnapshotStore
 	diagnostics   api.DiagnosticSink
+	sinkFactory   daemon.TransactionSinkFactory
 	dm            *daemonManager
 	logger        *slog.Logger
 }
@@ -272,12 +273,11 @@ func (c *daemonCoordinator) runDaemon(
 	ctx context.Context,
 	run daemonRun,
 ) {
-	const writerName = "postgres"
-	c.logger.Debug("runDaemon starting", "reader", run.readerName, "writer", writerName)
+	c.logger.Debug("runDaemon starting", "reader", run.readerName)
 
-	scopes, err := c.registry.GetAllScopes(run.readerName, writerName)
+	scopes, err := c.registry.GetAllScopes(run.readerName)
 	if err != nil {
-		c.logger.Error("failed to resolve OAuth scopes", "reader", run.readerName, "writer", writerName, "error", err)
+		c.logger.Error("failed to resolve OAuth scopes", "reader", run.readerName, "error", err)
 		c.dm.setStopped(err)
 		return
 	}
@@ -319,10 +319,9 @@ func (c *daemonCoordinator) runDaemon(
 		stateManager = state.NewDBManager(c.runtimeStore, c.logger)
 	}
 
-	runner := daemon.New(c.registry, httpClient, c.logger)
+	runner := daemon.New(c.registry, c.sinkFactory, httpClient, c.logger)
 	runCfg := daemon.RunConfig{
 		ReaderName:     run.readerName,
-		WriterName:     writerName,
 		Config:         &run.cfg,
 		Rules:          run.compiledRules,
 		Resolver:       run.resolver,
@@ -332,7 +331,7 @@ func (c *daemonCoordinator) runDaemon(
 		ForceRescan:    run.forceRescan,
 	}
 
-	c.logger.Info("daemon starting", "reader", run.readerName, "writer", writerName)
+	c.logger.Info("daemon starting", "reader", run.readerName)
 	c.dm.setRunning(time.Now())
 
 	runErr := runner.Run(ctx, runCfg)

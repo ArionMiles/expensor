@@ -21,19 +21,26 @@ import (
 
 // Runner manages the expense tracking daemon lifecycle.
 type Runner struct {
-	registry   *plugins.Registry
-	httpClient *http.Client
-	logger     *slog.Logger
-	scope      *observability.Scope
+	registry    *plugins.Registry
+	sinkFactory TransactionSinkFactory
+	httpClient  *http.Client
+	logger      *slog.Logger
+	scope       *observability.Scope
 }
 
 // New creates a new daemon runner.
-func New(registry *plugins.Registry, httpClient *http.Client, logger *slog.Logger) *Runner {
-	return NewWithScope(registry, httpClient, logger, nil)
+func New(registry *plugins.Registry, sinkFactory TransactionSinkFactory, httpClient *http.Client, logger *slog.Logger) *Runner {
+	return NewWithScope(registry, sinkFactory, httpClient, logger, nil)
 }
 
 // NewWithScope creates a daemon runner with an explicit observability scope.
-func NewWithScope(registry *plugins.Registry, httpClient *http.Client, logger *slog.Logger, scope *observability.Scope) *Runner {
+func NewWithScope(
+	registry *plugins.Registry,
+	sinkFactory TransactionSinkFactory,
+	httpClient *http.Client,
+	logger *slog.Logger,
+	scope *observability.Scope,
+) *Runner {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -42,20 +49,27 @@ func NewWithScope(registry *plugins.Registry, httpClient *http.Client, logger *s
 	}
 
 	return &Runner{
-		registry:   registry,
-		httpClient: httpClient,
-		logger:     logger,
-		scope:      scope,
+		registry:    registry,
+		sinkFactory: sinkFactory,
+		httpClient:  httpClient,
+		logger:      logger,
+		scope:       scope,
 	}
 }
+
+// TransactionSink consumes extracted transactions and acknowledges successfully persisted message IDs.
+type TransactionSink interface {
+	Write(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error
+}
+
+// TransactionSinkFactory builds the daemon's transaction sink for one run.
+type TransactionSinkFactory func(cfg *config.App, logger *slog.Logger) (TransactionSink, error)
 
 // RunConfig holds the configuration for running the daemon.
 type RunConfig struct {
 	// ReaderName is the plugin name of the reader to use (e.g. "gmail").
 	// Set by the web UI via POST /api/daemon/start.
-	ReaderName string
-	// WriterName is the plugin name of the writer to use (e.g. "postgres").
-	WriterName     string
+	ReaderName     string
 	Config         *config.App
 	Rules          []api.Rule
 	Resolver       api.CategoryResolver
@@ -90,7 +104,6 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 
 	r.logger.Info("starting expensor daemon",
 		"reader", runCfg.ReaderName,
-		"writer", runCfg.WriterName,
 	)
 
 	readerPlugin, err := r.registry.GetReader(runCfg.ReaderName)
@@ -113,19 +126,15 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 		return fmt.Errorf("creating reader: %w", err)
 	}
 
-	writerPlugin, err := r.registry.GetWriter(runCfg.WriterName)
-	if err != nil {
+	if r.sinkFactory == nil {
+		err := errors.New("transaction sink factory is nil")
 		runErr = err
-		return fmt.Errorf("creating writer: %w", err)
+		return err
 	}
-	writer, err := writerPlugin.NewWriter(plugins.WriterInput{
-		HTTPClient: r.httpClient,
-		AppConfig:  cfg,
-		Logger:     r.logger.With("component", "writer", "plugin", runCfg.WriterName),
-	})
+	sink, err := r.sinkFactory(cfg, r.logger.With("component", "transaction_ingestion"))
 	if err != nil {
 		runErr = err
-		return fmt.Errorf("creating writer: %w", err)
+		return fmt.Errorf("creating transaction sink: %w", err)
 	}
 
 	// Create transaction and acknowledgment channels
@@ -135,7 +144,7 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 	r.logger.Info("daemon started")
 
 	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return writer.Write(gctx, transactions, ackChan) })
+	g.Go(func() error { return sink.Write(gctx, transactions, ackChan) })
 	g.Go(func() error { return reader.Read(gctx, transactions, ackChan) })
 
 	if err := g.Wait(); err != nil &&
@@ -145,12 +154,12 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 		r.logger.Error("daemon error", "error", err)
 	}
 
-	// Close writer if it implements io.Closer.
-	if closer, ok := writer.(io.Closer); ok {
+	// Close the sink if it owns resources beyond the application store.
+	if closer, ok := sink.(io.Closer); ok {
 		if err := closer.Close(); err != nil {
-			r.logger.Warn("error closing writer", "error", err)
+			r.logger.Warn("error closing transaction sink", "error", err)
 		} else {
-			r.logger.Info("closed writer resources")
+			r.logger.Info("closed transaction sink resources")
 		}
 	}
 
