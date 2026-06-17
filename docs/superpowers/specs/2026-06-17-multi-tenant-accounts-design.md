@@ -241,13 +241,22 @@ For tenant-owned operations:
 
 `reader_runtime` becomes tenant-scoped and stores encrypted secret/token fields. Active reader, reader config, OAuth token, OAuth client secret, checkpoints, and processed-message state are scoped by `tenant_id`.
 
-Secrets are encrypted in application code using authenticated encryption and a deployment-provided secret. Associated data binds ciphertext to:
+Secrets are encrypted in application code using authenticated encryption and a deployment-provided secret. Encryption is not optional for reader client secrets or OAuth tokens.
+
+The deployment secret can be provided in either form:
+
+- `EXPENSOR_SECRET_KEY`: a base64-encoded 32-byte key.
+- `EXPENSOR_SECRET_KEY_FILE`: a path to a file containing the base64-encoded 32-byte key, suitable for Docker Compose secrets, local secret files, or external secret-manager wrapper scripts.
+
+If both are set, startup fails with a clear configuration error. If neither is set, startup fails once encrypted reader credential storage is part of the release. The application must never silently generate a production encryption key. Setup documentation should include a simple `openssl rand -base64 32` path, a Docker Compose secret-file example, and guidance that the key must be backed up.
+
+Associated data binds ciphertext to:
 
 - `tenant_id`
 - reader name
 - credential type
 
-Production startup fails when secret encryption is required but no configured key is provided. Development and tests may use explicit test keys. The app must not silently generate a production encryption key.
+Development and tests may use explicit test keys.
 
 Never include these values in logs, API responses, traces, metrics, span events, or error messages:
 

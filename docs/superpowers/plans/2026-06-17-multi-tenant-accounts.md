@@ -34,6 +34,8 @@ Create:
 - `backend/internal/bootstrap/legacy_test.go`: isolated legacy migration tests.
 - `backend/migrations/004_multi_tenant_accounts.up.sql`: permanent auth and tenant schema.
 - `backend/migrations/004_multi_tenant_accounts.down.sql`: rollback for migration tests.
+- `docs/deployment/secrets.md`: deployment guidance for `EXPENSOR_SECRET_KEY` and `EXPENSOR_SECRET_KEY_FILE`.
+- `scripts/secrets/generate-key.sh`: helper that prints a base64-encoded 32-byte key.
 - `content/avatars/catalog.json`: bundled avatar metadata.
 - `content/avatars/default.svg`: default avatar.
 - `content/avatars/ledger.svg`: additional built-in avatar.
@@ -51,6 +53,7 @@ Modify:
 
 - `backend/go.mod`, `backend/go.sum`: add `golang.org/x/crypto` for bcrypt.
 - `backend/pkg/config/config.go`: add auth/session/encryption config.
+- `Taskfile.yml`: add `secrets:generate` helper target.
 - `backend/cmd/server/content.go`: embed avatar catalog and SVG assets.
 - `backend/cmd/server/main.go`: pass auth/encryption dependencies into handlers and store/runtime wiring.
 - `backend/internal/httpapi/server.go`: register RESTful auth/profile/token/admin/account routes and wrap private routes.
@@ -426,6 +429,9 @@ git commit --no-gpg-sign -m "feat: add tenant auth storage"
 - Modify: `backend/pkg/config/config_test.go`
 - Create: `backend/internal/store/secretbox.go`
 - Create: `backend/internal/store/secretbox_test.go`
+- Create: `docs/deployment/secrets.md`
+- Create: `scripts/secrets/generate-key.sh`
+- Modify: `Taskfile.yml`
 - Modify: `backend/internal/store/runtime_repository.go`
 - Modify: `backend/internal/store/store_repositories_test.go`
 
@@ -442,6 +448,35 @@ func TestLoadAuthEncryptionKey(t *testing.T) {
 	}
 	if len(cfg.Security.SecretKey) != 32 {
 		t.Fatalf("SecretKey length = %d, want 32", len(cfg.Security.SecretKey))
+	}
+}
+
+func TestLoadAuthEncryptionKeyFile(t *testing.T) {
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "expensor_secret_key")
+	if err := os.WriteFile(keyPath, []byte(base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{8}, 32))+"\n"), 0o600); err != nil {
+		t.Fatalf("write key file: %v", err)
+	}
+	t.Setenv("EXPENSOR_SECRET_KEY_FILE", keyPath)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(cfg.Security.SecretKey) != 32 {
+		t.Fatalf("SecretKey length = %d, want 32", len(cfg.Security.SecretKey))
+	}
+}
+
+func TestLoadRejectsBothSecretKeyInputs(t *testing.T) {
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "expensor_secret_key")
+	if err := os.WriteFile(keyPath, []byte(base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{8}, 32))), 0o600); err != nil {
+		t.Fatalf("write key file: %v", err)
+	}
+	t.Setenv("EXPENSOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{9}, 32)))
+	t.Setenv("EXPENSOR_SECRET_KEY_FILE", keyPath)
+	if _, err := config.Load(); err == nil {
+		t.Fatal("Load() succeeded with both EXPENSOR_SECRET_KEY and EXPENSOR_SECRET_KEY_FILE")
 	}
 }
 ```
@@ -466,7 +501,7 @@ func TestReaderRuntimeEncryptsTokenPerTenant(t *testing.T) {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd backend && go test ./pkg/config ./internal/store -run 'TestLoadAuthEncryptionKey|TestReaderRuntimeEncryptsTokenPerTenant' -count=1`
+Run: `cd backend && go test ./pkg/config ./internal/store -run 'TestLoadAuthEncryptionKey|TestLoadRejectsBothSecretKeyInputs|TestReaderRuntimeEncryptsTokenPerTenant' -count=1`
 
 Expected: FAIL because config/security and tenant runtime signatures do not exist.
 
@@ -477,14 +512,48 @@ Add:
 ```go
 type Security struct {
 	SecretKey []byte `envconfig:"EXPENSOR_SECRET_KEY"`
+	SecretKeyFile string `envconfig:"EXPENSOR_SECRET_KEY_FILE"`
 	SessionTTL time.Duration `envconfig:"EXPENSOR_SESSION_TTL" default:"168h"`
 	SetupTokenTTL time.Duration `envconfig:"EXPENSOR_SETUP_TOKEN_TTL" default:"24h"`
 }
 ```
 
-Decode `EXPENSOR_SECRET_KEY` from base64 in `Load()`. Return an error if it is set and not exactly 32 bytes. Enforce production startup failure in `cmd/server/main.go` once encrypted runtime is wired; tests may inject explicit keys.
+Decode the secret from exactly one source in `Load()`:
 
-- [ ] **Step 4: Tenant-scope reader runtime schema and repository**
+- `EXPENSOR_SECRET_KEY`: base64-encoded 32-byte key.
+- `EXPENSOR_SECRET_KEY_FILE`: file containing the base64-encoded 32-byte key, with surrounding whitespace trimmed.
+
+If both are set, return a clear config error. If either source is set but does not decode to exactly 32 bytes, return a clear config error. Enforce startup failure in `cmd/server/main.go` once encrypted runtime is wired and neither source is set; tests may inject explicit keys. Never log the key or file contents.
+
+- [ ] **Step 4: Add key-generation helper and deployment docs**
+
+Create `scripts/secrets/generate-key.sh`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+openssl rand -base64 32
+```
+
+Add `secrets:generate` to `Taskfile.yml`:
+
+```yaml
+  secrets:generate:
+    summary: Generate a base64-encoded 32-byte secret key for credential encryption.
+    cmd: scripts/secrets/generate-key.sh
+```
+
+Create `docs/deployment/secrets.md` documenting:
+
+- encryption is mandatory for reader client secrets and OAuth tokens
+- `task secrets:generate`
+- `.env` usage with `EXPENSOR_SECRET_KEY`
+- Docker Compose secret-file usage with `EXPENSOR_SECRET_KEY_FILE=/run/secrets/expensor_secret_key`
+- the key must be backed up, because losing it prevents decrypting stored reader credentials
+- host compromise can still expose local secret files; this protects against accidental exposure and database-only compromise
+- external secret managers can feed Expensor by exporting `EXPENSOR_SECRET_KEY` or rendering a file consumed by `EXPENSOR_SECRET_KEY_FILE`
+
+- [ ] **Step 5: Tenant-scope reader runtime schema and repository**
 
 Extend the migration from Task 2 or add `005_tenant_runtime.up.sql` if Task 2 is already merged:
 
@@ -497,16 +566,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS processed_messages_tenant_key ON processed_mes
 
 Change runtime methods to accept `store.Tenant` and use encrypted byte columns for secret/token data. Keep reader config JSON unencrypted unless it contains secrets.
 
-- [ ] **Step 5: Run focused tests**
+- [ ] **Step 6: Run focused tests**
 
-Run: `cd backend && go test ./pkg/config ./internal/store -run 'TestLoadAuthEncryptionKey|TestReaderRuntime' -count=1`
+Run: `cd backend && go test ./pkg/config ./internal/store -run 'TestLoadAuthEncryptionKey|TestLoadRejectsBothSecretKeyInputs|TestReaderRuntime' -count=1`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add backend/pkg/config backend/internal/store backend/migrations
+git add Taskfile.yml scripts/secrets docs/deployment backend/pkg/config backend/internal/store backend/migrations
 git commit --no-gpg-sign -m "feat: encrypt tenant reader runtime"
 ```
 
