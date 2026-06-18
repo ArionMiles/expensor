@@ -26,7 +26,7 @@ Create:
 - `backend/internal/auth/tokens.go`: opaque token generation and SHA-256 token hashing.
 - `backend/internal/auth/crypto.go`: authenticated encryption for reader secrets.
 - `backend/internal/auth/*_test.go`: unit tests for auth primitives.
-- `backend/internal/httpapi/handlers_auth.go`: bootstrap, session, profile, token, account setup, admin user, and avatar handlers.
+- `backend/internal/httpapi/handlers_auth.go`: bootstrap, session, profile, token, account setup, and admin user handlers.
 - `backend/internal/httpapi/auth_middleware.go`: public route allowlist and authenticated principal injection.
 - `backend/internal/store/auth_repository.go`: users, sessions, access tokens, and setup tokens.
 - `backend/internal/store/secretbox.go`: repository helper for encrypting and decrypting reader runtime secrets.
@@ -40,6 +40,7 @@ Create:
 - `content/avatars/default.svg`: default avatar.
 - `content/avatars/ledger.svg`: additional built-in avatar.
 - `content/avatars/wallet.svg`: additional built-in avatar.
+- `frontend/src/assets/avatars.ts`: frontend avatar catalog loader and key helpers.
 - `frontend/src/pages/Login.tsx`: login page.
 - `frontend/src/pages/BootstrapAdmin.tsx`: first-admin setup page.
 - `frontend/src/pages/AccountSetup.tsx`: setup-token password page.
@@ -54,7 +55,6 @@ Modify:
 - `backend/go.mod`, `backend/go.sum`: add `golang.org/x/crypto` for bcrypt.
 - `backend/pkg/config/config.go`: add auth/session/encryption config.
 - `Taskfile.yml`: add `secrets:generate` helper target.
-- `backend/cmd/server/content.go`: embed avatar catalog and SVG assets.
 - `backend/cmd/server/main.go`: pass auth/encryption dependencies into handlers and store/runtime wiring.
 - `backend/internal/httpapi/server.go`: register RESTful auth/profile/token/admin/account routes and wrap private routes.
 - `backend/internal/httpapi/store.go`: include auth store capability.
@@ -70,8 +70,9 @@ Modify:
 - `tests/component/helpers/client.go`: add authenticated request helpers.
 - `tests/component/*.go`: create/bootstrap/login users before private API calls.
 - `tests/contract/allowlist.tsv`, `tests/contract/exclusions.tsv`: update only for documented protected routes.
-- `frontend/src/api/types.ts`: add auth/profile/token/admin/avatar types.
-- `frontend/src/api/client.ts`: add session/profile/token/admin/avatar/account setup clients and preserve cookie credentials.
+- `frontend/vite.config.ts`: add an alias to repository-root `content/avatars` and allow it in dev server filesystem access.
+- `frontend/src/api/types.ts`: add auth/profile/token/admin types.
+- `frontend/src/api/client.ts`: add session/profile/token/admin/account setup clients and preserve cookie credentials.
 - `frontend/src/api/queries.ts`: add auth/profile/token/admin query hooks.
 - `frontend/src/App.tsx`: replace first-run-only gate with auth gate and public auth routes.
 - `frontend/src/pages/Settings.tsx`: add profile, tokens, and admin users settings tabs with URL state.
@@ -642,7 +643,6 @@ mux.HandleFunc("GET /api/session", h.GetSession)
 mux.HandleFunc("DELETE /api/session", h.Logout)
 mux.HandleFunc("GET /api/profile", h.GetProfile)
 mux.HandleFunc("PATCH /api/profile", h.PatchProfile)
-mux.HandleFunc("GET /api/avatars", h.ListAvatars)
 mux.HandleFunc("GET /api/tokens", h.ListTokens)
 mux.HandleFunc("POST /api/tokens", h.CreateToken)
 mux.HandleFunc("DELETE /api/tokens/{id}", h.RevokeToken)
@@ -676,31 +676,29 @@ git commit --no-gpg-sign -m "feat: add account auth API"
 
 ---
 
-### Task 5: Avatar Catalog And Content Embedding
+### Task 5: Avatar Catalog And Frontend Bundling
 
 **Files:**
 - Create: `content/avatars/catalog.json`
 - Create: `content/avatars/default.svg`
 - Create: `content/avatars/ledger.svg`
 - Create: `content/avatars/wallet.svg`
-- Create: `backend/internal/httpapi/avatar_test.go`
-- Modify: `backend/cmd/server/content.go`
-- Modify: `backend/cmd/server/content_test.go`
+- Create: `frontend/src/assets/avatars.ts`
+- Modify: `frontend/vite.config.ts`
+- Modify: `frontend/src/vite-env.d.ts`
+- Modify: `backend/internal/httpapi/handlers_auth_test.go`
 - Modify: `backend/internal/httpapi/handlers_auth.go`
 
-- [ ] **Step 1: Write failing avatar tests**
+- [ ] **Step 1: Write failing avatar key validation tests**
 
 Add:
 
 ```go
 func TestAvatarCatalogRejectsUnknownKey(t *testing.T) {
-	catalog := httpapi.AvatarCatalog{
-		{Key: "default", Label: "Default", SVG: "<svg></svg>"},
-	}
-	if !catalog.Valid("default") {
+	if !httpapi.ValidAvatarKey("default") {
 		t.Fatal("default avatar not valid")
 	}
-	if catalog.Valid("remote-url") {
+	if httpapi.ValidAvatarKey("remote-url") {
 		t.Fatal("unknown avatar key accepted")
 	}
 }
@@ -708,13 +706,13 @@ func TestAvatarCatalogRejectsUnknownKey(t *testing.T) {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd backend && go test ./internal/httpapi ./cmd/server -run 'TestAvatar|TestParseAvatar' -count=1`
+Run: `cd backend && go test ./internal/httpapi -run TestAvatarCatalogRejectsUnknownKey -count=1`
 
-Expected: FAIL because avatar catalog code and assets do not exist.
+Expected: FAIL because avatar key validation does not exist.
 
 - [ ] **Step 3: Add pure SVG avatars and catalog**
 
-Use only SVG text assets under `content/avatars/`. Catalog shape:
+Use only SVG text assets under repository-root `content/avatars/`. Catalog shape:
 
 ```json
 [
@@ -726,28 +724,64 @@ Use only SVG text assets under `content/avatars/`. Catalog shape:
 
 Each SVG must start with `<svg` and contain no scripts, external references, images, or event attributes.
 
-- [ ] **Step 4: Embed and expose avatars**
+- [ ] **Step 4: Bundle avatars from root content into the frontend**
 
-Add `//go:embed content/avatars/catalog.json content/avatars/*.svg` in `backend/cmd/server/content.go`, parse the catalog at startup, and pass it to `httpapi.NewHandlers`.
+Do not add `//go:embed` for avatar SVGs and do not add `GET /api/avatars`.
 
-`GET /api/avatars` returns:
+Update `frontend/vite.config.ts` to resolve a repository-root avatar alias. Preserve the existing `/api` proxy settings while adding `server.fs.allow`:
 
-```json
-[
-  {"key":"default","label":"Default","svg":"<svg ...>...</svg>"}
-]
+```ts
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const repoRoot = path.resolve(__dirname, '..')
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      '@': '/src',
+      '@avatar-content': path.resolve(repoRoot, 'content/avatars'),
+    },
+  },
+  server: {
+    fs: { allow: [repoRoot] },
+  },
+})
 ```
+
+Create `frontend/src/assets/avatars.ts` that imports the root catalog plus SVG text assets using the alias:
+
+```ts
+import catalog from '@avatar-content/catalog.json'
+import defaultSvg from '@avatar-content/default.svg?raw'
+import ledgerSvg from '@avatar-content/ledger.svg?raw'
+import walletSvg from '@avatar-content/wallet.svg?raw'
+
+const svgByFile = {
+  'default.svg': defaultSvg,
+  'ledger.svg': ledgerSvg,
+  'wallet.svg': walletSvg,
+} as const
+
+export const avatars = catalog.map((entry) => ({
+  ...entry,
+  svg: svgByFile[entry.file as keyof typeof svgByFile],
+}))
+```
+
+Backend profile/account handlers validate only the submitted `avatar_key` against a small server-side allowlist. The allowlist must include `default` and match the catalog keys.
 
 - [ ] **Step 5: Run focused avatar tests**
 
-Run: `cd backend && go test ./internal/httpapi ./cmd/server -run 'TestAvatar|TestParseAvatar' -count=1`
+Run: `cd backend && go test ./internal/httpapi -run TestAvatar -count=1 && cd ../frontend && npm run test -- --run ProfileSettings`
 
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add content/avatars backend/cmd/server backend/internal/httpapi
+git add content/avatars frontend/vite.config.ts frontend/src/assets/avatars.ts frontend/src/vite-env.d.ts backend/internal/httpapi
 git commit --no-gpg-sign -m "feat: add bundled account avatars"
 ```
 
@@ -1205,7 +1239,6 @@ Document:
 - `/bootstrap`
 - `/session`
 - `/profile`
-- `/avatars`
 - `/tokens`
 - `/admin/users`
 - `/admin/users/{id}/setup-tokens`

@@ -71,9 +71,9 @@ The first user created through bootstrap receives the instance administrator rol
 
 ## Avatars
 
-Bundled avatars live under `content/avatars/` and are pure SVG assets. A catalog defines the allowed avatar keys and display labels.
+Bundled avatars live under repository-root `content/avatars/` and are pure SVG assets. A catalog defines the allowed avatar keys, display labels, and SVG filenames.
 
-The user table stores only `avatar_key`. The API rejects unknown avatar keys and applies a stable default when no avatar is selected. Adding a new avatar should require adding a new SVG asset and catalog metadata, not changing profile storage.
+The frontend bundles these assets directly from `content/avatars/`; the backend does not serve avatar SVGs and does not expose an avatar catalog API. The user table stores only `avatar_key`. Backend profile/account handlers reject unknown avatar keys and apply a stable default when no avatar is selected.
 
 The frontend must not provide any upload, external URL, crop, zoom, or transform UI.
 
@@ -196,7 +196,7 @@ System-owned content stays global:
 - community content
 - banks
 - reader plugin catalog
-- avatar catalog
+- avatar key catalog
 - system-wide operational configuration, such as community content sync settings
 
 Uniqueness constraints become tenant-scoped where relevant:
@@ -327,7 +327,6 @@ Phase 1 routes:
 - `DELETE /api/session`
 - `GET /api/profile`
 - `PATCH /api/profile`
-- `GET /api/avatars`
 - `GET /api/tokens`
 - `POST /api/tokens`
 - `DELETE /api/tokens/{id}`
@@ -370,7 +369,6 @@ OpenAPI must document:
 - bootstrap schemas
 - session schemas
 - profile schemas
-- avatar catalog schemas
 - token schemas
 - admin user schemas
 - account setup schemas
@@ -409,7 +407,7 @@ Component tests:
 Contract tests:
 
 - auth requirements for protected endpoints
-- schemas for new auth, profile, token, admin user, account setup, and avatar routes
+- schemas for new auth, profile, token, admin user, and account setup routes
 
 Frontend tests:
 
