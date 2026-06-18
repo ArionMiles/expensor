@@ -6,6 +6,108 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
+// UserRole is an instance-level account role.
+type UserRole string
+
+const (
+	// UserRoleAdmin can manage instance users.
+	UserRoleAdmin UserRole = "admin"
+	// UserRoleUser can access their own tenant data.
+	UserRoleUser UserRole = "user"
+)
+
+// Tenant identifies a tenant boundary for user-owned data. In Phase 1, the tenant ID is the user's ID.
+type Tenant struct {
+	ID string
+}
+
+// User is an Expensor account.
+type User struct {
+	ID string
+	// TenantID is equal to ID in Phase 1.
+	TenantID     string
+	Email        string
+	PasswordHash string
+	DisplayName  string
+	Role         UserRole
+	AvatarKey    string
+	DisabledAt   *time.Time
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+// CreateBootstrapAdminInput creates the first admin account.
+type CreateBootstrapAdminInput struct {
+	Email        string
+	DisplayName  string
+	PasswordHash string
+	AvatarKey    string
+}
+
+// CreateUserInput creates an admin-managed account.
+type CreateUserInput struct {
+	Email        string
+	DisplayName  string
+	Role         UserRole
+	AvatarKey    string
+	PasswordHash string
+}
+
+// Session is a persisted browser session.
+type Session struct {
+	ID         string
+	UserID     string
+	TokenHash  string
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+	LastUsedAt *time.Time
+	RevokedAt  *time.Time
+}
+
+// CreateSessionInput creates a session hash record.
+type CreateSessionInput struct {
+	UserID    string
+	TokenHash string
+	ExpiresAt time.Time
+}
+
+// AccessToken is metadata for a programmatic access token.
+type AccessToken struct {
+	ID         string
+	UserID     string
+	Name       string
+	TokenHash  string
+	CreatedAt  time.Time
+	ExpiresAt  *time.Time
+	LastUsedAt *time.Time
+	RevokedAt  *time.Time
+}
+
+// CreateAccessTokenInput creates a programmatic access token hash record.
+type CreateAccessTokenInput struct {
+	UserID    string
+	Name      string
+	TokenHash string
+	ExpiresAt *time.Time
+}
+
+// AccountSetupToken is a one-time password setup token.
+type AccountSetupToken struct {
+	ID        string
+	UserID    string
+	TokenHash string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+}
+
+// CreateAccountSetupTokenInput creates a one-time password setup token.
+type CreateAccountSetupTokenInput struct {
+	UserID    string
+	TokenHash string
+	ExpiresAt time.Time
+}
+
 // Transaction represents a single expense transaction as returned by the API.
 type Transaction struct {
 	ID               string     `json:"id"`

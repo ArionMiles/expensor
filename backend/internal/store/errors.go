@@ -9,6 +9,9 @@ import (
 // ErrNotFound is returned when an operation targets a row that does not exist.
 var ErrNotFound = errors.New("not found")
 
+// ErrBootstrapUnavailable is returned when first-admin bootstrap has already been completed.
+var ErrBootstrapUnavailable = errors.New("bootstrap unavailable")
+
 // ErrRuleNameConflict is returned when a rule name is already in use.
 var ErrRuleNameConflict = errors.New("rule name conflict")
 

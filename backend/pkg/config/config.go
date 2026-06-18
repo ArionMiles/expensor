@@ -2,6 +2,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -68,6 +69,7 @@ type App struct {
 	Postgres      Postgres
 	Community     Community
 	Persisted     Persisted
+	Security      Security
 	Observability Observability
 }
 
@@ -143,6 +145,14 @@ type Persisted struct {
 	ReadTimeout time.Duration `envconfig:"EXPENSOR_APP_CONFIG_READ_TIMEOUT" default:"3s"`
 }
 
+// Security controls authentication and credential encryption settings.
+type Security struct {
+	SecretKey     []byte        `ignored:"true"`
+	SecretKeyFile string        `envconfig:"EXPENSOR_SECRET_KEY_FILE"`
+	SessionTTL    time.Duration `envconfig:"EXPENSOR_SESSION_TTL" default:"168h"`
+	SetupTokenTTL time.Duration `envconfig:"EXPENSOR_SETUP_TOKEN_TTL" default:"24h"`
+}
+
 // Observability controls application logging and telemetry export.
 type Observability struct {
 	LogLevel     slog.Level `envconfig:"LOG_LEVEL" default:"INFO"`
@@ -163,6 +173,9 @@ func Load() (App, error) {
 	if cfg.Postgres.MaxPoolSize < 0 {
 		return App{}, errors.New("POSTGRES_MAX_POOL_SIZE must be non-negative")
 	}
+	if err := loadSecretKey(&cfg.Security); err != nil {
+		return App{}, err
+	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = fmt.Sprintf("http://localhost:%d", cfg.Port)
 	}
@@ -171,4 +184,34 @@ func Load() (App, error) {
 	}
 	cfg.Observability.Output = os.Stderr
 	return cfg, nil
+}
+
+func loadSecretKey(security *Security) error {
+	rawKey, hasRawKey := os.LookupEnv("EXPENSOR_SECRET_KEY")
+	hasKeyFile := strings.TrimSpace(security.SecretKeyFile) != ""
+	if hasRawKey && hasKeyFile {
+		return errors.New("set exactly one of EXPENSOR_SECRET_KEY or EXPENSOR_SECRET_KEY_FILE")
+	}
+	if !hasRawKey && !hasKeyFile {
+		return nil
+	}
+
+	encoded := rawKey
+	if hasKeyFile {
+		data, err := os.ReadFile(security.SecretKeyFile)
+		if err != nil {
+			return fmt.Errorf("reading EXPENSOR_SECRET_KEY_FILE: %w", err)
+		}
+		encoded = string(data)
+	}
+
+	key, err := base64.StdEncoding.DecodeString(strings.TrimSpace(encoded))
+	if err != nil {
+		return errors.New("EXPENSOR_SECRET_KEY must be base64-encoded 32-byte key material")
+	}
+	if len(key) != 32 {
+		return fmt.Errorf("EXPENSOR_SECRET_KEY decoded length is %d bytes, want 32", len(key))
+	}
+	security.SecretKey = key
+	return nil
 }
