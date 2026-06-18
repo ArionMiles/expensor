@@ -83,7 +83,7 @@ func newTestStoreWithLogger(t *testing.T, logs *bytes.Buffer) *testStore {
 		logger = slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
 
-	st, err := store.New(cfg, logger)
+	st, err := store.NewWithSecurity(cfg, config.Security{SecretKey: bytes.Repeat([]byte{4}, 32)}, logger)
 	if err != nil {
 		_ = ctr.Terminate(ctx)
 		t.Fatalf("failed to create store: %v", err)
@@ -175,33 +175,30 @@ func TestRuntimeState_ReaderBlobAndConfig(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
 	ctx := context.Background()
+	tenant := store.Tenant{ID: createRuntimeTestUser(t, ts, "runtime-blob@example.com").TenantID}
 
-	if err := ts.SetReaderSecret(ctx, "gmail", []byte(`{"installed":{}}`)); err != nil {
+	if err := ts.SetReaderSecret(ctx, tenant, "gmail", []byte(`{"installed":{}}`)); err != nil {
 		t.Fatalf("SetReaderSecret: %v", err)
 	}
-	secret, ok, err := ts.GetReaderSecret(ctx, "gmail")
+	secret, ok, err := ts.GetReaderSecret(ctx, tenant, "gmail")
 	if err != nil || !ok {
 		t.Fatalf("GetReaderSecret: ok=%v err=%v", ok, err)
 	}
-	if string(secret) != `{"installed": {}}` {
-		t.Fatalf("secret = %s", secret)
-	}
+	assertJSONBytesEqual(t, secret, []byte(`{"installed":{}}`))
 
-	if err := ts.SetReaderToken(ctx, "gmail", []byte(`{"access_token":"a","token_type":"Bearer"}`)); err != nil {
+	if err := ts.SetReaderToken(ctx, tenant, "gmail", []byte(`{"access_token":"a","token_type":"Bearer"}`)); err != nil {
 		t.Fatalf("SetReaderToken: %v", err)
 	}
-	token, ok, err := ts.GetReaderToken(ctx, "gmail")
+	token, ok, err := ts.GetReaderToken(ctx, tenant, "gmail")
 	if err != nil || !ok {
 		t.Fatalf("GetReaderToken: ok=%v err=%v", ok, err)
 	}
-	if !bytes.Contains(token, []byte(`"access_token": "a"`)) {
-		t.Fatalf("token = %s", token)
-	}
+	assertJSONBytesEqual(t, token, []byte(`{"access_token":"a","token_type":"Bearer"}`))
 
-	if err := ts.SetReaderConfig(ctx, "thunderbird", json.RawMessage(`{"config":{"mailboxes":"Inbox"}}`)); err != nil {
+	if err := ts.SetReaderConfig(ctx, tenant, "thunderbird", json.RawMessage(`{"config":{"mailboxes":"Inbox"}}`)); err != nil {
 		t.Fatalf("SetReaderConfig: %v", err)
 	}
-	cfg, ok, err := ts.GetReaderConfig(ctx, "thunderbird")
+	cfg, ok, err := ts.GetReaderConfig(ctx, tenant, "thunderbird")
 	if err != nil || !ok {
 		t.Fatalf("GetReaderConfig: ok=%v err=%v", ok, err)
 	}
@@ -214,20 +211,21 @@ func TestRuntimeState_DeleteReaderRuntime(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
 	ctx := context.Background()
+	tenant := store.Tenant{ID: createRuntimeTestUser(t, ts, "runtime-delete@example.com").TenantID}
 
-	if err := ts.SetReaderSecret(ctx, "gmail", []byte(`{"installed":{}}`)); err != nil {
+	if err := ts.SetReaderSecret(ctx, tenant, "gmail", []byte(`{"installed":{}}`)); err != nil {
 		t.Fatalf("SetReaderSecret: %v", err)
 	}
-	if err := ts.SetReaderToken(ctx, "gmail", []byte(`{"access_token":"a"}`)); err != nil {
+	if err := ts.SetReaderToken(ctx, tenant, "gmail", []byte(`{"access_token":"a"}`)); err != nil {
 		t.Fatalf("SetReaderToken: %v", err)
 	}
-	if err := ts.DeleteReaderRuntime(ctx, "gmail"); err != nil {
+	if err := ts.DeleteReaderRuntime(ctx, tenant, "gmail"); err != nil {
 		t.Fatalf("DeleteReaderRuntime: %v", err)
 	}
-	if _, ok, err := ts.GetReaderSecret(ctx, "gmail"); err != nil || ok {
+	if _, ok, err := ts.GetReaderSecret(ctx, tenant, "gmail"); err != nil || ok {
 		t.Fatalf("GetReaderSecret after delete: ok=%v err=%v", ok, err)
 	}
-	if _, ok, err := ts.GetReaderToken(ctx, "gmail"); err != nil || ok {
+	if _, ok, err := ts.GetReaderToken(ctx, tenant, "gmail"); err != nil || ok {
 		t.Fatalf("GetReaderToken after delete: ok=%v err=%v", ok, err)
 	}
 }
@@ -236,8 +234,9 @@ func TestRuntimeState_ProcessedMessages(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
 	ctx := context.Background()
+	tenant := store.Tenant{ID: createRuntimeTestUser(t, ts, "processed@example.com").TenantID}
 
-	processed, err := ts.IsMessageProcessed(ctx, "msg-1")
+	processed, err := ts.IsMessageProcessed(ctx, tenant, "msg-1")
 	if err != nil {
 		t.Fatalf("IsMessageProcessed: %v", err)
 	}
@@ -246,16 +245,83 @@ func TestRuntimeState_ProcessedMessages(t *testing.T) {
 	}
 
 	processedAt := time.Date(2026, time.April, 28, 10, 30, 0, 0, time.UTC)
-	if err := ts.MarkMessageProcessed(ctx, "msg-1", processedAt); err != nil {
+	if err := ts.MarkMessageProcessed(ctx, tenant, "msg-1", processedAt); err != nil {
 		t.Fatalf("MarkMessageProcessed: %v", err)
 	}
-	processed, err = ts.IsMessageProcessed(ctx, "msg-1")
+	processed, err = ts.IsMessageProcessed(ctx, tenant, "msg-1")
 	if err != nil {
 		t.Fatalf("IsMessageProcessed after mark: %v", err)
 	}
 	if !processed {
 		t.Fatal("message should be processed")
 	}
+}
+
+func TestReaderRuntimeEncryptsTokenPerTenant(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+
+	tenantA := createRuntimeTestUser(t, ts, "runtime-a@example.com").TenantID
+	tenantB := createRuntimeTestUser(t, ts, "runtime-b@example.com").TenantID
+
+	if err := ts.SetReaderToken(ctx, store.Tenant{ID: tenantA}, "gmail", []byte(`{"access_token":"tenant-a"}`)); err != nil {
+		t.Fatalf("SetReaderToken() error = %v", err)
+	}
+
+	token, found, err := ts.GetReaderToken(ctx, store.Tenant{ID: tenantA}, "gmail")
+	if err != nil || !found {
+		t.Fatalf("tenant A token = found %v err %v", found, err)
+	}
+	if string(token) != `{"access_token":"tenant-a"}` {
+		t.Fatalf("tenant A token = %s", token)
+	}
+
+	if _, found, err := ts.GetReaderToken(ctx, store.Tenant{ID: tenantB}, "gmail"); err != nil || found {
+		t.Fatalf("tenant B token = found %v err %v, want not found", found, err)
+	}
+}
+
+func TestProcessedMessagesAreTenantScoped(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+
+	tenantA := store.Tenant{ID: createRuntimeTestUser(t, ts, "processed-a@example.com").TenantID}
+	tenantB := store.Tenant{ID: createRuntimeTestUser(t, ts, "processed-b@example.com").TenantID}
+
+	if err := ts.MarkMessageProcessed(ctx, tenantA, "message-1", time.Now()); err != nil {
+		t.Fatalf("MarkMessageProcessed() error = %v", err)
+	}
+	processed, err := ts.IsMessageProcessed(ctx, tenantA, "message-1")
+	if err != nil {
+		t.Fatalf("IsMessageProcessed() tenant A error = %v", err)
+	}
+	if !processed {
+		t.Fatal("tenant A message should be processed")
+	}
+	processed, err = ts.IsMessageProcessed(ctx, tenantB, "message-1")
+	if err != nil {
+		t.Fatalf("IsMessageProcessed() tenant B error = %v", err)
+	}
+	if processed {
+		t.Fatal("tenant B message should not be processed")
+	}
+}
+
+func createRuntimeTestUser(t *testing.T, ts *testStore, email string) *store.User {
+	t.Helper()
+	user, err := ts.CreateUser(context.Background(), store.CreateUserInput{
+		Email:        email,
+		DisplayName:  "Runtime User",
+		Role:         store.UserRoleUser,
+		AvatarKey:    "default",
+		PasswordHash: "$2a$10$abcdefghijklmnopqrstuu6Z6RMcYbqVvB6KZlSmLfHLj6y8s3zme",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(%q): %v", email, err)
+	}
+	return user
 }
 
 func TestExtractionDiagnostics_RecordListUpdateAndGet(t *testing.T) {
@@ -2532,4 +2598,20 @@ func monthlySeriesData(data *store.MonthlyBreakdownData, label string) []float64
 		}
 	}
 	return nil
+}
+
+func assertJSONBytesEqual(t *testing.T, got, want []byte) {
+	t.Helper()
+
+	var gotValue any
+	if err := json.Unmarshal(got, &gotValue); err != nil {
+		t.Fatalf("got JSON is invalid: %v", err)
+	}
+	var wantValue any
+	if err := json.Unmarshal(want, &wantValue); err != nil {
+		t.Fatalf("want JSON is invalid: %v", err)
+	}
+	if !reflect.DeepEqual(gotValue, wantValue) {
+		t.Fatalf("JSON = %s, want %s", got, want)
+	}
 }

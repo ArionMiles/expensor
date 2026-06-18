@@ -21,6 +21,7 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
+	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 )
@@ -94,7 +95,7 @@ type mockRuntimeStore struct {
 	err          error
 }
 
-func (m *mockRuntimeStore) GetReaderConfig(ctx context.Context, reader string) (json.RawMessage, bool, error) {
+func (m *mockRuntimeStore) GetReaderConfig(ctx context.Context, _ store.Tenant, reader string) (json.RawMessage, bool, error) {
 	return m.readerConfig, m.hasConfig, m.err
 }
 

@@ -286,20 +286,20 @@ func (s *InstrumentedStore) SetAppConfig(ctx context.Context, key, value string)
 	return err
 }
 
-func (s *InstrumentedStore) IsMessageProcessed(ctx context.Context, key string) (bool, error) {
+func (s *InstrumentedStore) IsMessageProcessed(ctx context.Context, tenant Tenant, key string) (bool, error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.is_message_processed")
 	defer span.End()
 
-	processed, err := s.next.IsMessageProcessed(ctx, key)
+	processed, err := s.next.IsMessageProcessed(ctx, tenant, key)
 	s.recordOperation(ctx, "runtime.is_message_processed", err)
 	return processed, err
 }
 
-func (s *InstrumentedStore) MarkMessageProcessed(ctx context.Context, key string, at time.Time) error {
+func (s *InstrumentedStore) MarkMessageProcessed(ctx context.Context, tenant Tenant, key string, at time.Time) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.mark_message_processed")
 	defer span.End()
 
-	err := s.next.MarkMessageProcessed(ctx, key, at)
+	err := s.next.MarkMessageProcessed(ctx, tenant, key, at)
 	s.recordOperation(ctx, "runtime.mark_message_processed", err)
 	return err
 }
@@ -322,74 +322,74 @@ func (s *InstrumentedStore) GetActiveReader(ctx context.Context) (string, error)
 	return reader, err
 }
 
-func (s *InstrumentedStore) SetReaderSecret(ctx context.Context, reader string, secret []byte) error {
+func (s *InstrumentedStore) SetReaderSecret(ctx context.Context, tenant Tenant, reader string, secret []byte) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.set_reader_secret")
 	defer span.End()
 
-	err := s.next.SetReaderSecret(ctx, reader, secret)
+	err := s.next.SetReaderSecret(ctx, tenant, reader, secret)
 	s.recordOperation(ctx, "runtime.set_reader_secret", err)
 	return err
 }
 
-func (s *InstrumentedStore) GetReaderSecret(ctx context.Context, reader string) (secret []byte, found bool, err error) {
+func (s *InstrumentedStore) GetReaderSecret(ctx context.Context, tenant Tenant, reader string) (secret []byte, found bool, err error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.get_reader_secret")
 	defer span.End()
 
-	secret, found, err = s.next.GetReaderSecret(ctx, reader)
+	secret, found, err = s.next.GetReaderSecret(ctx, tenant, reader)
 	s.recordOperation(ctx, "runtime.get_reader_secret", err)
 	return secret, found, err
 }
 
-func (s *InstrumentedStore) SetReaderToken(ctx context.Context, reader string, token []byte) error {
+func (s *InstrumentedStore) SetReaderToken(ctx context.Context, tenant Tenant, reader string, token []byte) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.set_reader_token")
 	defer span.End()
 
-	err := s.next.SetReaderToken(ctx, reader, token)
+	err := s.next.SetReaderToken(ctx, tenant, reader, token)
 	s.recordOperation(ctx, "runtime.set_reader_token", err)
 	return err
 }
 
-func (s *InstrumentedStore) GetReaderToken(ctx context.Context, reader string) (token []byte, found bool, err error) {
+func (s *InstrumentedStore) GetReaderToken(ctx context.Context, tenant Tenant, reader string) (token []byte, found bool, err error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.get_reader_token")
 	defer span.End()
 
-	token, found, err = s.next.GetReaderToken(ctx, reader)
+	token, found, err = s.next.GetReaderToken(ctx, tenant, reader)
 	s.recordOperation(ctx, "runtime.get_reader_token", err)
 	return token, found, err
 }
 
-func (s *InstrumentedStore) DeleteReaderToken(ctx context.Context, reader string) error {
+func (s *InstrumentedStore) DeleteReaderToken(ctx context.Context, tenant Tenant, reader string) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.delete_reader_token")
 	defer span.End()
 
-	err := s.next.DeleteReaderToken(ctx, reader)
+	err := s.next.DeleteReaderToken(ctx, tenant, reader)
 	s.recordOperation(ctx, "runtime.delete_reader_token", err)
 	return err
 }
 
-func (s *InstrumentedStore) SetReaderConfig(ctx context.Context, reader string, config json.RawMessage) error {
+func (s *InstrumentedStore) SetReaderConfig(ctx context.Context, tenant Tenant, reader string, config json.RawMessage) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.set_reader_config")
 	defer span.End()
 
-	err := s.next.SetReaderConfig(ctx, reader, config)
+	err := s.next.SetReaderConfig(ctx, tenant, reader, config)
 	s.recordOperation(ctx, "runtime.set_reader_config", err)
 	return err
 }
 
-func (s *InstrumentedStore) GetReaderConfig(ctx context.Context, reader string) (json.RawMessage, bool, error) {
+func (s *InstrumentedStore) GetReaderConfig(ctx context.Context, tenant Tenant, reader string) (json.RawMessage, bool, error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.get_reader_config")
 	defer span.End()
 
-	config, found, err := s.next.GetReaderConfig(ctx, reader)
+	config, found, err := s.next.GetReaderConfig(ctx, tenant, reader)
 	s.recordOperation(ctx, "runtime.get_reader_config", err)
 	return config, found, err
 }
 
-func (s *InstrumentedStore) DeleteReaderRuntime(ctx context.Context, reader string) error {
+func (s *InstrumentedStore) DeleteReaderRuntime(ctx context.Context, tenant Tenant, reader string) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.delete_reader_runtime")
 	defer span.End()
 
-	err := s.next.DeleteReaderRuntime(ctx, reader)
+	err := s.next.DeleteReaderRuntime(ctx, tenant, reader)
 	s.recordOperation(ctx, "runtime.delete_reader_runtime", err)
 	return err
 }

@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ArionMiles/expensor/backend/internal/auth"
 	"github.com/ArionMiles/expensor/backend/internal/daemon"
 	"github.com/ArionMiles/expensor/backend/internal/httpapi"
 	"github.com/ArionMiles/expensor/backend/internal/observability"
@@ -76,8 +77,12 @@ func run() int {
 		logger.Error("failed to run migrations", "error", err)
 		return 1
 	}
+	if len(cfg.Security.SecretKey) != auth.SecretKeySize {
+		logger.Error("missing EXPENSOR_SECRET_KEY or EXPENSOR_SECRET_KEY_FILE for encrypted reader runtime")
+		return 1
+	}
 
-	pgStore, storeErr := store.New(cfg.Postgres, logger.With("component", "store"))
+	pgStore, storeErr := store.NewWithSecurity(cfg.Postgres, cfg.Security, logger.With("component", "store"))
 	if storeErr != nil {
 		logger.Error("failed to connect store", "error", storeErr)
 		return 1

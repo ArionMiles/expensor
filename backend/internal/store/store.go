@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ArionMiles/expensor/backend/internal/auth"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 )
@@ -19,6 +20,7 @@ type Store struct {
 	pool      *pgxpool.Pool
 	logger    *slog.Logger
 	now       func() time.Time
+	secretBox *auth.SecretBox
 	auth      *pgAuthRepository
 	community *pgCommunityRepository
 	diag      *pgDiagnosticsRepository
@@ -33,6 +35,11 @@ var _ api.DiagnosticSink = (*Store)(nil)
 
 // New creates a Store connected to the PostgreSQL instance described by cfg.
 func New(cfg config.Postgres, logger *slog.Logger) (*Store, error) {
+	return NewWithSecurity(cfg, config.Security{}, logger)
+}
+
+// NewWithSecurity creates a Store with security dependencies for encrypted runtime state.
+func NewWithSecurity(cfg config.Postgres, security config.Security, logger *slog.Logger) (*Store, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -65,7 +72,16 @@ func New(cfg config.Postgres, logger *slog.Logger) (*Store, error) {
 		return nil, fmt.Errorf("pinging store database: %w", err)
 	}
 
-	s := &Store{pool: pool, logger: logger, now: time.Now}
+	var secretBox *auth.SecretBox
+	if len(security.SecretKey) > 0 {
+		secretBox, err = auth.NewSecretBox(security.SecretKey)
+		if err != nil {
+			pool.Close()
+			return nil, fmt.Errorf("creating store secret box: %w", err)
+		}
+	}
+
+	s := &Store{pool: pool, logger: logger, now: time.Now, secretBox: secretBox}
 	s.initRepositories()
 	logger.Info("store connected to PostgreSQL", "host", cfg.Host, "database", cfg.Database)
 	return s, nil
@@ -73,9 +89,10 @@ func New(cfg config.Postgres, logger *slog.Logger) (*Store, error) {
 
 func (s *Store) initRepositories() {
 	deps := repositoryDependencies{
-		pool:   s.pool,
-		logger: s.logger,
-		now:    s.now,
+		pool:      s.pool,
+		logger:    s.logger,
+		now:       s.now,
+		secretBox: s.secretBox,
 	}
 	s.auth = newPGAuthRepository(deps)
 	s.community = newPGCommunityRepository(deps)
@@ -251,54 +268,54 @@ func (s *Store) GetActiveReader(ctx context.Context) (string, error) {
 	return s.runtime.GetActiveReader(ctx)
 }
 
-// SetReaderSecret stores OAuth client secret JSON for a reader.
-func (s *Store) SetReaderSecret(ctx context.Context, reader string, secret []byte) error {
-	return s.runtime.SetReaderSecret(ctx, reader, secret)
+// SetReaderSecret stores OAuth client secret JSON for a tenant reader.
+func (s *Store) SetReaderSecret(ctx context.Context, tenant Tenant, reader string, secret []byte) error {
+	return s.runtime.SetReaderSecret(ctx, tenant, reader, secret)
 }
 
-// GetReaderSecret returns OAuth client secret JSON for a reader.
-func (s *Store) GetReaderSecret(ctx context.Context, reader string) (secret []byte, found bool, err error) {
-	return s.runtime.GetReaderSecret(ctx, reader)
+// GetReaderSecret returns OAuth client secret JSON for a tenant reader.
+func (s *Store) GetReaderSecret(ctx context.Context, tenant Tenant, reader string) (secret []byte, found bool, err error) {
+	return s.runtime.GetReaderSecret(ctx, tenant, reader)
 }
 
-// SetReaderToken stores OAuth token JSON for a reader.
-func (s *Store) SetReaderToken(ctx context.Context, reader string, token []byte) error {
-	return s.runtime.SetReaderToken(ctx, reader, token)
+// SetReaderToken stores OAuth token JSON for a tenant reader.
+func (s *Store) SetReaderToken(ctx context.Context, tenant Tenant, reader string, token []byte) error {
+	return s.runtime.SetReaderToken(ctx, tenant, reader, token)
 }
 
-// GetReaderToken returns OAuth token JSON for a reader.
-func (s *Store) GetReaderToken(ctx context.Context, reader string) (token []byte, found bool, err error) {
-	return s.runtime.GetReaderToken(ctx, reader)
+// GetReaderToken returns OAuth token JSON for a tenant reader.
+func (s *Store) GetReaderToken(ctx context.Context, tenant Tenant, reader string) (token []byte, found bool, err error) {
+	return s.runtime.GetReaderToken(ctx, tenant, reader)
 }
 
-// DeleteReaderToken removes the OAuth token JSON for a reader without deleting other reader runtime data.
-func (s *Store) DeleteReaderToken(ctx context.Context, reader string) error {
-	return s.runtime.DeleteReaderToken(ctx, reader)
+// DeleteReaderToken removes the OAuth token JSON for a tenant reader without deleting other reader runtime data.
+func (s *Store) DeleteReaderToken(ctx context.Context, tenant Tenant, reader string) error {
+	return s.runtime.DeleteReaderToken(ctx, tenant, reader)
 }
 
-// SetReaderConfig stores reader-specific configuration JSON.
-func (s *Store) SetReaderConfig(ctx context.Context, reader string, readerConfig json.RawMessage) error {
-	return s.runtime.SetReaderConfig(ctx, reader, readerConfig)
+// SetReaderConfig stores tenant reader-specific configuration JSON.
+func (s *Store) SetReaderConfig(ctx context.Context, tenant Tenant, reader string, readerConfig json.RawMessage) error {
+	return s.runtime.SetReaderConfig(ctx, tenant, reader, readerConfig)
 }
 
-// GetReaderConfig returns reader-specific configuration JSON.
-func (s *Store) GetReaderConfig(ctx context.Context, reader string) (json.RawMessage, bool, error) {
-	return s.runtime.GetReaderConfig(ctx, reader)
+// GetReaderConfig returns tenant reader-specific configuration JSON.
+func (s *Store) GetReaderConfig(ctx context.Context, tenant Tenant, reader string) (json.RawMessage, bool, error) {
+	return s.runtime.GetReaderConfig(ctx, tenant, reader)
 }
 
-// DeleteReaderRuntime removes all runtime data for a reader.
-func (s *Store) DeleteReaderRuntime(ctx context.Context, reader string) error {
-	return s.runtime.DeleteReaderRuntime(ctx, reader)
+// DeleteReaderRuntime removes all runtime data for a tenant reader.
+func (s *Store) DeleteReaderRuntime(ctx context.Context, tenant Tenant, reader string) error {
+	return s.runtime.DeleteReaderRuntime(ctx, tenant, reader)
 }
 
-// IsMessageProcessed reports whether a message key has already been processed.
-func (s *Store) IsMessageProcessed(ctx context.Context, key string) (bool, error) {
-	return s.runtime.IsMessageProcessed(ctx, key)
+// IsMessageProcessed reports whether a tenant message key has already been processed.
+func (s *Store) IsMessageProcessed(ctx context.Context, tenant Tenant, key string) (bool, error) {
+	return s.runtime.IsMessageProcessed(ctx, tenant, key)
 }
 
-// MarkMessageProcessed records a processed message key at the supplied time.
-func (s *Store) MarkMessageProcessed(ctx context.Context, key string, at time.Time) error {
-	return s.runtime.MarkMessageProcessed(ctx, key, at)
+// MarkMessageProcessed records a tenant processed message key at the supplied time.
+func (s *Store) MarkMessageProcessed(ctx context.Context, tenant Tenant, key string, at time.Time) error {
+	return s.runtime.MarkMessageProcessed(ctx, tenant, key, at)
 }
 
 // --- Labels ---

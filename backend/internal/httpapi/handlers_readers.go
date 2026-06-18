@@ -18,6 +18,7 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/oauth"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
+	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
 )
 
@@ -59,6 +60,10 @@ func (h *Handlers) ListReaders(w http.ResponseWriter, _ *http.Request) {
 }
 
 // --- reader credentials upload ---
+
+func requestTenant(_ *http.Request) store.Tenant {
+	return store.Tenant{}
+}
 
 // UploadCredentials handles POST /api/readers/{name}/credentials.
 // Accepts a JSON file upload (e.g. Google client_secret.json) and saves it to the runtime store.
@@ -112,7 +117,7 @@ func (h *Handlers) UploadCredentials(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.readerRuntimeStore.SetReaderSecret(r.Context(), name, body); err != nil {
+	if err := h.readerRuntimeStore.SetReaderSecret(r.Context(), requestTenant(r), name, body); err != nil {
 		h.logger.Error("failed to save credentials", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to save credentials")
 		return
@@ -138,7 +143,7 @@ func (h *Handlers) CredentialsStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, exists, err := h.readerRuntimeStore.GetReaderSecret(r.Context(), name)
+	_, exists, err := h.readerRuntimeStore.GetReaderSecret(r.Context(), requestTenant(r), name)
 	if err != nil {
 		h.logger.Error("failed to load credentials status", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to load credentials status")
@@ -187,7 +192,7 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.logger.Debug("reading credentials from store", "reader", name)
-	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(r.Context(), name)
+	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(r.Context(), requestTenant(r), name)
 	if err != nil {
 		h.logger.Error("failed to load credentials", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to load credentials")
@@ -242,13 +247,13 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 // exchangeAndSaveToken loads credentials for the named reader, exchanges the
 // authorization code for a token, and persists it to the runtime store. The
 // redirectURL must match the one used when building the authorization URL.
-func (h *Handlers) exchangeAndSaveToken(ctx context.Context, name, code, redirectURL string) error {
+func (h *Handlers) exchangeAndSaveToken(ctx context.Context, tenant store.Tenant, name, code, redirectURL string) error {
 	plugin, err := h.registry.GetReader(name)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errReaderNotRegistered, err)
 	}
 
-	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(ctx, name)
+	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(ctx, tenant, name)
 	if err != nil {
 		return fmt.Errorf("failed to load credentials: %w", err)
 	}
@@ -270,7 +275,7 @@ func (h *Handlers) exchangeAndSaveToken(ctx context.Context, name, code, redirec
 	if err != nil {
 		return fmt.Errorf("failed to marshal token: %w", err)
 	}
-	if err := h.readerRuntimeStore.SetReaderToken(ctx, name, tokenJSON); err != nil {
+	if err := h.readerRuntimeStore.SetReaderToken(ctx, tenant, name, tokenJSON); err != nil {
 		return fmt.Errorf("failed to save token: %w", err)
 	}
 	h.restartReaderDaemonAfterAuth(name)
@@ -313,7 +318,7 @@ func (h *Handlers) AuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
-	if err := h.exchangeAndSaveToken(r.Context(), name, code, redirectURL); err != nil {
+	if err := h.exchangeAndSaveToken(r.Context(), requestTenant(r), name, code, redirectURL); err != nil {
 		h.logger.Error("OAuth token exchange failed", "reader", name, "error", err)
 		if errors.Is(err, errCredentialsMissing) || errors.Is(err, errReaderNotRegistered) {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -407,7 +412,7 @@ func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
-	if err := h.exchangeAndSaveToken(r.Context(), name, code, redirectURL); err != nil {
+	if err := h.exchangeAndSaveToken(r.Context(), requestTenant(r), name, code, redirectURL); err != nil {
 		h.logger.Error("manual OAuth exchange failed", "reader", name, "error", err)
 		if errors.Is(err, errCredentialsMissing) || errors.Is(err, errReaderNotRegistered) {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -447,7 +452,7 @@ func (h *Handlers) AuthStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenJSON, ok, err := h.readerRuntimeStore.GetReaderToken(r.Context(), name)
+	tokenJSON, ok, err := h.readerRuntimeStore.GetReaderToken(r.Context(), requestTenant(r), name)
 	if err != nil {
 		h.logger.Error("failed to load token", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to load token")
@@ -461,7 +466,7 @@ func (h *Handlers) AuthStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenState, err := h.resolveOAuthTokenState(r.Context(), name, plugin.Metadata().Auth.RequiredScopes, tokenJSON)
+	tokenState, err := h.resolveOAuthTokenState(r.Context(), requestTenant(r), name, plugin.Metadata().Auth.RequiredScopes, tokenJSON)
 	if err != nil {
 		h.logger.Error("failed to resolve OAuth token state", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to resolve OAuth token state")
@@ -475,7 +480,7 @@ func (h *Handlers) AuthStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handlers) resolveOAuthTokenState(ctx context.Context, name string, scopes []string, tokenJSON []byte) (oauthTokenState, error) {
+func (h *Handlers) resolveOAuthTokenState(ctx context.Context, tenant store.Tenant, name string, scopes []string, tokenJSON []byte) (oauthTokenState, error) {
 	var tok oauth2.Token
 	if err := json.Unmarshal(tokenJSON, &tok); err != nil {
 		h.logger.Warn("failed to parse token", "reader", name, "error", err)
@@ -489,7 +494,7 @@ func (h *Handlers) resolveOAuthTokenState(ctx context.Context, name string, scop
 		return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, nil
 	}
 
-	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(ctx, name)
+	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(ctx, tenant, name)
 	if err != nil {
 		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, fmt.Errorf("loading credentials for token refresh: %w", err)
 	}
@@ -512,7 +517,7 @@ func (h *Handlers) resolveOAuthTokenState(ctx context.Context, name string, scop
 	if err != nil {
 		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, fmt.Errorf("marshaling refreshed token: %w", err)
 	}
-	if err := h.readerRuntimeStore.SetReaderToken(ctx, name, refreshedJSON); err != nil {
+	if err := h.readerRuntimeStore.SetReaderToken(ctx, tenant, name, refreshedJSON); err != nil {
 		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, fmt.Errorf("saving refreshed token: %w", err)
 	}
 	return oauthTokenState{authenticated: true, authState: authStateConnected, expiry: tokenExpiry(*refreshed)}, nil
@@ -531,15 +536,15 @@ func isInvalidOAuthGrant(err error) bool {
 	return errors.As(err, &retrieveErr) && retrieveErr.ErrorCode == "invalid_grant"
 }
 
-func (h *Handlers) resolveReaderAuthStatus(ctx context.Context, name string, meta plugins.ReaderMetadata) (bool, string) {
+func (h *Handlers) resolveReaderAuthStatus(ctx context.Context, tenant store.Tenant, name string, meta plugins.ReaderMetadata) (bool, string) {
 	if meta.Auth.Type != plugins.AuthTypeOAuth {
 		return true, authStateConnected
 	}
-	tokenJSON, ok, err := h.readerRuntimeStore.GetReaderToken(ctx, name)
+	tokenJSON, ok, err := h.readerRuntimeStore.GetReaderToken(ctx, tenant, name)
 	if err != nil || !ok {
 		return false, authStateReauthorizationRequired
 	}
-	tokenState, err := h.resolveOAuthTokenState(ctx, name, meta.Auth.RequiredScopes, tokenJSON)
+	tokenState, err := h.resolveOAuthTokenState(ctx, tenant, name, meta.Auth.RequiredScopes, tokenJSON)
 	if err != nil {
 		return false, authStateRefreshPending
 	}
@@ -570,7 +575,7 @@ func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
 		return
 	}
-	if err := h.readerRuntimeStore.DeleteReaderRuntime(r.Context(), name); err != nil {
+	if err := h.readerRuntimeStore.DeleteReaderRuntime(r.Context(), requestTenant(r), name); err != nil {
 		h.logger.Error("failed to disconnect reader", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
 		return
@@ -607,7 +612,7 @@ func (h *Handlers) RevokeToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, ok, err := h.readerRuntimeStore.GetReaderToken(r.Context(), name); err != nil {
+	if _, ok, err := h.readerRuntimeStore.GetReaderToken(r.Context(), requestTenant(r), name); err != nil {
 		h.logger.Error("failed to load token", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to remove token")
 		return
@@ -615,7 +620,7 @@ func (h *Handlers) RevokeToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "no token found")
 		return
 	}
-	if err := h.readerRuntimeStore.DeleteReaderToken(r.Context(), name); err != nil {
+	if err := h.readerRuntimeStore.DeleteReaderToken(r.Context(), requestTenant(r), name); err != nil {
 		h.logger.Error("failed to remove token", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to remove token")
 		return
@@ -643,7 +648,7 @@ func (h *Handlers) GetReaderConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, ok, err := h.readerRuntimeStore.GetReaderConfig(r.Context(), name)
+	data, ok, err := h.readerRuntimeStore.GetReaderConfig(r.Context(), requestTenant(r), name)
 	if err != nil {
 		h.logger.Error("failed to read config", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to read config")
@@ -656,7 +661,7 @@ func (h *Handlers) GetReaderConfig(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data) //nolint:gosec // data is JSON read from a known config file; Content-Type is already set to application/json
+	_, _ = w.Write(data)
 }
 
 // SaveReaderConfig handles PUT /api/readers/{name}/config.
@@ -693,7 +698,7 @@ func (h *Handlers) SaveReaderConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.readerRuntimeStore.SetReaderConfig(r.Context(), name, json.RawMessage(body)); err != nil {
+	if err := h.readerRuntimeStore.SetReaderConfig(r.Context(), requestTenant(r), name, json.RawMessage(body)); err != nil {
 		h.logger.Error("failed to save config", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to save config")
 		return
@@ -733,7 +738,7 @@ func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 	st := readerStatus{AuthType: meta.Auth.Type}
 
 	if meta.Auth.RequiresCredentialsUpload {
-		_, ok, err := h.readerRuntimeStore.GetReaderSecret(r.Context(), name)
+		_, ok, err := h.readerRuntimeStore.GetReaderSecret(r.Context(), requestTenant(r), name)
 		if err != nil {
 			h.logger.Error("failed to load credentials status", "reader", name, "error", err)
 			writeError(w, http.StatusInternalServerError, "failed to load credentials status")
@@ -744,12 +749,12 @@ func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 		st.CredentialsUploaded = true
 	}
 
-	st.Authenticated, st.AuthState = h.resolveReaderAuthStatus(r.Context(), name, meta)
+	st.Authenticated, st.AuthState = h.resolveReaderAuthStatus(r.Context(), requestTenant(r), name, meta)
 
 	if len(meta.ConfigSchema) == 0 {
 		st.ConfigPresent = true
 	} else {
-		_, ok, err := h.readerRuntimeStore.GetReaderConfig(r.Context(), name)
+		_, ok, err := h.readerRuntimeStore.GetReaderConfig(r.Context(), requestTenant(r), name)
 		if err != nil {
 			h.logger.Error("failed to load reader config status", "reader", name, "error", err)
 			writeError(w, http.StatusInternalServerError, "failed to load reader config status")

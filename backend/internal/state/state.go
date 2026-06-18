@@ -8,27 +8,31 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
 // Manager tracks processed messages to avoid reprocessing.
 type Manager struct {
 	store  ProcessedMessageStore
+	tenant store.Tenant
 	logger *slog.Logger
 }
 
 // ProcessedMessageStore is the DB persistence surface used by DB-backed state managers.
 type ProcessedMessageStore interface {
-	IsMessageProcessed(ctx context.Context, key string) (bool, error)
-	MarkMessageProcessed(ctx context.Context, key string, at time.Time) error
+	IsMessageProcessed(ctx context.Context, tenant store.Tenant, key string) (bool, error)
+	MarkMessageProcessed(ctx context.Context, tenant store.Tenant, key string, at time.Time) error
 }
 
 // NewDBManager creates a state manager backed by the runtime database.
-func NewDBManager(store ProcessedMessageStore, logger *slog.Logger) *Manager {
+func NewDBManager(processedStore ProcessedMessageStore, tenant store.Tenant, logger *slog.Logger) *Manager {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &Manager{
-		store:  store,
+		store:  processedStore,
+		tenant: tenant,
 		logger: logger,
 	}
 }
@@ -48,7 +52,7 @@ func (m *Manager) IsProcessed(ctx context.Context, msgKey string) bool {
 		m.logger.Warn("processed message state store is nil", "key", msgKey)
 		return false
 	}
-	processed, err := m.store.IsMessageProcessed(ctx, msgKey)
+	processed, err := m.store.IsMessageProcessed(ctx, m.tenant, msgKey)
 	if err != nil {
 		m.logger.Warn("failed to check processed message state", "key", msgKey, "error", err)
 		return false
@@ -61,7 +65,7 @@ func (m *Manager) MarkProcessed(ctx context.Context, msgKey string) error {
 	if m.store == nil {
 		return fmt.Errorf("processed message state store is nil")
 	}
-	if err := m.store.MarkMessageProcessed(ctx, msgKey, time.Now()); err != nil {
+	if err := m.store.MarkMessageProcessed(ctx, m.tenant, msgKey, time.Now()); err != nil {
 		return fmt.Errorf("marking message processed in DB: %w", err)
 	}
 	return nil

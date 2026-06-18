@@ -15,6 +15,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/state"
+	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 )
@@ -70,6 +71,7 @@ type RunConfig struct {
 	// ReaderName is the plugin name of the reader to use (e.g. "gmail").
 	// Set by the web UI via POST /api/daemon/start.
 	ReaderName     string
+	Tenant         store.Tenant
 	Config         *config.App
 	Rules          []api.Rule
 	Resolver       api.CategoryResolver
@@ -83,7 +85,7 @@ type RunConfig struct {
 
 // ReaderRuntimeStore loads reader runtime configuration persisted by the API.
 type ReaderRuntimeStore interface {
-	GetReaderConfig(ctx context.Context, reader string) (json.RawMessage, bool, error)
+	GetReaderConfig(ctx context.Context, tenant store.Tenant, reader string) (json.RawMessage, bool, error)
 }
 
 // Run starts the expense tracking daemon with the given configuration.
@@ -114,7 +116,7 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 	reader, err := readerPlugin.NewReader(plugins.ReaderInput{
 		HTTPClient:     r.httpClient,
 		AppConfig:      cfg,
-		ReaderConfig:   r.loadReaderConfig(ctx, runCfg.ReaderName, runCfg.RuntimeStore),
+		ReaderConfig:   r.loadReaderConfig(ctx, runCfg.Tenant, runCfg.ReaderName, runCfg.RuntimeStore),
 		Rules:          runCfg.Rules,
 		Resolver:       runCfg.Resolver,
 		StateManager:   runCfg.StateManager,
@@ -167,11 +169,11 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 	return runErr
 }
 
-func (r *Runner) loadReaderConfig(ctx context.Context, readerName string, store ReaderRuntimeStore) json.RawMessage {
-	if store == nil {
+func (r *Runner) loadReaderConfig(ctx context.Context, tenant store.Tenant, readerName string, runtimeStore ReaderRuntimeStore) json.RawMessage {
+	if runtimeStore == nil {
 		return nil
 	}
-	data, ok, err := store.GetReaderConfig(ctx, readerName)
+	data, ok, err := runtimeStore.GetReaderConfig(ctx, tenant, readerName)
 	if err != nil {
 		r.logger.Warn("failed to read persisted reader config", "reader", readerName, "error", err)
 		return nil

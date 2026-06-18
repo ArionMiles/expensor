@@ -17,6 +17,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/rules"
 	"github.com/ArionMiles/expensor/backend/internal/state"
+	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 )
@@ -35,12 +36,12 @@ type categorySnapshotStore interface {
 }
 
 type daemonRuntimeStore interface {
-	GetReaderSecret(ctx context.Context, reader string) ([]byte, bool, error)
-	GetReaderToken(ctx context.Context, reader string) ([]byte, bool, error)
-	SetReaderToken(ctx context.Context, reader string, token []byte) error
-	GetReaderConfig(ctx context.Context, reader string) (json.RawMessage, bool, error)
-	IsMessageProcessed(ctx context.Context, key string) (bool, error)
-	MarkMessageProcessed(ctx context.Context, key string, at time.Time) error
+	GetReaderSecret(ctx context.Context, tenant store.Tenant, reader string) ([]byte, bool, error)
+	GetReaderToken(ctx context.Context, tenant store.Tenant, reader string) ([]byte, bool, error)
+	SetReaderToken(ctx context.Context, tenant store.Tenant, reader string, token []byte) error
+	GetReaderConfig(ctx context.Context, tenant store.Tenant, reader string) (json.RawMessage, bool, error)
+	IsMessageProcessed(ctx context.Context, tenant store.Tenant, key string) (bool, error)
+	MarkMessageProcessed(ctx context.Context, tenant store.Tenant, key string, at time.Time) error
 }
 
 func (m *daemonManager) setRunning(t time.Time) {
@@ -94,6 +95,7 @@ type daemonCoordinator struct {
 
 type daemonRun struct {
 	readerName    string
+	tenant        store.Tenant
 	cfg           config.App
 	compiledRules []api.Rule
 	resolver      api.CategoryResolver
@@ -130,6 +132,7 @@ func (c *daemonCoordinator) launch(readerName string, forceRescan bool) {
 	merged := rules.MergeRules(c.systemRules, loadUserRules(c.ctx, c.st, c.logger))
 	run := daemonRun{
 		readerName:    readerName,
+		tenant:        store.Tenant{},
 		cfg:           runtimeCfg,
 		compiledRules: merged,
 		resolver:      c.resolver,
@@ -291,7 +294,7 @@ func (c *daemonCoordinator) runDaemon(
 			c.dm.setStopped(err)
 			return
 		}
-		secretJSON, ok, err := c.runtimeStore.GetReaderSecret(ctx, run.readerName)
+		secretJSON, ok, err := c.runtimeStore.GetReaderSecret(ctx, run.tenant, run.readerName)
 		if err != nil {
 			c.logger.Error("failed to load OAuth credentials", "reader", run.readerName, "error", err)
 			c.dm.setStopped(err)
@@ -304,7 +307,13 @@ func (c *daemonCoordinator) runDaemon(
 			return
 		}
 		c.logger.Debug("creating OAuth HTTP client", "reader", run.readerName)
-		httpClient, err = oauth.NewFromJSONAndStore(ctx, secretJSON, c.runtimeStore, run.readerName, scopes...)
+		httpClient, err = oauth.NewFromJSONAndStore(ctx, oauth.StoreClientInput{
+			SecretJSON: secretJSON,
+			Store:      c.runtimeStore,
+			Tenant:     run.tenant,
+			Reader:     run.readerName,
+			Scopes:     scopes,
+		})
 		if err != nil {
 			c.logger.Error("failed to create OAuth client — run onboarding first", "error", err)
 			c.dm.setStopped(err)
@@ -316,12 +325,13 @@ func (c *daemonCoordinator) runDaemon(
 	// Forced rescans intentionally bypass processed-message deduplication.
 	var stateManager *state.Manager
 	if !run.forceRescan {
-		stateManager = state.NewDBManager(c.runtimeStore, c.logger)
+		stateManager = state.NewDBManager(c.runtimeStore, run.tenant, c.logger)
 	}
 
 	runner := daemon.New(c.registry, c.sinkFactory, httpClient, c.logger)
 	runCfg := daemon.RunConfig{
 		ReaderName:     run.readerName,
+		Tenant:         run.tenant,
 		Config:         &run.cfg,
 		Rules:          run.compiledRules,
 		Resolver:       run.resolver,
