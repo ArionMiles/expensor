@@ -179,7 +179,7 @@ function DonutChart({
 
   return (
     <>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-label="Breakdown chart">
         <g transform={`rotate(-90, ${cx}, ${cy})`}>
           {slices.map((s, i) => (
             <circle

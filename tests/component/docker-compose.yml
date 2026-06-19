@@ -27,6 +27,7 @@ services:
       POSTGRES_USER: expensor
       POSTGRES_PASSWORD: expensor
       POSTGRES_SSLMODE: disable
+      EXPENSOR_SECRET_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
       GOCOVERDIR: /coverage/backend
       GOTOOLCHAIN: auto
     command:
