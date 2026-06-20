@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/ArionMiles/expensor/backend/internal/oauth"
-	storepkg "github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
 const testSecretJSON = `{
@@ -22,21 +22,21 @@ type fakeTokenStore struct {
 	token []byte
 }
 
-func (f *fakeTokenStore) GetReaderToken(_ context.Context, _ storepkg.Tenant, _ string) (token []byte, found bool, err error) {
+func (f *fakeTokenStore) GetReaderToken(_ context.Context, _ store.Tenant, _ string) (token []byte, found bool, err error) {
 	return f.token, len(f.token) > 0, nil
 }
 
-func (f *fakeTokenStore) SetReaderToken(_ context.Context, _ storepkg.Tenant, _ string, token []byte) error {
+func (f *fakeTokenStore) SetReaderToken(_ context.Context, _ store.Tenant, _ string, token []byte) error {
 	f.token = token
 	return nil
 }
 
 func TestNewFromJSONAndStoreLoadsToken(t *testing.T) {
-	store := &fakeTokenStore{token: []byte(`{"access_token":"a","token_type":"Bearer","expiry":"2999-01-01T00:00:00Z"}`)}
+	tokenStore := &fakeTokenStore{token: []byte(`{"access_token":"a","token_type":"Bearer","expiry":"2999-01-01T00:00:00Z"}`)}
 	client, err := oauth.NewFromJSONAndStore(context.Background(), oauth.StoreClientInput{
 		SecretJSON: []byte(testSecretJSON),
-		Store:      store,
-		Tenant:     storepkg.Tenant{},
+		Store:      tokenStore,
+		Tenant:     store.Tenant{},
 		Reader:     "gmail",
 		Scopes:     []string{"https://www.googleapis.com/auth/gmail.readonly"},
 	})

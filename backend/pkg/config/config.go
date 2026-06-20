@@ -193,7 +193,7 @@ func loadSecretKey(security *Security) error {
 		return errors.New("set exactly one of EXPENSOR_SECRET_KEY or EXPENSOR_SECRET_KEY_FILE")
 	}
 	if !hasRawKey && !hasKeyFile {
-		return nil
+		return errors.New("set exactly one of EXPENSOR_SECRET_KEY or EXPENSOR_SECRET_KEY_FILE")
 	}
 
 	encoded := rawKey
