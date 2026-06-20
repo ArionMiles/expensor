@@ -308,7 +308,7 @@ func (m *mockStore) GetActiveReader(_ context.Context) (string, error) {
 	return m.activeReader, nil
 }
 
-func (m *mockStore) SetReaderSecret(_ context.Context, reader string, secret []byte) error {
+func (m *mockStore) SetReaderSecret(_ context.Context, _ store.Tenant, reader string, secret []byte) error {
 	if m.readerSecrets == nil {
 		m.readerSecrets = make(map[string][]byte)
 	}
@@ -316,12 +316,12 @@ func (m *mockStore) SetReaderSecret(_ context.Context, reader string, secret []b
 	return nil
 }
 
-func (m *mockStore) GetReaderSecret(_ context.Context, reader string) (secret []byte, found bool, err error) {
+func (m *mockStore) GetReaderSecret(_ context.Context, _ store.Tenant, reader string) (secret []byte, found bool, err error) {
 	secret, ok := m.readerSecrets[reader]
 	return append([]byte(nil), secret...), ok, nil
 }
 
-func (m *mockStore) SetReaderToken(_ context.Context, reader string, token []byte) error {
+func (m *mockStore) SetReaderToken(_ context.Context, _ store.Tenant, reader string, token []byte) error {
 	if m.readerTokens == nil {
 		m.readerTokens = make(map[string][]byte)
 	}
@@ -329,17 +329,17 @@ func (m *mockStore) SetReaderToken(_ context.Context, reader string, token []byt
 	return nil
 }
 
-func (m *mockStore) GetReaderToken(_ context.Context, reader string) (token []byte, found bool, err error) {
+func (m *mockStore) GetReaderToken(_ context.Context, _ store.Tenant, reader string) (token []byte, found bool, err error) {
 	token, ok := m.readerTokens[reader]
 	return append([]byte(nil), token...), ok, nil
 }
 
-func (m *mockStore) DeleteReaderToken(_ context.Context, reader string) error {
+func (m *mockStore) DeleteReaderToken(_ context.Context, _ store.Tenant, reader string) error {
 	delete(m.readerTokens, reader)
 	return nil
 }
 
-func (m *mockStore) SetReaderConfig(_ context.Context, reader string, readerConfig json.RawMessage) error {
+func (m *mockStore) SetReaderConfig(_ context.Context, _ store.Tenant, reader string, readerConfig json.RawMessage) error {
 	if m.readerConfigs == nil {
 		m.readerConfigs = make(map[string]json.RawMessage)
 	}
@@ -347,12 +347,12 @@ func (m *mockStore) SetReaderConfig(_ context.Context, reader string, readerConf
 	return nil
 }
 
-func (m *mockStore) GetReaderConfig(_ context.Context, reader string) (json.RawMessage, bool, error) {
+func (m *mockStore) GetReaderConfig(_ context.Context, _ store.Tenant, reader string) (json.RawMessage, bool, error) {
 	cfg, ok := m.readerConfigs[reader]
 	return append(json.RawMessage(nil), cfg...), ok, nil
 }
 
-func (m *mockStore) DeleteReaderRuntime(_ context.Context, reader string) error {
+func (m *mockStore) DeleteReaderRuntime(_ context.Context, _ store.Tenant, reader string) error {
 	delete(m.readerSecrets, reader)
 	delete(m.readerTokens, reader)
 	delete(m.readerConfigs, reader)

@@ -75,8 +75,20 @@ func TestLoadAuthEncryptionKey(t *testing.T) {
 	}
 }
 
+func TestLoadRequiresAuthEncryptionKey(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("POSTGRES_HOST", "localhost")
+	t.Setenv("POSTGRES_DB", "expensor")
+	t.Setenv("POSTGRES_USER", "expensor")
+
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), "EXPENSOR_SECRET_KEY") {
+		t.Fatalf("expected missing EXPENSOR_SECRET_KEY error, got %v", err)
+	}
+}
+
 func TestLoadAuthEncryptionKeyFile(t *testing.T) {
-	setRequiredConfigEnv(t)
+	setRequiredPostgresEnv(t)
 	dir := t.TempDir()
 	keyPath := filepath.Join(dir, "expensor_secret_key")
 	if err := os.WriteFile(keyPath, []byte(base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{8}, 32))+"\n"), 0o600); err != nil {
@@ -220,6 +232,12 @@ func TestThunderbirdConfig_GetMailboxes(t *testing.T) {
 }
 
 func setRequiredConfigEnv(t *testing.T) {
+	t.Helper()
+	setRequiredPostgresEnv(t)
+	t.Setenv("EXPENSOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)))
+}
+
+func setRequiredPostgresEnv(t *testing.T) {
 	t.Helper()
 	clearConfigEnv(t)
 	t.Setenv("POSTGRES_HOST", "localhost")

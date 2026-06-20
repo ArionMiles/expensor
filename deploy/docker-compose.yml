@@ -12,6 +12,10 @@
 #   EXPENSOR_POSTGRES_PASSWORD='change-me' docker compose up -d
 # or a .env file next to this compose file:
 #   EXPENSOR_POSTGRES_PASSWORD=change-me
+#
+# Generate an encryption key with OpenSSL:
+#   openssl rand -base64 32
+# and set EXPENSOR_SECRET_KEY in your shell or .env file before starting.
 
 services:
   postgres:
@@ -44,6 +48,7 @@ services:
       POSTGRES_USER: expensor
       POSTGRES_PASSWORD: ${EXPENSOR_POSTGRES_PASSWORD:-expensor_password}
       POSTGRES_SSLMODE: disable
+      EXPENSOR_SECRET_KEY: ${EXPENSOR_SECRET_KEY:?set EXPENSOR_SECRET_KEY with openssl rand -base64 32}
       LOG_LEVEL: INFO
       # BASE_URL: http://localhost:8080  # Public URL Expensor is reachable at. Change this if you
       #                                  # expose on a different port (e.g. 8081:8080 -> http://localhost:8081)

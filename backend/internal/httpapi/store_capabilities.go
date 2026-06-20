@@ -85,14 +85,14 @@ type taxonomyStore interface {
 type readerRuntimeStore interface {
 	SetActiveReader(ctx context.Context, reader string) error
 	GetActiveReader(ctx context.Context) (string, error)
-	SetReaderSecret(ctx context.Context, reader string, secret []byte) error
-	GetReaderSecret(ctx context.Context, reader string) ([]byte, bool, error)
-	SetReaderToken(ctx context.Context, reader string, token []byte) error
-	GetReaderToken(ctx context.Context, reader string) ([]byte, bool, error)
-	DeleteReaderToken(ctx context.Context, reader string) error
-	SetReaderConfig(ctx context.Context, reader string, config json.RawMessage) error
-	GetReaderConfig(ctx context.Context, reader string) (json.RawMessage, bool, error)
-	DeleteReaderRuntime(ctx context.Context, reader string) error
+	SetReaderSecret(ctx context.Context, tenant store.Tenant, reader string, secret []byte) error
+	GetReaderSecret(ctx context.Context, tenant store.Tenant, reader string) ([]byte, bool, error)
+	SetReaderToken(ctx context.Context, tenant store.Tenant, reader string, token []byte) error
+	GetReaderToken(ctx context.Context, tenant store.Tenant, reader string) ([]byte, bool, error)
+	DeleteReaderToken(ctx context.Context, tenant store.Tenant, reader string) error
+	SetReaderConfig(ctx context.Context, tenant store.Tenant, reader string, config json.RawMessage) error
+	GetReaderConfig(ctx context.Context, tenant store.Tenant, reader string) (json.RawMessage, bool, error)
+	DeleteReaderRuntime(ctx context.Context, tenant store.Tenant, reader string) error
 }
 
 type ruleStore interface {

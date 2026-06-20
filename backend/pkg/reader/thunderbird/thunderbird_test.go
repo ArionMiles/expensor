@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/state"
+	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
@@ -58,17 +59,17 @@ type fakeProcessedMessageStore struct {
 }
 
 func newTestStateManager() *state.Manager {
-	return state.NewDBManager(&fakeProcessedMessageStore{processed: map[string]time.Time{}}, slog.Default())
+	return state.NewDBManager(&fakeProcessedMessageStore{processed: map[string]time.Time{}}, store.Tenant{}, slog.Default())
 }
 
-func (f *fakeProcessedMessageStore) IsMessageProcessed(_ context.Context, key string) (bool, error) {
+func (f *fakeProcessedMessageStore) IsMessageProcessed(_ context.Context, _ store.Tenant, key string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	_, ok := f.processed[key]
 	return ok, nil
 }
 
-func (f *fakeProcessedMessageStore) MarkMessageProcessed(_ context.Context, key string, at time.Time) error {
+func (f *fakeProcessedMessageStore) MarkMessageProcessed(_ context.Context, _ store.Tenant, key string, at time.Time) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.processed[key] = at

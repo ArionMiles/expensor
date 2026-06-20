@@ -7,6 +7,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
 func testLogger() *slog.Logger {
@@ -20,7 +22,7 @@ type fakeProcessedMessageStore struct {
 	markErr   error
 }
 
-func (f *fakeProcessedMessageStore) IsMessageProcessed(ctx context.Context, key string) (bool, error) {
+func (f *fakeProcessedMessageStore) IsMessageProcessed(ctx context.Context, _ store.Tenant, key string) (bool, error) {
 	f.lastCtx = ctx
 	if f.checkErr != nil {
 		return false, f.checkErr
@@ -29,7 +31,7 @@ func (f *fakeProcessedMessageStore) IsMessageProcessed(ctx context.Context, key 
 	return ok, nil
 }
 
-func (f *fakeProcessedMessageStore) MarkMessageProcessed(ctx context.Context, key string, at time.Time) error {
+func (f *fakeProcessedMessageStore) MarkMessageProcessed(ctx context.Context, _ store.Tenant, key string, at time.Time) error {
 	f.lastCtx = ctx
 	if f.markErr != nil {
 		return f.markErr
@@ -39,8 +41,8 @@ func (f *fakeProcessedMessageStore) MarkMessageProcessed(ctx context.Context, ke
 }
 
 func TestDBManagerMarksProcessedMessages(t *testing.T) {
-	store := &fakeProcessedMessageStore{processed: map[string]time.Time{}}
-	m := NewDBManager(store, testLogger())
+	processedStore := &fakeProcessedMessageStore{processed: map[string]time.Time{}}
+	m := NewDBManager(processedStore, store.Tenant{}, testLogger())
 
 	if m.IsProcessed(context.Background(), "msg-1") {
 		t.Fatal("message should not start processed")
@@ -54,27 +56,27 @@ func TestDBManagerMarksProcessedMessages(t *testing.T) {
 }
 
 func TestDBManagerUsesCallerContext(t *testing.T) {
-	store := &fakeProcessedMessageStore{processed: map[string]time.Time{}}
-	m := NewDBManager(store, testLogger())
+	processedStore := &fakeProcessedMessageStore{processed: map[string]time.Time{}}
+	m := NewDBManager(processedStore, store.Tenant{}, testLogger())
 	ctx := context.WithValue(context.Background(), testContextKey{}, "caller")
 
 	if m.IsProcessed(ctx, "msg-1") {
 		t.Fatal("message should not start processed")
 	}
-	assertStoreContext(store.lastCtx, t)
+	assertStoreContext(processedStore.lastCtx, t)
 
 	if err := m.MarkProcessed(ctx, "msg-1"); err != nil {
 		t.Fatalf("MarkProcessed: %v", err)
 	}
-	assertStoreContext(store.lastCtx, t)
+	assertStoreContext(processedStore.lastCtx, t)
 }
 
 func TestDBManagerCheckErrorDoesNotSkipMessages(t *testing.T) {
-	store := &fakeProcessedMessageStore{
+	processedStore := &fakeProcessedMessageStore{
 		processed: map[string]time.Time{},
 		checkErr:  errors.New("db unavailable"),
 	}
-	m := NewDBManager(store, testLogger())
+	m := NewDBManager(processedStore, store.Tenant{}, testLogger())
 
 	if m.IsProcessed(context.Background(), "msg-1") {
 		t.Fatal("check errors should not mark messages as already processed")
@@ -82,11 +84,11 @@ func TestDBManagerCheckErrorDoesNotSkipMessages(t *testing.T) {
 }
 
 func TestDBManagerMarkErrorIsReturned(t *testing.T) {
-	store := &fakeProcessedMessageStore{
+	processedStore := &fakeProcessedMessageStore{
 		processed: map[string]time.Time{},
 		markErr:   errors.New("db unavailable"),
 	}
-	m := NewDBManager(store, testLogger())
+	m := NewDBManager(processedStore, store.Tenant{}, testLogger())
 
 	if err := m.MarkProcessed(context.Background(), "msg-1"); err == nil {
 		t.Fatal("expected mark error")
@@ -94,7 +96,7 @@ func TestDBManagerMarkErrorIsReturned(t *testing.T) {
 }
 
 func TestDBManagerNilStoreIsConservative(t *testing.T) {
-	m := NewDBManager(nil, testLogger())
+	m := NewDBManager(nil, store.Tenant{}, testLogger())
 
 	if m.IsProcessed(context.Background(), "msg-1") {
 		t.Fatal("nil store should not mark messages as already processed")

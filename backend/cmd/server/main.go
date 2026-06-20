@@ -77,7 +77,7 @@ func run() int {
 		return 1
 	}
 
-	pgStore, storeErr := store.New(cfg.Postgres, logger.With("component", "store"))
+	pgStore, storeErr := store.NewWithSecurity(cfg.Postgres, cfg.Security, logger.With("component", "store"))
 	if storeErr != nil {
 		logger.Error("failed to connect store", "error", storeErr)
 		return 1

@@ -10,7 +10,7 @@ ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 
 INSERT INTO reader_runtime (reader, config) VALUES
   ('thunderbird', '{"config":{"profilePath":"/workspace/tests/component/fixtures/thunderbird-profile","mailboxes":"Inbox"}}'::jsonb)
-ON CONFLICT (reader) DO UPDATE SET config = EXCLUDED.config, updated_at = NOW();
+ON CONFLICT (reader) WHERE tenant_id IS NULL DO UPDATE SET config = EXCLUDED.config, updated_at = NOW();
 
 INSERT INTO labels (name, color) VALUES
   ('10min Delivery', '#8b5cf6'),
