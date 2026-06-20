@@ -77,7 +77,7 @@ func loadUserRules(ctx context.Context, st httpapi.Storer, logger *slog.Logger) 
 	if st == nil {
 		return nil
 	}
-	rows, err := st.ListRules(ctx)
+	rows, err := st.ListRules(ctx, store.Tenant{})
 	if err != nil {
 		logger.Warn("failed to load rules from DB, falling back to embedded rules", "error", err)
 		return nil

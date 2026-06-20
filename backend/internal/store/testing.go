@@ -11,6 +11,7 @@ import (
 
 // InsertParams holds the minimum fields needed to seed a transaction in tests.
 type InsertParams struct {
+	Tenant       Tenant
 	MessageID    string
 	Amount       float64
 	Currency     string
@@ -45,11 +46,11 @@ func (s *Store) InsertForTest(ctx context.Context, p InsertParams) (string, erro
 	var id string
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO transactions
-			(message_id, amount, currency, timestamp, merchant_info, category, source, source_type, source_label, bank, bucket, description)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULLIF($11, ''), $12)
+			(tenant_id, message_id, amount, currency, timestamp, merchant_info, category, source, source_type, source_label, bank, bucket, description)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULLIF($12, ''), $13)
 		RETURNING id
 	`,
-		p.MessageID, p.Amount, p.Currency, p.Timestamp,
+		tenantIDParam(p.Tenant), p.MessageID, p.Amount, p.Currency, p.Timestamp,
 		p.MerchantInfo, p.Category, p.Source, p.SourceType, p.SourceLabel, p.Bank, p.Bucket, p.Description,
 	).Scan(&id)
 	if err != nil {

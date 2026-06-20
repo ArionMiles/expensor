@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
 // ListBanks returns the embedded bank color mappings.
@@ -35,7 +37,7 @@ func (h *Handlers) ListBanks(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/preferences [get]
 func (h *Handlers) GetPreferences(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, h.preferences(r.Context()))
+	writeJSON(w, http.StatusOK, h.preferences(r.Context(), requestTenant(r)))
 }
 
 // PatchPreferences handles PATCH /api/config/preferences.
@@ -59,34 +61,34 @@ func (h *Handlers) PatchPreferences(w http.ResponseWriter, r *http.Request) {
 	if !h.validateRequest(w, "body", body) {
 		return
 	}
-	if err := h.persistPreferences(r.Context(), body); err != nil {
+	if err := h.persistPreferences(r.Context(), requestTenant(r), body); err != nil {
 		h.logger.Error("update preferences", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to update preferences")
 		return
 	}
-	writeJSON(w, http.StatusOK, h.preferences(r.Context()))
+	writeJSON(w, http.StatusOK, h.preferences(r.Context(), requestTenant(r)))
 }
 
-func (h *Handlers) preferences(ctx context.Context) PreferencesResponse {
+func (h *Handlers) preferences(ctx context.Context, tenant store.Tenant) PreferencesResponse {
 	return PreferencesResponse{
-		BaseCurrency: h.currentBaseCurrency(ctx),
-		ScanInterval: h.storedIntPreference(ctx, "scan_interval", h.scanInterval),
-		LookbackDays: h.storedIntPreference(ctx, "lookback_days", h.lookbackDays),
-		Timezone:     h.storedPreference(ctx, "app.timezone", ""),
-		TimeFormat:   h.storedPreference(ctx, "app.time_format", "HH:mm"),
+		BaseCurrency: h.currentBaseCurrency(ctx, tenant),
+		ScanInterval: h.storedIntPreference(ctx, tenant, "scan_interval", h.scanInterval),
+		LookbackDays: h.storedIntPreference(ctx, tenant, "lookback_days", h.lookbackDays),
+		Timezone:     h.storedPreference(ctx, tenant, "app.timezone", ""),
+		TimeFormat:   h.storedPreference(ctx, tenant, "app.time_format", "HH:mm"),
 	}
 }
 
-func (h *Handlers) storedPreference(ctx context.Context, key, fallback string) string {
-	value, err := h.settingsStore.GetAppConfig(ctx, key)
+func (h *Handlers) storedPreference(ctx context.Context, tenant store.Tenant, key, fallback string) string {
+	value, err := h.settingsStore.GetAppConfig(ctx, tenant, key)
 	if err != nil || value == "" {
 		return fallback
 	}
 	return value
 }
 
-func (h *Handlers) storedIntPreference(ctx context.Context, key string, fallback int) int {
-	value := h.storedPreference(ctx, key, "")
+func (h *Handlers) storedIntPreference(ctx context.Context, tenant store.Tenant, key string, fallback int) int {
+	value := h.storedPreference(ctx, tenant, key, "")
 	parsed, err := strconv.Atoi(value)
 	if err != nil {
 		return fallback
@@ -109,7 +111,7 @@ func normalizePreferencesPatch(body *PreferencesPatchRequest) {
 	}
 }
 
-func (h *Handlers) persistPreferences(ctx context.Context, body PreferencesPatchRequest) error {
+func (h *Handlers) persistPreferences(ctx context.Context, tenant store.Tenant, body PreferencesPatchRequest) error {
 	values := []struct {
 		key   string
 		value *string
@@ -124,7 +126,7 @@ func (h *Handlers) persistPreferences(ctx context.Context, body PreferencesPatch
 		if preference.value == nil {
 			continue
 		}
-		if err := h.settingsStore.SetAppConfig(ctx, preference.key, *preference.value); err != nil {
+		if err := h.settingsStore.SetAppConfig(ctx, tenant, preference.key, *preference.value); err != nil {
 			return err
 		}
 	}
@@ -150,7 +152,7 @@ func (h *Handlers) missingSetupPreferences(ctx context.Context) []string {
 	}
 	missing := make([]string, 0, len(required))
 	for _, pref := range required {
-		value, err := h.settingsStore.GetAppConfig(ctx, pref.key)
+		value, err := h.settingsStore.GetAppConfig(ctx, store.Tenant{}, pref.key)
 		if err != nil || strings.TrimSpace(value) == "" {
 			missing = append(missing, pref.field)
 		}
@@ -184,7 +186,7 @@ func (h *Handlers) GetSetupStatus(w http.ResponseWriter, r *http.Request) {
 // @Router /config/readers/{name}/checkpoint [get]
 func (h *Handlers) GetReaderCheckpoint(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	val, err := h.settingsStore.GetAppConfig(r.Context(), "reader."+name+".last_scan_at")
+	val, err := h.settingsStore.GetAppConfig(r.Context(), requestTenant(r), "reader."+name+".last_scan_at")
 	if err != nil || val == "" {
 		writeJSON(w, http.StatusOK, map[string]any{"last_scan_at": nil})
 		return
@@ -205,7 +207,7 @@ func (h *Handlers) GetReaderCheckpoint(w http.ResponseWriter, r *http.Request) {
 // @Router /config/readers/{name}/checkpoint [delete]
 func (h *Handlers) ClearReaderCheckpoint(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	if err := h.settingsStore.SetAppConfig(r.Context(), "reader."+name+".last_scan_at", ""); err != nil {
+	if err := h.settingsStore.SetAppConfig(r.Context(), requestTenant(r), "reader."+name+".last_scan_at", ""); err != nil {
 		h.logger.Error("clear reader checkpoint", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to clear checkpoint")
 		return
@@ -227,7 +229,7 @@ func (h *Handlers) resolveTimezone(ctx context.Context, requested string) string
 			return requested
 		}
 	}
-	if configured, err := h.settingsStore.GetAppConfig(ctx, "app.timezone"); err == nil && configured != "" {
+	if configured, err := h.settingsStore.GetAppConfig(ctx, store.Tenant{}, "app.timezone"); err == nil && configured != "" {
 		if _, err := time.LoadLocation(configured); err == nil {
 			return configured
 		}

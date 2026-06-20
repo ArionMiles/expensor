@@ -15,6 +15,8 @@ import (
 
 // IngestionConfig controls daemon transaction ingestion batching.
 type IngestionConfig struct {
+	// Tenant identifies the tenant that owns written transactions. Empty keeps the temporary legacy tenant.
+	Tenant Tenant
 	// BatchSize is the number of transactions to buffer before writing.
 	BatchSize int
 	// FlushInterval is the time between automatic flushes.
@@ -24,6 +26,7 @@ type IngestionConfig struct {
 // TransactionIngestor writes extracted daemon transactions to the application store.
 type TransactionIngestor struct {
 	pool          poolBeginner
+	tenant        Tenant
 	logger        *slog.Logger
 	batchSize     int
 	flushInterval time.Duration
@@ -44,6 +47,7 @@ func (s *Store) NewTransactionIngestor(cfg IngestionConfig, logger *slog.Logger)
 
 	return &TransactionIngestor{
 		pool:          s.pool,
+		tenant:        cfg.Tenant,
 		logger:        logger,
 		batchSize:     cfg.BatchSize,
 		flushInterval: cfg.FlushInterval,
@@ -149,15 +153,19 @@ func (w *TransactionIngestor) writeBatch(ctx context.Context, transactions []*ap
 
 	// Prepare batch insert for transactions
 	batch := &pgx.Batch{}
+	conflictClause := "ON CONFLICT (tenant_id, message_id) WHERE tenant_id IS NOT NULL"
+	if tenantIDParam(w.tenant) == nil {
+		conflictClause = "ON CONFLICT (message_id) WHERE tenant_id IS NULL"
+	}
 	for _, txn := range transactions {
 		currency, timestamp := w.normalizeWriteInput(txn)
-		batch.Queue(`
+		batch.Queue(fmt.Sprintf(`
 			INSERT INTO transactions (
-				message_id, amount, currency, original_amount, original_currency,
+				tenant_id, message_id, amount, currency, original_amount, original_currency,
 				exchange_rate, timestamp, merchant_info, category, bucket, source,
 				source_type, source_label, bank, description
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-			ON CONFLICT (message_id) DO UPDATE SET
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+			%s DO UPDATE SET
 				amount            = EXCLUDED.amount,
 				currency          = EXCLUDED.currency,
 				original_amount   = EXCLUDED.original_amount,
@@ -176,7 +184,8 @@ func (w *TransactionIngestor) writeBatch(ctx context.Context, transactions []*ap
 				-- description is never produced by extraction; never overwrite it.
 				updated_at = NOW()
 			RETURNING id
-		`,
+		`, conflictClause),
+			tenantIDParam(w.tenant),
 			txn.MessageID,
 			txn.Amount,
 			currency,
@@ -279,6 +288,7 @@ func (w *TransactionIngestor) applyMerchantLabels(ctx context.Context, tx pgx.Tx
 		FROM transactions t
 		JOIN label_merchants lm
 		  ON t.merchant_info ILIKE '%' || lm.merchant_pattern || '%'
+		 AND lm.tenant_id IS NOT DISTINCT FROM t.tenant_id
 		WHERE t.id = ANY($1)
 		ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING
 	`, txnIDs); err != nil {
@@ -310,6 +320,7 @@ func (w *TransactionIngestor) applyMerchantCategories(ctx context.Context, tx pg
 			FROM transactions t
 			JOIN merchant_categories mc
 			  ON t.merchant_info ILIKE '%' || mc.fragment || '%'
+			 AND mc.tenant_id IS NOT DISTINCT FROM t.tenant_id
 			LEFT JOIN mcc_codes m ON m.code = mc.mcc_code
 			WHERE t.id = ANY($1)
 			  AND COALESCE(m.category, mc.category) IS NOT NULL
@@ -335,6 +346,7 @@ func (w *TransactionIngestor) applyMutedMerchants(ctx context.Context, tx pgx.Tx
 		    updated_at = NOW()
 		FROM muted_merchants mm
 		WHERE t.id = ANY($1)
+		  AND mm.tenant_id IS NOT DISTINCT FROM t.tenant_id
 		  AND t.merchant_info ILIKE '%' || mm.pattern || '%'
 	`, txnIDs)
 	return err

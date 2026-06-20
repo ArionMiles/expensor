@@ -21,7 +21,7 @@ import (
 // @Failure 503 {object} ErrorResponse
 // @Router /config/labels [get]
 func (h *Handlers) ListLabels(w http.ResponseWriter, r *http.Request) {
-	labels, err := h.taxonomyStore.ListLabels(r.Context())
+	labels, err := h.taxonomyStore.ListLabels(r.Context(), requestTenant(r))
 	if err != nil {
 		h.logger.Error("list labels", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list labels")
@@ -51,7 +51,7 @@ func (h *Handlers) CreateLabel(w http.ResponseWriter, r *http.Request) {
 	if body.Color == "" {
 		body.Color = "#6366f1"
 	}
-	if err := h.taxonomyStore.CreateLabel(r.Context(), body.Name, body.Color); err != nil {
+	if err := h.taxonomyStore.CreateLabel(r.Context(), requestTenant(r), body.Name, body.Color); err != nil {
 		h.logger.Error("create label", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create label")
 		return
@@ -80,7 +80,7 @@ func (h *Handlers) UpdateLabel(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.taxonomyStore.UpdateLabel(r.Context(), name, body.Color); err != nil {
+	if err := h.taxonomyStore.UpdateLabel(r.Context(), requestTenant(r), name, body.Color); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "label not found")
 			return
@@ -110,7 +110,7 @@ func (h *Handlers) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.taxonomyStore.DeleteLabel(r.Context(), name, removeFromTransactions); err != nil {
+	if err := h.taxonomyStore.DeleteLabel(r.Context(), requestTenant(r), name, removeFromTransactions); err != nil {
 		h.logger.Error("delete label", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to delete label")
 		return
@@ -131,7 +131,7 @@ func (h *Handlers) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 // @Router /config/labels/{name}/merchant-mappings/{pattern} [put]
 func (h *Handlers) ApplyLabel(w http.ResponseWriter, r *http.Request) {
 	h.handleApplyTaxonomyMerchant(w, r, "label", func(ctx context.Context, label, pattern string) (int64, error) {
-		return h.taxonomyStore.ApplyLabelByMerchant(ctx, label, pattern)
+		return h.taxonomyStore.ApplyLabelByMerchant(ctx, requestTenant(r), label, pattern)
 	})
 }
 
@@ -148,7 +148,7 @@ func (h *Handlers) ApplyLabel(w http.ResponseWriter, r *http.Request) {
 // @Router /config/labels/{name}/merchant-mappings/{pattern} [delete]
 func (h *Handlers) RemoveLabelByMerchant(w http.ResponseWriter, r *http.Request) {
 	h.handleRemoveTaxonomyMerchant(w, r, "label", func(ctx context.Context, label, pattern string) (int64, error) {
-		return h.taxonomyStore.RemoveLabelByMerchant(ctx, label, pattern)
+		return h.taxonomyStore.RemoveLabelByMerchant(ctx, requestTenant(r), label, pattern)
 	})
 }
 
@@ -176,7 +176,7 @@ func (h *Handlers) GetLabelMonthlySpend(w http.ResponseWriter, r *http.Request) 
 		dimension = "labels"
 	}
 
-	data, err := h.analyticsStore.GetMonthlyBreakdownSpend(r.Context(), dimension, 12)
+	data, err := h.analyticsStore.GetMonthlyBreakdownSpend(r.Context(), requestTenant(r), dimension, 12)
 	if err != nil {
 		h.logger.Error("get monthly breakdown spend", "dimension", dimension, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch monthly breakdown spend")
@@ -195,7 +195,7 @@ func (h *Handlers) GetLabelMonthlySpend(w http.ResponseWriter, r *http.Request) 
 // @Failure 503 {object} ErrorResponse
 // @Router /config/labels/mappings [get]
 func (h *Handlers) GetLabelMappings(w http.ResponseWriter, r *http.Request) {
-	mappings, err := h.taxonomyStore.GetLabelMappings(r.Context())
+	mappings, err := h.taxonomyStore.GetLabelMappings(r.Context(), requestTenant(r))
 	if err != nil {
 		h.logger.Error("get label mappings", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to get label mappings")
@@ -214,13 +214,13 @@ func (h *Handlers) GetLabelMappings(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/labels/export [get]
 func (h *Handlers) ExportLabels(w http.ResponseWriter, r *http.Request) {
-	labels, err := h.taxonomyStore.ListLabels(r.Context())
+	labels, err := h.taxonomyStore.ListLabels(r.Context(), requestTenant(r))
 	if err != nil {
 		h.logger.Error("export labels", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list labels")
 		return
 	}
-	mappings, err := h.taxonomyStore.GetLabelMappings(r.Context())
+	mappings, err := h.taxonomyStore.GetLabelMappings(r.Context(), requestTenant(r))
 	if err != nil {
 		h.logger.Error("export label mappings", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list label mappings")
@@ -260,9 +260,11 @@ func (h *Handlers) ExportCategories(w http.ResponseWriter, r *http.Request) {
 		singular: "category",
 		plural:   "categories",
 		filename: "expensor-categories.json",
-		list:     func(ctx context.Context) ([]store.Category, error) { return h.taxonomyStore.ListCategories(ctx) },
+		list: func(ctx context.Context) ([]store.Category, error) {
+			return h.taxonomyStore.ListCategories(ctx, requestTenant(r))
+		},
 		getMappings: func(ctx context.Context) (map[string][]string, error) {
-			return h.taxonomyStore.GetCategoryMappings(ctx)
+			return h.taxonomyStore.GetCategoryMappings(ctx, requestTenant(r))
 		},
 		nameOf: func(item store.Category) string { return item.Name },
 	})
@@ -277,7 +279,7 @@ func (h *Handlers) ExportCategories(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/categories/mappings [get]
 func (h *Handlers) GetCategoryMappings(w http.ResponseWriter, r *http.Request) {
-	mappings, err := h.taxonomyStore.GetCategoryMappings(r.Context())
+	mappings, err := h.taxonomyStore.GetCategoryMappings(r.Context(), requestTenant(r))
 	if err != nil {
 		h.logger.Error("get category mappings", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to get category mappings")
@@ -295,7 +297,7 @@ func (h *Handlers) GetCategoryMappings(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/categories [get]
 func (h *Handlers) ListCategories(w http.ResponseWriter, r *http.Request) {
-	cats, err := h.taxonomyStore.ListCategories(r.Context())
+	cats, err := h.taxonomyStore.ListCategories(r.Context(), requestTenant(r))
 	if err != nil {
 		h.logger.Error("list categories", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list categories")
@@ -321,7 +323,7 @@ func (h *Handlers) CreateCategory(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.taxonomyStore.CreateCategory(r.Context(), body.Name, body.Description); err != nil {
+	if err := h.taxonomyStore.CreateCategory(r.Context(), requestTenant(r), body.Name, body.Description); err != nil {
 		h.logger.Error("create category", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create category")
 		return
@@ -347,7 +349,7 @@ func (h *Handlers) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.taxonomyStore.DeleteCategory(r.Context(), name, removeFromTransactions); err != nil {
+	if err := h.taxonomyStore.DeleteCategory(r.Context(), requestTenant(r), name, removeFromTransactions); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "category not found")
 			return
@@ -372,7 +374,7 @@ func (h *Handlers) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 // @Router /config/categories/{name}/merchant-mappings/{pattern} [put]
 func (h *Handlers) ApplyCategoryByMerchant(w http.ResponseWriter, r *http.Request) {
 	h.handleApplyTaxonomyMerchant(w, r, "category", func(ctx context.Context, category, pattern string) (int64, error) {
-		return h.taxonomyStore.ApplyCategoryByMerchant(ctx, category, pattern)
+		return h.taxonomyStore.ApplyCategoryByMerchant(ctx, requestTenant(r), category, pattern)
 	})
 }
 
@@ -389,7 +391,7 @@ func (h *Handlers) ApplyCategoryByMerchant(w http.ResponseWriter, r *http.Reques
 // @Router /config/categories/{name}/merchant-mappings/{pattern} [delete]
 func (h *Handlers) RemoveCategoryByMerchant(w http.ResponseWriter, r *http.Request) {
 	h.handleRemoveTaxonomyMerchant(w, r, "category", func(ctx context.Context, category, pattern string) (int64, error) {
-		return h.taxonomyStore.RemoveCategoryByMerchant(ctx, category, pattern)
+		return h.taxonomyStore.RemoveCategoryByMerchant(ctx, requestTenant(r), category, pattern)
 	})
 }
 
@@ -402,7 +404,7 @@ func (h *Handlers) RemoveCategoryByMerchant(w http.ResponseWriter, r *http.Reque
 // @Failure 503 {object} ErrorResponse
 // @Router /config/buckets [get]
 func (h *Handlers) ListBuckets(w http.ResponseWriter, r *http.Request) {
-	bkts, err := h.taxonomyStore.ListBuckets(r.Context())
+	bkts, err := h.taxonomyStore.ListBuckets(r.Context(), requestTenant(r))
 	if err != nil {
 		h.logger.Error("list buckets", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list buckets")
@@ -428,7 +430,7 @@ func (h *Handlers) CreateBucket(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.taxonomyStore.CreateBucket(r.Context(), body.Name, body.Description); err != nil {
+	if err := h.taxonomyStore.CreateBucket(r.Context(), requestTenant(r), body.Name, body.Description); err != nil {
 		h.logger.Error("create bucket", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create bucket")
 		return
@@ -454,7 +456,7 @@ func (h *Handlers) DeleteBucket(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.taxonomyStore.DeleteBucket(r.Context(), name, removeFromTransactions); err != nil {
+	if err := h.taxonomyStore.DeleteBucket(r.Context(), requestTenant(r), name, removeFromTransactions); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "bucket not found")
 			return
@@ -480,9 +482,11 @@ func (h *Handlers) ExportBuckets(w http.ResponseWriter, r *http.Request) {
 		singular: "bucket",
 		plural:   "buckets",
 		filename: "expensor-buckets.json",
-		list:     func(ctx context.Context) ([]store.Bucket, error) { return h.taxonomyStore.ListBuckets(ctx) },
+		list: func(ctx context.Context) ([]store.Bucket, error) {
+			return h.taxonomyStore.ListBuckets(ctx, requestTenant(r))
+		},
 		getMappings: func(ctx context.Context) (map[string][]string, error) {
-			return h.taxonomyStore.GetBucketMappings(ctx)
+			return h.taxonomyStore.GetBucketMappings(ctx, requestTenant(r))
 		},
 		nameOf: func(item store.Bucket) string { return item.Name },
 	})
@@ -497,7 +501,7 @@ func (h *Handlers) ExportBuckets(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/buckets/mappings [get]
 func (h *Handlers) GetBucketMappings(w http.ResponseWriter, r *http.Request) {
-	mappings, err := h.taxonomyStore.GetBucketMappings(r.Context())
+	mappings, err := h.taxonomyStore.GetBucketMappings(r.Context(), requestTenant(r))
 	if err != nil {
 		h.logger.Error("get bucket mappings", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to get bucket mappings")
@@ -519,7 +523,7 @@ func (h *Handlers) GetBucketMappings(w http.ResponseWriter, r *http.Request) {
 // @Router /config/buckets/{name}/merchant-mappings/{pattern} [put]
 func (h *Handlers) ApplyBucketByMerchant(w http.ResponseWriter, r *http.Request) {
 	h.handleApplyTaxonomyMerchant(w, r, "bucket", func(ctx context.Context, bucket, pattern string) (int64, error) {
-		return h.taxonomyStore.ApplyBucketByMerchant(ctx, bucket, pattern)
+		return h.taxonomyStore.ApplyBucketByMerchant(ctx, requestTenant(r), bucket, pattern)
 	})
 }
 
@@ -536,7 +540,7 @@ func (h *Handlers) ApplyBucketByMerchant(w http.ResponseWriter, r *http.Request)
 // @Router /config/buckets/{name}/merchant-mappings/{pattern} [delete]
 func (h *Handlers) RemoveBucketByMerchant(w http.ResponseWriter, r *http.Request) {
 	h.handleRemoveTaxonomyMerchant(w, r, "bucket", func(ctx context.Context, bucket, pattern string) (int64, error) {
-		return h.taxonomyStore.RemoveBucketByMerchant(ctx, bucket, pattern)
+		return h.taxonomyStore.RemoveBucketByMerchant(ctx, requestTenant(r), bucket, pattern)
 	})
 }
 
@@ -678,7 +682,7 @@ func (h *Handlers) AddLabels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.transactionStore.AddLabels(r.Context(), id, body.Labels); err != nil {
+	if err := h.transactionStore.AddLabels(r.Context(), requestTenant(r), id, body.Labels); err != nil {
 		h.logger.Error("add labels", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to add labels")
 		return
@@ -706,7 +710,7 @@ func (h *Handlers) RemoveLabel(w http.ResponseWriter, r *http.Request) {
 	}
 	label := r.PathValue("label")
 
-	if err := h.transactionStore.RemoveLabel(r.Context(), id, label); err != nil {
+	if err := h.transactionStore.RemoveLabel(r.Context(), requestTenant(r), id, label); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "label not found on transaction")
 			return

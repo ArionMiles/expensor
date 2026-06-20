@@ -34,7 +34,7 @@ func (h *Handlers) ListExtractionDiagnostics(w http.ResponseWriter, r *http.Requ
 		filter.Limit = *query.Limit
 	}
 
-	rows, err := h.diagnosticStore.ListExtractionDiagnostics(r.Context(), filter)
+	rows, err := h.diagnosticStore.ListExtractionDiagnostics(r.Context(), requestTenant(r), filter)
 	if err != nil {
 		h.logger.Error("list extraction diagnostics", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list extraction diagnostics")
@@ -64,7 +64,7 @@ func (h *Handlers) GetExtractionDiagnostic(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	row, err := h.diagnosticStore.GetExtractionDiagnostic(r.Context(), id)
+	row, err := h.diagnosticStore.GetExtractionDiagnostic(r.Context(), requestTenant(r), id)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "extraction diagnostic not found")
@@ -104,7 +104,7 @@ func (h *Handlers) UpdateExtractionDiagnosticStatus(w http.ResponseWriter, r *ht
 		return
 	}
 
-	row, err := h.diagnosticStore.UpdateExtractionDiagnosticStatus(r.Context(), id, body.Status)
+	row, err := h.diagnosticStore.UpdateExtractionDiagnosticStatus(r.Context(), requestTenant(r), id, body.Status)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "extraction diagnostic not found")

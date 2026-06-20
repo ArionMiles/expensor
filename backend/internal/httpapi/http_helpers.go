@@ -6,13 +6,15 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+
+	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
 // --- helpers ---
 
 // currentBaseCurrency returns the base currency from the DB, falling back to INR.
-func (h *Handlers) currentBaseCurrency(ctx context.Context) string {
-	if val, err := h.settingsStore.GetAppConfig(ctx, "base_currency"); err == nil && val != "" {
+func (h *Handlers) currentBaseCurrency(ctx context.Context, tenant store.Tenant) string {
+	if val, err := h.settingsStore.GetAppConfig(ctx, tenant, "base_currency"); err == nil && val != "" {
 		return val
 	}
 	return defaultBaseCurrency

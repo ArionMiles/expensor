@@ -221,7 +221,7 @@ func presetValuesFromRules(entries []ruleDocumentEntry, value func(api.Source) s
 // @Failure 503 {object} ErrorResponse
 // @Router /rules [get]
 func (h *Handlers) ListRules(w http.ResponseWriter, r *http.Request) {
-	ruleRows, err := h.ruleStore.ListRules(r.Context())
+	ruleRows, err := h.ruleStore.ListRules(r.Context(), requestTenant(r))
 	if err != nil {
 		h.logger.Error("list rules", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list rules")
@@ -250,7 +250,7 @@ func (h *Handlers) CreateRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	row := ruleMutationToRow(body)
-	created, err := h.ruleStore.CreateRule(r.Context(), row)
+	created, err := h.ruleStore.CreateRule(r.Context(), requestTenant(r), row)
 	if err != nil {
 		if errors.Is(err, store.ErrRuleNameConflict) {
 			writeError(w, http.StatusConflict, "rule name already exists")
@@ -260,17 +260,17 @@ func (h *Handlers) CreateRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to create rule")
 		return
 	}
-	h.clearActiveReaderCheckpointForNewRule(r.Context())
+	h.clearActiveReaderCheckpointForNewRule(r.Context(), requestTenant(r))
 	writeJSON(w, http.StatusCreated, ruleRowToHTTP(*created))
 }
 
-func (h *Handlers) clearActiveReaderCheckpointForNewRule(ctx context.Context) {
+func (h *Handlers) clearActiveReaderCheckpointForNewRule(ctx context.Context, tenant store.Tenant) {
 	reader, err := h.readActiveReader(ctx)
 	if err != nil || strings.TrimSpace(reader) == "" {
 		return
 	}
 	reader = strings.TrimSpace(reader)
-	if err := h.settingsStore.SetAppConfig(ctx, "reader."+reader+".last_scan_at", ""); err != nil {
+	if err := h.settingsStore.SetAppConfig(ctx, tenant, "reader."+reader+".last_scan_at", ""); err != nil {
 		h.logger.Warn("failed to clear checkpoint after rule creation", "reader", reader, "error", err)
 		return
 	}
@@ -310,7 +310,7 @@ func (h *Handlers) UpdateRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	row := ruleMutationToRow(body)
-	updated, err := h.ruleStore.UpdateRule(r.Context(), id, row)
+	updated, err := h.ruleStore.UpdateRule(r.Context(), requestTenant(r), id, row)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "rule not found")
@@ -346,7 +346,7 @@ func (h *Handlers) DeleteRule(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	existing, err := h.ruleStore.GetRule(r.Context(), id)
+	existing, err := h.ruleStore.GetRule(r.Context(), requestTenant(r), id)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "rule not found")
@@ -359,7 +359,7 @@ func (h *Handlers) DeleteRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "predefined rules cannot be deleted")
 		return
 	}
-	if err := h.ruleStore.DeleteRule(r.Context(), id); err != nil {
+	if err := h.ruleStore.DeleteRule(r.Context(), requestTenant(r), id); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "rule not found")
 			return
@@ -383,7 +383,7 @@ func (h *Handlers) DeleteRule(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /rules/export [get]
 func (h *Handlers) ExportRules(w http.ResponseWriter, r *http.Request) {
-	all, err := h.ruleStore.ListRules(r.Context())
+	all, err := h.ruleStore.ListRules(r.Context(), requestTenant(r))
 	if err != nil {
 		h.logger.Error("export rules", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch rules")
@@ -436,7 +436,7 @@ func (h *Handlers) ImportRules(w http.ResponseWriter, r *http.Request) {
 	for _, rule := range doc.Rules {
 		rows = append(rows, ruleToRow(rule))
 	}
-	if err := h.ruleStore.ImportUserRules(r.Context(), rows); err != nil {
+	if err := h.ruleStore.ImportUserRules(r.Context(), requestTenant(r), rows); err != nil {
 		h.logger.Error("import rules", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to import rules")
 		return

@@ -121,7 +121,7 @@ func (c *daemonCoordinator) launch(readerName string, forceRescan bool) {
 	if c.st != nil {
 		runtimeCfg.OnCheckpoint = func(t time.Time) {
 			key := "reader." + readerName + ".last_scan_at"
-			if err := c.st.SetAppConfig(c.ctx, key, t.Format(time.RFC3339)); err != nil {
+			if err := c.st.SetAppConfig(c.ctx, store.Tenant{}, key, t.Format(time.RFC3339)); err != nil {
 				c.logger.Warn("failed to save scan checkpoint", "reader", readerName, "error", err)
 			} else {
 				c.logger.Debug("scan checkpoint saved", "reader", readerName, "at", t.Format(time.RFC3339))
@@ -151,7 +151,7 @@ func loadLastScanAt(ctx context.Context, st httpapi.Storer, readerName string, l
 		return nil
 	}
 	key := "reader." + readerName + ".last_scan_at"
-	val, err := st.GetAppConfig(ctx, key)
+	val, err := st.GetAppConfig(ctx, store.Tenant{}, key)
 	if err != nil {
 		return nil // no checkpoint yet; the reader will use the full lookback window
 	}
@@ -393,5 +393,5 @@ func applyScanOverrides(ctx context.Context, cfg config.App, st httpapi.Storer) 
 func getAppConfigWithTimeout(ctx context.Context, st httpapi.Storer, key string, timeout time.Duration) (string, error) {
 	readCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	return st.GetAppConfig(readCtx, key)
+	return st.GetAppConfig(readCtx, store.Tenant{}, key)
 }
