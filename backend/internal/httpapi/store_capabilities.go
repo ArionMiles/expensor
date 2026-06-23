@@ -26,60 +26,60 @@ type authStore interface {
 }
 
 type settingsStore interface {
-	GetAppConfig(ctx context.Context, key string) (string, error)
-	SetAppConfig(ctx context.Context, key, value string) error
+	GetAppConfig(ctx context.Context, tenant store.Tenant, key string) (string, error)
+	SetAppConfig(ctx context.Context, tenant store.Tenant, key, value string) error
 }
 
 type analyticsStore interface {
-	GetStats(ctx context.Context, baseCurrency string) (*store.Stats, error)
-	GetChartData(ctx context.Context) (*store.ChartData, error)
-	GetDashboardData(ctx context.Context) (*store.DashboardData, error)
-	GetSpendingHeatmap(ctx context.Context, from, to *time.Time) (*store.HeatmapData, error)
-	GetAnnualSpend(ctx context.Context, year int) ([]store.DailyBucket, error)
-	GetMonthlyBreakdownSpend(ctx context.Context, dimension string, months int) (*store.MonthlyBreakdownData, error)
+	GetStats(ctx context.Context, tenant store.Tenant, baseCurrency string) (*store.Stats, error)
+	GetChartData(ctx context.Context, tenant store.Tenant) (*store.ChartData, error)
+	GetDashboardData(ctx context.Context, tenant store.Tenant) (*store.DashboardData, error)
+	GetSpendingHeatmap(ctx context.Context, tenant store.Tenant, from, to *time.Time) (*store.HeatmapData, error)
+	GetAnnualSpend(ctx context.Context, tenant store.Tenant, year int) ([]store.DailyBucket, error)
+	GetMonthlyBreakdownSpend(ctx context.Context, tenant store.Tenant, dimension string, months int) (*store.MonthlyBreakdownData, error)
 }
 
 type transactionStore interface {
-	ListTransactions(ctx context.Context, f store.ListFilter) ([]store.Transaction, store.TransactionListResult, error)
-	SearchTransactions(ctx context.Context, query string, f store.ListFilter) ([]store.Transaction, store.TransactionListResult, error)
-	GetTransaction(ctx context.Context, id string) (*store.Transaction, error)
-	UpdateTransaction(ctx context.Context, id string, u store.TransactionUpdate) error
-	AddLabels(ctx context.Context, transactionID string, labels []string) error
-	RemoveLabel(ctx context.Context, transactionID, label string) error
-	GetFacets(ctx context.Context) (*store.Facets, error)
+	ListTransactions(ctx context.Context, tenant store.Tenant, f store.ListFilter) ([]store.Transaction, store.TransactionListResult, error)
+	SearchTransactions(ctx context.Context, tenant store.Tenant, query string, f store.ListFilter) ([]store.Transaction, store.TransactionListResult, error)
+	GetTransaction(ctx context.Context, tenant store.Tenant, id string) (*store.Transaction, error)
+	UpdateTransaction(ctx context.Context, tenant store.Tenant, id string, u store.TransactionUpdate) error
+	AddLabels(ctx context.Context, tenant store.Tenant, transactionID string, labels []string) error
+	RemoveLabel(ctx context.Context, tenant store.Tenant, transactionID, label string) error
+	GetFacets(ctx context.Context, tenant store.Tenant) (*store.Facets, error)
 }
 
 type muteStore interface {
-	MuteTransaction(ctx context.Context, id string, muted bool, reason string) error
-	UpdateMuteReason(ctx context.Context, id, reason string) error
-	MuteByMerchant(ctx context.Context, pattern, reason string) error
-	UpdateMerchantReason(ctx context.Context, id, reason string) error
-	GetMutedMerchantsWithCount(ctx context.Context) ([]store.MutedMerchantWithCount, error)
-	DeleteMutedMerchant(ctx context.Context, id string) error
-	DeleteMutedMerchantAndUnmute(ctx context.Context, id string) error
-	CategorizeMerchant(ctx context.Context, merchant, category, bucket string) (int64, error)
+	MuteTransaction(ctx context.Context, tenant store.Tenant, id string, muted bool, reason string) error
+	UpdateMuteReason(ctx context.Context, tenant store.Tenant, id, reason string) error
+	MuteByMerchant(ctx context.Context, tenant store.Tenant, pattern, reason string) error
+	UpdateMerchantReason(ctx context.Context, tenant store.Tenant, id, reason string) error
+	GetMutedMerchantsWithCount(ctx context.Context, tenant store.Tenant) ([]store.MutedMerchantWithCount, error)
+	DeleteMutedMerchant(ctx context.Context, tenant store.Tenant, id string) error
+	DeleteMutedMerchantAndUnmute(ctx context.Context, tenant store.Tenant, id string) error
+	CategorizeMerchant(ctx context.Context, tenant store.Tenant, merchant, category, bucket string) (int64, error)
 }
 
 type taxonomyStore interface {
-	ListLabels(ctx context.Context) ([]store.Label, error)
-	CreateLabel(ctx context.Context, name, color string) error
-	UpdateLabel(ctx context.Context, name, color string) error
-	DeleteLabel(ctx context.Context, name string, removeFromTransactions bool) error
-	ApplyLabelByMerchant(ctx context.Context, label, pattern string) (int64, error)
-	RemoveLabelByMerchant(ctx context.Context, label, pattern string) (int64, error)
-	GetLabelMappings(ctx context.Context) (map[string][]string, error)
-	ListCategories(ctx context.Context) ([]store.Category, error)
-	CreateCategory(ctx context.Context, name, description string) error
-	DeleteCategory(ctx context.Context, name string, removeFromTransactions bool) error
-	ApplyCategoryByMerchant(ctx context.Context, category, pattern string) (int64, error)
-	RemoveCategoryByMerchant(ctx context.Context, category, pattern string) (int64, error)
-	GetCategoryMappings(ctx context.Context) (map[string][]string, error)
-	ListBuckets(ctx context.Context) ([]store.Bucket, error)
-	CreateBucket(ctx context.Context, name, description string) error
-	DeleteBucket(ctx context.Context, name string, removeFromTransactions bool) error
-	ApplyBucketByMerchant(ctx context.Context, bucket, pattern string) (int64, error)
-	RemoveBucketByMerchant(ctx context.Context, bucket, pattern string) (int64, error)
-	GetBucketMappings(ctx context.Context) (map[string][]string, error)
+	ListLabels(ctx context.Context, tenant store.Tenant) ([]store.Label, error)
+	CreateLabel(ctx context.Context, tenant store.Tenant, name, color string) error
+	UpdateLabel(ctx context.Context, tenant store.Tenant, name, color string) error
+	DeleteLabel(ctx context.Context, tenant store.Tenant, name string, removeFromTransactions bool) error
+	ApplyLabelByMerchant(ctx context.Context, tenant store.Tenant, label, pattern string) (int64, error)
+	RemoveLabelByMerchant(ctx context.Context, tenant store.Tenant, label, pattern string) (int64, error)
+	GetLabelMappings(ctx context.Context, tenant store.Tenant) (map[string][]string, error)
+	ListCategories(ctx context.Context, tenant store.Tenant) ([]store.Category, error)
+	CreateCategory(ctx context.Context, tenant store.Tenant, name, description string) error
+	DeleteCategory(ctx context.Context, tenant store.Tenant, name string, removeFromTransactions bool) error
+	ApplyCategoryByMerchant(ctx context.Context, tenant store.Tenant, category, pattern string) (int64, error)
+	RemoveCategoryByMerchant(ctx context.Context, tenant store.Tenant, category, pattern string) (int64, error)
+	GetCategoryMappings(ctx context.Context, tenant store.Tenant) (map[string][]string, error)
+	ListBuckets(ctx context.Context, tenant store.Tenant) ([]store.Bucket, error)
+	CreateBucket(ctx context.Context, tenant store.Tenant, name, description string) error
+	DeleteBucket(ctx context.Context, tenant store.Tenant, name string, removeFromTransactions bool) error
+	ApplyBucketByMerchant(ctx context.Context, tenant store.Tenant, bucket, pattern string) (int64, error)
+	RemoveBucketByMerchant(ctx context.Context, tenant store.Tenant, bucket, pattern string) (int64, error)
+	GetBucketMappings(ctx context.Context, tenant store.Tenant) (map[string][]string, error)
 }
 
 type readerRuntimeStore interface {
@@ -96,12 +96,12 @@ type readerRuntimeStore interface {
 }
 
 type ruleStore interface {
-	ListRules(ctx context.Context) ([]store.RuleRow, error)
-	GetRule(ctx context.Context, id string) (*store.RuleRow, error)
-	CreateRule(ctx context.Context, r store.RuleRow) (*store.RuleRow, error)
-	UpdateRule(ctx context.Context, id string, r store.RuleRow) (*store.RuleRow, error)
-	DeleteRule(ctx context.Context, id string) error
-	ImportUserRules(ctx context.Context, rules []store.RuleRow) error
+	ListRules(ctx context.Context, tenant store.Tenant) ([]store.RuleRow, error)
+	GetRule(ctx context.Context, tenant store.Tenant, id string) (*store.RuleRow, error)
+	CreateRule(ctx context.Context, tenant store.Tenant, r store.RuleRow) (*store.RuleRow, error)
+	UpdateRule(ctx context.Context, tenant store.Tenant, id string, r store.RuleRow) (*store.RuleRow, error)
+	DeleteRule(ctx context.Context, tenant store.Tenant, id string) error
+	ImportUserRules(ctx context.Context, tenant store.Tenant, rules []store.RuleRow) error
 }
 
 type syncStore interface {
@@ -109,7 +109,7 @@ type syncStore interface {
 }
 
 type diagnosticStore interface {
-	ListExtractionDiagnostics(ctx context.Context, filter store.DiagnosticFilter) ([]store.ExtractionDiagnosticRow, error)
-	GetExtractionDiagnostic(ctx context.Context, id string) (*store.ExtractionDiagnosticRow, error)
-	UpdateExtractionDiagnosticStatus(ctx context.Context, id, status string) (*store.ExtractionDiagnosticRow, error)
+	ListExtractionDiagnostics(ctx context.Context, tenant store.Tenant, filter store.DiagnosticFilter) ([]store.ExtractionDiagnosticRow, error)
+	GetExtractionDiagnostic(ctx context.Context, tenant store.Tenant, id string) (*store.ExtractionDiagnosticRow, error)
+	UpdateExtractionDiagnosticStatus(ctx context.Context, tenant store.Tenant, id, status string) (*store.ExtractionDiagnosticRow, error)
 }

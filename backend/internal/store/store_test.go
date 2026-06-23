@@ -166,7 +166,7 @@ func TestRuntimeState_BaseCurrencyStartsUnset(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
 
-	if got, err := ts.GetAppConfig(context.Background(), "base_currency"); err == nil {
+	if got, err := ts.GetAppConfig(context.Background(), store.Tenant{}, "base_currency"); err == nil {
 		t.Fatalf("base_currency = %q, want missing", got)
 	}
 }
@@ -352,7 +352,7 @@ func TestExtractionDiagnostics_RecordListUpdateAndGet(t *testing.T) {
 		t.Fatalf("RecordExtractionDiagnostic: %v", err)
 	}
 
-	rows, err := ts.ListExtractionDiagnostics(ctx, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen})
+	rows, err := ts.ListExtractionDiagnostics(ctx, store.Tenant{}, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen})
 	if err != nil {
 		t.Fatalf("ListExtractionDiagnostics: %v", err)
 	}
@@ -385,7 +385,7 @@ func TestExtractionDiagnostics_RecordListUpdateAndGet(t *testing.T) {
 		t.Fatalf("open diagnostic should not have resolved_at: %v", row.ResolvedAt)
 	}
 
-	resolved, err := ts.UpdateExtractionDiagnosticStatus(ctx, row.ID, store.DiagnosticStatusResolved)
+	resolved, err := ts.UpdateExtractionDiagnosticStatus(ctx, store.Tenant{}, row.ID, store.DiagnosticStatusResolved)
 	if err != nil {
 		t.Fatalf("UpdateExtractionDiagnosticStatus: %v", err)
 	}
@@ -396,7 +396,7 @@ func TestExtractionDiagnostics_RecordListUpdateAndGet(t *testing.T) {
 		t.Fatal("resolved diagnostic should have resolved_at")
 	}
 
-	got, err := ts.GetExtractionDiagnostic(ctx, row.ID)
+	got, err := ts.GetExtractionDiagnostic(ctx, store.Tenant{}, row.ID)
 	if err != nil {
 		t.Fatalf("GetExtractionDiagnostic: %v", err)
 	}
@@ -404,7 +404,7 @@ func TestExtractionDiagnostics_RecordListUpdateAndGet(t *testing.T) {
 		t.Fatalf("unexpected fetched diagnostic: %+v", got)
 	}
 
-	openAgain, err := ts.UpdateExtractionDiagnosticStatus(ctx, row.ID, store.DiagnosticStatusOpen)
+	openAgain, err := ts.UpdateExtractionDiagnosticStatus(ctx, store.Tenant{}, row.ID, store.DiagnosticStatusOpen)
 	if err != nil {
 		t.Fatalf("UpdateExtractionDiagnosticStatus open: %v", err)
 	}
@@ -428,7 +428,7 @@ func TestExtractionDiagnostics_SenderFallsBackToSenderEmail(t *testing.T) {
 		t.Fatalf("RecordExtractionDiagnostic: %v", err)
 	}
 
-	rows, err := ts.ListExtractionDiagnostics(ctx, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen})
+	rows, err := ts.ListExtractionDiagnostics(ctx, store.Tenant{}, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen})
 	if err != nil {
 		t.Fatalf("ListExtractionDiagnostics: %v", err)
 	}
@@ -456,7 +456,7 @@ func TestExtractionDiagnostics_ListLimit(t *testing.T) {
 		}
 	}
 
-	rows, err := ts.ListExtractionDiagnostics(ctx, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen, Limit: 2})
+	rows, err := ts.ListExtractionDiagnostics(ctx, store.Tenant{}, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen, Limit: 2})
 	if err != nil {
 		t.Fatalf("ListExtractionDiagnostics: %v", err)
 	}
@@ -502,7 +502,7 @@ func TestExtractionDiagnostics_OpenDedupeUpdatesExistingRow(t *testing.T) {
 		t.Fatalf("record second diagnostic: %v", err)
 	}
 
-	rows, err := ts.ListExtractionDiagnostics(ctx, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen})
+	rows, err := ts.ListExtractionDiagnostics(ctx, store.Tenant{}, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen})
 	if err != nil {
 		t.Fatalf("ListExtractionDiagnostics: %v", err)
 	}
@@ -535,7 +535,7 @@ func TestExtractionDiagnostics_ReopenConflictReturnsSentinelError(t *testing.T) 
 	if err := ts.RecordExtractionDiagnostic(ctx, diagnostic); err != nil {
 		t.Fatalf("record original diagnostic: %v", err)
 	}
-	rows, err := ts.ListExtractionDiagnostics(ctx, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen})
+	rows, err := ts.ListExtractionDiagnostics(ctx, store.Tenant{}, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen})
 	if err != nil {
 		t.Fatalf("list original diagnostic: %v", err)
 	}
@@ -544,7 +544,7 @@ func TestExtractionDiagnostics_ReopenConflictReturnsSentinelError(t *testing.T) 
 	}
 	originalID := rows[0].ID
 
-	if _, err := ts.UpdateExtractionDiagnosticStatus(ctx, originalID, store.DiagnosticStatusResolved); err != nil {
+	if _, err := ts.UpdateExtractionDiagnosticStatus(ctx, store.Tenant{}, originalID, store.DiagnosticStatusResolved); err != nil {
 		t.Fatalf("resolve original diagnostic: %v", err)
 	}
 	diagnostic.Subject = "Current open subject"
@@ -552,11 +552,11 @@ func TestExtractionDiagnostics_ReopenConflictReturnsSentinelError(t *testing.T) 
 		t.Fatalf("record current diagnostic: %v", err)
 	}
 
-	_, err = ts.UpdateExtractionDiagnosticStatus(ctx, originalID, store.DiagnosticStatusOpen)
+	_, err = ts.UpdateExtractionDiagnosticStatus(ctx, store.Tenant{}, originalID, store.DiagnosticStatusOpen)
 	if !errors.Is(err, store.ErrDiagnosticConflict) {
 		t.Fatalf("reopen should return ErrDiagnosticConflict, got %v", err)
 	}
-	openRows, err := ts.ListExtractionDiagnostics(ctx, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen})
+	openRows, err := ts.ListExtractionDiagnostics(ctx, store.Tenant{}, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen})
 	if err != nil {
 		t.Fatalf("list open diagnostics: %v", err)
 	}
@@ -578,7 +578,7 @@ func TestExtractionDiagnostics_EmptyRuleIDScansAsNil(t *testing.T) {
 		t.Fatalf("RecordExtractionDiagnostic: %v", err)
 	}
 
-	rows, err := ts.ListExtractionDiagnostics(ctx, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen})
+	rows, err := ts.ListExtractionDiagnostics(ctx, store.Tenant{}, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen})
 	if err != nil {
 		t.Fatalf("ListExtractionDiagnostics: %v", err)
 	}
@@ -612,7 +612,7 @@ func TestExtractionDiagnostics_EmptyMessageIDDoesNotDedupe(t *testing.T) {
 		t.Fatalf("record second diagnostic: %v", err)
 	}
 
-	rows, err := ts.ListExtractionDiagnostics(ctx, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen})
+	rows, err := ts.ListExtractionDiagnostics(ctx, store.Tenant{}, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen})
 	if err != nil {
 		t.Fatalf("ListExtractionDiagnostics: %v", err)
 	}
@@ -630,10 +630,10 @@ func TestExtractionDiagnostics_NotFound(t *testing.T) {
 	ctx := context.Background()
 	missingID := "22222222-2222-2222-2222-222222222222"
 
-	if _, err := ts.GetExtractionDiagnostic(ctx, missingID); !errors.Is(err, store.ErrNotFound) {
+	if _, err := ts.GetExtractionDiagnostic(ctx, store.Tenant{}, missingID); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("GetExtractionDiagnostic should return ErrNotFound, got %v", err)
 	}
-	if _, err := ts.UpdateExtractionDiagnosticStatus(ctx, missingID, store.DiagnosticStatusResolved); !errors.Is(err, store.ErrNotFound) {
+	if _, err := ts.UpdateExtractionDiagnosticStatus(ctx, store.Tenant{}, missingID, store.DiagnosticStatusResolved); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("UpdateExtractionDiagnosticStatus should return ErrNotFound, got %v", err)
 	}
 }
@@ -672,7 +672,7 @@ func TestListTransactions_Pagination(t *testing.T) {
 	}
 
 	// Page 1, size 2.
-	txns, result, err := ts.ListTransactions(ctx, store.ListFilter{Page: 1, PageSize: 2})
+	txns, result, err := ts.ListTransactions(ctx, store.Tenant{}, store.ListFilter{Page: 1, PageSize: 2})
 	if err != nil {
 		t.Fatalf("ListTransactions: %v", err)
 	}
@@ -684,7 +684,7 @@ func TestListTransactions_Pagination(t *testing.T) {
 	}
 
 	// Page 3, size 2 — only 1 remaining.
-	txns, _, err = ts.ListTransactions(ctx, store.ListFilter{Page: 3, PageSize: 2})
+	txns, _, err = ts.ListTransactions(ctx, store.Tenant{}, store.ListFilter{Page: 3, PageSize: 2})
 	if err != nil {
 		t.Fatalf("ListTransactions page 3: %v", err)
 	}
@@ -698,6 +698,7 @@ func TestListTransactions_RejectsOffsetOverflow(t *testing.T) {
 	defer ts.cleanup()
 	_, _, err := ts.ListTransactions(
 		context.Background(),
+		store.Tenant{},
 		store.ListFilter{Page: math.MaxInt, PageSize: 100},
 	)
 	if !errors.Is(err, store.ErrPaginationOverflow) {
@@ -720,6 +721,7 @@ func TestListTransactions_FilterByCategory(t *testing.T) {
 
 	txns, result, err := ts.ListTransactions(
 		ctx,
+		store.Tenant{},
 		store.ListFilter{Category: "Food", PageSize: 10},
 	)
 	if err != nil {
@@ -754,11 +756,11 @@ func TestListTransactions_FilterMissingCategoryBucketAndLabel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InsertForTest labeled: %v", err)
 	}
-	if err := ts.AddLabel(ctx, labeledID, "Groceries"); err != nil {
+	if err := ts.AddLabel(ctx, store.Tenant{}, labeledID, "Groceries"); err != nil {
 		t.Fatalf("AddLabel: %v", err)
 	}
 
-	txns, result, err := ts.ListTransactions(ctx, store.ListFilter{
+	txns, result, err := ts.ListTransactions(ctx, store.Tenant{}, store.ListFilter{
 		CategoryMissing: true,
 		BucketMissing:   true,
 		LabelMissing:    true,
@@ -777,7 +779,7 @@ func TestDefaultBucketsUseInvestments(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	buckets, err := ts.ListBuckets(ctx)
+	buckets, err := ts.ListBuckets(ctx, store.Tenant{})
 	if err != nil {
 		t.Fatalf("ListBuckets: %v", err)
 	}
@@ -814,11 +816,11 @@ func TestGetDashboardData_IncludesUncategorizedBreakdowns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InsertForTest known: %v", err)
 	}
-	if err := ts.AddLabel(ctx, knownID, "Groceries"); err != nil {
+	if err := ts.AddLabel(ctx, store.Tenant{}, knownID, "Groceries"); err != nil {
 		t.Fatalf("AddLabel: %v", err)
 	}
 
-	data, err := ts.GetDashboardData(ctx)
+	data, err := ts.GetDashboardData(ctx, store.Tenant{})
 	if err != nil {
 		t.Fatalf("GetDashboardData: %v", err)
 	}
@@ -846,7 +848,7 @@ func TestListTransactions_FilterByCurrency(t *testing.T) {
 		MessageID: "usd-1", Amount: 20, Currency: "USD", MerchantInfo: "Amazon US", Category: "Shopping",
 	})
 
-	txns, result, err := ts.ListTransactions(ctx, store.ListFilter{Currency: "USD", PageSize: 10})
+	txns, result, err := ts.ListTransactions(ctx, store.Tenant{}, store.ListFilter{Currency: "USD", PageSize: 10})
 	if err != nil {
 		t.Fatalf("ListTransactions: %v", err)
 	}
@@ -869,11 +871,11 @@ func TestListTransactions_FilterByLabel(t *testing.T) {
 	})
 
 	// Add label to first transaction.
-	if err := ts.AddLabel(ctx, id, "subscription"); err != nil {
+	if err := ts.AddLabel(ctx, store.Tenant{}, id, "subscription"); err != nil {
 		t.Fatalf("AddLabel: %v", err)
 	}
 
-	txns, result, err := ts.ListTransactions(ctx, store.ListFilter{Label: "subscription", PageSize: 10})
+	txns, result, err := ts.ListTransactions(ctx, store.Tenant{}, store.ListFilter{Label: "subscription", PageSize: 10})
 	if err != nil {
 		t.Fatalf("ListTransactions: %v", err)
 	}
@@ -899,17 +901,17 @@ func TestListTransactions_ExcludeCategoriesAndLabels(t *testing.T) {
 		MessageID: "misc-books", Amount: 300, Currency: "INR", MerchantInfo: "Bookshop", Category: "Books",
 	})
 
-	if err := ts.AddLabel(ctx, foodID, "top"); err != nil {
+	if err := ts.AddLabel(ctx, store.Tenant{}, foodID, "top"); err != nil {
 		t.Fatalf("AddLabel food: %v", err)
 	}
-	if err := ts.AddLabel(ctx, travelID, "top"); err != nil {
+	if err := ts.AddLabel(ctx, store.Tenant{}, travelID, "top"); err != nil {
 		t.Fatalf("AddLabel travel: %v", err)
 	}
-	if err := ts.AddLabel(ctx, booksID, "misc"); err != nil {
+	if err := ts.AddLabel(ctx, store.Tenant{}, booksID, "misc"); err != nil {
 		t.Fatalf("AddLabel books: %v", err)
 	}
 
-	txns, result, err := ts.ListTransactions(ctx, store.ListFilter{
+	txns, result, err := ts.ListTransactions(ctx, store.Tenant{}, store.ListFilter{
 		ExcludeCategories: []string{"Food", "Travel"},
 		PageSize:          10,
 	})
@@ -920,7 +922,7 @@ func TestListTransactions_ExcludeCategoriesAndLabels(t *testing.T) {
 		t.Fatalf("want only Books after excluding Food/Travel, got total=%d txns=%v", result.Total, txns)
 	}
 
-	txns, result, err = ts.ListTransactions(ctx, store.ListFilter{
+	txns, result, err = ts.ListTransactions(ctx, store.Tenant{}, store.ListFilter{
 		ExcludeLabels: []string{"top"},
 		PageSize:      10,
 	})
@@ -946,7 +948,7 @@ func TestGetTransaction_Found(t *testing.T) {
 		Description:  "iPad Pro",
 	})
 
-	txn, err := ts.GetTransaction(ctx, id)
+	txn, err := ts.GetTransaction(ctx, store.Tenant{}, id)
 	if err != nil {
 		t.Fatalf("GetTransaction: %v", err)
 	}
@@ -966,7 +968,7 @@ func TestGetTransaction_NotFound(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	_, err := ts.GetTransaction(ctx, "00000000-0000-0000-0000-000000000000")
+	_, err := ts.GetTransaction(ctx, store.Tenant{}, "00000000-0000-0000-0000-000000000000")
 	if !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
@@ -981,11 +983,11 @@ func TestUpdateDescription(t *testing.T) {
 		MessageID: "upd-1", Amount: 50, Currency: "INR", MerchantInfo: "Swiggy", Category: "Food",
 	})
 
-	if err := ts.UpdateDescription(ctx, id, "Lunch with team"); err != nil {
+	if err := ts.UpdateDescription(ctx, store.Tenant{}, id, "Lunch with team"); err != nil {
 		t.Fatalf("UpdateDescription: %v", err)
 	}
 
-	txn, err := ts.GetTransaction(ctx, id)
+	txn, err := ts.GetTransaction(ctx, store.Tenant{}, id)
 	if err != nil || txn == nil {
 		t.Fatalf("GetTransaction after update: %v", err)
 	}
@@ -999,7 +1001,7 @@ func TestUpdateDescription_NotFound(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	err := ts.UpdateDescription(ctx, "00000000-0000-0000-0000-000000000000", "nope")
+	err := ts.UpdateDescription(ctx, store.Tenant{}, "00000000-0000-0000-0000-000000000000", "nope")
 	if err == nil {
 		t.Fatal("expected ErrNotFound, got nil")
 	}
@@ -1015,14 +1017,14 @@ func TestAddLabel_Idempotent(t *testing.T) {
 	})
 
 	// Add same label twice — should not error.
-	if err := ts.AddLabel(ctx, id, "leisure"); err != nil {
+	if err := ts.AddLabel(ctx, store.Tenant{}, id, "leisure"); err != nil {
 		t.Fatalf("first AddLabel: %v", err)
 	}
-	if err := ts.AddLabel(ctx, id, "leisure"); err != nil {
+	if err := ts.AddLabel(ctx, store.Tenant{}, id, "leisure"); err != nil {
 		t.Fatalf("duplicate AddLabel should not error: %v", err)
 	}
 
-	txn, _ := ts.GetTransaction(ctx, id)
+	txn, _ := ts.GetTransaction(ctx, store.Tenant{}, id)
 	if len(txn.Labels) != 1 || txn.Labels[0] != "leisure" {
 		t.Errorf("expected 1 label 'leisure', got %v", txn.Labels)
 	}
@@ -1037,13 +1039,13 @@ func TestRemoveLabel(t *testing.T) {
 		MessageID: "rmlbl-1", Amount: 250, Currency: "INR", MerchantInfo: "Myntra", Category: "Shopping",
 	})
 
-	_ = ts.AddLabel(ctx, id, "clothing")
+	_ = ts.AddLabel(ctx, store.Tenant{}, id, "clothing")
 
-	if err := ts.RemoveLabel(ctx, id, "clothing"); err != nil {
+	if err := ts.RemoveLabel(ctx, store.Tenant{}, id, "clothing"); err != nil {
 		t.Fatalf("RemoveLabel: %v", err)
 	}
 
-	txn, _ := ts.GetTransaction(ctx, id)
+	txn, _ := ts.GetTransaction(ctx, store.Tenant{}, id)
 	if len(txn.Labels) != 0 {
 		t.Errorf("expected 0 labels after removal, got %v", txn.Labels)
 	}
@@ -1058,7 +1060,7 @@ func TestRemoveLabel_NotFound(t *testing.T) {
 		MessageID: "rmlbl-nf", Amount: 100, Currency: "INR", MerchantInfo: "Store", Category: "Misc",
 	})
 
-	err := ts.RemoveLabel(ctx, id, "nonexistent")
+	err := ts.RemoveLabel(ctx, store.Tenant{}, id, "nonexistent")
 	if err == nil {
 		t.Fatal("expected ErrNotFound, got nil")
 	}
@@ -1069,11 +1071,11 @@ func TestApplyLabelByMerchant_PersistsMapping(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	if err := ts.CreateLabel(ctx, "subscription", "#f59e0b"); err != nil {
+	if err := ts.CreateLabel(ctx, store.Tenant{}, "subscription", "#f59e0b"); err != nil {
 		t.Fatalf("CreateLabel: %v", err)
 	}
 
-	affected, err := ts.ApplyLabelByMerchant(ctx, "subscription", "Netflix")
+	affected, err := ts.ApplyLabelByMerchant(ctx, store.Tenant{}, "subscription", "Netflix")
 	if err != nil {
 		t.Fatalf("ApplyLabelByMerchant: %v", err)
 	}
@@ -1081,7 +1083,7 @@ func TestApplyLabelByMerchant_PersistsMapping(t *testing.T) {
 		t.Fatalf("want 0 affected transactions, got %d", affected)
 	}
 
-	mappings, err := ts.GetLabelMappings(ctx)
+	mappings, err := ts.GetLabelMappings(ctx, store.Tenant{})
 	if err != nil {
 		t.Fatalf("GetLabelMappings: %v", err)
 	}
@@ -1096,7 +1098,7 @@ func TestRemoveLabelByMerchant_RemovesMappingAndBackfilledLabels(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	if err := ts.CreateLabel(ctx, "subscription", "#f59e0b"); err != nil {
+	if err := ts.CreateLabel(ctx, store.Tenant{}, "subscription", "#f59e0b"); err != nil {
 		t.Fatalf("CreateLabel: %v", err)
 	}
 
@@ -1104,7 +1106,7 @@ func TestRemoveLabelByMerchant_RemovesMappingAndBackfilledLabels(t *testing.T) {
 		MessageID: "lbl-merchant-1", Amount: 200, Currency: "INR", MerchantInfo: "Netflix", Category: "Entertainment",
 	})
 
-	affected, err := ts.ApplyLabelByMerchant(ctx, "subscription", "Netflix")
+	affected, err := ts.ApplyLabelByMerchant(ctx, store.Tenant{}, "subscription", "Netflix")
 	if err != nil {
 		t.Fatalf("ApplyLabelByMerchant: %v", err)
 	}
@@ -1112,7 +1114,7 @@ func TestRemoveLabelByMerchant_RemovesMappingAndBackfilledLabels(t *testing.T) {
 		t.Fatalf("want 1 affected transaction, got %d", affected)
 	}
 
-	txn, err := ts.GetTransaction(ctx, id)
+	txn, err := ts.GetTransaction(ctx, store.Tenant{}, id)
 	if err != nil {
 		t.Fatalf("GetTransaction before remove: %v", err)
 	}
@@ -1120,7 +1122,7 @@ func TestRemoveLabelByMerchant_RemovesMappingAndBackfilledLabels(t *testing.T) {
 		t.Fatalf("want backfilled label [subscription], got %v", txn.Labels)
 	}
 
-	removed, err := ts.RemoveLabelByMerchant(ctx, "subscription", "Netflix")
+	removed, err := ts.RemoveLabelByMerchant(ctx, store.Tenant{}, "subscription", "Netflix")
 	if err != nil {
 		t.Fatalf("RemoveLabelByMerchant: %v", err)
 	}
@@ -1128,7 +1130,7 @@ func TestRemoveLabelByMerchant_RemovesMappingAndBackfilledLabels(t *testing.T) {
 		t.Fatalf("want 1 removed transaction label, got %d", removed)
 	}
 
-	mappings, err := ts.GetLabelMappings(ctx)
+	mappings, err := ts.GetLabelMappings(ctx, store.Tenant{})
 	if err != nil {
 		t.Fatalf("GetLabelMappings after remove: %v", err)
 	}
@@ -1136,7 +1138,7 @@ func TestRemoveLabelByMerchant_RemovesMappingAndBackfilledLabels(t *testing.T) {
 		t.Fatalf("want mapping removed, got %v", got)
 	}
 
-	txn, err = ts.GetTransaction(ctx, id)
+	txn, err = ts.GetTransaction(ctx, store.Tenant{}, id)
 	if err != nil {
 		t.Fatalf("GetTransaction after remove: %v", err)
 	}
@@ -1150,7 +1152,7 @@ func TestRemoveLabelByMerchant_PreservesManualLabelSources(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	if err := ts.CreateLabel(ctx, "subscription", "#f59e0b"); err != nil {
+	if err := ts.CreateLabel(ctx, store.Tenant{}, "subscription", "#f59e0b"); err != nil {
 		t.Fatalf("CreateLabel: %v", err)
 	}
 
@@ -1158,11 +1160,11 @@ func TestRemoveLabelByMerchant_PreservesManualLabelSources(t *testing.T) {
 		MessageID: "lbl-manual-merchant-1", Amount: 200, Currency: "INR", MerchantInfo: "Netflix", Category: "Entertainment",
 	})
 
-	if err := ts.AddLabel(ctx, id, "subscription"); err != nil {
+	if err := ts.AddLabel(ctx, store.Tenant{}, id, "subscription"); err != nil {
 		t.Fatalf("AddLabel: %v", err)
 	}
 
-	affected, err := ts.ApplyLabelByMerchant(ctx, "subscription", "Netflix")
+	affected, err := ts.ApplyLabelByMerchant(ctx, store.Tenant{}, "subscription", "Netflix")
 	if err != nil {
 		t.Fatalf("ApplyLabelByMerchant: %v", err)
 	}
@@ -1170,7 +1172,7 @@ func TestRemoveLabelByMerchant_PreservesManualLabelSources(t *testing.T) {
 		t.Fatalf("want 0 affected transactions after manual label, got %d", affected)
 	}
 
-	removed, err := ts.RemoveLabelByMerchant(ctx, "subscription", "Netflix")
+	removed, err := ts.RemoveLabelByMerchant(ctx, store.Tenant{}, "subscription", "Netflix")
 	if err != nil {
 		t.Fatalf("RemoveLabelByMerchant: %v", err)
 	}
@@ -1178,7 +1180,7 @@ func TestRemoveLabelByMerchant_PreservesManualLabelSources(t *testing.T) {
 		t.Fatalf("want 0 removed transaction labels after manual source remains, got %d", removed)
 	}
 
-	txn, err := ts.GetTransaction(ctx, id)
+	txn, err := ts.GetTransaction(ctx, store.Tenant{}, id)
 	if err != nil {
 		t.Fatalf("GetTransaction: %v", err)
 	}
@@ -1186,7 +1188,7 @@ func TestRemoveLabelByMerchant_PreservesManualLabelSources(t *testing.T) {
 		t.Fatalf("manual label should remain, got %v", txn.Labels)
 	}
 
-	mappings, err := ts.GetLabelMappings(ctx)
+	mappings, err := ts.GetLabelMappings(ctx, store.Tenant{})
 	if err != nil {
 		t.Fatalf("GetLabelMappings: %v", err)
 	}
@@ -1200,7 +1202,7 @@ func TestRemoveLabelByMerchant_PreservesOtherMerchantSources(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	if err := ts.CreateLabel(ctx, "delivery", "#f59e0b"); err != nil {
+	if err := ts.CreateLabel(ctx, store.Tenant{}, "delivery", "#f59e0b"); err != nil {
 		t.Fatalf("CreateLabel: %v", err)
 	}
 
@@ -1208,18 +1210,18 @@ func TestRemoveLabelByMerchant_PreservesOtherMerchantSources(t *testing.T) {
 		MessageID: "lbl-overlap-merchant-1", Amount: 350, Currency: "INR", MerchantInfo: "Uber Eats Pass", Category: "Entertainment",
 	})
 
-	if affected, err := ts.ApplyLabelByMerchant(ctx, "delivery", "Uber"); err != nil {
+	if affected, err := ts.ApplyLabelByMerchant(ctx, store.Tenant{}, "delivery", "Uber"); err != nil {
 		t.Fatalf("ApplyLabelByMerchant Uber: %v", err)
 	} else if affected != 1 {
 		t.Fatalf("want 1 affected transaction for Uber, got %d", affected)
 	}
-	if affected, err := ts.ApplyLabelByMerchant(ctx, "delivery", "Uber Eats"); err != nil {
+	if affected, err := ts.ApplyLabelByMerchant(ctx, store.Tenant{}, "delivery", "Uber Eats"); err != nil {
 		t.Fatalf("ApplyLabelByMerchant Uber Eats: %v", err)
 	} else if affected != 0 {
 		t.Fatalf("want 0 affected transactions for overlapping mapping, got %d", affected)
 	}
 
-	removed, err := ts.RemoveLabelByMerchant(ctx, "delivery", "Uber")
+	removed, err := ts.RemoveLabelByMerchant(ctx, store.Tenant{}, "delivery", "Uber")
 	if err != nil {
 		t.Fatalf("RemoveLabelByMerchant: %v", err)
 	}
@@ -1227,7 +1229,7 @@ func TestRemoveLabelByMerchant_PreservesOtherMerchantSources(t *testing.T) {
 		t.Fatalf("want 0 removed transaction labels while another mapping still applies, got %d", removed)
 	}
 
-	txn, err := ts.GetTransaction(ctx, id)
+	txn, err := ts.GetTransaction(ctx, store.Tenant{}, id)
 	if err != nil {
 		t.Fatalf("GetTransaction: %v", err)
 	}
@@ -1235,7 +1237,7 @@ func TestRemoveLabelByMerchant_PreservesOtherMerchantSources(t *testing.T) {
 		t.Fatalf("label should remain because Uber Eats still applies, got %v", txn.Labels)
 	}
 
-	mappings, err := ts.GetLabelMappings(ctx)
+	mappings, err := ts.GetLabelMappings(ctx, store.Tenant{})
 	if err != nil {
 		t.Fatalf("GetLabelMappings: %v", err)
 	}
@@ -1260,6 +1262,7 @@ func TestSearchTransactions(t *testing.T) {
 
 	txns, result, err := ts.SearchTransactions(
 		ctx,
+		store.Tenant{},
 		"Starbucks",
 		store.ListFilter{PageSize: 10},
 	)
@@ -1282,6 +1285,7 @@ func TestSearchTransactions_RejectsOffsetOverflow(t *testing.T) {
 	defer ts.cleanup()
 	_, _, err := ts.SearchTransactions(
 		context.Background(),
+		store.Tenant{},
 		"coffee",
 		store.ListFilter{Page: math.MaxInt, PageSize: 100},
 	)
@@ -1318,7 +1322,7 @@ func TestSearchTransactions_HonorsAscendingSort(t *testing.T) {
 		}
 	}
 
-	txns, _, err := ts.SearchTransactions(ctx, "Coffee", store.ListFilter{PageSize: 10, SortDir: "asc"})
+	txns, _, err := ts.SearchTransactions(ctx, store.Tenant{}, "Coffee", store.ListFilter{PageSize: 10, SortDir: "asc"})
 	if err != nil {
 		t.Fatalf("SearchTransactions: %v", err)
 	}
@@ -1368,7 +1372,7 @@ func TestSearchTransactions_AppliesDateAndSourceTypeFilters(t *testing.T) {
 
 	from := time.Date(2026, time.May, 1, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, time.May, 31, 23, 59, 59, 0, time.UTC)
-	rows, result, err := ts.SearchTransactions(ctx, "instamart", store.ListFilter{
+	rows, result, err := ts.SearchTransactions(ctx, store.Tenant{}, "instamart", store.ListFilter{
 		Page:       1,
 		PageSize:   20,
 		SourceType: "Credit Card",
@@ -1400,7 +1404,7 @@ func TestSearchTransactions_EmptyQuery(t *testing.T) {
 	})
 
 	// Empty query should return all.
-	_, result, err := ts.SearchTransactions(ctx, "", store.ListFilter{PageSize: 10})
+	_, result, err := ts.SearchTransactions(ctx, store.Tenant{}, "", store.ListFilter{PageSize: 10})
 	if err != nil {
 		t.Fatalf("SearchTransactions empty: %v", err)
 	}
@@ -1418,7 +1422,7 @@ func TestSearchTransactions_SpecialCharactersDoNotError(t *testing.T) {
 		MessageID: "srch-special-1", Amount: 100, Currency: "INR", MerchantInfo: "Cafe Delight", Category: "Food",
 	})
 
-	_, _, err := ts.SearchTransactions(ctx, "í)", store.ListFilter{PageSize: 10})
+	_, _, err := ts.SearchTransactions(ctx, store.Tenant{}, "í)", store.ListFilter{PageSize: 10})
 	if err != nil {
 		t.Fatalf("SearchTransactions special chars: %v", err)
 	}
@@ -1438,7 +1442,7 @@ func TestSearchTransactions_SubstringMerchantMatch(t *testing.T) {
 		Description:  "groceries",
 	})
 
-	rows, _, err := ts.SearchTransactions(ctx, "insta", store.ListFilter{Page: 1, PageSize: 20})
+	rows, _, err := ts.SearchTransactions(ctx, store.Tenant{}, "insta", store.ListFilter{Page: 1, PageSize: 20})
 	if err != nil {
 		t.Fatalf("SearchTransactions: %v", err)
 	}
@@ -1461,7 +1465,7 @@ func TestSearchTransactions_WebStyleQuery(t *testing.T) {
 		Description:  "prime membership",
 	})
 
-	rows, _, err := ts.SearchTransactions(ctx, "amazon prime", store.ListFilter{Page: 1, PageSize: 20})
+	rows, _, err := ts.SearchTransactions(ctx, store.Tenant{}, "amazon prime", store.ListFilter{Page: 1, PageSize: 20})
 	if err != nil {
 		t.Fatalf("SearchTransactions: %v", err)
 	}
@@ -1489,7 +1493,7 @@ func TestGetStats(t *testing.T) {
 
 	// excluded from INR total
 
-	stats, err := ts.GetStats(ctx, "INR")
+	stats, err := ts.GetStats(ctx, store.Tenant{}, "INR")
 	if err != nil {
 		t.Fatalf("GetStats: %v", err)
 	}
@@ -1508,7 +1512,7 @@ func TestGetSpendingHeatmap_EmptyDB(t *testing.T) {
 	ts := newTestStore(t) // skips automatically when -short is passed
 	defer ts.cleanup()
 
-	hd, err := ts.GetSpendingHeatmap(context.Background(), nil, nil)
+	hd, err := ts.GetSpendingHeatmap(context.Background(), store.Tenant{}, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1531,7 +1535,7 @@ func TestHeatmapBucketMatchesListTransactionsForWeekdayHour(t *testing.T) {
 	defer ts.cleanup()
 
 	ctx := context.Background()
-	if err := ts.SetAppConfig(ctx, "app.timezone", "Asia/Kolkata"); err != nil {
+	if err := ts.SetAppConfig(ctx, store.Tenant{}, "app.timezone", "Asia/Kolkata"); err != nil {
 		t.Fatalf("SetAppConfig: %v", err)
 	}
 
@@ -1555,7 +1559,7 @@ func TestHeatmapBucketMatchesListTransactionsForWeekdayHour(t *testing.T) {
 		}
 	}
 
-	heatmap, err := ts.GetSpendingHeatmap(ctx, &from, &to)
+	heatmap, err := ts.GetSpendingHeatmap(ctx, store.Tenant{}, &from, &to)
 	if err != nil {
 		t.Fatalf("GetSpendingHeatmap: %v", err)
 	}
@@ -1568,7 +1572,7 @@ func TestHeatmapBucketMatchesListTransactionsForWeekdayHour(t *testing.T) {
 		}
 	}
 
-	txns, result, err := ts.ListTransactions(ctx, store.ListFilter{
+	txns, result, err := ts.ListTransactions(ctx, store.Tenant{}, store.ListFilter{
 		Page:     1,
 		PageSize: 20,
 		From:     &from,
@@ -1595,7 +1599,7 @@ func TestHeatmapBucketMatchesListTransactionsForWeekdayHour_AllTime(t *testing.T
 	defer ts.cleanup()
 
 	ctx := context.Background()
-	if err := ts.SetAppConfig(ctx, "app.timezone", "Asia/Calcutta"); err != nil {
+	if err := ts.SetAppConfig(ctx, store.Tenant{}, "app.timezone", "Asia/Calcutta"); err != nil {
 		t.Fatalf("SetAppConfig: %v", err)
 	}
 
@@ -1621,7 +1625,7 @@ func TestHeatmapBucketMatchesListTransactionsForWeekdayHour_AllTime(t *testing.T
 		}
 	}
 
-	heatmap, err := ts.GetSpendingHeatmap(ctx, nil, nil)
+	heatmap, err := ts.GetSpendingHeatmap(ctx, store.Tenant{}, nil, nil)
 	if err != nil {
 		t.Fatalf("GetSpendingHeatmap: %v", err)
 	}
@@ -1637,7 +1641,7 @@ func TestHeatmapBucketMatchesListTransactionsForWeekdayHour_AllTime(t *testing.T
 		t.Fatal("expected Sunday 23:00 bucket in all-time heatmap")
 	}
 
-	txns, result, err := ts.ListTransactions(ctx, store.ListFilter{
+	txns, result, err := ts.ListTransactions(ctx, store.Tenant{}, store.ListFilter{
 		Page:     1,
 		PageSize: 20,
 		Weekday:  ptrInt(0),
@@ -1699,7 +1703,7 @@ func TestGetSpendingHeatmapSupportsSingleSidedBounds(t *testing.T) {
 	from := time.Date(2026, time.April, 10, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, time.April, 20, 0, 0, 0, 0, time.UTC)
 
-	fromOnly, err := ts.GetSpendingHeatmap(ctx, &from, nil)
+	fromOnly, err := ts.GetSpendingHeatmap(ctx, store.Tenant{}, &from, nil)
 	if err != nil {
 		t.Fatalf("GetSpendingHeatmap from only: %v", err)
 	}
@@ -1707,7 +1711,7 @@ func TestGetSpendingHeatmapSupportsSingleSidedBounds(t *testing.T) {
 		t.Fatalf("from-only heatmap count = %d, want 2", got)
 	}
 
-	toOnly, err := ts.GetSpendingHeatmap(ctx, nil, &to)
+	toOnly, err := ts.GetSpendingHeatmap(ctx, store.Tenant{}, nil, &to)
 	if err != nil {
 		t.Fatalf("GetSpendingHeatmap to only: %v", err)
 	}
@@ -1721,7 +1725,7 @@ func TestGetSpendingHeatmap_DayOfMonthUsesLocalTimezone(t *testing.T) {
 	defer ts.cleanup()
 
 	ctx := context.Background()
-	if err := ts.SetAppConfig(ctx, "app.timezone", "Asia/Kolkata"); err != nil {
+	if err := ts.SetAppConfig(ctx, store.Tenant{}, "app.timezone", "Asia/Kolkata"); err != nil {
 		t.Fatalf("SetAppConfig: %v", err)
 	}
 
@@ -1739,7 +1743,7 @@ func TestGetSpendingHeatmap_DayOfMonthUsesLocalTimezone(t *testing.T) {
 		t.Fatalf("InsertForTest: %v", err)
 	}
 
-	heatmap, err := ts.GetSpendingHeatmap(ctx, &from, &to)
+	heatmap, err := ts.GetSpendingHeatmap(ctx, store.Tenant{}, &from, &to)
 	if err != nil {
 		t.Fatalf("GetSpendingHeatmap: %v", err)
 	}
@@ -1770,7 +1774,7 @@ func TestGetAnnualSpend_EmptyDB(t *testing.T) {
 	ts := newTestStore(t) // skips when -short
 	defer ts.cleanup()
 
-	buckets, err := ts.GetAnnualSpend(context.Background(), 2026)
+	buckets, err := ts.GetAnnualSpend(context.Background(), store.Tenant{}, 2026)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1786,7 +1790,7 @@ func TestListRules_EmptyDB(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
 
-	rules, err := ts.ListRules(context.Background())
+	rules, err := ts.ListRules(context.Background(), store.Tenant{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1807,7 +1811,7 @@ func TestCreateAndGetRule(t *testing.T) {
 		AmountRegex:   `(\d+)`,
 		MerchantRegex: `(.+)`,
 	}
-	created, err := ts.CreateRule(context.Background(), row)
+	created, err := ts.CreateRule(context.Background(), store.Tenant{}, row)
 	if err != nil {
 		t.Fatalf("CreateRule: %v", err)
 	}
@@ -1818,7 +1822,7 @@ func TestCreateAndGetRule(t *testing.T) {
 		t.Error("expected predefined=false for user-created rule")
 	}
 
-	got, err := ts.GetRule(context.Background(), created.ID)
+	got, err := ts.GetRule(context.Background(), store.Tenant{}, created.ID)
 	if err != nil {
 		t.Fatalf("GetRule: %v", err)
 	}
@@ -1836,11 +1840,11 @@ func TestCreateRuleDuplicateNameReturnsConflict(t *testing.T) {
 		AmountRegex:   `(\d+)`,
 		MerchantRegex: `(.+)`,
 	}
-	if _, err := ts.CreateRule(ctx, row); err != nil {
+	if _, err := ts.CreateRule(ctx, store.Tenant{}, row); err != nil {
 		t.Fatalf("CreateRule first insert: %v", err)
 	}
 
-	_, err := ts.CreateRule(ctx, row)
+	_, err := ts.CreateRule(ctx, store.Tenant{}, row)
 	if !errors.Is(err, store.ErrRuleNameConflict) {
 		t.Fatalf("CreateRule duplicate error = %v, want ErrRuleNameConflict", err)
 	}
@@ -1850,7 +1854,7 @@ func TestUpdateRuleDuplicateNameReturnsConflict(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
 	ctx := context.Background()
-	first, err := ts.CreateRule(ctx, store.RuleRow{
+	first, err := ts.CreateRule(ctx, store.Tenant{}, store.RuleRow{
 		Name:          "first rule",
 		AmountRegex:   `(\d+)`,
 		MerchantRegex: `(.+)`,
@@ -1858,7 +1862,7 @@ func TestUpdateRuleDuplicateNameReturnsConflict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateRule first: %v", err)
 	}
-	second, err := ts.CreateRule(ctx, store.RuleRow{
+	second, err := ts.CreateRule(ctx, store.Tenant{}, store.RuleRow{
 		Name:          "second rule",
 		AmountRegex:   `(\d+)`,
 		MerchantRegex: `(.+)`,
@@ -1867,7 +1871,7 @@ func TestUpdateRuleDuplicateNameReturnsConflict(t *testing.T) {
 		t.Fatalf("CreateRule second: %v", err)
 	}
 
-	_, err = ts.UpdateRule(ctx, second.ID, store.RuleRow{
+	_, err = ts.UpdateRule(ctx, store.Tenant{}, second.ID, store.RuleRow{
 		Name:          first.Name,
 		AmountRegex:   `(\d+)`,
 		MerchantRegex: `(.+)`,
@@ -1887,7 +1891,7 @@ func TestDeleteRule_PredefinedRuleNotDeleted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SeedPredefinedRules: %v", err)
 	}
-	rules, err := ts.ListRules(context.Background())
+	rules, err := ts.ListRules(context.Background(), store.Tenant{})
 	if err != nil {
 		t.Fatalf("ListRules: %v", err)
 	}
@@ -1896,7 +1900,7 @@ func TestDeleteRule_PredefinedRuleNotDeleted(t *testing.T) {
 	}
 	predefinedRule := rules[0]
 
-	delErr := ts.DeleteRule(context.Background(), predefinedRule.ID)
+	delErr := ts.DeleteRule(context.Background(), store.Tenant{}, predefinedRule.ID)
 	if !errors.Is(delErr, store.ErrNotFound) {
 		t.Errorf("expected ErrNotFound when deleting predefined rule, got %v", delErr)
 	}
@@ -2035,7 +2039,7 @@ func TestListTransactions_FilterByBucket(t *testing.T) {
 		t.Fatalf("seed needs: %v", err)
 	}
 
-	txns, result, err := ts.ListTransactions(ctx, store.ListFilter{Bucket: "wants", PageSize: 10})
+	txns, result, err := ts.ListTransactions(ctx, store.Tenant{}, store.ListFilter{Bucket: "wants", PageSize: 10})
 	if err != nil {
 		t.Fatalf("ListTransactions: %v", err)
 	}
@@ -2064,7 +2068,7 @@ func TestGetFacets_IncludesBuckets(t *testing.T) {
 		}
 	}
 
-	facets, err := ts.GetFacets(ctx)
+	facets, err := ts.GetFacets(ctx, store.Tenant{})
 	if err != nil {
 		t.Fatalf("GetFacets: %v", err)
 	}
@@ -2100,14 +2104,14 @@ func TestGetFacets_IncludesLabelCounts(t *testing.T) {
 		MessageID: "facet-label-count-2", Amount: 200, Currency: "INR", MerchantInfo: "Merchant B", Category: "Food",
 	})
 
-	if err := ts.AddLabels(ctx, id1, []string{"counted-label"}); err != nil {
+	if err := ts.AddLabels(ctx, store.Tenant{}, id1, []string{"counted-label"}); err != nil {
 		t.Fatalf("AddLabels id1: %v", err)
 	}
-	if err := ts.AddLabels(ctx, id2, []string{"counted-label"}); err != nil {
+	if err := ts.AddLabels(ctx, store.Tenant{}, id2, []string{"counted-label"}); err != nil {
 		t.Fatalf("AddLabels id2: %v", err)
 	}
 
-	facets, err := ts.GetFacets(ctx)
+	facets, err := ts.GetFacets(ctx, store.Tenant{})
 	if err != nil {
 		t.Fatalf("GetFacets: %v", err)
 	}
@@ -2124,7 +2128,7 @@ func TestRulesRepository_PersistsSenderEmailsAndSourceFields(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	created, err := ts.CreateRule(ctx, store.RuleRow{
+	created, err := ts.CreateRule(ctx, store.Tenant{}, store.RuleRow{
 		Name:            "Structured HDFC",
 		SenderEmails:    []string{"alerts@hdfcbank.net", "alerts@hdfcbank.bank.in"},
 		SubjectContains: "HDFC Credit Card",
@@ -2138,7 +2142,7 @@ func TestRulesRepository_PersistsSenderEmailsAndSourceFields(t *testing.T) {
 		t.Fatalf("CreateRule: %v", err)
 	}
 
-	got, err := ts.GetRule(ctx, created.ID)
+	got, err := ts.GetRule(ctx, store.Tenant{}, created.ID)
 	if err != nil {
 		t.Fatalf("GetRule: %v", err)
 	}
@@ -2169,7 +2173,7 @@ func TestTransactionsStructuredSourceFacetsAndFilters(t *testing.T) {
 		}
 	}
 
-	facets, err := ts.GetFacets(ctx)
+	facets, err := ts.GetFacets(ctx, store.Tenant{})
 	if err != nil {
 		t.Fatalf("GetFacets: %v", err)
 	}
@@ -2180,7 +2184,7 @@ func TestTransactionsStructuredSourceFacetsAndFilters(t *testing.T) {
 		t.Fatalf("banks = %#v", facets.Banks)
 	}
 
-	txns, _, err := ts.ListTransactions(ctx, store.ListFilter{SourceType: "Credit Card", Bank: "HDFC", PageSize: 10})
+	txns, _, err := ts.ListTransactions(ctx, store.Tenant{}, store.ListFilter{SourceType: "Credit Card", Bank: "HDFC", PageSize: 10})
 	if err != nil {
 		t.Fatalf("ListTransactions: %v", err)
 	}
@@ -2210,7 +2214,7 @@ func TestGetChartData_BySource(t *testing.T) {
 		}
 	}
 
-	cd, err := ts.GetChartData(ctx)
+	cd, err := ts.GetChartData(ctx, store.Tenant{})
 	if err != nil {
 		t.Fatalf("GetChartData: %v", err)
 	}
@@ -2239,7 +2243,7 @@ func TestGetCurrentMonthDashboardData_UsesConfiguredTimezone(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	if err := ts.SetAppConfig(ctx, "app.timezone", "Asia/Kolkata"); err != nil {
+	if err := ts.SetAppConfig(ctx, store.Tenant{}, "app.timezone", "Asia/Kolkata"); err != nil {
 		t.Fatalf("SetAppConfig: %v", err)
 	}
 
@@ -2267,7 +2271,7 @@ func TestGetCurrentMonthDashboardData_UsesConfiguredTimezone(t *testing.T) {
 		t.Fatalf("InsertForTest: %v", err)
 	}
 
-	data, err := ts.GetDashboardData(ctx)
+	data, err := ts.GetDashboardData(ctx, store.Tenant{})
 	if err != nil {
 		t.Fatalf("GetDashboardData: %v", err)
 	}
@@ -2284,7 +2288,7 @@ func TestGetChartData_MonthlySpendUsesConfiguredTimezone(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	if err := ts.SetAppConfig(ctx, "app.timezone", "Asia/Kolkata"); err != nil {
+	if err := ts.SetAppConfig(ctx, store.Tenant{}, "app.timezone", "Asia/Kolkata"); err != nil {
 		t.Fatalf("SetAppConfig: %v", err)
 	}
 
@@ -2302,7 +2306,7 @@ func TestGetChartData_MonthlySpendUsesConfiguredTimezone(t *testing.T) {
 		t.Fatalf("InsertForTest: %v", err)
 	}
 
-	cd, err := ts.GetChartData(ctx)
+	cd, err := ts.GetChartData(ctx, store.Tenant{})
 	if err != nil {
 		t.Fatalf("GetChartData: %v", err)
 	}
@@ -2332,7 +2336,7 @@ func TestGetDashboardData_UsesSingleNowAcrossSections(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	if err := ts.SetAppConfig(ctx, "app.timezone", "Asia/Kolkata"); err != nil {
+	if err := ts.SetAppConfig(ctx, store.Tenant{}, "app.timezone", "Asia/Kolkata"); err != nil {
 		t.Fatalf("SetAppConfig: %v", err)
 	}
 
@@ -2354,7 +2358,7 @@ func TestGetDashboardData_UsesSingleNowAcrossSections(t *testing.T) {
 		t.Fatalf("InsertForTest: %v", err)
 	}
 
-	data, err := ts.GetDashboardData(ctx)
+	data, err := ts.GetDashboardData(ctx, store.Tenant{})
 	if err != nil {
 		t.Fatalf("GetDashboardData: %v", err)
 	}
@@ -2398,7 +2402,7 @@ func TestCategorizeMerchant(t *testing.T) {
 		MessageID: "msg-cat-4", Amount: 200, Currency: "INR", MerchantInfo: "Spotify",
 	})
 
-	n, err := ts.CategorizeMerchant(ctx, "Netflix", "Entertainment", "Wants")
+	n, err := ts.CategorizeMerchant(ctx, store.Tenant{}, "Netflix", "Entertainment", "Wants")
 	if err != nil {
 		t.Fatalf("CategorizeMerchant: %v", err)
 	}
@@ -2408,7 +2412,7 @@ func TestCategorizeMerchant(t *testing.T) {
 
 	// Verify all Netflix transactions updated.
 	for _, id := range []string{id1, id2, id3} {
-		tx, err := ts.GetTransaction(ctx, id)
+		tx, err := ts.GetTransaction(ctx, store.Tenant{}, id)
 		if err != nil {
 			t.Fatalf("GetTransaction %s: %v", id, err)
 		}
@@ -2421,7 +2425,7 @@ func TestCategorizeMerchant(t *testing.T) {
 	}
 
 	// Verify Spotify was not touched.
-	all, _, err := ts.ListTransactions(ctx, store.ListFilter{Page: 1, PageSize: 10})
+	all, _, err := ts.ListTransactions(ctx, store.Tenant{}, store.ListFilter{Page: 1, PageSize: 10})
 	if err != nil {
 		t.Fatalf("ListTransactions: %v", err)
 	}
@@ -2438,7 +2442,7 @@ func TestCategorizeMerchant_UpsertsMerchantCategories(t *testing.T) {
 	ctx := context.Background()
 
 	// No existing transactions — upsert still persists the rule.
-	n, err := ts.CategorizeMerchant(ctx, "Hulu", "Entertainment", "Wants")
+	n, err := ts.CategorizeMerchant(ctx, store.Tenant{}, "Hulu", "Entertainment", "Wants")
 	if err != nil {
 		t.Fatalf("CategorizeMerchant: %v", err)
 	}
@@ -2465,7 +2469,7 @@ func TestLoadCategorySnapshot_AllowsCategoryOnlyMerchantMappings(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	if _, err := ts.ApplyCategoryByMerchant(ctx, "Food", "Swiggy"); err != nil {
+	if _, err := ts.ApplyCategoryByMerchant(ctx, store.Tenant{}, "Food", "Swiggy"); err != nil {
 		t.Fatalf("ApplyCategoryByMerchant: %v", err)
 	}
 
@@ -2484,7 +2488,7 @@ func TestGetMonthlyBreakdownSpend_ByDimension(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	if err := ts.SetAppConfig(ctx, "app.timezone", "Asia/Kolkata"); err != nil {
+	if err := ts.SetAppConfig(ctx, store.Tenant{}, "app.timezone", "Asia/Kolkata"); err != nil {
 		t.Fatalf("SetAppConfig: %v", err)
 	}
 
@@ -2503,7 +2507,7 @@ func TestGetMonthlyBreakdownSpend_ByDimension(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InsertForTest jan: %v", err)
 	}
-	if err := ts.AddLabel(ctx, janID, "Travel"); err != nil {
+	if err := ts.AddLabel(ctx, store.Tenant{}, janID, "Travel"); err != nil {
 		t.Fatalf("AddLabel jan: %v", err)
 	}
 
@@ -2531,7 +2535,7 @@ func TestGetMonthlyBreakdownSpend_ByDimension(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InsertForTest mar: %v", err)
 	}
-	if err := ts.AddLabel(ctx, marID, "Dining"); err != nil {
+	if err := ts.AddLabel(ctx, store.Tenant{}, marID, "Dining"); err != nil {
 		t.Fatalf("AddLabel mar: %v", err)
 	}
 
@@ -2545,7 +2549,7 @@ func TestGetMonthlyBreakdownSpend_ByDimension(t *testing.T) {
 		t.Fatalf("InsertForTest uncategorized apr: %v", err)
 	}
 
-	categoryData, err := ts.GetMonthlyBreakdownSpend(ctx, "categories", 4)
+	categoryData, err := ts.GetMonthlyBreakdownSpend(ctx, store.Tenant{}, "categories", 4)
 	if err != nil {
 		t.Fatalf("GetMonthlyBreakdownSpend categories: %v", err)
 	}
@@ -2559,7 +2563,7 @@ func TestGetMonthlyBreakdownSpend_ByDimension(t *testing.T) {
 		t.Fatalf("Uncategorized category series: got %v", data)
 	}
 
-	bucketData, err := ts.GetMonthlyBreakdownSpend(ctx, "buckets", 4)
+	bucketData, err := ts.GetMonthlyBreakdownSpend(ctx, store.Tenant{}, "buckets", 4)
 	if err != nil {
 		t.Fatalf("GetMonthlyBreakdownSpend buckets: %v", err)
 	}
@@ -2582,7 +2586,7 @@ func TestGetMonthlyBreakdownSpend_ByDimension(t *testing.T) {
 		t.Fatalf("Uncategorized bucket series: got %v", data)
 	}
 
-	labelData, err := ts.GetMonthlyBreakdownSpend(ctx, "labels", 4)
+	labelData, err := ts.GetMonthlyBreakdownSpend(ctx, store.Tenant{}, "labels", 4)
 	if err != nil {
 		t.Fatalf("GetMonthlyBreakdownSpend labels: %v", err)
 	}

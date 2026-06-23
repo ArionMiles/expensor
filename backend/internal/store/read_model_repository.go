@@ -43,51 +43,51 @@ func newPGReadModelRepository(deps repositoryDependencies, runtime *pgRuntimeRep
 	}
 }
 
-func (r *pgReadModelRepository) GetStats(ctx context.Context, baseCurrency string) (*Stats, error) {
-	return r.statsReadModel(ctx, baseCurrency)
+func (r *pgReadModelRepository) GetStats(ctx context.Context, tenant Tenant, baseCurrency string) (*Stats, error) {
+	return r.statsReadModel(ctx, tenant, baseCurrency)
 }
 
-func (r *pgReadModelRepository) GetChartData(ctx context.Context) (*ChartData, error) {
-	return r.chartDataReadModel(ctx)
+func (r *pgReadModelRepository) GetChartData(ctx context.Context, tenant Tenant) (*ChartData, error) {
+	return r.chartDataReadModel(ctx, tenant)
 }
 
-func (r *pgReadModelRepository) GetDashboardData(ctx context.Context) (*DashboardData, error) {
-	return r.dashboardDataReadModel(ctx)
+func (r *pgReadModelRepository) GetDashboardData(ctx context.Context, tenant Tenant) (*DashboardData, error) {
+	return r.dashboardDataReadModel(ctx, tenant)
 }
 
-func (r *pgReadModelRepository) GetSpendingHeatmap(ctx context.Context, from, to *time.Time) (*HeatmapData, error) {
-	return r.spendingHeatmapReadModel(ctx, from, to)
+func (r *pgReadModelRepository) GetSpendingHeatmap(ctx context.Context, tenant Tenant, from, to *time.Time) (*HeatmapData, error) {
+	return r.spendingHeatmapReadModel(ctx, tenant, from, to)
 }
 
-func (r *pgReadModelRepository) GetAnnualSpend(ctx context.Context, year int) ([]DailyBucket, error) {
-	return r.annualSpendReadModel(ctx, year)
+func (r *pgReadModelRepository) GetAnnualSpend(ctx context.Context, tenant Tenant, year int) ([]DailyBucket, error) {
+	return r.annualSpendReadModel(ctx, tenant, year)
 }
 
-func (r *pgReadModelRepository) GetMonthlyBreakdownSpend(ctx context.Context, dimension string, months int) (*MonthlyBreakdownData, error) {
-	return r.monthlyBreakdownSpendReadModel(ctx, dimension, months)
+func (r *pgReadModelRepository) GetMonthlyBreakdownSpend(ctx context.Context, tenant Tenant, dimension string, months int) (*MonthlyBreakdownData, error) {
+	return r.monthlyBreakdownSpendReadModel(ctx, tenant, dimension, months)
 }
 
-func (r *pgReadModelRepository) statsReadModel(ctx context.Context, baseCurrency string) (*Stats, error) {
+func (r *pgReadModelRepository) statsReadModel(ctx context.Context, tenant Tenant, baseCurrency string) (*Stats, error) {
 	const mainQ = `
 		SELECT COUNT(*),
 		       COALESCE(SUM(CASE WHEN currency = $1 THEN amount ELSE 0 END), 0)
 		FROM transactions
-		WHERE muted = false
+		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $2
 	`
 	var st Stats
 	st.BaseCurrency = baseCurrency
-	if err := r.pool.QueryRow(ctx, mainQ, baseCurrency).Scan(&st.TotalCount, &st.TotalBase); err != nil {
+	if err := r.pool.QueryRow(ctx, mainQ, baseCurrency, tenantIDParam(tenant)).Scan(&st.TotalCount, &st.TotalBase); err != nil {
 		return nil, fmt.Errorf("fetching stats: %w", err)
 	}
 
 	const catQ = `
 		SELECT COALESCE(NULLIF(category, ''), 'Uncategorized'), COALESCE(SUM(amount), 0), COUNT(*)
 		FROM transactions
-		WHERE muted = false
+		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $1
 		GROUP BY COALESCE(NULLIF(category, ''), 'Uncategorized')
 		ORDER BY SUM(amount) DESC
 	`
-	rows, err := r.pool.Query(ctx, catQ)
+	rows, err := r.pool.Query(ctx, catQ, tenantIDParam(tenant))
 	if err != nil {
 		return nil, fmt.Errorf("fetching category stats: %w", err)
 	}
@@ -112,12 +112,12 @@ func (r *pgReadModelRepository) statsReadModel(ctx context.Context, baseCurrency
 	return &st, nil
 }
 
-func (r *pgReadModelRepository) chartDataReadModel(ctx context.Context) (*ChartData, error) {
-	return r.getChartDataAt(ctx, r.nowTime())
+func (r *pgReadModelRepository) chartDataReadModel(ctx context.Context, tenant Tenant) (*ChartData, error) {
+	return r.getChartDataAt(ctx, tenant, r.nowTime())
 }
 
-func (r *pgReadModelRepository) getChartDataAt(ctx context.Context, now time.Time) (*ChartData, error) {
-	tz := r.appTimezone(ctx)
+func (r *pgReadModelRepository) getChartDataAt(ctx context.Context, tenant Tenant, now time.Time) (*ChartData, error) {
+	tz := r.appTimezone(ctx, tenant)
 	return r.loadChartData(ctx, chartDataLoadRequest{
 		Monthly: chartQueryRequest{
 			Label: "monthly spend",
@@ -126,11 +126,11 @@ func (r *pgReadModelRepository) getChartDataAt(ctx context.Context, now time.Tim
 			       COALESCE(SUM(amount), 0)                     AS amount,
 			       COUNT(*)                                     AS cnt
 			FROM transactions
-			WHERE muted = false AND timestamp >= $2
+			WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $2
 			GROUP BY period
 			ORDER BY period
 		`,
-			Args: []any{tz, now.AddDate(-1, 0, 0)},
+			Args: []any{tz, now.AddDate(-1, 0, 0), tenantIDParam(tenant)},
 		},
 		Daily: chartQueryRequest{
 			Label: "daily spend",
@@ -139,31 +139,33 @@ func (r *pgReadModelRepository) getChartDataAt(ctx context.Context, now time.Tim
 			       COALESCE(SUM(amount), 0)                        AS amount,
 			       COUNT(*)                                        AS cnt
 			FROM transactions
-			WHERE muted = false AND timestamp >= $2
+			WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $2
 			GROUP BY period
 			ORDER BY period
 		`,
-			Args: []any{tz, now.AddDate(0, 0, -30)},
+			Args: []any{tz, now.AddDate(0, 0, -30), tenantIDParam(tenant)},
 		},
 		Category: chartQueryRequest{
 			Label: "category chart data",
 			Query: `
 			SELECT COALESCE(NULLIF(category, ''), 'Uncategorized'), COALESCE(SUM(amount), 0)
 			FROM transactions
-			WHERE muted = false
+			WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $1
 			GROUP BY COALESCE(NULLIF(category, ''), 'Uncategorized')
 			ORDER BY SUM(amount) DESC
 		`,
+			Args: []any{tenantIDParam(tenant)},
 		},
 		Bucket: chartQueryRequest{
 			Label: "bucket chart data",
 			Query: `
 			SELECT COALESCE(NULLIF(bucket, ''), 'Uncategorized'), COALESCE(SUM(amount), 0)
 			FROM transactions
-			WHERE muted = false
+			WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $1
 			GROUP BY COALESCE(NULLIF(bucket, ''), 'Uncategorized')
 			ORDER BY SUM(amount) DESC
 		`,
+			Args: []any{tenantIDParam(tenant)},
 		},
 		Label: chartQueryRequest{
 			Label: "label chart data",
@@ -171,67 +173,71 @@ func (r *pgReadModelRepository) getChartDataAt(ctx context.Context, now time.Tim
 			SELECT COALESCE(tl.label, 'Uncategorized'), COALESCE(SUM(t.amount), 0)
 			FROM transactions t
 			LEFT JOIN transaction_labels tl ON tl.transaction_id = t.id
-			WHERE t.muted = false
+			WHERE t.muted = false AND t.tenant_id IS NOT DISTINCT FROM $1
 			GROUP BY COALESCE(tl.label, 'Uncategorized')
 			ORDER BY SUM(t.amount) DESC
 			LIMIT 20
 		`,
+			Args: []any{tenantIDParam(tenant)},
 		},
 		Source: chartQueryRequest{
 			Label: "source chart data",
 			Query: `
 			SELECT COALESCE(source, ''), COALESCE(SUM(amount), 0)
 			FROM transactions
-			WHERE muted = false AND source IS NOT NULL AND source != ''
+			WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $1 AND source IS NOT NULL AND source != ''
 			GROUP BY source
 			ORDER BY SUM(amount) DESC
 		`,
+			Args: []any{tenantIDParam(tenant)},
 		},
 		SourceType: chartQueryRequest{
 			Label: "source type chart data",
 			Query: `
 			SELECT COALESCE(source_type, ''), COALESCE(SUM(amount), 0)
 			FROM transactions
-			WHERE muted = false AND source_type IS NOT NULL AND source_type != ''
+			WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $1 AND source_type IS NOT NULL AND source_type != ''
 			GROUP BY source_type
 			ORDER BY SUM(amount) DESC
 		`,
+			Args: []any{tenantIDParam(tenant)},
 		},
 		Bank: chartQueryRequest{
 			Label: "bank chart data",
 			Query: `
 			SELECT COALESCE(bank, ''), COALESCE(SUM(amount), 0)
 			FROM transactions
-			WHERE muted = false AND bank IS NOT NULL AND bank != ''
+			WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $1 AND bank IS NOT NULL AND bank != ''
 			GROUP BY bank
 			ORDER BY SUM(amount) DESC
 		`,
+			Args: []any{tenantIDParam(tenant)},
 		},
 		CategoryMonthlyFn: func(ctx context.Context) (map[string]CategoryMonthlyEntry, error) {
-			return r.queryCategoryMonthlyAt(ctx, now)
+			return r.queryCategoryMonthlyAt(ctx, tenant, now)
 		},
 	})
 }
 
-func (r *pgReadModelRepository) dashboardDataReadModel(ctx context.Context) (*DashboardData, error) {
-	baseCurrency := r.dashboardBaseCurrency(ctx)
+func (r *pgReadModelRepository) dashboardDataReadModel(ctx context.Context, tenant Tenant) (*DashboardData, error) {
+	baseCurrency := r.dashboardBaseCurrency(ctx, tenant)
 	now := r.nowTime()
-	window := r.dashboardMonthBounds(ctx, now)
+	window := r.dashboardMonthBounds(ctx, tenant, now)
 
-	currentStats, err := r.getStatsBetween(ctx, baseCurrency, window.startUTC, window.endUTC)
+	currentStats, err := r.getStatsBetween(ctx, tenant, baseCurrency, window.startUTC, window.endUTC)
 	if err != nil {
 		return nil, fmt.Errorf("fetching current-month stats: %w", err)
 	}
-	currentCharts, err := r.getChartDataBetween(ctx, window.loc, window.startUTC, window.endUTC)
+	currentCharts, err := r.getChartDataBetween(ctx, tenant, window.loc, window.startUTC, window.endUTC)
 	if err != nil {
 		return nil, fmt.Errorf("fetching current-month charts: %w", err)
 	}
 
-	allTimeStats, err := r.GetStats(ctx, baseCurrency)
+	allTimeStats, err := r.GetStats(ctx, tenant, baseCurrency)
 	if err != nil {
 		return nil, fmt.Errorf("fetching all-time stats: %w", err)
 	}
-	allTimeCharts, err := r.getChartDataAt(ctx, now)
+	allTimeCharts, err := r.getChartDataAt(ctx, tenant, now)
 	if err != nil {
 		return nil, fmt.Errorf("fetching all-time charts: %w", err)
 	}
@@ -250,12 +256,12 @@ func (r *pgReadModelRepository) dashboardDataReadModel(ctx context.Context) (*Da
 	}, nil
 }
 
-func (r *pgReadModelRepository) getStatsBetween(ctx context.Context, baseCurrency string, startUTC, endUTC time.Time) (*Stats, error) {
+func (r *pgReadModelRepository) getStatsBetween(ctx context.Context, tenant Tenant, baseCurrency string, startUTC, endUTC time.Time) (*Stats, error) {
 	const mainQ = `
 		SELECT COUNT(*),
 		       COALESCE(SUM(CASE WHEN currency = $1 THEN amount ELSE 0 END), 0)
 		FROM transactions
-		WHERE muted = false AND timestamp >= $2 AND timestamp < $3
+		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $4 AND timestamp >= $2 AND timestamp < $3
 	`
 
 	st := &Stats{
@@ -263,18 +269,18 @@ func (r *pgReadModelRepository) getStatsBetween(ctx context.Context, baseCurrenc
 		TotalByCategory:    make(map[string]float64),
 		TotalCategoryCount: make(map[string]int),
 	}
-	if err := r.pool.QueryRow(ctx, mainQ, baseCurrency, startUTC, endUTC).Scan(&st.TotalCount, &st.TotalBase); err != nil {
+	if err := r.pool.QueryRow(ctx, mainQ, baseCurrency, startUTC, endUTC, tenantIDParam(tenant)).Scan(&st.TotalCount, &st.TotalBase); err != nil {
 		return nil, fmt.Errorf("fetching range stats: %w", err)
 	}
 
 	const catQ = `
 		SELECT COALESCE(NULLIF(category, ''), 'Uncategorized'), COALESCE(SUM(amount), 0), COUNT(*)
 		FROM transactions
-		WHERE muted = false AND timestamp >= $1 AND timestamp < $2
+		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $1 AND timestamp < $2
 		GROUP BY COALESCE(NULLIF(category, ''), 'Uncategorized')
 		ORDER BY SUM(amount) DESC
 	`
-	rows, err := r.pool.Query(ctx, catQ, startUTC, endUTC)
+	rows, err := r.pool.Query(ctx, catQ, startUTC, endUTC, tenantIDParam(tenant))
 	if err != nil {
 		return nil, fmt.Errorf("fetching range category stats: %w", err)
 	}
@@ -297,7 +303,7 @@ func (r *pgReadModelRepository) getStatsBetween(ctx context.Context, baseCurrenc
 	return st, nil
 }
 
-func (r *pgReadModelRepository) getChartDataBetween(ctx context.Context, loc *time.Location, startUTC, endUTC time.Time) (*ChartData, error) {
+func (r *pgReadModelRepository) getChartDataBetween(ctx context.Context, tenant Tenant, loc *time.Location, startUTC, endUTC time.Time) (*ChartData, error) {
 	tz := loc.String()
 	return r.loadChartData(ctx, chartDataLoadRequest{
 		Monthly: chartQueryRequest{
@@ -307,11 +313,11 @@ func (r *pgReadModelRepository) getChartDataBetween(ctx context.Context, loc *ti
 		       COALESCE(SUM(amount), 0)                    AS amount,
 		       COUNT(*)                                    AS cnt
 		FROM transactions
-		WHERE muted = false AND timestamp >= $2 AND timestamp < $3
+		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $4 AND timestamp >= $2 AND timestamp < $3
 		GROUP BY period
 		ORDER BY period
 	`,
-			Args: []any{tz, startUTC, endUTC},
+			Args: []any{tz, startUTC, endUTC, tenantIDParam(tenant)},
 		},
 		Daily: chartQueryRequest{
 			Label: "range daily spend",
@@ -320,33 +326,33 @@ func (r *pgReadModelRepository) getChartDataBetween(ctx context.Context, loc *ti
 		       COALESCE(SUM(amount), 0)                        AS amount,
 		       COUNT(*)                                        AS cnt
 		FROM transactions
-		WHERE muted = false AND timestamp >= $2 AND timestamp < $3
+		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $4 AND timestamp >= $2 AND timestamp < $3
 		GROUP BY period
 		ORDER BY period
 	`,
-			Args: []any{tz, startUTC, endUTC},
+			Args: []any{tz, startUTC, endUTC, tenantIDParam(tenant)},
 		},
 		Category: chartQueryRequest{
 			Label: "range category chart data",
 			Query: `
 		SELECT COALESCE(NULLIF(category, ''), 'Uncategorized'), COALESCE(SUM(amount), 0)
 		FROM transactions
-		WHERE muted = false AND timestamp >= $1 AND timestamp < $2
+		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $1 AND timestamp < $2
 		GROUP BY COALESCE(NULLIF(category, ''), 'Uncategorized')
 		ORDER BY SUM(amount) DESC
 	`,
-			Args: []any{startUTC, endUTC},
+			Args: []any{startUTC, endUTC, tenantIDParam(tenant)},
 		},
 		Bucket: chartQueryRequest{
 			Label: "range bucket chart data",
 			Query: `
 		SELECT COALESCE(NULLIF(bucket, ''), 'Uncategorized'), COALESCE(SUM(amount), 0)
 		FROM transactions
-		WHERE muted = false AND timestamp >= $1 AND timestamp < $2
+		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $1 AND timestamp < $2
 		GROUP BY COALESCE(NULLIF(bucket, ''), 'Uncategorized')
 		ORDER BY SUM(amount) DESC
 	`,
-			Args: []any{startUTC, endUTC},
+			Args: []any{startUTC, endUTC, tenantIDParam(tenant)},
 		},
 		Label: chartQueryRequest{
 			Label: "range label chart data",
@@ -354,67 +360,68 @@ func (r *pgReadModelRepository) getChartDataBetween(ctx context.Context, loc *ti
 		SELECT COALESCE(tl.label, 'Uncategorized'), COALESCE(SUM(t.amount), 0)
 		FROM transactions t
 		LEFT JOIN transaction_labels tl ON tl.transaction_id = t.id
-		WHERE t.muted = false AND t.timestamp >= $1 AND t.timestamp < $2
+		WHERE t.muted = false AND t.tenant_id IS NOT DISTINCT FROM $3 AND t.timestamp >= $1 AND t.timestamp < $2
 		GROUP BY COALESCE(tl.label, 'Uncategorized')
 		ORDER BY SUM(t.amount) DESC
 		LIMIT 20
 	`,
-			Args: []any{startUTC, endUTC},
+			Args: []any{startUTC, endUTC, tenantIDParam(tenant)},
 		},
 		Source: chartQueryRequest{
 			Label: "range source chart data",
 			Query: `
 		SELECT COALESCE(source, ''), COALESCE(SUM(amount), 0)
 		FROM transactions
-		WHERE muted = false AND timestamp >= $1 AND timestamp < $2
+		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $1 AND timestamp < $2
 		  AND source IS NOT NULL AND source != ''
 		GROUP BY source
 		ORDER BY SUM(amount) DESC
 	`,
-			Args: []any{startUTC, endUTC},
+			Args: []any{startUTC, endUTC, tenantIDParam(tenant)},
 		},
 		SourceType: chartQueryRequest{
 			Label: "range source type chart data",
 			Query: `
 		SELECT COALESCE(source_type, ''), COALESCE(SUM(amount), 0)
 		FROM transactions
-		WHERE muted = false AND timestamp >= $1 AND timestamp < $2
+		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $1 AND timestamp < $2
 		  AND source_type IS NOT NULL AND source_type != ''
 		GROUP BY source_type
 		ORDER BY SUM(amount) DESC
 	`,
-			Args: []any{startUTC, endUTC},
+			Args: []any{startUTC, endUTC, tenantIDParam(tenant)},
 		},
 		Bank: chartQueryRequest{
 			Label: "range bank chart data",
 			Query: `
 		SELECT COALESCE(bank, ''), COALESCE(SUM(amount), 0)
 		FROM transactions
-		WHERE muted = false AND timestamp >= $1 AND timestamp < $2
+		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $1 AND timestamp < $2
 		  AND bank IS NOT NULL AND bank != ''
 		GROUP BY bank
 		ORDER BY SUM(amount) DESC
 	`,
-			Args: []any{startUTC, endUTC},
+			Args: []any{startUTC, endUTC, tenantIDParam(tenant)},
 		},
 		CategoryMonthlyFn: func(ctx context.Context) (map[string]CategoryMonthlyEntry, error) {
-			return r.queryCategoryMonthlyBetween(ctx, loc, startUTC, endUTC)
+			return r.queryCategoryMonthlyBetween(ctx, tenant, loc, startUTC, endUTC)
 		},
 	})
 }
 
 // queryCategoryMonthly returns per-category spend totals for the current and prior calendar month.
-func (r *pgReadModelRepository) queryCategoryMonthly(ctx context.Context) (map[string]CategoryMonthlyEntry, error) {
-	return r.queryCategoryMonthlyAt(ctx, r.nowTime())
+func (r *pgReadModelRepository) queryCategoryMonthly(ctx context.Context, tenant Tenant) (map[string]CategoryMonthlyEntry, error) {
+	return r.queryCategoryMonthlyAt(ctx, tenant, r.nowTime())
 }
 
-func (r *pgReadModelRepository) queryCategoryMonthlyAt(ctx context.Context, now time.Time) (map[string]CategoryMonthlyEntry, error) {
-	window := r.dashboardMonthBounds(ctx, now)
-	return r.queryCategoryMonthlyBetween(ctx, window.loc, window.startUTC, window.endUTC)
+func (r *pgReadModelRepository) queryCategoryMonthlyAt(ctx context.Context, tenant Tenant, now time.Time) (map[string]CategoryMonthlyEntry, error) {
+	window := r.dashboardMonthBounds(ctx, tenant, now)
+	return r.queryCategoryMonthlyBetween(ctx, tenant, window.loc, window.startUTC, window.endUTC)
 }
 
 func (r *pgReadModelRepository) queryCategoryMonthlyBetween(
 	ctx context.Context,
+	tenant Tenant,
 	loc *time.Location,
 	startUTC, endUTC time.Time,
 ) (map[string]CategoryMonthlyEntry, error) {
@@ -431,11 +438,12 @@ func (r *pgReadModelRepository) queryCategoryMonthlyBetween(
 		    ), 0) AS prior_month
 		FROM transactions
 		WHERE muted = false
+		    AND tenant_id IS NOT DISTINCT FROM $4
 		    AND timestamp >= $3
 		    AND timestamp < $2
 		GROUP BY COALESCE(NULLIF(category, ''), 'Uncategorized')
 	`
-	rows, err := r.pool.Query(ctx, q, startUTC, endUTC, priorStartUTC)
+	rows, err := r.pool.Query(ctx, q, startUTC, endUTC, priorStartUTC, tenantIDParam(tenant))
 	if err != nil {
 		return nil, fmt.Errorf("fetching category monthly data: %w", err)
 	}
@@ -461,14 +469,14 @@ func (r *pgReadModelRepository) nowTime() time.Time {
 }
 
 // GetSpendingHeatmap returns transaction totals aggregated by weekday×hour and
-func (r *pgReadModelRepository) spendingHeatmapReadModel(ctx context.Context, from, to *time.Time) (*HeatmapData, error) {
+func (r *pgReadModelRepository) spendingHeatmapReadModel(ctx context.Context, tenant Tenant, from, to *time.Time) (*HeatmapData, error) {
 	hd := &HeatmapData{
 		ByWeekdayHour: []WeekdayHourBucket{},
 		ByDayOfMonth:  []DayOfMonthBucket{},
 	}
 
-	where, args := buildHeatmapWhere(from, to)
-	tz := r.appTimezone(ctx)
+	where, args := buildHeatmapWhere(tenant, from, to)
+	tz := r.appTimezone(ctx, tenant)
 	argsWithTZ := append(append([]any{}, args...), tz)
 	tzArg := fmt.Sprintf("$%d", len(argsWithTZ))
 
@@ -531,7 +539,7 @@ func (r *pgReadModelRepository) spendingHeatmapReadModel(ctx context.Context, fr
 
 // GetAnnualSpend returns per-day transaction totals for a given calendar year.
 // Results are ordered by date ascending. Returns an empty (non-nil) slice when
-func (r *pgReadModelRepository) annualSpendReadModel(ctx context.Context, year int) ([]DailyBucket, error) {
+func (r *pgReadModelRepository) annualSpendReadModel(ctx context.Context, tenant Tenant, year int) ([]DailyBucket, error) {
 	buckets := []DailyBucket{}
 
 	rows, err := r.pool.Query(ctx, `
@@ -540,10 +548,10 @@ func (r *pgReadModelRepository) annualSpendReadModel(ctx context.Context, year i
 			COALESCE(SUM(amount), 0) AS amount,
 			COUNT(*)                 AS count
 		FROM transactions
-		WHERE muted = false AND EXTRACT(YEAR FROM timestamp) = $1
+		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $2 AND EXTRACT(YEAR FROM timestamp) = $1
 		GROUP BY date
 		ORDER BY date
-	`, year)
+	`, year, tenantIDParam(tenant))
 	if err != nil {
 		return nil, fmt.Errorf("fetching annual spend for %d: %w", year, err)
 	}
@@ -564,17 +572,17 @@ func (r *pgReadModelRepository) annualSpendReadModel(ctx context.Context, year i
 
 // buildHeatmapWhere returns a WHERE clause and positional args for
 // GetSpendingHeatmap. Returns empty string and nil args when both are nil.
-func buildHeatmapWhere(from, to *time.Time) (string, []any) {
+func buildHeatmapWhere(tenant Tenant, from, to *time.Time) (string, []any) {
 	if from == nil && to == nil {
-		return " WHERE muted = false", nil
+		return " WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $1", []any{tenantIDParam(tenant)}
 	}
 	if from == nil {
-		return " WHERE muted = false AND timestamp <= $1", []any{*to}
+		return " WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $2 AND timestamp <= $1", []any{*to, tenantIDParam(tenant)}
 	}
 	if to == nil {
-		return " WHERE muted = false AND timestamp >= $1", []any{*from}
+		return " WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $2 AND timestamp >= $1", []any{*from, tenantIDParam(tenant)}
 	}
-	return " WHERE muted = false AND timestamp >= $1 AND timestamp <= $2", []any{*from, *to}
+	return " WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $1 AND timestamp <= $2", []any{*from, *to, tenantIDParam(tenant)}
 }
 
 // Facets holds distinct filter values for the transactions UI dropdowns.
@@ -696,7 +704,12 @@ func newChartData() *ChartData {
 	}
 }
 
-func (r *pgReadModelRepository) monthlyBreakdownSpendReadModel(ctx context.Context, dimension string, months int) (*MonthlyBreakdownData, error) {
+func (r *pgReadModelRepository) monthlyBreakdownSpendReadModel(
+	ctx context.Context,
+	tenant Tenant,
+	dimension string,
+	months int,
+) (*MonthlyBreakdownData, error) {
 	if months <= 0 {
 		return &MonthlyBreakdownData{
 			Labels: []string{},
@@ -710,7 +723,7 @@ func (r *pgReadModelRepository) monthlyBreakdownSpendReadModel(ctx context.Conte
 		dimension = "labels"
 	}
 
-	tz := r.appTimezone(ctx)
+	tz := r.appTimezone(ctx, tenant)
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
 		loc = time.UTC
@@ -742,10 +755,11 @@ func (r *pgReadModelRepository) monthlyBreakdownSpendReadModel(ctx context.Conte
 			LEFT JOIN transaction_labels tl ON tl.transaction_id = t.id
 			WHERE t.muted = false
 			  AND t.timestamp >= $2
+			  AND t.tenant_id IS NOT DISTINCT FROM $3
 			GROUP BY COALESCE(tl.label, 'Uncategorized'), month
 			ORDER BY month, label
 		`
-		args = []any{tz, startUTC}
+		args = []any{tz, startUTC, tenantIDParam(tenant)}
 	case "categories":
 		query = `
 			SELECT
@@ -755,10 +769,11 @@ func (r *pgReadModelRepository) monthlyBreakdownSpendReadModel(ctx context.Conte
 			FROM transactions t
 			WHERE t.muted = false
 			  AND t.timestamp >= $2
+			  AND t.tenant_id IS NOT DISTINCT FROM $3
 			GROUP BY COALESCE(NULLIF(t.category, ''), 'Uncategorized'), month
 			ORDER BY month, label
 		`
-		args = []any{tz, startUTC}
+		args = []any{tz, startUTC, tenantIDParam(tenant)}
 	case "buckets":
 		query = `
 			SELECT
@@ -768,10 +783,11 @@ func (r *pgReadModelRepository) monthlyBreakdownSpendReadModel(ctx context.Conte
 			FROM transactions t
 			WHERE t.muted = false
 			  AND t.timestamp >= $2
+			  AND t.tenant_id IS NOT DISTINCT FROM $3
 			GROUP BY COALESCE(NULLIF(t.bucket, ''), 'Uncategorized'), month
 			ORDER BY month, label
 		`
-		args = []any{tz, startUTC}
+		args = []any{tz, startUTC, tenantIDParam(tenant)}
 	default:
 		return nil, fmt.Errorf("unsupported monthly breakdown dimension %q", dimension)
 	}
@@ -826,10 +842,10 @@ func (r *pgReadModelRepository) monthlyBreakdownSpendReadModel(ctx context.Conte
 	}, nil
 }
 
-func (r *pgReadModelRepository) appTimezone(ctx context.Context) string {
+func (r *pgReadModelRepository) appTimezone(ctx context.Context, tenant Tenant) string {
 	const fallback = "UTC"
 
-	tz, err := r.runtime.GetAppConfig(ctx, "app.timezone")
+	tz, err := r.runtime.GetAppConfig(ctx, tenant, "app.timezone")
 	if err != nil || tz == "" {
 		return fallback
 	}
@@ -839,10 +855,10 @@ func (r *pgReadModelRepository) appTimezone(ctx context.Context) string {
 	return tz
 }
 
-func (r *pgReadModelRepository) dashboardBaseCurrency(ctx context.Context) string {
+func (r *pgReadModelRepository) dashboardBaseCurrency(ctx context.Context, tenant Tenant) string {
 	const fallback = "INR"
 
-	baseCurrency, err := r.runtime.GetAppConfig(ctx, "base_currency")
+	baseCurrency, err := r.runtime.GetAppConfig(ctx, tenant, "base_currency")
 	if err != nil || baseCurrency == "" {
 		return fallback
 	}
@@ -856,8 +872,8 @@ type dashboardMonthWindow struct {
 	label    string
 }
 
-func (r *pgReadModelRepository) dashboardMonthBounds(ctx context.Context, now time.Time) dashboardMonthWindow {
-	tz := r.appTimezone(ctx)
+func (r *pgReadModelRepository) dashboardMonthBounds(ctx context.Context, tenant Tenant, now time.Time) dashboardMonthWindow {
+	tz := r.appTimezone(ctx, tenant)
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
 		loc = time.UTC

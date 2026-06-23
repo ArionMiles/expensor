@@ -23,10 +23,28 @@ var ErrPaginationOverflow = errors.New("pagination offset overflow")
 
 func isDiagnosticOpenConflict(err error) bool {
 	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "extraction_diagnostics_open_unique"
+	if !errors.As(err, &pgErr) || pgErr.Code != "23505" {
+		return false
+	}
+	switch pgErr.ConstraintName {
+	case "extraction_diagnostics_open_unique",
+		"extraction_diagnostics_open_legacy_unique",
+		"extraction_diagnostics_open_tenant_unique":
+		return true
+	default:
+		return false
+	}
 }
 
 func isRuleNameConflict(err error) bool {
 	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "rules_name_key"
+	if !errors.As(err, &pgErr) || pgErr.Code != "23505" {
+		return false
+	}
+	switch pgErr.ConstraintName {
+	case "rules_name_key", "rules_legacy_user_name_key", "rules_tenant_user_name_key":
+		return true
+	default:
+		return false
+	}
 }

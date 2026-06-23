@@ -67,9 +67,9 @@ func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
 		err    error
 	)
 	if q == "" {
-		txns, result, err = h.transactionStore.ListTransactions(r.Context(), f)
+		txns, result, err = h.transactionStore.ListTransactions(r.Context(), requestTenant(r), f)
 	} else {
-		txns, result, err = h.transactionStore.SearchTransactions(r.Context(), q, f)
+		txns, result, err = h.transactionStore.SearchTransactions(r.Context(), requestTenant(r), q, f)
 	}
 	if err != nil {
 		h.logger.Error("query transactions", "error", err)
@@ -84,7 +84,7 @@ func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
 		"transactions":  txns,
 		"total":         result.Total,
 		"total_amount":  result.TotalAmount,
-		"base_currency": h.currentBaseCurrency(r.Context()),
+		"base_currency": h.currentBaseCurrency(r.Context(), requestTenant(r)),
 		"page":          f.Page,
 		"page_size":     f.PageSize,
 	})
@@ -168,7 +168,7 @@ func (h *Handlers) GetTransaction(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	txn, err := h.transactionStore.GetTransaction(r.Context(), id)
+	txn, err := h.transactionStore.GetTransaction(r.Context(), requestTenant(r), id)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "transaction not found")
@@ -184,7 +184,7 @@ func (h *Handlers) GetTransaction(w http.ResponseWriter, r *http.Request) {
 // validateCategory checks that the given category name exists in the store.
 // Returns false and writes an error response if validation fails.
 func (h *Handlers) validateCategory(w http.ResponseWriter, r *http.Request, name string) bool {
-	cats, err := h.taxonomyStore.ListCategories(r.Context())
+	cats, err := h.taxonomyStore.ListCategories(r.Context(), requestTenant(r))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to validate category")
 		return false
@@ -201,7 +201,7 @@ func (h *Handlers) validateCategory(w http.ResponseWriter, r *http.Request, name
 // validateBucket checks that the given bucket name exists in the store.
 // Returns false and writes an error response if validation fails.
 func (h *Handlers) validateBucket(w http.ResponseWriter, r *http.Request, name string) bool {
-	bkts, err := h.taxonomyStore.ListBuckets(r.Context())
+	bkts, err := h.taxonomyStore.ListBuckets(r.Context(), requestTenant(r))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to validate bucket")
 		return false
@@ -252,7 +252,7 @@ func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := h.transactionStore.GetTransaction(r.Context(), id)
+	tx, err := h.transactionStore.GetTransaction(r.Context(), requestTenant(r), id)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "transaction not found")
@@ -276,7 +276,7 @@ func (h *Handlers) patchTransaction(
 			Category:    body.Category,
 			Bucket:      body.Bucket,
 		}
-		if err := h.transactionStore.UpdateTransaction(r.Context(), id, update); err != nil {
+		if err := h.transactionStore.UpdateTransaction(r.Context(), requestTenant(r), id, update); err != nil {
 			return h.writeTransactionPatchError(w, err, "update transaction details")
 		}
 	}
@@ -285,11 +285,11 @@ func (h *Handlers) patchTransaction(
 		if body.MuteReason != nil {
 			reason = *body.MuteReason
 		}
-		if err := h.muteStore.MuteTransaction(r.Context(), id, *body.Muted, reason); err != nil {
+		if err := h.muteStore.MuteTransaction(r.Context(), requestTenant(r), id, *body.Muted, reason); err != nil {
 			return h.writeTransactionPatchError(w, err, "update transaction mute state")
 		}
 	} else if body.MuteReason != nil {
-		if err := h.muteStore.UpdateMuteReason(r.Context(), id, *body.MuteReason); err != nil {
+		if err := h.muteStore.UpdateMuteReason(r.Context(), requestTenant(r), id, *body.MuteReason); err != nil {
 			return h.writeTransactionPatchError(w, err, "update transaction mute reason")
 		}
 	}
@@ -316,7 +316,7 @@ func (h *Handlers) writeTransactionPatchError(w http.ResponseWriter, err error, 
 // @Failure 503 {object} ErrorResponse
 // @Router /muted-merchants [get]
 func (h *Handlers) ListMutedMerchants(w http.ResponseWriter, r *http.Request) {
-	merchants, err := h.muteStore.GetMutedMerchantsWithCount(r.Context())
+	merchants, err := h.muteStore.GetMutedMerchantsWithCount(r.Context(), requestTenant(r))
 	if err != nil {
 		h.logger.Error("list muted merchants", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list muted merchants")
@@ -344,7 +344,7 @@ func (h *Handlers) MuteByMerchant(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.muteStore.MuteByMerchant(r.Context(), body.Pattern, body.Reason); err != nil {
+	if err := h.muteStore.MuteByMerchant(r.Context(), requestTenant(r), body.Pattern, body.Reason); err != nil {
 		h.logger.Error("mute by merchant", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to mute merchant")
 		return
@@ -377,7 +377,7 @@ func (h *Handlers) UpdateMerchantReason(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	if err := h.muteStore.UpdateMerchantReason(r.Context(), id, body.Reason); err != nil {
+	if err := h.muteStore.UpdateMerchantReason(r.Context(), requestTenant(r), id, body.Reason); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "muted merchant not found")
 			return
@@ -416,9 +416,9 @@ func (h *Handlers) DeleteMutedMerchant(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	if query.Unmute {
-		err = h.muteStore.DeleteMutedMerchantAndUnmute(r.Context(), id)
+		err = h.muteStore.DeleteMutedMerchantAndUnmute(r.Context(), requestTenant(r), id)
 	} else {
-		err = h.muteStore.DeleteMutedMerchant(r.Context(), id)
+		err = h.muteStore.DeleteMutedMerchant(r.Context(), requestTenant(r), id)
 	}
 
 	if err != nil {
@@ -454,7 +454,7 @@ func (h *Handlers) CategorizeMerchant(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	n, err := h.muteStore.CategorizeMerchant(r.Context(), body.Merchant, body.Category, body.Bucket)
+	n, err := h.muteStore.CategorizeMerchant(r.Context(), requestTenant(r), body.Merchant, body.Category, body.Bucket)
 	if err != nil {
 		h.logger.Error("categorize merchant", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to categorize merchant")
@@ -474,7 +474,7 @@ func (h *Handlers) CategorizeMerchant(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions/facets [get]
 func (h *Handlers) GetFacets(w http.ResponseWriter, r *http.Request) {
-	facets, err := h.transactionStore.GetFacets(r.Context())
+	facets, err := h.transactionStore.GetFacets(r.Context(), requestTenant(r))
 	if err != nil {
 		h.logger.Error("get facets", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch facets")

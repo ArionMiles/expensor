@@ -32,19 +32,21 @@ func newPGRuntimeRepository(deps repositoryDependencies) *pgRuntimeRepository {
 	}
 }
 
-func (r *pgRuntimeRepository) GetAppConfig(ctx context.Context, key string) (string, error) {
+func (r *pgRuntimeRepository) GetAppConfig(ctx context.Context, tenant Tenant, key string) (string, error) {
 	var value string
-	if err := r.pool.QueryRow(ctx, `SELECT value FROM app_config WHERE key = $1`, key).Scan(&value); err != nil {
+	if err := r.pool.QueryRow(ctx,
+		`SELECT value FROM app_config WHERE tenant_id IS NOT DISTINCT FROM $1 AND key = $2`,
+		tenantIDParam(tenant), key,
+	).Scan(&value); err != nil {
 		return "", fmt.Errorf("getting app config %q: %w", key, err)
 	}
 	return value, nil
 }
 
-func (r *pgRuntimeRepository) SetAppConfig(ctx context.Context, key, value string) error {
+func (r *pgRuntimeRepository) SetAppConfig(ctx context.Context, tenant Tenant, key, value string) error {
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO app_config (key, value) VALUES ($1, $2)
-			 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-		key, value,
+		appConfigUpsertSQL(tenant),
+		tenantIDParam(tenant), key, value,
 	)
 	if err != nil {
 		return fmt.Errorf("setting app config %q: %w", key, err)
@@ -56,11 +58,11 @@ func (r *pgRuntimeRepository) SetActiveReader(ctx context.Context, reader string
 	if strings.TrimSpace(reader) == "" {
 		return errors.New("active reader cannot be blank")
 	}
-	return r.writeAppConfig(ctx, "active_reader", reader)
+	return r.writeAppConfig(ctx, Tenant{}, "active_reader", reader)
 }
 
 func (r *pgRuntimeRepository) GetActiveReader(ctx context.Context) (string, error) {
-	value, err := r.readAppConfig(ctx, "active_reader")
+	value, err := r.readAppConfig(ctx, Tenant{}, "active_reader")
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
@@ -165,7 +167,7 @@ func (r *pgRuntimeRepository) MarkMessageProcessed(ctx context.Context, tenant T
 
 func (r *pgRuntimeRepository) GetSyncStatus(ctx context.Context) (SyncStatus, error) {
 	var status SyncStatus
-	val, err := r.readAppConfig(ctx, "content_sync_status")
+	val, err := r.readAppConfig(ctx, Tenant{}, "content_sync_status")
 	if err != nil {
 		return status, nil //nolint:nilerr // key-not-found on first run is expected; zero value means "never synced"
 	}
@@ -180,11 +182,11 @@ func (r *pgRuntimeRepository) SetSyncStatus(ctx context.Context, status SyncStat
 	if err != nil {
 		return fmt.Errorf("marshaling sync status: %w", err)
 	}
-	return r.writeAppConfig(ctx, "content_sync_status", string(b))
+	return r.writeAppConfig(ctx, Tenant{}, "content_sync_status", string(b))
 }
 
 func (r *pgRuntimeRepository) GetCommunityURL(ctx context.Context) (string, error) {
-	url, err := r.readAppConfig(ctx, "community_content_url")
+	url, err := r.readAppConfig(ctx, Tenant{}, "community_content_url")
 	if err != nil {
 		return "", err
 	}
@@ -192,7 +194,7 @@ func (r *pgRuntimeRepository) GetCommunityURL(ctx context.Context) (string, erro
 }
 
 func (r *pgRuntimeRepository) SetCommunityURL(ctx context.Context, url string) error {
-	return r.writeAppConfig(ctx, "community_content_url", url)
+	return r.writeAppConfig(ctx, Tenant{}, "community_content_url", url)
 }
 
 func (r *pgRuntimeRepository) writeReaderEncryptedJSON(ctx context.Context, tenant Tenant, reader, column string, value []byte) error {
@@ -289,25 +291,36 @@ func (r *pgRuntimeRepository) readReaderConfigJSON(ctx context.Context, tenant T
 	return value, true, nil
 }
 
-func (r *pgRuntimeRepository) readAppConfig(ctx context.Context, key string) (string, error) {
+func (r *pgRuntimeRepository) readAppConfig(ctx context.Context, tenant Tenant, key string) (string, error) {
 	var value string
-	err := r.pool.QueryRow(ctx, `SELECT value FROM app_config WHERE key = $1`, key).Scan(&value)
+	err := r.pool.QueryRow(ctx,
+		`SELECT value FROM app_config WHERE tenant_id IS NOT DISTINCT FROM $1 AND key = $2`,
+		tenantIDParam(tenant), key,
+	).Scan(&value)
 	if err != nil {
 		return "", fmt.Errorf("getting app config %q: %w", key, err)
 	}
 	return value, nil
 }
 
-func (r *pgRuntimeRepository) writeAppConfig(ctx context.Context, key, value string) error {
+func (r *pgRuntimeRepository) writeAppConfig(ctx context.Context, tenant Tenant, key, value string) error {
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO app_config (key, value) VALUES ($1, $2)
-		 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-		key, value,
+		appConfigUpsertSQL(tenant),
+		tenantIDParam(tenant), key, value,
 	)
 	if err != nil {
 		return fmt.Errorf("setting app config %q: %w", key, err)
 	}
 	return nil
+}
+
+func appConfigUpsertSQL(tenant Tenant) string {
+	if tenantIDParam(tenant) == nil {
+		return `INSERT INTO app_config (tenant_id, key, value) VALUES ($1, $2, $3)
+		 ON CONFLICT (key) WHERE tenant_id IS NULL DO UPDATE SET value = EXCLUDED.value`
+	}
+	return `INSERT INTO app_config (tenant_id, key, value) VALUES ($1, $2, $3)
+		 ON CONFLICT (tenant_id, key) WHERE tenant_id IS NOT NULL DO UPDATE SET value = EXCLUDED.value`
 }
 
 func runtimeSetReaderSecretQuery(tenant Tenant, column string) (string, error) {
@@ -388,11 +401,3 @@ const runtimeSetReaderConfigLegacyQuery = `
 	ON CONFLICT (reader) WHERE tenant_id IS NULL
 	DO UPDATE SET config = EXCLUDED.config, updated_at = NOW()
 `
-
-func tenantIDParam(tenant Tenant) any {
-	tenantID := strings.TrimSpace(tenant.ID)
-	if tenantID == "" {
-		return nil
-	}
-	return tenantID
-}

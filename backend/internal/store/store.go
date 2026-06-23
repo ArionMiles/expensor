@@ -176,86 +176,87 @@ func (s *Store) queryTransactionTotals(
 
 // ListTransactions returns a paginated, filtered list of transactions and the total
 // count plus total amount matching the filter (ignoring pagination).
-func (s *Store) ListTransactions(ctx context.Context, f ListFilter) ([]Transaction, TransactionListResult, error) {
-	return s.txns.ListTransactions(ctx, f)
+func (s *Store) ListTransactions(ctx context.Context, tenant Tenant, f ListFilter) ([]Transaction, TransactionListResult, error) {
+	return s.txns.ListTransactions(ctx, tenant, f)
 }
 
 // GetTransaction fetches a single transaction by UUID, including its labels.
-func (s *Store) GetTransaction(ctx context.Context, id string) (*Transaction, error) {
-	return s.txns.GetTransaction(ctx, id)
+func (s *Store) GetTransaction(ctx context.Context, tenant Tenant, id string) (*Transaction, error) {
+	return s.txns.GetTransaction(ctx, tenant, id)
 }
 
 // UpdateDescription sets the user-provided description on a transaction.
-func (s *Store) UpdateDescription(ctx context.Context, id, description string) error {
-	return s.txns.UpdateDescription(ctx, id, description)
+func (s *Store) UpdateDescription(ctx context.Context, tenant Tenant, id, description string) error {
+	return s.txns.UpdateDescription(ctx, tenant, id, description)
 }
 
 // AddLabel attaches a label to a transaction (idempotent — ignores duplicates).
-func (s *Store) AddLabel(ctx context.Context, transactionID, label string) error {
-	return s.txns.AddLabel(ctx, transactionID, label)
+func (s *Store) AddLabel(ctx context.Context, tenant Tenant, transactionID, label string) error {
+	return s.txns.AddLabel(ctx, tenant, transactionID, label)
 }
 
 // AddLabels attaches multiple labels to a transaction in a single round-trip (idempotent).
-func (s *Store) AddLabels(ctx context.Context, transactionID string, labels []string) error {
-	return s.txns.AddLabels(ctx, transactionID, labels)
+func (s *Store) AddLabels(ctx context.Context, tenant Tenant, transactionID string, labels []string) error {
+	return s.txns.AddLabels(ctx, tenant, transactionID, labels)
 }
 
 // RemoveLabel detaches a label from a transaction.
-func (s *Store) RemoveLabel(ctx context.Context, transactionID, label string) error {
-	return s.txns.RemoveLabel(ctx, transactionID, label)
+func (s *Store) RemoveLabel(ctx context.Context, tenant Tenant, transactionID, label string) error {
+	return s.txns.RemoveLabel(ctx, tenant, transactionID, label)
 }
 
 // SearchTransactions performs a full-text search over merchant_info and description.
 func (s *Store) SearchTransactions(
 	ctx context.Context,
+	tenant Tenant,
 	query string,
 	f ListFilter,
 ) ([]Transaction, TransactionListResult, error) {
-	return s.txns.SearchTransactions(ctx, query, f)
+	return s.txns.SearchTransactions(ctx, tenant, query, f)
 }
 
 // GetStats returns aggregate counts and totals across all transactions.
-func (s *Store) GetStats(ctx context.Context, baseCurrency string) (*Stats, error) {
-	return s.readModel.GetStats(ctx, baseCurrency)
+func (s *Store) GetStats(ctx context.Context, tenant Tenant, baseCurrency string) (*Stats, error) {
+	return s.readModel.GetStats(ctx, tenant, baseCurrency)
 }
 
 // GetChartData returns time-series and breakdown data for dashboard charts.
 // All chart queries run concurrently.
-func (s *Store) GetChartData(ctx context.Context) (*ChartData, error) {
-	return s.readModel.GetChartData(ctx)
+func (s *Store) GetChartData(ctx context.Context, tenant Tenant) (*ChartData, error) {
+	return s.readModel.GetChartData(ctx, tenant)
 }
 
 // GetDashboardData returns dashboard data split into current-month and all-time sections.
-func (s *Store) GetDashboardData(ctx context.Context) (*DashboardData, error) {
-	return s.readModel.GetDashboardData(ctx)
+func (s *Store) GetDashboardData(ctx context.Context, tenant Tenant) (*DashboardData, error) {
+	return s.readModel.GetDashboardData(ctx, tenant)
 }
 
 // by day-of-month. When from and to are both non-nil, only transactions within
 // [from, to] (inclusive) are included; nil/nil returns all-time data.
-func (s *Store) GetSpendingHeatmap(ctx context.Context, from, to *time.Time) (*HeatmapData, error) {
-	return s.readModel.GetSpendingHeatmap(ctx, from, to)
+func (s *Store) GetSpendingHeatmap(ctx context.Context, tenant Tenant, from, to *time.Time) (*HeatmapData, error) {
+	return s.readModel.GetSpendingHeatmap(ctx, tenant, from, to)
 }
 
 // the year has no transactions.
-func (s *Store) GetAnnualSpend(ctx context.Context, year int) ([]DailyBucket, error) {
-	return s.readModel.GetAnnualSpend(ctx, year)
+func (s *Store) GetAnnualSpend(ctx context.Context, tenant Tenant, year int) ([]DailyBucket, error) {
+	return s.readModel.GetAnnualSpend(ctx, tenant, year)
 }
 
 // GetSpendingHeatmap. Returns empty string and nil args when both are nil.
 // across all transactions. Used to populate filter dropdowns in the UI.
-func (s *Store) GetFacets(ctx context.Context) (*Facets, error) {
-	return s.txns.GetFacets(ctx)
+func (s *Store) GetFacets(ctx context.Context, tenant Tenant) (*Facets, error) {
+	return s.txns.GetFacets(ctx, tenant)
 }
 
 // GetAppConfig retrieves a configuration value by key.
 // Returns an error if the key does not exist.
-func (s *Store) GetAppConfig(ctx context.Context, key string) (string, error) {
-	return s.runtime.GetAppConfig(ctx, key)
+func (s *Store) GetAppConfig(ctx context.Context, tenant Tenant, key string) (string, error) {
+	return s.runtime.GetAppConfig(ctx, tenant, key)
 }
 
 // SetAppConfig upserts a configuration value.
-func (s *Store) SetAppConfig(ctx context.Context, key, value string) error {
-	return s.runtime.SetAppConfig(ctx, key, value)
+func (s *Store) SetAppConfig(ctx context.Context, tenant Tenant, key, value string) error {
+	return s.runtime.SetAppConfig(ctx, tenant, key, value)
 }
 
 // SetActiveReader stores the selected reader name.
@@ -321,152 +322,152 @@ func (s *Store) MarkMessageProcessed(ctx context.Context, tenant Tenant, key str
 // --- Labels ---
 
 // ListLabels returns all labels ordered by name.
-func (s *Store) ListLabels(ctx context.Context) ([]Label, error) {
-	return s.taxonomy.ListLabels(ctx)
+func (s *Store) ListLabels(ctx context.Context, tenant Tenant) ([]Label, error) {
+	return s.taxonomy.ListLabels(ctx, tenant)
 }
 
 // CreateLabel inserts a new label. Silently ignores duplicate names.
-func (s *Store) CreateLabel(ctx context.Context, name, color string) error {
-	return s.taxonomy.CreateLabel(ctx, name, color)
+func (s *Store) CreateLabel(ctx context.Context, tenant Tenant, name, color string) error {
+	return s.taxonomy.CreateLabel(ctx, tenant, name, color)
 }
 
 // UpdateLabel changes the color of an existing label. Returns ErrNotFound if no row matched.
-func (s *Store) UpdateLabel(ctx context.Context, name, color string) error {
-	return s.taxonomy.UpdateLabel(ctx, name, color)
+func (s *Store) UpdateLabel(ctx context.Context, tenant Tenant, name, color string) error {
+	return s.taxonomy.UpdateLabel(ctx, tenant, name, color)
 }
 
 // DeleteLabel removes a label by name.
-func (s *Store) DeleteLabel(ctx context.Context, name string, removeFromTransactions bool) error {
-	return s.taxonomy.DeleteLabel(ctx, name, removeFromTransactions)
+func (s *Store) DeleteLabel(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
+	return s.taxonomy.DeleteLabel(ctx, tenant, name, removeFromTransactions)
 }
 
 // ApplyLabelByMerchant bulk-applies a label to all transactions whose
 // merchant_info matches the given pattern (case-insensitive contains), and
 // persists the mapping for future auto-apply.
 // Returns the number of transaction-label rows inserted.
-func (s *Store) ApplyLabelByMerchant(ctx context.Context, label, pattern string) (int64, error) {
-	return s.taxonomy.ApplyLabelByMerchant(ctx, label, pattern)
+func (s *Store) ApplyLabelByMerchant(ctx context.Context, tenant Tenant, label, pattern string) (int64, error) {
+	return s.taxonomy.ApplyLabelByMerchant(ctx, tenant, label, pattern)
 }
 
 // RemoveLabelByMerchant removes a label from all transactions whose
 // merchant_info matches the pattern (case-insensitive contains), and removes
 // the persisted merchant mapping.
-func (s *Store) RemoveLabelByMerchant(ctx context.Context, label, pattern string) (int64, error) {
-	return s.taxonomy.RemoveLabelByMerchant(ctx, label, pattern)
+func (s *Store) RemoveLabelByMerchant(ctx context.Context, tenant Tenant, label, pattern string) (int64, error) {
+	return s.taxonomy.RemoveLabelByMerchant(ctx, tenant, label, pattern)
 }
 
 // GetMonthlyBreakdownSpend returns a 12-month spend series for labels, categories, or buckets.
 // Muted transactions are excluded. Months are emitted in the configured app timezone.
-func (s *Store) GetMonthlyBreakdownSpend(ctx context.Context, dimension string, months int) (*MonthlyBreakdownData, error) {
-	return s.readModel.GetMonthlyBreakdownSpend(ctx, dimension, months)
+func (s *Store) GetMonthlyBreakdownSpend(ctx context.Context, tenant Tenant, dimension string, months int) (*MonthlyBreakdownData, error) {
+	return s.readModel.GetMonthlyBreakdownSpend(ctx, tenant, dimension, months)
 }
 
 // GetLabelMappings returns persisted merchant patterns for each label.
-func (s *Store) GetLabelMappings(ctx context.Context) (map[string][]string, error) {
-	return s.taxonomy.GetLabelMappings(ctx)
+func (s *Store) GetLabelMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
+	return s.taxonomy.GetLabelMappings(ctx, tenant)
 }
 
 // --- Categories ---
 
 // ListCategories returns all categories ordered by name.
-func (s *Store) ListCategories(ctx context.Context) ([]Category, error) {
-	return s.taxonomy.ListCategories(ctx)
+func (s *Store) ListCategories(ctx context.Context, tenant Tenant) ([]Category, error) {
+	return s.taxonomy.ListCategories(ctx, tenant)
 }
 
 // CreateCategory inserts a new category. Silently ignores duplicate names.
-func (s *Store) CreateCategory(ctx context.Context, name, description string) error {
-	return s.taxonomy.CreateCategory(ctx, name, description)
+func (s *Store) CreateCategory(ctx context.Context, tenant Tenant, name, description string) error {
+	return s.taxonomy.CreateCategory(ctx, tenant, name, description)
 }
 
 // DeleteCategory removes a category by name. Returns ErrNotFound if it does not exist.
 // Returns an error if the category is a default one.
-func (s *Store) DeleteCategory(ctx context.Context, name string, removeFromTransactions bool) error {
-	return s.taxonomy.DeleteCategory(ctx, name, removeFromTransactions)
+func (s *Store) DeleteCategory(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
+	return s.taxonomy.DeleteCategory(ctx, tenant, name, removeFromTransactions)
 }
 
 // GetCategoryMappings returns persisted merchant patterns for each category.
-func (s *Store) GetCategoryMappings(ctx context.Context) (map[string][]string, error) {
-	return s.community.GetCategoryMappings(ctx)
+func (s *Store) GetCategoryMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
+	return s.community.GetCategoryMappings(ctx, tenant)
 }
 
 // ApplyCategoryByMerchant updates matching transactions and future category auto-apply rules.
-func (s *Store) ApplyCategoryByMerchant(ctx context.Context, category, pattern string) (int64, error) {
-	return s.community.ApplyCategoryByMerchant(ctx, category, pattern)
+func (s *Store) ApplyCategoryByMerchant(ctx context.Context, tenant Tenant, category, pattern string) (int64, error) {
+	return s.community.ApplyCategoryByMerchant(ctx, tenant, category, pattern)
 }
 
 // RemoveCategoryByMerchant removes a merchant category auto-apply rule.
-func (s *Store) RemoveCategoryByMerchant(ctx context.Context, category, pattern string) (int64, error) {
-	return s.community.RemoveCategoryByMerchant(ctx, category, pattern)
+func (s *Store) RemoveCategoryByMerchant(ctx context.Context, tenant Tenant, category, pattern string) (int64, error) {
+	return s.community.RemoveCategoryByMerchant(ctx, tenant, category, pattern)
 }
 
 // --- Buckets ---
 
 // ListBuckets returns all buckets ordered by name.
-func (s *Store) ListBuckets(ctx context.Context) ([]Bucket, error) {
-	return s.taxonomy.ListBuckets(ctx)
+func (s *Store) ListBuckets(ctx context.Context, tenant Tenant) ([]Bucket, error) {
+	return s.taxonomy.ListBuckets(ctx, tenant)
 }
 
 // CreateBucket inserts a new bucket. Silently ignores duplicate names.
-func (s *Store) CreateBucket(ctx context.Context, name, description string) error {
-	return s.taxonomy.CreateBucket(ctx, name, description)
+func (s *Store) CreateBucket(ctx context.Context, tenant Tenant, name, description string) error {
+	return s.taxonomy.CreateBucket(ctx, tenant, name, description)
 }
 
 // DeleteBucket removes a bucket by name. Returns ErrNotFound if it does not exist.
 // Returns an error if the bucket is a default one.
-func (s *Store) DeleteBucket(ctx context.Context, name string, removeFromTransactions bool) error {
-	return s.taxonomy.DeleteBucket(ctx, name, removeFromTransactions)
+func (s *Store) DeleteBucket(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
+	return s.taxonomy.DeleteBucket(ctx, tenant, name, removeFromTransactions)
 }
 
 // GetBucketMappings returns persisted merchant patterns for each bucket.
-func (s *Store) GetBucketMappings(ctx context.Context) (map[string][]string, error) {
-	return s.community.GetBucketMappings(ctx)
+func (s *Store) GetBucketMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
+	return s.community.GetBucketMappings(ctx, tenant)
 }
 
 // ApplyBucketByMerchant updates matching transactions and future bucket auto-apply rules.
-func (s *Store) ApplyBucketByMerchant(ctx context.Context, bucket, pattern string) (int64, error) {
-	return s.community.ApplyBucketByMerchant(ctx, bucket, pattern)
+func (s *Store) ApplyBucketByMerchant(ctx context.Context, tenant Tenant, bucket, pattern string) (int64, error) {
+	return s.community.ApplyBucketByMerchant(ctx, tenant, bucket, pattern)
 }
 
 // RemoveBucketByMerchant removes a merchant bucket auto-apply rule.
-func (s *Store) RemoveBucketByMerchant(ctx context.Context, bucket, pattern string) (int64, error) {
-	return s.community.RemoveBucketByMerchant(ctx, bucket, pattern)
+func (s *Store) RemoveBucketByMerchant(ctx context.Context, tenant Tenant, bucket, pattern string) (int64, error) {
+	return s.community.RemoveBucketByMerchant(ctx, tenant, bucket, pattern)
 }
 
 // --- Transaction update ---
 
 // UpdateTransaction updates one or more optional fields on a transaction.
 // Only non-nil pointer fields are written. Returns ErrNotFound if no row matched.
-func (s *Store) UpdateTransaction(ctx context.Context, id string, u TransactionUpdate) error {
-	return s.txns.UpdateTransaction(ctx, id, u)
+func (s *Store) UpdateTransaction(ctx context.Context, tenant Tenant, id string, u TransactionUpdate) error {
+	return s.txns.UpdateTransaction(ctx, tenant, id, u)
 }
 
 // --- helpers ---
 
 // ListRules returns all rules ordered by user rules first, then predefined rules, both by name.
-func (s *Store) ListRules(ctx context.Context) ([]RuleRow, error) {
-	return s.rules.ListRules(ctx)
+func (s *Store) ListRules(ctx context.Context, tenant Tenant) ([]RuleRow, error) {
+	return s.rules.ListRules(ctx, tenant)
 }
 
 // GetRule fetches a single rule by UUID. Returns ErrNotFound if no row matched.
-func (s *Store) GetRule(ctx context.Context, id string) (*RuleRow, error) {
-	return s.rules.GetRule(ctx, id)
+func (s *Store) GetRule(ctx context.Context, tenant Tenant, id string) (*RuleRow, error) {
+	return s.rules.GetRule(ctx, tenant, id)
 }
 
 // CreateRule inserts a new user rule and returns the created row.
-func (s *Store) CreateRule(ctx context.Context, r RuleRow) (*RuleRow, error) {
-	return s.rules.CreateRule(ctx, r)
+func (s *Store) CreateRule(ctx context.Context, tenant Tenant, r RuleRow) (*RuleRow, error) {
+	return s.rules.CreateRule(ctx, tenant, r)
 }
 
 // UpdateRule updates any rule by ID. All rules (predefined and user-created) are editable.
 // Returns ErrNotFound if no row matched.
-func (s *Store) UpdateRule(ctx context.Context, id string, r RuleRow) (*RuleRow, error) {
-	return s.rules.UpdateRule(ctx, id, r)
+func (s *Store) UpdateRule(ctx context.Context, tenant Tenant, id string, r RuleRow) (*RuleRow, error) {
+	return s.rules.UpdateRule(ctx, tenant, id, r)
 }
 
 // DeleteRule removes a non-predefined rule by ID. Returns ErrNotFound if no row matched.
 // Predefined rules cannot be deleted.
-func (s *Store) DeleteRule(ctx context.Context, id string) error {
-	return s.rules.DeleteRule(ctx, id)
+func (s *Store) DeleteRule(ctx context.Context, tenant Tenant, id string) error {
+	return s.rules.DeleteRule(ctx, tenant, id)
 }
 
 // SeedPredefinedRules inserts predefined rules from the embedded rules.json.
@@ -494,29 +495,34 @@ func validateDiagnosticRowStatus(status string) error {
 	}
 }
 
-// RecordExtractionDiagnostic persists a failed extraction attempt for later inspection.
+// RecordExtractionDiagnostic persists a failed extraction attempt for the temporary legacy tenant.
 func (s *Store) RecordExtractionDiagnostic(ctx context.Context, diagnostic api.ExtractionDiagnostic) error {
-	return s.diag.RecordExtractionDiagnostic(ctx, diagnostic)
+	return s.diag.RecordExtractionDiagnostic(ctx, Tenant{}, diagnostic)
+}
+
+// RecordTenantExtractionDiagnostic persists a failed extraction attempt for a tenant.
+func (s *Store) RecordTenantExtractionDiagnostic(ctx context.Context, tenant Tenant, diagnostic api.ExtractionDiagnostic) error {
+	return s.diag.RecordExtractionDiagnostic(ctx, tenant, diagnostic)
 }
 
 // ListExtractionDiagnostics returns diagnostics matching the supplied status filter.
-func (s *Store) ListExtractionDiagnostics(ctx context.Context, f DiagnosticFilter) ([]ExtractionDiagnosticRow, error) {
-	return s.diag.ListExtractionDiagnostics(ctx, f)
+func (s *Store) ListExtractionDiagnostics(ctx context.Context, tenant Tenant, f DiagnosticFilter) ([]ExtractionDiagnosticRow, error) {
+	return s.diag.ListExtractionDiagnostics(ctx, tenant, f)
 }
 
 // GetExtractionDiagnostic fetches one diagnostic by UUID.
-func (s *Store) GetExtractionDiagnostic(ctx context.Context, id string) (*ExtractionDiagnosticRow, error) {
-	return s.diag.GetExtractionDiagnostic(ctx, id)
+func (s *Store) GetExtractionDiagnostic(ctx context.Context, tenant Tenant, id string) (*ExtractionDiagnosticRow, error) {
+	return s.diag.GetExtractionDiagnostic(ctx, tenant, id)
 }
 
 // UpdateExtractionDiagnosticStatus changes a diagnostic status and returns the updated row.
-func (s *Store) UpdateExtractionDiagnosticStatus(ctx context.Context, id, status string) (*ExtractionDiagnosticRow, error) {
-	return s.diag.UpdateExtractionDiagnosticStatus(ctx, id, status)
+func (s *Store) UpdateExtractionDiagnosticStatus(ctx context.Context, tenant Tenant, id, status string) (*ExtractionDiagnosticRow, error) {
+	return s.diag.UpdateExtractionDiagnosticStatus(ctx, tenant, id, status)
 }
 
 // ImportUserRules upserts user-supplied rules inside a transaction. Idempotent per name.
-func (s *Store) ImportUserRules(ctx context.Context, rules []RuleRow) error {
-	return s.rules.ImportUserRules(ctx, rules)
+func (s *Store) ImportUserRules(ctx context.Context, tenant Tenant, rules []RuleRow) error {
+	return s.rules.ImportUserRules(ctx, tenant, rules)
 }
 
 // loadLabels fetches labels for all transactions in a single query and attaches them.
@@ -524,65 +530,65 @@ func (s *Store) ImportUserRules(ctx context.Context, rules []RuleRow) error {
 
 // MuteTransaction sets or clears the muted flag on a single transaction.
 // reason is optional; pass empty string to leave it unchanged when muted=false.
-func (s *Store) MuteTransaction(ctx context.Context, id string, muted bool, reason string) error {
-	return s.txns.MuteTransaction(ctx, id, muted, reason)
+func (s *Store) MuteTransaction(ctx context.Context, tenant Tenant, id string, muted bool, reason string) error {
+	return s.txns.MuteTransaction(ctx, tenant, id, muted, reason)
 }
 
 // UpdateMuteReason updates the mute_reason on an individually muted transaction.
-func (s *Store) UpdateMuteReason(ctx context.Context, id, reason string) error {
-	return s.txns.UpdateMuteReason(ctx, id, reason)
+func (s *Store) UpdateMuteReason(ctx context.Context, tenant Tenant, id, reason string) error {
+	return s.txns.UpdateMuteReason(ctx, tenant, id, reason)
 }
 
 // UpdateMerchantReason updates the reason on a muted_merchants entry.
-func (s *Store) UpdateMerchantReason(ctx context.Context, id, reason string) error {
-	return s.txns.UpdateMerchantReason(ctx, id, reason)
+func (s *Store) UpdateMerchantReason(ctx context.Context, tenant Tenant, id, reason string) error {
+	return s.txns.UpdateMerchantReason(ctx, tenant, id, reason)
 }
 
 // MuteByMerchant mutes all matching transactions (muted_by_merchant=true) and
 // stores the pattern in muted_merchants for future auto-muting.
-func (s *Store) MuteByMerchant(ctx context.Context, pattern, reason string) error {
-	return s.txns.MuteByMerchant(ctx, pattern, reason)
+func (s *Store) MuteByMerchant(ctx context.Context, tenant Tenant, pattern, reason string) error {
+	return s.txns.MuteByMerchant(ctx, tenant, pattern, reason)
 }
 
 // CategorizeMerchant atomically updates all transactions with the given merchant_info
 // (exact case-sensitive equality match, not substring) and upserts a user_locked entry
 // in merchant_categories for future scans. Returns the number of transaction rows updated.
-func (s *Store) CategorizeMerchant(ctx context.Context, merchant, category, bucket string) (int64, error) {
-	return s.community.CategorizeMerchant(ctx, merchant, category, bucket)
+func (s *Store) CategorizeMerchant(ctx context.Context, tenant Tenant, merchant, category, bucket string) (int64, error) {
+	return s.community.CategorizeMerchant(ctx, tenant, merchant, category, bucket)
 }
 
 // ListMutedMerchants returns all muted merchant patterns ordered by creation time.
-func (s *Store) ListMutedMerchants(ctx context.Context) ([]MutedMerchant, error) {
-	return s.txns.ListMutedMerchants(ctx)
+func (s *Store) ListMutedMerchants(ctx context.Context, tenant Tenant) ([]MutedMerchant, error) {
+	return s.txns.ListMutedMerchants(ctx, tenant)
 }
 
 // GetMutedMerchantsWithCount returns each muted merchant with the count of
 // transactions currently muted by that merchant-wide rule.
-func (s *Store) GetMutedMerchantsWithCount(ctx context.Context) ([]MutedMerchantWithCount, error) {
-	return s.txns.GetMutedMerchantsWithCount(ctx)
+func (s *Store) GetMutedMerchantsWithCount(ctx context.Context, tenant Tenant) ([]MutedMerchantWithCount, error) {
+	return s.txns.GetMutedMerchantsWithCount(ctx, tenant)
 }
 
 // DeleteMutedMerchant removes a muted merchant pattern by ID.
-func (s *Store) DeleteMutedMerchant(ctx context.Context, id string) error {
-	return s.txns.DeleteMutedMerchant(ctx, id)
+func (s *Store) DeleteMutedMerchant(ctx context.Context, tenant Tenant, id string) error {
+	return s.txns.DeleteMutedMerchant(ctx, tenant, id)
 }
 
 // UnmuteByPattern sets muted=false on all transactions whose merchant_info
 // matches the pattern (ILIKE contains). Used when removing a merchant-wide rule.
-func (s *Store) UnmuteByPattern(ctx context.Context, pattern string) error {
-	return s.txns.UnmuteByPattern(ctx, pattern)
+func (s *Store) UnmuteByPattern(ctx context.Context, tenant Tenant, pattern string) error {
+	return s.txns.UnmuteByPattern(ctx, tenant, pattern)
 }
 
 // DeleteMutedMerchantAndUnmute atomically deletes the merchant pattern and
 // sets muted=false on all matching transactions in a single transaction.
 // Returns ErrNotFound if no row matched the id.
-func (s *Store) DeleteMutedMerchantAndUnmute(ctx context.Context, id string) error {
-	return s.txns.DeleteMutedMerchantAndUnmute(ctx, id)
+func (s *Store) DeleteMutedMerchantAndUnmute(ctx context.Context, tenant Tenant, id string) error {
+	return s.txns.DeleteMutedMerchantAndUnmute(ctx, tenant, id)
 }
 
 // GetMutedMerchantPatterns returns all active ILIKE patterns used for auto-muting at write time.
-func (s *Store) GetMutedMerchantPatterns(ctx context.Context) ([]string, error) {
-	return s.txns.GetMutedMerchantPatterns(ctx)
+func (s *Store) GetMutedMerchantPatterns(ctx context.Context, tenant Tenant) ([]string, error) {
+	return s.txns.GetMutedMerchantPatterns(ctx, tenant)
 }
 
 func (s *Store) loadLabels(ctx context.Context, txns []Transaction) error {

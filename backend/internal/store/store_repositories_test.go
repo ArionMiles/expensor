@@ -16,7 +16,7 @@ func TestStoreEmitsRepresentativeDebugInstrumentation(t *testing.T) {
 	defer ts.cleanup()
 
 	ctx := context.Background()
-	if err := ts.CreateLabel(ctx, "instrumented", "#38bdf8"); err != nil {
+	if err := ts.CreateLabel(ctx, store.Tenant{}, "instrumented", "#38bdf8"); err != nil {
 		t.Fatalf("CreateLabel: %v", err)
 	}
 

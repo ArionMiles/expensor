@@ -317,7 +317,7 @@ func TestWrite_AutoAppliesMerchantLabelToFutureTransactions(t *testing.T) {
 	const label = "subscription"
 
 	_, err := w.st.PoolForTest().Exec(ctx, `
-		INSERT INTO labels (name, color) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING
+		INSERT INTO labels (name, color) VALUES ($1, $2) ON CONFLICT (name) WHERE tenant_id IS NULL DO NOTHING
 	`, label, "#f59e0b")
 	if err != nil {
 		t.Fatalf("seed label row: %v", err)
@@ -325,7 +325,7 @@ func TestWrite_AutoAppliesMerchantLabelToFutureTransactions(t *testing.T) {
 
 	_, err = w.st.PoolForTest().Exec(ctx, `
 		INSERT INTO label_merchants (label, merchant_pattern) VALUES ($1, $2)
-		ON CONFLICT (label, merchant_pattern) DO NOTHING
+		ON CONFLICT (label, merchant_pattern) WHERE tenant_id IS NULL DO NOTHING
 	`, label, merchant)
 	if err != nil {
 		t.Fatalf("seed label mapping: %v", err)
@@ -380,7 +380,7 @@ func TestWrite_AutoAppliesMerchantCategoryBucketToFutureTransactions(t *testing.
 	_, err = w.st.PoolForTest().Exec(ctx, `
 		INSERT INTO merchant_categories (fragment, mcc_code, category, bucket, user_locked)
 		VALUES ($1, $2, NULL, NULL, true)
-		ON CONFLICT (fragment) DO UPDATE
+		ON CONFLICT (fragment) WHERE tenant_id IS NULL DO UPDATE
 		SET mcc_code = EXCLUDED.mcc_code,
 		    category = EXCLUDED.category,
 		    bucket = EXCLUDED.bucket,
@@ -393,7 +393,7 @@ func TestWrite_AutoAppliesMerchantCategoryBucketToFutureTransactions(t *testing.
 	_, err = w.st.PoolForTest().Exec(ctx, `
 		INSERT INTO merchant_categories (fragment, category, bucket, user_locked)
 		VALUES ($1, $2, $3, true)
-		ON CONFLICT (fragment) DO UPDATE
+		ON CONFLICT (fragment) WHERE tenant_id IS NULL DO UPDATE
 		SET category = EXCLUDED.category,
 		    bucket = EXCLUDED.bucket,
 		    user_locked = true

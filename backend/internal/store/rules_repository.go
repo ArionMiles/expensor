@@ -44,11 +44,13 @@ func ruleSourceLabel(rule RuleRow) string {
 	return rule.TransactionSource
 }
 
-func (r *pgRulesRepository) ListRules(ctx context.Context) ([]RuleRow, error) {
+func (r *pgRulesRepository) ListRules(ctx context.Context, tenant Tenant) ([]RuleRow, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+ruleColumns+`
 			 FROM rules
-			 ORDER BY predefined, name`)
+			 WHERE predefined = true OR tenant_id IS NOT DISTINCT FROM $1
+			 ORDER BY predefined, name`,
+		tenantIDParam(tenant))
 	if err != nil {
 		return nil, fmt.Errorf("listing rules: %w", err)
 	}
@@ -60,9 +62,10 @@ func (r *pgRulesRepository) ListRules(ctx context.Context) ([]RuleRow, error) {
 	return result, nil
 }
 
-func (r *pgRulesRepository) GetRule(ctx context.Context, id string) (*RuleRow, error) {
+func (r *pgRulesRepository) GetRule(ctx context.Context, tenant Tenant, id string) (*RuleRow, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT `+ruleColumns+` FROM rules WHERE id = $1`, id)
+		`SELECT `+ruleColumns+` FROM rules WHERE id = $1 AND (predefined = true OR tenant_id IS NOT DISTINCT FROM $2)`,
+		id, tenantIDParam(tenant))
 	if err != nil {
 		return nil, fmt.Errorf("fetching rule: %w", err)
 	}
@@ -77,15 +80,15 @@ func (r *pgRulesRepository) GetRule(ctx context.Context, id string) (*RuleRow, e
 	return &result[0], nil
 }
 
-func (r *pgRulesRepository) CreateRule(ctx context.Context, rule RuleRow) (*RuleRow, error) {
+func (r *pgRulesRepository) CreateRule(ctx context.Context, tenant Tenant, rule RuleRow) (*RuleRow, error) {
 	rows, err := r.pool.Query(ctx,
 		`INSERT INTO rules (
-				name, sender_email, sender_emails, subject_contains, amount_regex, merchant_regex,
+				tenant_id, name, sender_email, sender_emails, subject_contains, amount_regex, merchant_regex,
 				currency_regex, transaction_source, source_type, source_label, bank
 			)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 			 RETURNING `+ruleColumns,
-		rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
+		tenantIDParam(tenant), rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
 		rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
 		ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
 	)
@@ -109,17 +112,17 @@ func (r *pgRulesRepository) CreateRule(ctx context.Context, rule RuleRow) (*Rule
 	return &result[0], nil
 }
 
-func (r *pgRulesRepository) UpdateRule(ctx context.Context, id string, rule RuleRow) (*RuleRow, error) {
+func (r *pgRulesRepository) UpdateRule(ctx context.Context, tenant Tenant, id string, rule RuleRow) (*RuleRow, error) {
 	rows, err := r.pool.Query(ctx,
 		`UPDATE rules
 			 SET name=$2, sender_email=$3, sender_emails=$4, subject_contains=$5,
 			     amount_regex=$6, merchant_regex=$7, currency_regex=$8,
 			     transaction_source=$9, source_type=$10, source_label=$11, bank=$12, updated_at=NOW()
-			 WHERE id=$1
+			 WHERE id=$1 AND predefined = false AND tenant_id IS NOT DISTINCT FROM $13
 			 RETURNING `+ruleColumns,
 		id, rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
 		rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
-		ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
+		ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank, tenantIDParam(tenant),
 	)
 	if err != nil {
 		if isRuleNameConflict(err) {
@@ -141,9 +144,10 @@ func (r *pgRulesRepository) UpdateRule(ctx context.Context, id string, rule Rule
 	return &result[0], nil
 }
 
-func (r *pgRulesRepository) DeleteRule(ctx context.Context, id string) error {
+func (r *pgRulesRepository) DeleteRule(ctx context.Context, tenant Tenant, id string) error {
 	tag, err := r.pool.Exec(ctx,
-		`DELETE FROM rules WHERE id=$1 AND predefined = false`, id)
+		`DELETE FROM rules WHERE id=$1 AND predefined = false AND tenant_id IS NOT DISTINCT FROM $2`,
+		id, tenantIDParam(tenant))
 	if err != nil {
 		return fmt.Errorf("deleting rule: %w", err)
 	}
@@ -160,7 +164,7 @@ func (r *pgRulesRepository) SeedPredefinedRules(ctx context.Context, rules []Rul
 				  (name, sender_email, sender_emails, subject_contains, amount_regex, merchant_regex,
 				   currency_regex, transaction_source, source_type, source_label, bank, predefined)
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
-				ON CONFLICT (name) DO NOTHING`,
+				ON CONFLICT (name) WHERE tenant_id IS NULL AND predefined = true DO NOTHING`,
 			rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
 			rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
 			ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
@@ -172,20 +176,21 @@ func (r *pgRulesRepository) SeedPredefinedRules(ctx context.Context, rules []Rul
 	return nil
 }
 
-func (r *pgRulesRepository) ImportUserRules(ctx context.Context, rules []RuleRow) error {
+func (r *pgRulesRepository) ImportUserRules(ctx context.Context, tenant Tenant, rules []RuleRow) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("beginning import transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	conflictClause := importUserRulesConflictClause(tenant)
 	for _, rule := range rules {
 		_, err := tx.Exec(ctx, `
 				INSERT INTO rules
-				  (name, sender_email, sender_emails, subject_contains, amount_regex, merchant_regex,
+				  (tenant_id, name, sender_email, sender_emails, subject_contains, amount_regex, merchant_regex,
 				   currency_regex, transaction_source, source_type, source_label, bank)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-				ON CONFLICT (name) DO UPDATE SET
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+				`+conflictClause+` DO UPDATE SET
 					sender_email       = EXCLUDED.sender_email,
 					sender_emails      = EXCLUDED.sender_emails,
 					subject_contains   = EXCLUDED.subject_contains,
@@ -197,7 +202,7 @@ func (r *pgRulesRepository) ImportUserRules(ctx context.Context, rules []RuleRow
 					source_label       = EXCLUDED.source_label,
 					bank               = EXCLUDED.bank,
 					updated_at         = NOW()`,
-			rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
+			tenantIDParam(tenant), rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
 			rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
 			ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
 		)
@@ -206,4 +211,11 @@ func (r *pgRulesRepository) ImportUserRules(ctx context.Context, rules []RuleRow
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+func importUserRulesConflictClause(tenant Tenant) string {
+	if tenantIDParam(tenant) == nil {
+		return "ON CONFLICT (name) WHERE tenant_id IS NULL AND predefined = false"
+	}
+	return "ON CONFLICT (tenant_id, name) WHERE tenant_id IS NOT NULL AND predefined = false"
 }

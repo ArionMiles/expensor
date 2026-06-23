@@ -15,7 +15,7 @@ import (
 // @Failure 503 {object} ErrorResponse
 // @Router /stats/charts [get]
 func (h *Handlers) GetChartData(w http.ResponseWriter, r *http.Request) {
-	cd, err := h.analyticsStore.GetChartData(r.Context())
+	cd, err := h.analyticsStore.GetChartData(r.Context(), requestTenant(r))
 	if err != nil {
 		h.logger.Error("get chart data", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch chart data")
@@ -33,7 +33,7 @@ func (h *Handlers) GetChartData(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} ErrorResponse
 // @Router /stats/dashboard [get]
 func (h *Handlers) GetDashboardData(w http.ResponseWriter, r *http.Request) {
-	data, err := h.analyticsStore.GetDashboardData(r.Context())
+	data, err := h.analyticsStore.GetDashboardData(r.Context(), requestTenant(r))
 	if err != nil {
 		h.logger.Error("get dashboard data", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch dashboard data")
@@ -67,7 +67,7 @@ func (h *Handlers) GetHeatmap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := h.analyticsStore.GetSpendingHeatmap(r.Context(), query.From, query.To)
+	data, err := h.analyticsStore.GetSpendingHeatmap(r.Context(), requestTenant(r), query.From, query.To)
 	if err != nil {
 		h.logger.Error("get heatmap", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch heatmap data")
@@ -77,7 +77,7 @@ func (h *Handlers) GetHeatmap(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) getAnnualHeatmap(w http.ResponseWriter, r *http.Request, year int) {
-	buckets, err := h.analyticsStore.GetAnnualSpend(r.Context(), year)
+	buckets, err := h.analyticsStore.GetAnnualSpend(r.Context(), requestTenant(r), year)
 	if err != nil {
 		h.logger.Error("get annual heatmap", "error", err, "year", year)
 		writeError(w, http.StatusInternalServerError, "failed to fetch annual heatmap data")

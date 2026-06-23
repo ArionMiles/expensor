@@ -178,8 +178,8 @@ func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := statusResponse{Daemon: ds}
 
-	currency := h.currentBaseCurrency(r.Context())
-	stats, err := h.analyticsStore.GetStats(r.Context(), currency)
+	currency := h.currentBaseCurrency(r.Context(), requestTenant(r))
+	stats, err := h.analyticsStore.GetStats(r.Context(), requestTenant(r), currency)
 	if err != nil {
 		h.logger.Error("get status stats", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch stats")

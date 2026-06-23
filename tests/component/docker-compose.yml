@@ -61,7 +61,7 @@ services:
       - |
         set -e
         until pg_isready -h postgres -U expensor -d expensor_component; do sleep 1; done
-        psql -h postgres -U expensor -d expensor_component -f /seed.sql
+        psql -v ON_ERROR_STOP=1 -h postgres -U expensor -d expensor_component -f /seed.sql
     depends_on:
       backend:
         condition: service_healthy

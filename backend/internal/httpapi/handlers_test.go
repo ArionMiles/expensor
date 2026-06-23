@@ -189,6 +189,7 @@ func (m *mockStore) MarkAccountSetupTokenUsed(_ context.Context, _ string) error
 
 func (m *mockStore) ListTransactions(
 	_ context.Context,
+	_ store.Tenant,
 	f store.ListFilter,
 ) ([]store.Transaction, store.TransactionListResult, error) {
 	m.listCalls++
@@ -199,20 +200,21 @@ func (m *mockStore) ListTransactions(
 	return m.transactions, m.listResult, nil
 }
 
-func (m *mockStore) GetTransaction(_ context.Context, _ string) (*store.Transaction, error) {
+func (m *mockStore) GetTransaction(_ context.Context, _ store.Tenant, _ string) (*store.Transaction, error) {
 	return m.getResult, m.getErr
 }
 
-func (m *mockStore) AddLabels(_ context.Context, _ string, _ []string) error {
+func (m *mockStore) AddLabels(_ context.Context, _ store.Tenant, _ string, _ []string) error {
 	return m.addLabelsErr
 }
 
-func (m *mockStore) RemoveLabel(_ context.Context, _, _ string) error {
+func (m *mockStore) RemoveLabel(_ context.Context, _ store.Tenant, _, _ string) error {
 	return m.removeLblErr
 }
 
 func (m *mockStore) SearchTransactions(
 	_ context.Context,
+	_ store.Tenant,
 	_ string,
 	f store.ListFilter,
 ) ([]store.Transaction, store.TransactionListResult, error) {
@@ -224,11 +226,11 @@ func (m *mockStore) SearchTransactions(
 	return m.searchResult, m.searchListResult, nil
 }
 
-func (m *mockStore) GetStats(_ context.Context, _ string) (*store.Stats, error) {
+func (m *mockStore) GetStats(_ context.Context, _ store.Tenant, _ string) (*store.Stats, error) {
 	return m.stats, m.statsErr
 }
 
-func (m *mockStore) GetChartData(_ context.Context) (*store.ChartData, error) {
+func (m *mockStore) GetChartData(_ context.Context, _ store.Tenant) (*store.ChartData, error) {
 	return &store.ChartData{
 		MonthlySpend: []store.TimeBucket{},
 		DailySpend:   []store.TimeBucket{},
@@ -239,7 +241,7 @@ func (m *mockStore) GetChartData(_ context.Context) (*store.ChartData, error) {
 	}, nil
 }
 
-func (m *mockStore) GetDashboardData(_ context.Context) (*store.DashboardData, error) {
+func (m *mockStore) GetDashboardData(_ context.Context, _ store.Tenant) (*store.DashboardData, error) {
 	if m.dashboardErr != nil {
 		return nil, m.dashboardErr
 	}
@@ -276,7 +278,7 @@ func (m *mockStore) GetDashboardData(_ context.Context) (*store.DashboardData, e
 	}, nil
 }
 
-func (m *mockStore) GetAppConfig(_ context.Context, key string) (string, error) {
+func (m *mockStore) GetAppConfig(_ context.Context, _ store.Tenant, key string) (string, error) {
 	if m.appConfig != nil {
 		if v, ok := m.appConfig[key]; ok {
 			return v, nil
@@ -285,7 +287,7 @@ func (m *mockStore) GetAppConfig(_ context.Context, key string) (string, error) 
 	return "", errors.New("not found")
 }
 
-func (m *mockStore) SetAppConfig(_ context.Context, key, value string) error {
+func (m *mockStore) SetAppConfig(_ context.Context, _ store.Tenant, key, value string) error {
 	if m.setConfigErr != nil {
 		return m.setConfigErr
 	}
@@ -359,7 +361,7 @@ func (m *mockStore) DeleteReaderRuntime(_ context.Context, _ store.Tenant, reade
 	return nil
 }
 
-func (m *mockStore) GetFacets(_ context.Context) (*store.Facets, error) {
+func (m *mockStore) GetFacets(_ context.Context, _ store.Tenant) (*store.Facets, error) {
 	if m.getFacetsErr != nil {
 		return nil, m.getFacetsErr
 	}
@@ -379,7 +381,7 @@ func (m *mockStore) GetFacets(_ context.Context) (*store.Facets, error) {
 	}, nil
 }
 
-func (m *mockStore) ListLabels(_ context.Context) ([]store.Label, error) {
+func (m *mockStore) ListLabels(_ context.Context, _ store.Tenant) ([]store.Label, error) {
 	if m.labelsErr != nil {
 		return nil, m.labelsErr
 	}
@@ -389,31 +391,35 @@ func (m *mockStore) ListLabels(_ context.Context) ([]store.Label, error) {
 	return m.labels, nil
 }
 
-func (m *mockStore) CreateLabel(_ context.Context, _, _ string) error { return m.labelsErr }
+func (m *mockStore) CreateLabel(_ context.Context, _ store.Tenant, _, _ string) error {
+	return m.labelsErr
+}
 
-func (m *mockStore) UpdateLabel(_ context.Context, _, _ string) error { return m.updateErr }
+func (m *mockStore) UpdateLabel(_ context.Context, _ store.Tenant, _, _ string) error {
+	return m.updateErr
+}
 
-func (m *mockStore) DeleteLabel(_ context.Context, _ string, removeFromTransactions bool) error {
+func (m *mockStore) DeleteLabel(_ context.Context, _ store.Tenant, _ string, removeFromTransactions bool) error {
 	m.deleteLabelCleanup = removeFromTransactions
 	return m.labelsErr
 }
 
-func (m *mockStore) RemoveLabelByMerchant(_ context.Context, _, _ string) (int64, error) {
+func (m *mockStore) RemoveLabelByMerchant(_ context.Context, _ store.Tenant, _, _ string) (int64, error) {
 	return 0, nil
 }
 
-func (m *mockStore) ApplyLabelByMerchant(_ context.Context, _, _ string) (int64, error) {
+func (m *mockStore) ApplyLabelByMerchant(_ context.Context, _ store.Tenant, _, _ string) (int64, error) {
 	if m.labelsErr != nil {
 		return 0, m.labelsErr
 	}
 	return 0, nil
 }
 
-func (m *mockStore) GetLabelMappings(_ context.Context) (map[string][]string, error) {
+func (m *mockStore) GetLabelMappings(_ context.Context, _ store.Tenant) (map[string][]string, error) {
 	return map[string][]string{}, nil
 }
 
-func (m *mockStore) GetMonthlyBreakdownSpend(_ context.Context, _ string, _ int) (*store.MonthlyBreakdownData, error) {
+func (m *mockStore) GetMonthlyBreakdownSpend(_ context.Context, _ store.Tenant, _ string, _ int) (*store.MonthlyBreakdownData, error) {
 	if m.monthlyBreakdownErr != nil {
 		return nil, m.monthlyBreakdownErr
 	}
@@ -427,7 +433,7 @@ func (m *mockStore) GetMonthlyBreakdownSpend(_ context.Context, _ string, _ int)
 	}, nil
 }
 
-func (m *mockStore) ListCategories(_ context.Context) ([]store.Category, error) {
+func (m *mockStore) ListCategories(_ context.Context, _ store.Tenant) ([]store.Category, error) {
 	if m.catsErr != nil {
 		return nil, m.catsErr
 	}
@@ -437,35 +443,37 @@ func (m *mockStore) ListCategories(_ context.Context) ([]store.Category, error) 
 	return m.categories, nil
 }
 
-func (m *mockStore) CreateCategory(_ context.Context, _, _ string) error { return m.catsErr }
+func (m *mockStore) CreateCategory(_ context.Context, _ store.Tenant, _, _ string) error {
+	return m.catsErr
+}
 
-func (m *mockStore) DeleteCategory(_ context.Context, _ string, removeFromTransactions bool) error {
+func (m *mockStore) DeleteCategory(_ context.Context, _ store.Tenant, _ string, removeFromTransactions bool) error {
 	m.deleteCategoryCleanup = removeFromTransactions
 	return m.catsErr
 }
 
-func (m *mockStore) GetCategoryMappings(_ context.Context) (map[string][]string, error) {
+func (m *mockStore) GetCategoryMappings(_ context.Context, _ store.Tenant) (map[string][]string, error) {
 	if m.categoryMappings != nil {
 		return m.categoryMappings, nil
 	}
 	return map[string][]string{}, nil
 }
 
-func (m *mockStore) ApplyCategoryByMerchant(_ context.Context, _, _ string) (int64, error) {
+func (m *mockStore) ApplyCategoryByMerchant(_ context.Context, _ store.Tenant, _, _ string) (int64, error) {
 	if m.catsErr != nil {
 		return 0, m.catsErr
 	}
 	return 2, nil
 }
 
-func (m *mockStore) RemoveCategoryByMerchant(_ context.Context, _, _ string) (int64, error) {
+func (m *mockStore) RemoveCategoryByMerchant(_ context.Context, _ store.Tenant, _, _ string) (int64, error) {
 	if m.catsErr != nil {
 		return 0, m.catsErr
 	}
 	return 1, nil
 }
 
-func (m *mockStore) ListBuckets(_ context.Context) ([]store.Bucket, error) {
+func (m *mockStore) ListBuckets(_ context.Context, _ store.Tenant) ([]store.Bucket, error) {
 	if m.bucketsErr != nil {
 		return nil, m.bucketsErr
 	}
@@ -475,40 +483,42 @@ func (m *mockStore) ListBuckets(_ context.Context) ([]store.Bucket, error) {
 	return m.buckets, nil
 }
 
-func (m *mockStore) CreateBucket(_ context.Context, _, _ string) error { return m.bucketsErr }
+func (m *mockStore) CreateBucket(_ context.Context, _ store.Tenant, _, _ string) error {
+	return m.bucketsErr
+}
 
-func (m *mockStore) DeleteBucket(_ context.Context, _ string, removeFromTransactions bool) error {
+func (m *mockStore) DeleteBucket(_ context.Context, _ store.Tenant, _ string, removeFromTransactions bool) error {
 	m.deleteBucketCleanup = removeFromTransactions
 	return m.bucketsErr
 }
 
-func (m *mockStore) GetBucketMappings(_ context.Context) (map[string][]string, error) {
+func (m *mockStore) GetBucketMappings(_ context.Context, _ store.Tenant) (map[string][]string, error) {
 	if m.bucketMappings != nil {
 		return m.bucketMappings, nil
 	}
 	return map[string][]string{}, nil
 }
 
-func (m *mockStore) ApplyBucketByMerchant(_ context.Context, _, _ string) (int64, error) {
+func (m *mockStore) ApplyBucketByMerchant(_ context.Context, _ store.Tenant, _, _ string) (int64, error) {
 	if m.bucketsErr != nil {
 		return 0, m.bucketsErr
 	}
 	return 3, nil
 }
 
-func (m *mockStore) RemoveBucketByMerchant(_ context.Context, _, _ string) (int64, error) {
+func (m *mockStore) RemoveBucketByMerchant(_ context.Context, _ store.Tenant, _, _ string) (int64, error) {
 	if m.bucketsErr != nil {
 		return 0, m.bucketsErr
 	}
 	return 1, nil
 }
 
-func (m *mockStore) UpdateTransaction(_ context.Context, _ string, update store.TransactionUpdate) error {
+func (m *mockStore) UpdateTransaction(_ context.Context, _ store.Tenant, _ string, update store.TransactionUpdate) error {
 	m.updatedTransaction = update
 	return m.updateTxErr
 }
 
-func (m *mockStore) ListRules(_ context.Context) ([]store.RuleRow, error) {
+func (m *mockStore) ListRules(_ context.Context, _ store.Tenant) ([]store.RuleRow, error) {
 	if m.rulesErr != nil {
 		return nil, m.rulesErr
 	}
@@ -518,11 +528,11 @@ func (m *mockStore) ListRules(_ context.Context) ([]store.RuleRow, error) {
 	return []store.RuleRow{}, nil
 }
 
-func (m *mockStore) GetRule(_ context.Context, _ string) (*store.RuleRow, error) {
+func (m *mockStore) GetRule(_ context.Context, _ store.Tenant, _ string) (*store.RuleRow, error) {
 	return m.ruleResult, m.ruleErr
 }
 
-func (m *mockStore) CreateRule(_ context.Context, r store.RuleRow) (*store.RuleRow, error) {
+func (m *mockStore) CreateRule(_ context.Context, _ store.Tenant, r store.RuleRow) (*store.RuleRow, error) {
 	if m.ruleErr != nil {
 		return nil, m.ruleErr
 	}
@@ -530,58 +540,67 @@ func (m *mockStore) CreateRule(_ context.Context, r store.RuleRow) (*store.RuleR
 	return &r, nil
 }
 
-func (m *mockStore) UpdateRule(_ context.Context, _ string, r store.RuleRow) (*store.RuleRow, error) {
+func (m *mockStore) UpdateRule(_ context.Context, _ store.Tenant, _ string, r store.RuleRow) (*store.RuleRow, error) {
 	if m.ruleErr != nil {
 		return nil, m.ruleErr
 	}
 	return &r, nil
 }
 
-func (m *mockStore) DeleteRule(_ context.Context, _ string) error {
+func (m *mockStore) DeleteRule(_ context.Context, _ store.Tenant, _ string) error {
 	return m.ruleErr
 }
 
-func (m *mockStore) ImportUserRules(_ context.Context, rows []store.RuleRow) error {
+func (m *mockStore) ImportUserRules(_ context.Context, _ store.Tenant, rows []store.RuleRow) error {
 	m.importedRules = rows
 	return m.importErr
 }
 
-func (m *mockStore) MuteTransaction(_ context.Context, id string, muted bool, reason string) error {
+func (m *mockStore) MuteTransaction(_ context.Context, _ store.Tenant, id string, muted bool, reason string) error {
 	m.muteTransactionID = id
 	m.muteTransactionValue = muted
 	m.muteTransactionReason = reason
 	return nil
 }
 
-func (m *mockStore) UpdateMuteReason(_ context.Context, id, reason string) error {
+func (m *mockStore) UpdateMuteReason(_ context.Context, _ store.Tenant, id, reason string) error {
 	m.updateMuteReasonID = id
 	m.updateMuteReasonValue = reason
 	return nil
 }
-func (m *mockStore) MuteByMerchant(_ context.Context, _, _ string) error { return nil }
-func (m *mockStore) UpdateMerchantReason(_ context.Context, id, reason string) error {
+
+func (m *mockStore) MuteByMerchant(_ context.Context, _ store.Tenant, _, _ string) error { return nil }
+
+func (m *mockStore) UpdateMerchantReason(_ context.Context, _ store.Tenant, id, reason string) error {
 	m.updateMerchantID = id
 	m.updateMerchantReason = reason
 	return nil
 }
 
-func (m *mockStore) ListMutedMerchants(_ context.Context) ([]store.MutedMerchant, error) {
+func (m *mockStore) ListMutedMerchants(_ context.Context, _ store.Tenant) ([]store.MutedMerchant, error) {
 	return []store.MutedMerchant{}, nil
 }
 
-func (m *mockStore) GetMutedMerchantsWithCount(_ context.Context) ([]store.MutedMerchantWithCount, error) {
+func (m *mockStore) GetMutedMerchantsWithCount(_ context.Context, _ store.Tenant) ([]store.MutedMerchantWithCount, error) {
 	return []store.MutedMerchantWithCount{}, nil
 }
-func (m *mockStore) DeleteMutedMerchant(_ context.Context, _ string) error          { return nil }
-func (m *mockStore) DeleteMutedMerchantAndUnmute(_ context.Context, _ string) error { return nil }
-func (m *mockStore) CategorizeMerchant(_ context.Context, _, _, _ string) (int64, error) {
+
+func (m *mockStore) DeleteMutedMerchant(_ context.Context, _ store.Tenant, _ string) error {
+	return nil
+}
+
+func (m *mockStore) DeleteMutedMerchantAndUnmute(_ context.Context, _ store.Tenant, _ string) error {
+	return nil
+}
+
+func (m *mockStore) CategorizeMerchant(_ context.Context, _ store.Tenant, _, _, _ string) (int64, error) {
 	if m.categorizeMerchantN != 0 {
 		return m.categorizeMerchantN, m.updateErr
 	}
 	return 3, m.updateErr
 }
 
-func (m *mockStore) GetSpendingHeatmap(_ context.Context, _, _ *time.Time) (*store.HeatmapData, error) {
+func (m *mockStore) GetSpendingHeatmap(_ context.Context, _ store.Tenant, _, _ *time.Time) (*store.HeatmapData, error) {
 	if m.heatmapErr != nil {
 		return nil, m.heatmapErr
 	}
@@ -594,7 +613,7 @@ func (m *mockStore) GetSpendingHeatmap(_ context.Context, _, _ *time.Time) (*sto
 	}, nil
 }
 
-func (m *mockStore) GetAnnualSpend(_ context.Context, _ int) ([]store.DailyBucket, error) {
+func (m *mockStore) GetAnnualSpend(_ context.Context, _ store.Tenant, _ int) ([]store.DailyBucket, error) {
 	if m.annualErr != nil {
 		return nil, m.annualErr
 	}
@@ -606,6 +625,7 @@ func (m *mockStore) GetAnnualSpend(_ context.Context, _ int) ([]store.DailyBucke
 
 func (m *mockStore) ListExtractionDiagnostics(
 	_ context.Context,
+	_ store.Tenant,
 	f store.DiagnosticFilter,
 ) ([]store.ExtractionDiagnosticRow, error) {
 	m.diagnosticFilter = f
@@ -618,12 +638,13 @@ func (m *mockStore) ListExtractionDiagnostics(
 	return []store.ExtractionDiagnosticRow{}, nil
 }
 
-func (m *mockStore) GetExtractionDiagnostic(_ context.Context, _ string) (*store.ExtractionDiagnosticRow, error) {
+func (m *mockStore) GetExtractionDiagnostic(_ context.Context, _ store.Tenant, _ string) (*store.ExtractionDiagnosticRow, error) {
 	return m.diagnosticResult, m.diagnosticErr
 }
 
 func (m *mockStore) UpdateExtractionDiagnosticStatus(
 	_ context.Context,
+	_ store.Tenant,
 	id string,
 	status string,
 ) (*store.ExtractionDiagnosticRow, error) {
