@@ -150,10 +150,10 @@ func TestRuntimeState_ActiveReader(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	if err := ts.SetActiveReader(ctx, "gmail"); err != nil {
+	if err := ts.SetActiveReader(ctx, store.Tenant{}, "gmail"); err != nil {
 		t.Fatalf("SetActiveReader: %v", err)
 	}
-	got, err := ts.GetActiveReader(ctx)
+	got, err := ts.GetActiveReader(ctx, store.Tenant{})
 	if err != nil {
 		t.Fatalf("GetActiveReader: %v", err)
 	}

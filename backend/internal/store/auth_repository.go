@@ -225,6 +225,47 @@ func (r *pgAuthRepository) MarkAccountSetupTokenUsed(ctx context.Context, id str
 	return nil
 }
 
+func (r *pgAuthRepository) CompleteAccountSetup(ctx context.Context, tokenHash, passwordHash string) (*User, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("beginning account setup transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	token, err := scanAccountSetupToken(tx.QueryRow(ctx, `
+		SELECT id, user_id, token_hash, created_at, expires_at, used_at
+		FROM account_setup_tokens
+		WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()
+		FOR UPDATE
+	`, tokenHash))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("finding active account setup token: %w", err)
+	}
+
+	user, err := scanUser(tx.QueryRow(ctx, `
+		UPDATE users
+		SET password_hash = $2, updated_at = NOW()
+		WHERE id = $1
+		RETURNING id, id AS tenant_id, email, COALESCE(password_hash, ''), display_name, role, avatar_key,
+		          disabled_at, created_at, updated_at
+	`, token.UserID, passwordHash))
+	if err != nil {
+		return nil, fmt.Errorf("updating setup password: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE account_setup_tokens SET used_at = NOW() WHERE id = $1`, token.ID); err != nil {
+		return nil, fmt.Errorf("marking account setup token used: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("committing account setup transaction: %w", err)
+	}
+	return user, nil
+}
+
 func insertUser(ctx context.Context, tx pgx.Tx, input CreateUserInput) (*User, error) {
 	role := input.Role
 	if role == "" {

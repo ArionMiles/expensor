@@ -141,7 +141,7 @@ func intString(value *int) *string {
 	return &result
 }
 
-func (h *Handlers) missingSetupPreferences(ctx context.Context) []string {
+func (h *Handlers) missingSetupPreferences(ctx context.Context, tenant store.Tenant) []string {
 	required := []struct {
 		key   string
 		field string
@@ -152,7 +152,7 @@ func (h *Handlers) missingSetupPreferences(ctx context.Context) []string {
 	}
 	missing := make([]string, 0, len(required))
 	for _, pref := range required {
-		value, err := h.settingsStore.GetAppConfig(ctx, store.Tenant{}, pref.key)
+		value, err := h.settingsStore.GetAppConfig(ctx, tenant, pref.key)
 		if err != nil || strings.TrimSpace(value) == "" {
 			missing = append(missing, pref.field)
 		}
@@ -168,7 +168,7 @@ func (h *Handlers) missingSetupPreferences(ctx context.Context) []string {
 // @Failure 503 {object} ErrorResponse
 // @Router /config/setup-status [get]
 func (h *Handlers) GetSetupStatus(w http.ResponseWriter, r *http.Request) {
-	missing := h.missingSetupPreferences(r.Context())
+	missing := h.missingSetupPreferences(r.Context(), requestTenant(r))
 	writeJSON(w, http.StatusOK, map[string]any{
 		"required": len(missing) > 0,
 		"missing":  missing,

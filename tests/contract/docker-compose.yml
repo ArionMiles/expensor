@@ -82,9 +82,11 @@ services:
         mkdir -p "$${CONTRACT_ARTIFACTS}"
         cp allowlist.tsv "$${CONTRACT_ARTIFACTS}/allowlist.tsv"
         tab="$$(printf '\011')"
-        while IFS="$${tab}" read -r method route reason; do
+        while IFS="$${tab}" read -r method route reason phases_override; do
           phases="examples"
-          if [ "$${method}" = "GET" ]; then
+          if [ -n "$${phases_override}" ]; then
+            phases="$${phases_override}"
+          elif [ "$${method}" = "GET" ]; then
             phases="examples,coverage"
           fi
           safe_name="$$(printf '%s' "$${method}-$${route}" | tr '/{}' '---' | tr -cs 'A-Za-z0-9_.-' '-')"
@@ -93,6 +95,7 @@ services:
           if ! schemathesis run "$${CONTRACT_SCHEMA}" \
             --url "$${CONTRACT_BASE_URL}" \
             --checks "not_a_server_error,status_code_conformance,content_type_conformance,response_schema_conformance" \
+            --header "Authorization: Bearer expensor_pat_component" \
             --phases "$${phases}" \
             --mode positive \
             --max-examples 5 \

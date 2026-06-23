@@ -31,7 +31,8 @@ func NewServer(port int, handlers *Handlers, staticDir string, logger *slog.Logg
 	}
 
 	scope := observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/internal/httpapi")
-	chain := corsMiddleware(loggingMiddleware(logger, observabilityMiddleware(scope, recoveryMiddleware(logger, mux))))
+	protectedMux := authMiddleware(handlers, mux)
+	chain := corsMiddleware(loggingMiddleware(logger, observabilityMiddleware(scope, recoveryMiddleware(logger, protectedMux))))
 
 	return &Server{
 		httpServer: &http.Server{
@@ -90,6 +91,17 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("GET /api/health", h.Health)
 	mux.HandleFunc("GET /api/status", h.Status)
 	mux.HandleFunc("GET /api/version", h.Version)
+	mux.HandleFunc("GET /api/bootstrap", h.GetBootstrap)
+	mux.HandleFunc("POST /api/bootstrap", h.Bootstrap)
+	mux.HandleFunc("POST /api/session", h.Login)
+	mux.HandleFunc("POST /api/account-setup", h.CompleteAccountSetup)
+	mux.HandleFunc("GET /api/session", h.GetSession)
+	mux.HandleFunc("DELETE /api/session", h.Logout)
+	mux.HandleFunc("GET /api/profile", h.GetProfile)
+	mux.HandleFunc("POST /api/tokens", h.CreateAccessToken)
+	mux.HandleFunc("DELETE /api/tokens/{id}", h.RevokeAccessToken)
+	mux.HandleFunc("POST /api/admin/users", h.CreateUser)
+	mux.HandleFunc("POST /api/admin/users/{id}/setup-tokens", h.CreateSetupToken)
 	mux.HandleFunc("POST /api/daemon/start", h.StartDaemon)
 	mux.HandleFunc("POST /api/daemon/rescan", h.Rescan)
 	mux.HandleFunc("GET /api/config/active-reader", h.GetActiveReader)

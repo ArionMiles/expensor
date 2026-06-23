@@ -160,6 +160,15 @@ func (s *InstrumentedStore) MarkAccountSetupTokenUsed(ctx context.Context, id st
 	return err
 }
 
+func (s *InstrumentedStore) CompleteAccountSetup(ctx context.Context, tokenHash, passwordHash string) (*User, error) {
+	ctx, span := s.scope.Start(ctx, "store.auth.complete_account_setup")
+	defer span.End()
+
+	user, err := s.next.CompleteAccountSetup(ctx, tokenHash, passwordHash)
+	s.recordOperation(ctx, "auth.complete_account_setup", err)
+	return user, err
+}
+
 func (s *InstrumentedStore) ListTransactions(ctx context.Context, tenant Tenant, f ListFilter) ([]Transaction, TransactionListResult, error) {
 	ctx, span := s.scope.Start(ctx, "store.transactions.list")
 	defer span.End()
@@ -304,20 +313,20 @@ func (s *InstrumentedStore) MarkMessageProcessed(ctx context.Context, tenant Ten
 	return err
 }
 
-func (s *InstrumentedStore) SetActiveReader(ctx context.Context, reader string) error {
+func (s *InstrumentedStore) SetActiveReader(ctx context.Context, tenant Tenant, reader string) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.set_active_reader")
 	defer span.End()
 
-	err := s.next.SetActiveReader(ctx, reader)
+	err := s.next.SetActiveReader(ctx, tenant, reader)
 	s.recordOperation(ctx, "runtime.set_active_reader", err)
 	return err
 }
 
-func (s *InstrumentedStore) GetActiveReader(ctx context.Context) (string, error) {
+func (s *InstrumentedStore) GetActiveReader(ctx context.Context, tenant Tenant) (string, error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.get_active_reader")
 	defer span.End()
 
-	reader, err := s.next.GetActiveReader(ctx)
+	reader, err := s.next.GetActiveReader(ctx, tenant)
 	s.recordOperation(ctx, "runtime.get_active_reader", err)
 	return reader, err
 }

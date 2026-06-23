@@ -16,6 +16,7 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/ArionMiles/expensor/backend/internal/auth"
 	"github.com/ArionMiles/expensor/backend/internal/oauth"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
@@ -61,7 +62,10 @@ func (h *Handlers) ListReaders(w http.ResponseWriter, _ *http.Request) {
 
 // --- reader credentials upload ---
 
-func requestTenant(_ *http.Request) store.Tenant {
+func requestTenant(r *http.Request) store.Tenant {
+	if principal, ok := auth.PrincipalFromContext(r.Context()); ok {
+		return store.Tenant{ID: principal.TenantID}
+	}
 	return store.Tenant{}
 }
 
@@ -569,7 +573,7 @@ func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	activeReader, err := h.readerRuntimeStore.GetActiveReader(r.Context())
+	activeReader, err := h.readerRuntimeStore.GetActiveReader(r.Context(), requestTenant(r))
 	if err != nil {
 		h.logger.Error("failed to read active reader before disconnect", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
@@ -581,7 +585,7 @@ func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if activeReader == name {
-		if err := h.readerRuntimeStore.SetActiveReader(r.Context(), ""); err != nil {
+		if err := h.readerRuntimeStore.SetActiveReader(r.Context(), requestTenant(r), ""); err != nil {
 			h.logger.Error("failed to clear active reader", "reader", name, "error", err)
 			writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
 			return
@@ -661,6 +665,7 @@ func (h *Handlers) GetReaderConfig(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	//nolint:gosec // reader config is stored JSON returned with application/json content type
 	_, _ = w.Write(data)
 }
 

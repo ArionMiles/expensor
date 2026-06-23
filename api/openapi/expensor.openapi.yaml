@@ -1105,12 +1105,239 @@ definitions:
         example: 1
         type: integer
     type: object
+  httpapi.accessTokenResponse:
+    properties:
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      token:
+        type: string
+    type: object
+  httpapi.bootstrapRequest:
+    properties:
+      avatar_key:
+        example: default
+        type: string
+      display_name:
+        example: New Admin
+        type: string
+      email:
+        example: new-admin@example.com
+        type: string
+      password:
+        example: correct horse battery staple
+        minLength: 12
+        type: string
+    required:
+    - display_name
+    - email
+    - password
+    type: object
+  httpapi.bootstrapResponse:
+    properties:
+      required:
+        type: boolean
+    type: object
+  httpapi.completeAccountSetupRequest:
+    properties:
+      password:
+        example: correct horse battery staple
+        minLength: 12
+        type: string
+      token:
+        example: expensor_setup_invalid
+        type: string
+    required:
+    - password
+    - token
+    type: object
+  httpapi.createAccessTokenRequest:
+    properties:
+      name:
+        example: contract
+        type: string
+    required:
+    - name
+    type: object
+  httpapi.createUserRequest:
+    properties:
+      avatar_key:
+        example: default
+        type: string
+      display_name:
+        example: Contract User
+        type: string
+      email:
+        example: contract-user@example.com
+        type: string
+      role:
+        enum:
+        - admin
+        - user
+        example: user
+        type: string
+    required:
+    - display_name
+    - email
+    type: object
+  httpapi.loginRequest:
+    properties:
+      email:
+        example: component-admin@example.com
+        type: string
+      password:
+        example: component admin password
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  httpapi.principalResponse:
+    properties:
+      avatar_key:
+        type: string
+      display_name:
+        type: string
+      email:
+        type: string
+      role:
+        type: string
+      tenant_id:
+        type: string
+      user_id:
+        type: string
+    type: object
+  httpapi.setupTokenResponse:
+    properties:
+      expires_at:
+        type: string
+      token:
+        type: string
+    type: object
 info:
   contact: {}
   description: This is the generated API contract for the Expensor backend.
   title: Expensor API
   version: dev
 paths:
+  /account-setup:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Setup token and password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.completeAccountSetupRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/httpapi.principalResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Complete account setup
+      tags:
+      - Auth
+  /admin/users:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: User account
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.createUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/httpapi.principalResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Create an instance user
+      tags:
+      - Auth
+  /admin/users/{id}/setup-tokens:
+    post:
+      parameters:
+      - description: User ID
+        example: 00000000-0000-0000-0000-00000000c0de
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/httpapi.setupTokenResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Create a user setup token
+      tags:
+      - Auth
   /auth/callback:
     get:
       parameters:
@@ -1140,6 +1367,58 @@ paths:
       summary: Handle reader OAuth callback
       tags:
       - Readers
+  /bootstrap:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.bootstrapResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Get bootstrap status
+      tags:
+      - Auth
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Bootstrap account
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.bootstrapRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/httpapi.principalResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Create the first administrator account
+      tags:
+      - Auth
   /config/active-reader:
     get:
       produces:
@@ -2409,6 +2688,26 @@ paths:
       summary: List reader plugins
       tags:
       - Readers
+  /profile:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.principalResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Get the current user profile
+      tags:
+      - Auth
   /readers/{name}:
     delete:
       parameters:
@@ -3026,6 +3325,73 @@ paths:
       summary: Import rules
       tags:
       - Rules
+  /session:
+    delete:
+      responses:
+        "204":
+          description: No Content
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Delete the current browser session
+      tags:
+      - Auth
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.principalResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Get the current session
+      tags:
+      - Auth
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.loginRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/httpapi.principalResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Create a browser session
+      tags:
+      - Auth
   /stats/charts:
     get:
       produces:
@@ -3152,6 +3518,70 @@ paths:
       summary: Get daemon and stats status
       tags:
       - Bootstrap
+  /tokens:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Access token metadata
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.createAccessTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/httpapi.accessTokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Create a programmatic access token
+      tags:
+      - Auth
+  /tokens/{id}:
+    delete:
+      parameters:
+      - description: Token ID
+        example: 00000000-0000-0000-0000-00000000c0de
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Revoke a programmatic access token
+      tags:
+      - Auth
   /transactions:
     get:
       parameters:

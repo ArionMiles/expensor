@@ -82,7 +82,7 @@ func (h *Handlers) Rescan(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} ErrorResponse
 // @Router /config/active-reader [get]
 func (h *Handlers) GetActiveReader(w http.ResponseWriter, r *http.Request) {
-	reader, err := h.readActiveReader(r.Context())
+	reader, err := h.readActiveReader(r.Context(), requestTenant(r))
 	if err != nil {
 		h.logger.Error("failed to read active reader", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to read active reader")

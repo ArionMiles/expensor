@@ -1,5 +1,16 @@
 GET	/health	health endpoint
 GET	/version	version endpoint
+GET	/bootstrap	bootstrap status
+POST	/bootstrap	bootstrap unavailable state
+POST	/session	login rejection state
+GET	/session	current bearer principal
+DELETE	/session	session deletion without cookie	coverage
+GET	/profile	current bearer profile
+POST	/account-setup	setup token rejection state
+POST	/tokens	programmatic access token creation
+DELETE	/tokens/{id}	programmatic access token missing-id revocation
+POST	/admin/users	admin user creation validation
+POST	/admin/users/{id}/setup-tokens	setup token missing-user state
 GET	/status	daemon status endpoint
 GET	/config/active-reader	active reader config
 GET	/config/banks	bank color mappings

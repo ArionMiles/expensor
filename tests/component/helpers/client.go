@@ -4,10 +4,16 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"strings"
 	"testing"
 	"time"
+)
+
+const (
+	componentEmail    = "component-admin@example.com"
+	componentPassword = "component admin password"
 )
 
 type Client struct {
@@ -23,12 +29,29 @@ func NewClient(t *testing.T) *Client {
 		baseURL = "http://backend:8080"
 	}
 
-	return &Client{
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("create cookie jar: %v", err)
+	}
+	client := &Client{
 		BaseURL: baseURL,
 		HTTP: &http.Client{
 			Timeout: 10 * time.Second,
+			Jar:     jar,
 		},
 	}
+	client.login(t)
+	return client
+}
+
+func (c *Client) login(t *testing.T) {
+	t.Helper()
+
+	resp := c.JSON(t, http.MethodPost, "/api/session", map[string]string{
+		"email":    componentEmail,
+		"password": componentPassword,
+	})
+	RequireStatus(t, resp, http.StatusCreated)
 }
 
 func (c *Client) Get(t *testing.T, path string) *http.Response {

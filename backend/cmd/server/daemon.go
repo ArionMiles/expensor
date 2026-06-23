@@ -356,7 +356,7 @@ func saveActiveReader(ctx context.Context, st httpapi.Storer, readerName string)
 	if st == nil {
 		return nil
 	}
-	return st.SetActiveReader(ctx, readerName)
+	return st.SetActiveReader(ctx, store.Tenant{}, readerName)
 }
 
 // loadActiveReader returns the persisted reader name, or empty when unavailable.
@@ -364,7 +364,7 @@ func loadActiveReader(ctx context.Context, st httpapi.Storer, logger *slog.Logge
 	if st == nil {
 		return ""
 	}
-	reader, err := st.GetActiveReader(ctx)
+	reader, err := st.GetActiveReader(ctx, store.Tenant{})
 	if err != nil {
 		logger.Warn("failed to read active reader", "error", err)
 		return ""
