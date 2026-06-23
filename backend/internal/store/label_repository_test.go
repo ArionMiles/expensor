@@ -108,6 +108,31 @@ func TestDeleteLabelCanRemoveExistingTransactionLabels(t *testing.T) {
 	}
 }
 
+func TestDeleteLabelRemovesMerchantMappings(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+
+	if err := ts.CreateLabel(ctx, store.Tenant{}, "merchant-cleanup", "#6366f1"); err != nil {
+		t.Fatalf("CreateLabel: %v", err)
+	}
+	if _, err := ts.ApplyLabelByMerchant(ctx, store.Tenant{}, "merchant-cleanup", "Netflix"); err != nil {
+		t.Fatalf("ApplyLabelByMerchant: %v", err)
+	}
+
+	if err := ts.DeleteLabel(ctx, store.Tenant{}, "merchant-cleanup", false); err != nil {
+		t.Fatalf("DeleteLabel: %v", err)
+	}
+
+	mappings, err := ts.GetLabelMappings(ctx, store.Tenant{})
+	if err != nil {
+		t.Fatalf("GetLabelMappings: %v", err)
+	}
+	if got := mappings["merchant-cleanup"]; len(got) != 0 {
+		t.Fatalf("deleted label still has merchant mappings: %v", got)
+	}
+}
+
 func containsLabel(labels []store.Label, name, color string) bool {
 	for _, label := range labels {
 		if label.Name == name && label.Color == color {

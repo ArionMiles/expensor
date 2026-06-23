@@ -240,8 +240,11 @@ func (r *pgCommunityRepository) loadCategorySnapshotEntries(ctx context.Context)
 		       COALESCE(m.bucket,   mc.bucket,   '') AS bucket
 		FROM merchant_categories mc
 		LEFT JOIN mcc_codes m ON m.code = mc.mcc_code
-		WHERE COALESCE(m.category, mc.category) IS NOT NULL
+		WHERE mc.tenant_id IS NULL
+		  AND (
+		      COALESCE(m.category, mc.category) IS NOT NULL
 		   OR COALESCE(m.bucket, mc.bucket) IS NOT NULL
+		  )
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("loading category snapshot: %w", err)

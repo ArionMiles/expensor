@@ -140,6 +140,60 @@ func TestTenantScopedTaxonomyAndMutedMerchants(t *testing.T) {
 	}
 }
 
+func TestTenantTaxonomyIncludesGlobalCategoryAndBucketDefaults(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+
+	tenant := store.Tenant{ID: createRuntimeTestUser(t, ts, "tenant-default-taxonomy@example.com").TenantID}
+
+	if err := ts.SeedMCCCategories(ctx, []string{"Global Default Category"}); err != nil {
+		t.Fatalf("SeedMCCCategories: %v", err)
+	}
+	if err := ts.CreateCategory(ctx, tenant, "Tenant Category", "tenant-owned"); err != nil {
+		t.Fatalf("CreateCategory: %v", err)
+	}
+	if err := ts.CreateBucket(ctx, tenant, "Tenant Bucket", "tenant-owned"); err != nil {
+		t.Fatalf("CreateBucket: %v", err)
+	}
+
+	categories, err := ts.ListCategories(ctx, tenant)
+	if err != nil {
+		t.Fatalf("ListCategories: %v", err)
+	}
+	if !containsCategory(categories, "Global Default Category") || !containsCategory(categories, "Tenant Category") {
+		t.Fatalf("tenant categories should include global defaults and tenant rows, got %#v", categories)
+	}
+
+	buckets, err := ts.ListBuckets(ctx, tenant)
+	if err != nil {
+		t.Fatalf("ListBuckets: %v", err)
+	}
+	if !containsBucket(buckets, "Needs") || !containsBucket(buckets, "Tenant Bucket") {
+		t.Fatalf("tenant buckets should include global defaults and tenant rows, got %#v", buckets)
+	}
+}
+
+func TestCategorySnapshotDoesNotIncludeOtherTenantOverrides(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+
+	tenant := store.Tenant{ID: createRuntimeTestUser(t, ts, "tenant-snapshot@example.com").TenantID}
+	if _, err := ts.ApplyCategoryByMerchant(ctx, tenant, "Tenant Private Category", "PrivateMerchant"); err != nil {
+		t.Fatalf("ApplyCategoryByMerchant: %v", err)
+	}
+
+	resolver, err := ts.LoadCategorySnapshot(ctx)
+	if err != nil {
+		t.Fatalf("LoadCategorySnapshot: %v", err)
+	}
+	category, bucket := resolver("PrivateMerchant")
+	if category != "" || bucket != "" {
+		t.Fatalf("global category snapshot included tenant override: category=%q bucket=%q", category, bucket)
+	}
+}
+
 func TestTenantScopedRulesAndDiagnostics(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
@@ -194,6 +248,24 @@ func TestTenantScopedRulesAndDiagnostics(t *testing.T) {
 
 func ptrString(v string) *string {
 	return &v
+}
+
+func containsCategory(categories []store.Category, name string) bool {
+	for _, category := range categories {
+		if category.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func containsBucket(buckets []store.Bucket, name string) bool {
+	for _, bucket := range buckets {
+		if bucket.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func tenantScopeDiagnostic(messageID, ruleName string) api.ExtractionDiagnostic {

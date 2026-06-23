@@ -106,6 +106,9 @@ func (r *pgTaxonomyRepository) DeleteLabel(ctx context.Context, tenant Tenant, n
 		}
 	}
 
+	if _, err := tx.Exec(ctx, `DELETE FROM label_merchants WHERE label = $1 AND tenant_id IS NOT DISTINCT FROM $2`, name, tenantIDParam(tenant)); err != nil {
+		return fmt.Errorf("deleting label: deleting merchant mappings: %w", err)
+	}
 	if _, err := tx.Exec(ctx, `DELETE FROM labels WHERE name = $1 AND tenant_id IS NOT DISTINCT FROM $2`, name, tenantIDParam(tenant)); err != nil {
 		return fmt.Errorf("deleting label: executing label delete: %w", err)
 	}
@@ -326,7 +329,7 @@ func (r *pgTaxonomyRepository) ListCategories(ctx context.Context, tenant Tenant
 	items, err := r.listTaxonomyItems(
 		ctx,
 		tenant,
-		`SELECT name, COALESCE(description,''), is_default FROM categories WHERE tenant_id IS NOT DISTINCT FROM $1 ORDER BY name`,
+		globalOrTenantTaxonomyQuery("categories"),
 		"category",
 	)
 	if err != nil {
@@ -370,7 +373,7 @@ func (r *pgTaxonomyRepository) ListBuckets(ctx context.Context, tenant Tenant) (
 	items, err := r.listTaxonomyItems(
 		ctx,
 		tenant,
-		`SELECT name, COALESCE(description,''), is_default FROM buckets WHERE tenant_id IS NOT DISTINCT FROM $1 ORDER BY name`,
+		globalOrTenantTaxonomyQuery("buckets"),
 		"bucket",
 	)
 	if err != nil {
@@ -417,6 +420,15 @@ func taxonomyItemUpsertSQL(tenant Tenant, table string) string {
 	}
 	return fmt.Sprintf(`INSERT INTO %s (tenant_id, name, description) VALUES ($1, $2, NULLIF($3,''))
 		 ON CONFLICT (tenant_id, name) WHERE tenant_id IS NOT NULL DO NOTHING`, table)
+}
+
+func globalOrTenantTaxonomyQuery(table string) string {
+	return fmt.Sprintf(`
+		SELECT DISTINCT ON (name) name, COALESCE(description,''), is_default
+		FROM %s
+		WHERE tenant_id IS NULL OR tenant_id IS NOT DISTINCT FROM $1
+		ORDER BY name, (tenant_id IS NOT DISTINCT FROM $1) DESC
+	`, table)
 }
 
 type taxonomyDeleteSpec struct {
