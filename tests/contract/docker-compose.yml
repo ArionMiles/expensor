@@ -58,7 +58,7 @@ services:
       - |
         set -e
         until pg_isready -h postgres -U expensor -d expensor_contract; do sleep 1; done
-        psql -h postgres -U expensor -d expensor_contract -f /seed.sql
+        psql -v ON_ERROR_STOP=1 -h postgres -U expensor -d expensor_contract -f /seed.sql
     depends_on:
       backend:
         condition: service_healthy

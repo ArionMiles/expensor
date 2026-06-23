@@ -6,7 +6,7 @@ INSERT INTO app_config (key, value) VALUES
   ('app.time_format', 'HH:mm'),
   ('active_reader', 'thunderbird'),
   ('reader.gmail.last_scan_at', '2026-05-23T06:00:00Z')
-ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+ON CONFLICT (key) WHERE tenant_id IS NULL DO UPDATE SET value = EXCLUDED.value;
 
 INSERT INTO reader_runtime (reader, config) VALUES
   ('thunderbird', '{"config":{"profilePath":"/workspace/tests/component/fixtures/thunderbird-profile","mailboxes":"Inbox"}}'::jsonb)
@@ -23,7 +23,7 @@ INSERT INTO labels (name, color) VALUES
   ('Reimbursable', '#10b981'),
   ('Late Night', '#64748b'),
   ('Online', '#3b82f6')
-ON CONFLICT (name) DO UPDATE SET color = EXCLUDED.color;
+ON CONFLICT (name) WHERE tenant_id IS NULL DO UPDATE SET color = EXCLUDED.color;
 
 INSERT INTO categories (name, description, is_default) VALUES
   ('Food & Dining', 'Seeded dining category', true),
@@ -37,13 +37,13 @@ INSERT INTO categories (name, description, is_default) VALUES
   ('Subscriptions', 'Seeded subscriptions category', true),
   ('Personal Care', 'Seeded personal care category', true),
   ('Investments', 'Seeded investments category', true)
-ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description;
+ON CONFLICT (name) WHERE tenant_id IS NULL DO UPDATE SET description = EXCLUDED.description, is_default = EXCLUDED.is_default;
 
 INSERT INTO buckets (name, description, is_default) VALUES
   ('Needs', 'Seeded needs bucket', true),
   ('Wants', 'Seeded wants bucket', true),
   ('Investments', 'Seeded investments bucket', true)
-ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description;
+ON CONFLICT (name) WHERE tenant_id IS NULL DO UPDATE SET description = EXCLUDED.description, is_default = EXCLUDED.is_default;
 
 DELETE FROM transaction_label_sources
 WHERE transaction_id IN (SELECT id FROM transactions WHERE message_id LIKE 'seed-msg-%');
@@ -267,15 +267,15 @@ ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING;
 
 INSERT INTO labels (name, color) VALUES
   ('ContractLabel', '#f59e0b')
-ON CONFLICT (name) DO UPDATE SET color = EXCLUDED.color;
+ON CONFLICT (name) WHERE tenant_id IS NULL DO UPDATE SET color = EXCLUDED.color;
 
 INSERT INTO categories (name, description, is_default) VALUES
   ('ContractCategory', 'Stable contract-test category', false)
-ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description;
+ON CONFLICT (name) WHERE tenant_id IS NULL DO UPDATE SET description = EXCLUDED.description, is_default = EXCLUDED.is_default;
 
 INSERT INTO buckets (name, description, is_default) VALUES
   ('ContractBucket', 'Stable contract-test bucket', false)
-ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description;
+ON CONFLICT (name) WHERE tenant_id IS NULL DO UPDATE SET description = EXCLUDED.description, is_default = EXCLUDED.is_default;
 
 INSERT INTO transaction_labels (transaction_id, label) VALUES
   ('00000000-0000-0000-0000-000000000001', 'Online')
