@@ -45,81 +45,101 @@ func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 type mockStore struct {
-	transactions          []store.Transaction
-	listResult            store.TransactionListResult
-	listErr               error
-	listFilter            store.ListFilter
-	listCalls             int
-	getResult             *store.Transaction
-	getErr                error
-	updateErr             error
-	updatedTransaction    store.TransactionUpdate
-	muteTransactionID     string
-	muteTransactionValue  bool
-	muteTransactionReason string
-	updateMuteReasonID    string
-	updateMuteReasonValue string
-	updateMerchantID      string
-	updateMerchantReason  string
-	addLabelsErr          error
-	removeLblErr          error
-	searchResult          []store.Transaction
-	searchListResult      store.TransactionListResult
-	searchErr             error
-	searchFilter          store.ListFilter
-	searchCalls           int
-	stats                 *store.Stats
-	statsErr              error
-	dashboardData         *store.DashboardData
-	dashboardErr          error
-	appConfig             map[string]string
-	setConfigErr          error
-	activeReader          string
-	readerSecrets         map[string][]byte
-	readerTokens          map[string][]byte
-	readerConfigs         map[string]json.RawMessage
-	getFacetsErr          error
-	facets                *store.Facets
-	labels                []store.Label
-	labelsErr             error
-	deleteLabelCleanup    bool
-	categoryMappings      map[string][]string
-	categories            []store.Category
-	catsErr               error
-	deleteCategoryCleanup bool
-	bucketMappings        map[string][]string
-	buckets               []store.Bucket
-	bucketsErr            error
-	deleteBucketCleanup   bool
-	updateTxErr           error
-	rules                 []store.RuleRow
-	rulesErr              error
-	ruleResult            *store.RuleRow
-	ruleErr               error
-	importedRules         []store.RuleRow
-	importErr             error
-	heatmapData           *store.HeatmapData
-	heatmapErr            error
-	annualData            []store.DailyBucket
-	annualErr             error
-	monthlyBreakdown      *store.MonthlyBreakdownData
-	monthlyBreakdownErr   error
-	categorizeMerchantN   int64
-	diagnostics           []store.ExtractionDiagnosticRow
-	diagnosticFilter      store.DiagnosticFilter
-	diagnosticResult      *store.ExtractionDiagnosticRow
-	diagnosticErr         error
-	updateDiagnosticID    string
-	updateDiagnosticStat  string
-	syncStatus            store.SyncStatus
-	syncStatusErr         error
+	transactions               []store.Transaction
+	listResult                 store.TransactionListResult
+	listErr                    error
+	listFilter                 store.ListFilter
+	listCalls                  int
+	getResult                  *store.Transaction
+	getErr                     error
+	updateErr                  error
+	updatedTransaction         store.TransactionUpdate
+	muteTransactionID          string
+	muteTransactionValue       bool
+	muteTransactionReason      string
+	updateMuteReasonID         string
+	updateMuteReasonValue      string
+	updateMerchantID           string
+	updateMerchantReason       string
+	addLabelsErr               error
+	removeLblErr               error
+	searchResult               []store.Transaction
+	searchListResult           store.TransactionListResult
+	searchErr                  error
+	searchFilter               store.ListFilter
+	searchCalls                int
+	stats                      *store.Stats
+	statsErr                   error
+	dashboardData              *store.DashboardData
+	dashboardErr               error
+	appConfig                  map[string]string
+	setConfigErr               error
+	activeReader               string
+	readerSecrets              map[string][]byte
+	readerTokens               map[string][]byte
+	readerConfigs              map[string]json.RawMessage
+	getFacetsErr               error
+	facets                     *store.Facets
+	labels                     []store.Label
+	labelsErr                  error
+	deleteLabelCleanup         bool
+	categoryMappings           map[string][]string
+	categories                 []store.Category
+	catsErr                    error
+	deleteCategoryCleanup      bool
+	bucketMappings             map[string][]string
+	buckets                    []store.Bucket
+	bucketsErr                 error
+	deleteBucketCleanup        bool
+	updateTxErr                error
+	rules                      []store.RuleRow
+	rulesErr                   error
+	ruleResult                 *store.RuleRow
+	ruleErr                    error
+	importedRules              []store.RuleRow
+	importErr                  error
+	heatmapData                *store.HeatmapData
+	heatmapErr                 error
+	annualData                 []store.DailyBucket
+	annualErr                  error
+	monthlyBreakdown           *store.MonthlyBreakdownData
+	monthlyBreakdownErr        error
+	categorizeMerchantN        int64
+	diagnostics                []store.ExtractionDiagnosticRow
+	diagnosticFilter           store.DiagnosticFilter
+	diagnosticResult           *store.ExtractionDiagnosticRow
+	diagnosticErr              error
+	updateDiagnosticID         string
+	updateDiagnosticStat       string
+	syncStatus                 store.SyncStatus
+	syncStatusErr              error
+	bootstrapRequired          bool
+	createdBootstrapAdmin      store.CreateBootstrapAdminInput
+	createdUser                store.CreateUserInput
+	usersByEmail               map[string]*store.User
+	usersByID                  map[string]*store.User
+	createdSession             store.CreateSessionInput
+	sessionsByHash             map[string]*store.Session
+	revokedSessionID           string
+	createdAccessToken         store.CreateAccessTokenInput
+	accessTokensByHash         map[string]*store.AccessToken
+	revokedAccessTokenID       string
+	revokedAccessUserID        string
+	createdSetupToken          store.CreateAccountSetupTokenInput
+	setupTokensByHash          map[string]*store.AccountSetupToken
+	usedSetupTokenID           string
+	completedSetupTokenHash    string
+	completedSetupPasswordHash string
+	completedSetupUser         *store.User
+	lastAppConfigTenant        store.Tenant
 }
 
 func (m *mockStore) BootstrapRequired(_ context.Context) (bool, error) {
-	return false, nil
+	return m.bootstrapRequired, nil
 }
 
 func (m *mockStore) CreateBootstrapAdmin(_ context.Context, input store.CreateBootstrapAdminInput) (*store.User, error) {
+	m.createdBootstrapAdmin = input
 	return &store.User{
 		ID:           "admin-user-id",
 		TenantID:     "admin-user-id",
@@ -132,6 +152,7 @@ func (m *mockStore) CreateBootstrapAdmin(_ context.Context, input store.CreateBo
 }
 
 func (m *mockStore) CreateUser(_ context.Context, input store.CreateUserInput) (*store.User, error) {
+	m.createdUser = input
 	return &store.User{
 		ID:           "user-id",
 		TenantID:     "user-id",
@@ -143,48 +164,89 @@ func (m *mockStore) CreateUser(_ context.Context, input store.CreateUserInput) (
 	}, nil
 }
 
-func (m *mockStore) FindUserByEmail(_ context.Context, _ string) (*store.User, error) {
+func (m *mockStore) FindUserByEmail(_ context.Context, email string) (*store.User, error) {
+	if m.usersByEmail != nil {
+		if user, ok := m.usersByEmail[strings.ToLower(email)]; ok {
+			return user, nil
+		}
+	}
 	return nil, store.ErrNotFound
 }
 
-func (m *mockStore) FindUserByID(_ context.Context, _ string) (*store.User, error) {
+func (m *mockStore) FindUserByID(_ context.Context, id string) (*store.User, error) {
+	if m.usersByID != nil {
+		if user, ok := m.usersByID[id]; ok {
+			return user, nil
+		}
+	}
 	return nil, store.ErrNotFound
 }
 
 func (m *mockStore) CreateSession(_ context.Context, input store.CreateSessionInput) (*store.Session, error) {
+	m.createdSession = input
 	return &store.Session{ID: "session-id", UserID: input.UserID, TokenHash: input.TokenHash, ExpiresAt: input.ExpiresAt}, nil
 }
 
-func (m *mockStore) FindSessionByHash(_ context.Context, _ string) (*store.Session, error) {
+func (m *mockStore) FindSessionByHash(_ context.Context, tokenHash string) (*store.Session, error) {
+	if m.sessionsByHash != nil {
+		if session, ok := m.sessionsByHash[tokenHash]; ok {
+			return session, nil
+		}
+	}
 	return nil, store.ErrNotFound
 }
 
-func (m *mockStore) RevokeSession(_ context.Context, _ string) error {
+func (m *mockStore) RevokeSession(_ context.Context, id string) error {
+	m.revokedSessionID = id
 	return nil
 }
 
 func (m *mockStore) CreateAccessToken(_ context.Context, input store.CreateAccessTokenInput) (*store.AccessToken, error) {
+	m.createdAccessToken = input
 	return &store.AccessToken{ID: "access-token-id", UserID: input.UserID, Name: input.Name, TokenHash: input.TokenHash, ExpiresAt: input.ExpiresAt}, nil
 }
 
-func (m *mockStore) FindAccessTokenByHash(_ context.Context, _ string) (*store.AccessToken, error) {
+func (m *mockStore) FindAccessTokenByHash(_ context.Context, tokenHash string) (*store.AccessToken, error) {
+	if m.accessTokensByHash != nil {
+		if token, ok := m.accessTokensByHash[tokenHash]; ok {
+			return token, nil
+		}
+	}
 	return nil, store.ErrNotFound
 }
 
-func (m *mockStore) RevokeAccessToken(_ context.Context, _, _ string) error {
+func (m *mockStore) RevokeAccessToken(_ context.Context, id, userID string) error {
+	m.revokedAccessTokenID = id
+	m.revokedAccessUserID = userID
 	return nil
 }
 
 func (m *mockStore) CreateAccountSetupToken(_ context.Context, input store.CreateAccountSetupTokenInput) (*store.AccountSetupToken, error) {
+	m.createdSetupToken = input
 	return &store.AccountSetupToken{ID: "setup-token-id", UserID: input.UserID, TokenHash: input.TokenHash, ExpiresAt: input.ExpiresAt}, nil
 }
 
-func (m *mockStore) FindAccountSetupTokenByHash(_ context.Context, _ string) (*store.AccountSetupToken, error) {
+func (m *mockStore) FindAccountSetupTokenByHash(_ context.Context, tokenHash string) (*store.AccountSetupToken, error) {
+	if m.setupTokensByHash != nil {
+		if token, ok := m.setupTokensByHash[tokenHash]; ok {
+			return token, nil
+		}
+	}
 	return nil, store.ErrNotFound
 }
 
-func (m *mockStore) MarkAccountSetupTokenUsed(_ context.Context, _ string) error {
+func (m *mockStore) MarkAccountSetupTokenUsed(_ context.Context, id string) error {
+	m.usedSetupTokenID = id
 	return nil
+}
+
+func (m *mockStore) CompleteAccountSetup(_ context.Context, tokenHash, passwordHash string) (*store.User, error) {
+	m.completedSetupTokenHash = tokenHash
+	m.completedSetupPasswordHash = passwordHash
+	if m.completedSetupUser != nil {
+		return m.completedSetupUser, nil
+	}
+	return nil, store.ErrNotFound
 }
 
 func (m *mockStore) ListTransactions(
@@ -278,7 +340,8 @@ func (m *mockStore) GetDashboardData(_ context.Context, _ store.Tenant) (*store.
 	}, nil
 }
 
-func (m *mockStore) GetAppConfig(_ context.Context, _ store.Tenant, key string) (string, error) {
+func (m *mockStore) GetAppConfig(_ context.Context, tenant store.Tenant, key string) (string, error) {
+	m.lastAppConfigTenant = tenant
 	if m.appConfig != nil {
 		if v, ok := m.appConfig[key]; ok {
 			return v, nil
@@ -301,12 +364,12 @@ func (m *mockStore) SetAppConfig(_ context.Context, _ store.Tenant, key, value s
 	return nil
 }
 
-func (m *mockStore) SetActiveReader(_ context.Context, reader string) error {
+func (m *mockStore) SetActiveReader(_ context.Context, _ store.Tenant, reader string) error {
 	m.activeReader = reader
 	return nil
 }
 
-func (m *mockStore) GetActiveReader(_ context.Context) (string, error) {
+func (m *mockStore) GetActiveReader(_ context.Context, _ store.Tenant) (string, error) {
 	return m.activeReader, nil
 }
 

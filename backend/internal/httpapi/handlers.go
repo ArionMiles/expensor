@@ -47,6 +47,7 @@ type DaemonStatusProvider interface {
 // Handlers holds all dependencies for HTTP endpoint handlers.
 type Handlers struct {
 	registry           *plugins.Registry
+	authStore          authStore
 	settingsStore      settingsStore
 	analyticsStore     analyticsStore
 	transactionStore   transactionStore
@@ -112,6 +113,7 @@ func NewHandlers(cfg HandlersConfig) *Handlers {
 	}
 	return &Handlers{
 		registry:           cfg.Registry,
+		authStore:          cfg.Store,
 		settingsStore:      cfg.Store,
 		analyticsStore:     cfg.Store,
 		transactionStore:   cfg.Store,

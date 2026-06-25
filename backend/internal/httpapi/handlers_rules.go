@@ -265,7 +265,7 @@ func (h *Handlers) CreateRule(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) clearActiveReaderCheckpointForNewRule(ctx context.Context, tenant store.Tenant) {
-	reader, err := h.readActiveReader(ctx)
+	reader, err := h.readActiveReader(ctx, tenant)
 	if err != nil || strings.TrimSpace(reader) == "" {
 		return
 	}
@@ -279,8 +279,8 @@ func (h *Handlers) clearActiveReaderCheckpointForNewRule(ctx context.Context, te
 	}
 }
 
-func (h *Handlers) readActiveReader(ctx context.Context) (string, error) {
-	return h.readerRuntimeStore.GetActiveReader(ctx)
+func (h *Handlers) readActiveReader(ctx context.Context, tenant store.Tenant) (string, error) {
+	return h.readerRuntimeStore.GetActiveReader(ctx, tenant)
 }
 
 // UpdateRule handles PUT /api/rules/{id}.

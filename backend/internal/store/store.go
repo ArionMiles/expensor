@@ -165,6 +165,10 @@ func (s *Store) MarkAccountSetupTokenUsed(ctx context.Context, id string) error 
 	return s.auth.MarkAccountSetupTokenUsed(ctx, id)
 }
 
+func (s *Store) CompleteAccountSetup(ctx context.Context, tokenHash, passwordHash string) (*User, error) {
+	return s.auth.CompleteAccountSetup(ctx, tokenHash, passwordHash)
+}
+
 func (s *Store) queryTransactionTotals(
 	ctx context.Context,
 	join string,
@@ -260,13 +264,13 @@ func (s *Store) SetAppConfig(ctx context.Context, tenant Tenant, key, value stri
 }
 
 // SetActiveReader stores the selected reader name.
-func (s *Store) SetActiveReader(ctx context.Context, reader string) error {
-	return s.runtime.SetActiveReader(ctx, reader)
+func (s *Store) SetActiveReader(ctx context.Context, tenant Tenant, reader string) error {
+	return s.runtime.SetActiveReader(ctx, tenant, reader)
 }
 
 // GetActiveReader returns the selected reader name, or an empty string when unset.
-func (s *Store) GetActiveReader(ctx context.Context) (string, error) {
-	return s.runtime.GetActiveReader(ctx)
+func (s *Store) GetActiveReader(ctx context.Context, tenant Tenant) (string, error) {
+	return s.runtime.GetActiveReader(ctx, tenant)
 }
 
 // SetReaderSecret stores OAuth client secret JSON for a tenant reader.

@@ -133,3 +133,45 @@ func TestAuthRepositoryStoresOnlyTokenHashes(t *testing.T) {
 		t.Fatalf("revoked = %#v", revoked)
 	}
 }
+
+func TestAuthRepositoryCompletesAccountSetupOnce(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+
+	ctx := context.Background()
+	user, err := ts.CreateUser(ctx, store.CreateUserInput{
+		Email:       "setup@example.com",
+		DisplayName: "Setup User",
+		Role:        store.UserRoleUser,
+		AvatarKey:   "default",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
+	}
+	token, err := ts.CreateAccountSetupToken(ctx, store.CreateAccountSetupTokenInput{
+		UserID:    user.ID,
+		TokenHash: "sha256:setup-token",
+		ExpiresAt: time.Now().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("CreateAccountSetupToken() error = %v", err)
+	}
+
+	updated, err := ts.CompleteAccountSetup(ctx, "sha256:setup-token", "$2a$10$newhashabcdefghijklmnop")
+	if err != nil {
+		t.Fatalf("CompleteAccountSetup() error = %v", err)
+	}
+	if updated.ID != user.ID || updated.PasswordHash != "$2a$10$newhashabcdefghijklmnop" {
+		t.Fatalf("updated user = %#v", updated)
+	}
+	used, err := ts.FindAccountSetupTokenByHash(ctx, token.TokenHash)
+	if err != nil {
+		t.Fatalf("FindAccountSetupTokenByHash() error = %v", err)
+	}
+	if used.UsedAt == nil {
+		t.Fatalf("setup token was not marked used: %#v", used)
+	}
+	if _, err := ts.CompleteAccountSetup(ctx, "sha256:setup-token", "$2a$10$otherhashabcdefghijklmn"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("second CompleteAccountSetup() error = %v, want ErrNotFound", err)
+	}
+}

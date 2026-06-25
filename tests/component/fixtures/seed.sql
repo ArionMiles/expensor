@@ -1,49 +1,77 @@
-INSERT INTO app_config (key, value) VALUES
-  ('base_currency', 'INR'),
-  ('scan_interval', '120'),
-  ('lookback_days', '365'),
-  ('app.timezone', 'Asia/Kolkata'),
-  ('app.time_format', 'HH:mm'),
-  ('active_reader', 'thunderbird'),
-  ('reader.gmail.last_scan_at', '2026-05-23T06:00:00Z')
-ON CONFLICT (key) WHERE tenant_id IS NULL DO UPDATE SET value = EXCLUDED.value;
+INSERT INTO users (id, email, password_hash, display_name, role, avatar_key) VALUES (
+  '00000000-0000-0000-0000-00000000c0de',
+  'component-admin@example.com',
+  '$2a$10$LfS5UEzIPBGqzhsDVmohr.FfBuPQLWlRH9QfNkMZgig0mnFc.BeCC',
+  'Component Admin',
+  'admin',
+  'default'
+) ON CONFLICT (id) DO UPDATE SET
+  email = EXCLUDED.email,
+  password_hash = EXCLUDED.password_hash,
+  display_name = EXCLUDED.display_name,
+  role = EXCLUDED.role,
+  avatar_key = EXCLUDED.avatar_key,
+  disabled_at = NULL,
+  updated_at = NOW();
 
-INSERT INTO reader_runtime (reader, config) VALUES
-  ('thunderbird', '{"config":{"profilePath":"/workspace/tests/component/fixtures/thunderbird-profile","mailboxes":"Inbox"}}'::jsonb)
-ON CONFLICT (reader) WHERE tenant_id IS NULL DO UPDATE SET config = EXCLUDED.config, updated_at = NOW();
+INSERT INTO access_tokens (user_id, name, token_hash) VALUES (
+  '00000000-0000-0000-0000-00000000c0de',
+  'component contract token',
+  'sha256:136a976b1f2c9c3d0fe47759b8f1b112a7dcb1c77197d213c6bd1715c54c111b'
+) ON CONFLICT (user_id, name) DO UPDATE SET
+  token_hash = EXCLUDED.token_hash,
+  revoked_at = NULL;
 
-INSERT INTO labels (name, color) VALUES
-  ('10min Delivery', '#8b5cf6'),
-  ('Recurring', '#6366f1'),
-  ('Weekend', '#f59e0b'),
-  ('Family', '#ec4899'),
-  ('Office', '#14b8a6'),
-  ('Shared', '#22c55e'),
-  ('High Value', '#ef4444'),
-  ('Reimbursable', '#10b981'),
-  ('Late Night', '#64748b'),
-  ('Online', '#3b82f6')
-ON CONFLICT (name) WHERE tenant_id IS NULL DO UPDATE SET color = EXCLUDED.color;
+INSERT INTO app_config (tenant_id, key, value) VALUES
+  ('00000000-0000-0000-0000-00000000c0de', 'base_currency', 'INR'),
+  ('00000000-0000-0000-0000-00000000c0de', 'scan_interval', '120'),
+  ('00000000-0000-0000-0000-00000000c0de', 'lookback_days', '365'),
+  ('00000000-0000-0000-0000-00000000c0de', 'app.timezone', 'Asia/Kolkata'),
+  ('00000000-0000-0000-0000-00000000c0de', 'app.time_format', 'HH:mm'),
+  ('00000000-0000-0000-0000-00000000c0de', 'active_reader', 'thunderbird'),
+  ('00000000-0000-0000-0000-00000000c0de', 'reader.gmail.last_scan_at', '2026-05-23T06:00:00Z')
+ON CONFLICT (tenant_id, key) WHERE tenant_id IS NOT NULL DO UPDATE SET value = EXCLUDED.value;
 
-INSERT INTO categories (name, description, is_default) VALUES
-  ('Food & Dining', 'Seeded dining category', true),
-  ('Groceries', 'Seeded groceries category', true),
-  ('Utilities', 'Seeded utilities category', true),
-  ('Entertainment', 'Seeded entertainment category', true),
-  ('Travel', 'Seeded travel category', true),
-  ('Healthcare', 'Seeded healthcare category', true),
-  ('Transport', 'Seeded transport category', true),
-  ('Shopping', 'Seeded shopping category', true),
-  ('Subscriptions', 'Seeded subscriptions category', true),
-  ('Personal Care', 'Seeded personal care category', true),
-  ('Investments', 'Seeded investments category', true)
-ON CONFLICT (name) WHERE tenant_id IS NULL DO UPDATE SET description = EXCLUDED.description, is_default = EXCLUDED.is_default;
+INSERT INTO reader_runtime (tenant_id, reader, config) VALUES
+  ('00000000-0000-0000-0000-00000000c0de', 'thunderbird', '{"config":{"profilePath":"/workspace/tests/component/fixtures/thunderbird-profile","mailboxes":"Inbox"}}'::jsonb)
+ON CONFLICT (tenant_id, reader) WHERE tenant_id IS NOT NULL DO UPDATE SET config = EXCLUDED.config, updated_at = NOW();
 
-INSERT INTO buckets (name, description, is_default) VALUES
-  ('Needs', 'Seeded needs bucket', true),
-  ('Wants', 'Seeded wants bucket', true),
-  ('Investments', 'Seeded investments bucket', true)
-ON CONFLICT (name) WHERE tenant_id IS NULL DO UPDATE SET description = EXCLUDED.description, is_default = EXCLUDED.is_default;
+INSERT INTO labels (tenant_id, name, color) VALUES
+  ('00000000-0000-0000-0000-00000000c0de', '10min Delivery', '#8b5cf6'),
+  ('00000000-0000-0000-0000-00000000c0de', 'Recurring', '#6366f1'),
+  ('00000000-0000-0000-0000-00000000c0de', 'Weekend', '#f59e0b'),
+  ('00000000-0000-0000-0000-00000000c0de', 'Family', '#ec4899'),
+  ('00000000-0000-0000-0000-00000000c0de', 'Office', '#14b8a6'),
+  ('00000000-0000-0000-0000-00000000c0de', 'Shared', '#22c55e'),
+  ('00000000-0000-0000-0000-00000000c0de', 'High Value', '#ef4444'),
+  ('00000000-0000-0000-0000-00000000c0de', 'Reimbursable', '#10b981'),
+  ('00000000-0000-0000-0000-00000000c0de', 'Late Night', '#64748b'),
+  ('00000000-0000-0000-0000-00000000c0de', 'Online', '#3b82f6')
+ON CONFLICT (tenant_id, name) WHERE tenant_id IS NOT NULL DO UPDATE SET color = EXCLUDED.color;
+
+INSERT INTO categories (tenant_id, name, description, is_default) VALUES
+  ('00000000-0000-0000-0000-00000000c0de', 'Food & Dining', 'Seeded dining category', true),
+  ('00000000-0000-0000-0000-00000000c0de', 'Groceries', 'Seeded groceries category', true),
+  ('00000000-0000-0000-0000-00000000c0de', 'Utilities', 'Seeded utilities category', true),
+  ('00000000-0000-0000-0000-00000000c0de', 'Entertainment', 'Seeded entertainment category', true),
+  ('00000000-0000-0000-0000-00000000c0de', 'Travel', 'Seeded travel category', true),
+  ('00000000-0000-0000-0000-00000000c0de', 'Healthcare', 'Seeded healthcare category', true),
+  ('00000000-0000-0000-0000-00000000c0de', 'Transport', 'Seeded transport category', true),
+  ('00000000-0000-0000-0000-00000000c0de', 'Shopping', 'Seeded shopping category', true),
+  ('00000000-0000-0000-0000-00000000c0de', 'Subscriptions', 'Seeded subscriptions category', true),
+  ('00000000-0000-0000-0000-00000000c0de', 'Personal Care', 'Seeded personal care category', true),
+  ('00000000-0000-0000-0000-00000000c0de', 'Investments', 'Seeded investments category', true)
+ON CONFLICT (tenant_id, name) WHERE tenant_id IS NOT NULL DO UPDATE SET
+  description = EXCLUDED.description,
+  is_default = EXCLUDED.is_default;
+
+INSERT INTO buckets (tenant_id, name, description, is_default) VALUES
+  ('00000000-0000-0000-0000-00000000c0de', 'Needs', 'Seeded needs bucket', true),
+  ('00000000-0000-0000-0000-00000000c0de', 'Wants', 'Seeded wants bucket', true),
+  ('00000000-0000-0000-0000-00000000c0de', 'Investments', 'Seeded investments bucket', true)
+ON CONFLICT (tenant_id, name) WHERE tenant_id IS NOT NULL DO UPDATE SET
+  description = EXCLUDED.description,
+  is_default = EXCLUDED.is_default;
 
 DELETE FROM transaction_label_sources
 WHERE transaction_id IN (SELECT id FROM transactions WHERE message_id LIKE 'seed-msg-%');
@@ -52,7 +80,8 @@ DELETE FROM transaction_labels
 WHERE transaction_id IN (SELECT id FROM transactions WHERE message_id LIKE 'seed-msg-%');
 
 DELETE FROM transactions
-WHERE message_id LIKE 'seed-msg-%';
+WHERE tenant_id = '00000000-0000-0000-0000-00000000c0de'
+  AND message_id LIKE 'seed-msg-%';
 
 WITH merchant_seed AS (
   SELECT *
@@ -149,6 +178,7 @@ transactions_to_insert AS (
   JOIN merchant_seed ON merchant_seed.idx = ((seed_rows.seq - 1) % 32) + 1
 )
 INSERT INTO transactions (
+  tenant_id,
   id,
   message_id,
   amount,
@@ -167,6 +197,7 @@ INSERT INTO transactions (
   mute_reason
 )
 SELECT
+  '00000000-0000-0000-0000-00000000c0de',
   id,
   message_id,
   amount,
@@ -192,52 +223,62 @@ WITH labeled AS (
     SELECT id, '10min Delivery' AS label, 'merchant' AS source_type, merchant_info AS merchant_pattern
     FROM transactions
     WHERE message_id LIKE 'seed-msg-%'
+      AND tenant_id = '00000000-0000-0000-0000-00000000c0de'
       AND (merchant_info ILIKE '%BLINK%' OR merchant_info ILIKE '%INSTAMART%')
     UNION
     SELECT id, 'Recurring', 'merchant', merchant_info
     FROM transactions
     WHERE message_id LIKE 'seed-msg-%'
+      AND tenant_id = '00000000-0000-0000-0000-00000000c0de'
       AND merchant_info IN ('OPENAI *CHATGPT SUBSCR', 'NETFLIX.COM', 'RENTOMOJO', 'NPS CONTRIBUTION')
     UNION
     SELECT id, 'Weekend', 'manual', ''
     FROM transactions
     WHERE message_id LIKE 'seed-msg-%'
+      AND tenant_id = '00000000-0000-0000-0000-00000000c0de'
       AND EXTRACT(ISODOW FROM timestamp AT TIME ZONE 'Asia/Kolkata') IN (6, 7)
     UNION
     SELECT id, 'Family', 'manual', ''
     FROM transactions
     WHERE message_id LIKE 'seed-msg-%'
+      AND tenant_id = '00000000-0000-0000-0000-00000000c0de'
       AND regexp_replace(message_id, 'seed-msg-', '')::int % 11 = 0
     UNION
     SELECT id, 'Office', 'manual', ''
     FROM transactions
     WHERE message_id LIKE 'seed-msg-%'
+      AND tenant_id = '00000000-0000-0000-0000-00000000c0de'
       AND regexp_replace(message_id, 'seed-msg-', '')::int % 13 = 0
     UNION
     SELECT id, 'Shared', 'manual', ''
     FROM transactions
     WHERE message_id LIKE 'seed-msg-%'
+      AND tenant_id = '00000000-0000-0000-0000-00000000c0de'
       AND regexp_replace(message_id, 'seed-msg-', '')::int % 7 = 0
     UNION
     SELECT id, 'High Value', 'manual', ''
     FROM transactions
     WHERE message_id LIKE 'seed-msg-%'
+      AND tenant_id = '00000000-0000-0000-0000-00000000c0de'
       AND amount >= 3500
     UNION
     SELECT id, 'Reimbursable', 'manual', ''
     FROM transactions
     WHERE message_id LIKE 'seed-msg-%'
+      AND tenant_id = '00000000-0000-0000-0000-00000000c0de'
       AND amount >= 1800
       AND regexp_replace(message_id, 'seed-msg-', '')::int % 4 = 0
     UNION
     SELECT id, 'Late Night', 'manual', ''
     FROM transactions
     WHERE message_id LIKE 'seed-msg-%'
+      AND tenant_id = '00000000-0000-0000-0000-00000000c0de'
       AND EXTRACT(HOUR FROM timestamp AT TIME ZONE 'Asia/Kolkata') >= 21
     UNION
     SELECT id, 'Online', 'manual', ''
     FROM transactions
     WHERE message_id LIKE 'seed-msg-%'
+      AND tenant_id = '00000000-0000-0000-0000-00000000c0de'
       AND source_type = 'Credit Card'
       AND regexp_replace(message_id, 'seed-msg-', '')::int % 5 = 0
   ) AS labels_for_transactions
@@ -262,20 +303,29 @@ SELECT
     ELSE ''
   END
 FROM transaction_labels
-WHERE transaction_id IN (SELECT id FROM transactions WHERE message_id LIKE 'seed-msg-%')
+WHERE transaction_id IN (
+  SELECT id
+  FROM transactions
+  WHERE tenant_id = '00000000-0000-0000-0000-00000000c0de'
+    AND message_id LIKE 'seed-msg-%'
+)
 ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING;
 
-INSERT INTO labels (name, color) VALUES
-  ('ContractLabel', '#f59e0b')
-ON CONFLICT (name) WHERE tenant_id IS NULL DO UPDATE SET color = EXCLUDED.color;
+INSERT INTO labels (tenant_id, name, color) VALUES
+  ('00000000-0000-0000-0000-00000000c0de', 'ContractLabel', '#f59e0b')
+ON CONFLICT (tenant_id, name) WHERE tenant_id IS NOT NULL DO UPDATE SET color = EXCLUDED.color;
 
-INSERT INTO categories (name, description, is_default) VALUES
-  ('ContractCategory', 'Stable contract-test category', false)
-ON CONFLICT (name) WHERE tenant_id IS NULL DO UPDATE SET description = EXCLUDED.description, is_default = EXCLUDED.is_default;
+INSERT INTO categories (tenant_id, name, description, is_default) VALUES
+  ('00000000-0000-0000-0000-00000000c0de', 'ContractCategory', 'Stable contract-test category', false)
+ON CONFLICT (tenant_id, name) WHERE tenant_id IS NOT NULL DO UPDATE SET
+  description = EXCLUDED.description,
+  is_default = EXCLUDED.is_default;
 
-INSERT INTO buckets (name, description, is_default) VALUES
-  ('ContractBucket', 'Stable contract-test bucket', false)
-ON CONFLICT (name) WHERE tenant_id IS NULL DO UPDATE SET description = EXCLUDED.description, is_default = EXCLUDED.is_default;
+INSERT INTO buckets (tenant_id, name, description, is_default) VALUES
+  ('00000000-0000-0000-0000-00000000c0de', 'ContractBucket', 'Stable contract-test bucket', false)
+ON CONFLICT (tenant_id, name) WHERE tenant_id IS NOT NULL DO UPDATE SET
+  description = EXCLUDED.description,
+  is_default = EXCLUDED.is_default;
 
 INSERT INTO transaction_labels (transaction_id, label) VALUES
   ('00000000-0000-0000-0000-000000000001', 'Online')
@@ -286,6 +336,7 @@ INSERT INTO transaction_label_sources (transaction_id, label, source_type, merch
 ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING;
 
 INSERT INTO rules (
+  tenant_id,
   id,
   name,
   sender_email,
@@ -300,6 +351,7 @@ INSERT INTO rules (
   bank,
   predefined
 ) VALUES (
+  '00000000-0000-0000-0000-00000000c0de',
   '00000000-0000-0000-0000-00000000c001',
   'Contract Existing Rule',
   'contract-existing@example.com',
@@ -314,6 +366,7 @@ INSERT INTO rules (
   'Contract Bank',
   false
 ) ON CONFLICT (id) DO UPDATE SET
+  tenant_id = EXCLUDED.tenant_id,
   sender_email = EXCLUDED.sender_email,
   sender_emails = EXCLUDED.sender_emails,
   subject_contains = EXCLUDED.subject_contains,
@@ -328,6 +381,7 @@ INSERT INTO rules (
   updated_at = NOW();
 
 INSERT INTO extraction_diagnostics (
+  tenant_id,
   id,
   status,
   reader,
@@ -346,6 +400,7 @@ INSERT INTO extraction_diagnostics (
   currency_regex,
   failure_reasons
 ) VALUES (
+  '00000000-0000-0000-0000-00000000c0de',
   '00000000-0000-0000-0000-00000000c002',
   'open',
   'thunderbird',
@@ -364,6 +419,7 @@ INSERT INTO extraction_diagnostics (
   '(INR)',
   ARRAY['amount_not_found']
 ) ON CONFLICT (id) DO UPDATE SET
+  tenant_id = EXCLUDED.tenant_id,
   status = EXCLUDED.status,
   reader = EXCLUDED.reader,
   message_id = EXCLUDED.message_id,
@@ -383,8 +439,9 @@ INSERT INTO extraction_diagnostics (
   updated_at = NOW(),
   resolved_at = NULL;
 
-INSERT INTO muted_merchants (id, pattern, reason) VALUES
-  ('00000000-0000-0000-0000-00000000c003', 'Contract Muted Merchant', 'contract check')
+INSERT INTO muted_merchants (tenant_id, id, pattern, reason) VALUES
+  ('00000000-0000-0000-0000-00000000c0de', '00000000-0000-0000-0000-00000000c003', 'Contract Muted Merchant', 'contract check')
 ON CONFLICT (id) DO UPDATE SET
+  tenant_id = EXCLUDED.tenant_id,
   pattern = EXCLUDED.pattern,
   reason = EXCLUDED.reason;

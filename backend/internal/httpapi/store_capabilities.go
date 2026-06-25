@@ -23,6 +23,7 @@ type authStore interface {
 	CreateAccountSetupToken(ctx context.Context, input store.CreateAccountSetupTokenInput) (*store.AccountSetupToken, error)
 	FindAccountSetupTokenByHash(ctx context.Context, tokenHash string) (*store.AccountSetupToken, error)
 	MarkAccountSetupTokenUsed(ctx context.Context, id string) error
+	CompleteAccountSetup(ctx context.Context, tokenHash, passwordHash string) (*store.User, error)
 }
 
 type settingsStore interface {
@@ -83,8 +84,8 @@ type taxonomyStore interface {
 }
 
 type readerRuntimeStore interface {
-	SetActiveReader(ctx context.Context, reader string) error
-	GetActiveReader(ctx context.Context) (string, error)
+	SetActiveReader(ctx context.Context, tenant store.Tenant, reader string) error
+	GetActiveReader(ctx context.Context, tenant store.Tenant) (string, error)
 	SetReaderSecret(ctx context.Context, tenant store.Tenant, reader string, secret []byte) error
 	GetReaderSecret(ctx context.Context, tenant store.Tenant, reader string) ([]byte, bool, error)
 	SetReaderToken(ctx context.Context, tenant store.Tenant, reader string, token []byte) error
