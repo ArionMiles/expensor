@@ -23,7 +23,7 @@ type bootstrapRequest struct {
 	Email       string `json:"email" validate:"required,email" example:"new-admin@example.com"`
 	Password    string `json:"password" validate:"required,min=12" example:"correct horse battery staple"`
 	DisplayName string `json:"display_name" validate:"required,no_control_chars" example:"New Admin"`
-	AvatarKey   string `json:"avatar_key" validate:"omitempty,no_control_chars" example:"default"`
+	AvatarKey   string `json:"avatar_key" validate:"omitempty,no_control_chars,oneof=default ledger wallet" example:"default"`
 }
 
 type loginRequest struct {
@@ -39,7 +39,7 @@ type createUserRequest struct {
 	Email       string `json:"email" validate:"required,email" example:"contract-user@example.com"`
 	DisplayName string `json:"display_name" validate:"required,no_control_chars" example:"Contract User"`
 	Role        string `json:"role" validate:"omitempty,oneof=admin user" example:"user"`
-	AvatarKey   string `json:"avatar_key" validate:"omitempty,no_control_chars" example:"default"`
+	AvatarKey   string `json:"avatar_key" validate:"omitempty,no_control_chars,oneof=default ledger wallet" example:"default"`
 }
 
 type completeAccountSetupRequest struct {
@@ -117,7 +117,7 @@ func (h *Handlers) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		Email:        strings.ToLower(strings.TrimSpace(body.Email)),
 		DisplayName:  strings.TrimSpace(body.DisplayName),
 		PasswordHash: passwordHash,
-		AvatarKey:    strings.TrimSpace(body.AvatarKey),
+		AvatarKey:    normalizeAvatarKey(body.AvatarKey),
 	})
 	if err != nil {
 		if errors.Is(err, store.ErrBootstrapUnavailable) {
@@ -314,7 +314,7 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 		Email:       strings.ToLower(strings.TrimSpace(body.Email)),
 		DisplayName: strings.TrimSpace(body.DisplayName),
 		Role:        role,
-		AvatarKey:   strings.TrimSpace(body.AvatarKey),
+		AvatarKey:   normalizeAvatarKey(body.AvatarKey),
 	})
 	if err != nil {
 		h.logger.Error("create user", "error", err)

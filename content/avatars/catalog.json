@@ -1,0 +1,14 @@
+[
+  {
+    "key": "default",
+    "label": "Default"
+  },
+  {
+    "key": "ledger",
+    "label": "Ledger"
+  },
+  {
+    "key": "wallet",
+    "label": "Wallet"
+  }
+]
