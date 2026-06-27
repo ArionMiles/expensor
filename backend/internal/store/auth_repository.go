@@ -79,6 +79,57 @@ func (r *pgAuthRepository) CreateUser(ctx context.Context, input CreateUserInput
 	return user, nil
 }
 
+func (r *pgAuthRepository) ListUsers(ctx context.Context) ([]User, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, id AS tenant_id, email, COALESCE(password_hash, ''), display_name, role, avatar_key,
+		       disabled_at, created_at, updated_at
+		FROM users
+		ORDER BY created_at, id
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("listing users: %w", err)
+	}
+	defer rows.Close()
+
+	users := make([]User, 0)
+	for rows.Next() {
+		user, err := scanUser(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scanning user: %w", err)
+		}
+		users = append(users, *user)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating users: %w", err)
+	}
+	return users, nil
+}
+
+func (r *pgAuthRepository) UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, error) {
+	user, err := scanUser(r.pool.QueryRow(ctx, `
+		UPDATE users
+		SET display_name = COALESCE($2, display_name),
+		    role = COALESCE($3, role),
+		    avatar_key = COALESCE($4, avatar_key),
+		    disabled_at = CASE
+		        WHEN $5::boolean IS NULL THEN disabled_at
+		        WHEN $5 THEN COALESCE(disabled_at, NOW())
+		        ELSE NULL
+		    END,
+		    updated_at = NOW()
+		WHERE id = $1
+		RETURNING id, id AS tenant_id, email, COALESCE(password_hash, ''), display_name, role, avatar_key,
+		          disabled_at, created_at, updated_at
+	`, id, input.DisplayName, input.Role, input.AvatarKey, input.Disabled))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("updating user: %w", err)
+	}
+	return user, nil
+}
+
 func (r *pgAuthRepository) FindUserByEmail(ctx context.Context, email string) (*User, error) {
 	user, err := scanUser(r.pool.QueryRow(ctx, `
 		SELECT id, id AS tenant_id, email, COALESCE(password_hash, ''), display_name, role, avatar_key,
@@ -159,6 +210,32 @@ func (r *pgAuthRepository) CreateAccessToken(ctx context.Context, input CreateAc
 		return nil, fmt.Errorf("creating access token: %w", err)
 	}
 	return token, nil
+}
+
+func (r *pgAuthRepository) ListAccessTokens(ctx context.Context, userID string) ([]AccessToken, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, user_id, name, token_hash, created_at, expires_at, last_used_at, revoked_at
+		FROM access_tokens
+		WHERE user_id = $1 AND revoked_at IS NULL
+		ORDER BY created_at DESC, id DESC
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing access tokens: %w", err)
+	}
+	defer rows.Close()
+
+	tokens := make([]AccessToken, 0)
+	for rows.Next() {
+		token, err := scanAccessToken(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scanning access token: %w", err)
+		}
+		tokens = append(tokens, *token)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating access tokens: %w", err)
+	}
+	return tokens, nil
 }
 
 func (r *pgAuthRepository) FindAccessTokenByHash(ctx context.Context, tokenHash string) (*AccessToken, error) {

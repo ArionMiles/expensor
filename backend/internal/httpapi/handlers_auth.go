@@ -35,11 +35,23 @@ type createAccessTokenRequest struct {
 	Name string `json:"name" validate:"required,no_control_chars" example:"contract"`
 }
 
+type updateProfileRequest struct {
+	DisplayName *string `json:"display_name" validate:"omitempty,no_control_chars" example:"New Name"`
+	AvatarKey   *string `json:"avatar_key" validate:"omitempty,no_control_chars" example:"wallet" enums:"default,ledger,wallet"`
+}
+
 type createUserRequest struct {
 	Email       string `json:"email" validate:"required,email" example:"contract-user@example.com"`
 	DisplayName string `json:"display_name" validate:"required,no_control_chars" example:"Contract User"`
 	Role        string `json:"role" validate:"omitempty,oneof=admin user" example:"user"`
 	AvatarKey   string `json:"avatar_key" validate:"omitempty,no_control_chars,oneof=default ledger wallet" example:"default"`
+}
+
+type updateUserRequest struct {
+	DisplayName *string `json:"display_name" validate:"omitempty,no_control_chars" example:"Contract User"`
+	Role        *string `json:"role" validate:"omitempty,no_control_chars" example:"user" enums:"admin,user"`
+	AvatarKey   *string `json:"avatar_key" validate:"omitempty,no_control_chars" example:"wallet" enums:"default,ledger,wallet"`
+	Disabled    *bool   `json:"disabled" example:"false"`
 }
 
 type completeAccountSetupRequest struct {
@@ -61,11 +73,24 @@ type principalResponse struct {
 }
 
 type accessTokenResponse struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	Token     string     `json:"token,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
-	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	Token      string     `json:"token,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+}
+
+type userResponse struct {
+	UserID      string     `json:"user_id"`
+	TenantID    string     `json:"tenant_id"`
+	Email       string     `json:"email"`
+	DisplayName string     `json:"display_name"`
+	Role        string     `json:"role"`
+	AvatarKey   string     `json:"avatar_key"`
+	DisabledAt  *time.Time `json:"disabled_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 type setupTokenResponse struct {
@@ -215,6 +240,45 @@ func (h *Handlers) GetProfile(w http.ResponseWriter, r *http.Request) {
 	h.GetSession(w, r)
 }
 
+// UpdateProfile updates the current authenticated user profile.
+// @Summary Update the current user profile
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param request body updateProfileRequest true "Profile update"
+// @Success 200 {object} principalResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /profile [patch]
+func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	body, ok := decodeAndValidateJSON[updateProfileRequest](h, w, r)
+	if !ok {
+		return
+	}
+	input, ok := updateUserInputFromProfile(w, body)
+	if !ok {
+		return
+	}
+	user, err := h.authStore.UpdateUser(r.Context(), principal.UserID, input)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		h.logger.Error("update profile", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to update profile")
+		return
+	}
+	writeJSON(w, http.StatusOK, principalFromUser(user))
+}
+
 // CreateAccessToken creates a programmatic access token.
 // @Summary Create a programmatic access token
 // @Tags Auth
@@ -256,6 +320,33 @@ func (h *Handlers) CreateAccessToken(w http.ResponseWriter, r *http.Request) {
 	resp := accessTokenFromStore(token)
 	resp.Token = raw
 	writeJSON(w, http.StatusCreated, resp)
+}
+
+// ListAccessTokens returns programmatic access token metadata for the current user.
+// @Summary List programmatic access tokens
+// @Tags Auth
+// @Produce json
+// @Success 200 {array} accessTokenResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tokens [get]
+func (h *Handlers) ListAccessTokens(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	tokens, err := h.authStore.ListAccessTokens(r.Context(), principal.UserID)
+	if err != nil {
+		h.logger.Error("list access tokens", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to list tokens")
+		return
+	}
+	resp := make([]accessTokenResponse, 0, len(tokens))
+	for _, token := range tokens {
+		resp = append(resp, accessTokenFromStore(&token))
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // RevokeAccessToken revokes one of the current user's programmatic access tokens.
@@ -322,6 +413,72 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, principalFromUser(user))
+}
+
+// ListUsers returns instance users for administrators.
+// @Summary List instance users
+// @Tags Auth
+// @Produce json
+// @Success 200 {array} userResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /admin/users [get]
+func (h *Handlers) ListUsers(w http.ResponseWriter, r *http.Request) {
+	if !requireAdmin(w, r) {
+		return
+	}
+	users, err := h.authStore.ListUsers(r.Context())
+	if err != nil {
+		h.logger.Error("list users", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to list users")
+		return
+	}
+	resp := make([]userResponse, 0, len(users))
+	for _, user := range users {
+		resp = append(resp, userFromStore(&user))
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// UpdateUser updates an instance user for administrators.
+// @Summary Update an instance user
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param id path string true "User ID" example(00000000-0000-0000-0000-00000000c0de)
+// @Param request body updateUserRequest true "User update"
+// @Success 200 {object} userResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /admin/users/{id} [patch]
+func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	if !requireAdmin(w, r) {
+		return
+	}
+	body, ok := decodeAndValidateJSON[updateUserRequest](h, w, r)
+	if !ok {
+		return
+	}
+	input, ok := updateUserInputFromAdmin(w, body)
+	if !ok {
+		return
+	}
+	user, err := h.authStore.UpdateUser(r.Context(), r.PathValue("id"), input)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		h.logger.Error("update user", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to update user")
+		return
+	}
+	writeJSON(w, http.StatusOK, userFromStore(user))
 }
 
 // CreateSetupToken creates a one-time setup token for an instance user.
@@ -477,12 +634,85 @@ func principalFromUser(user *store.User) principalResponse {
 	}
 }
 
+func userFromStore(user *store.User) userResponse {
+	return userResponse{
+		UserID:      user.ID,
+		TenantID:    user.TenantID,
+		Email:       user.Email,
+		DisplayName: user.DisplayName,
+		Role:        string(user.Role),
+		AvatarKey:   user.AvatarKey,
+		DisabledAt:  user.DisabledAt,
+		CreatedAt:   user.CreatedAt,
+		UpdatedAt:   user.UpdatedAt,
+	}
+}
+
 func accessTokenFromStore(token *store.AccessToken) accessTokenResponse {
 	return accessTokenResponse{
-		ID:        token.ID,
-		Name:      token.Name,
-		CreatedAt: token.CreatedAt,
-		ExpiresAt: token.ExpiresAt,
+		ID:         token.ID,
+		Name:       token.Name,
+		CreatedAt:  token.CreatedAt,
+		ExpiresAt:  token.ExpiresAt,
+		LastUsedAt: token.LastUsedAt,
+	}
+}
+
+func updateUserInputFromProfile(w http.ResponseWriter, request updateProfileRequest) (store.UpdateUserInput, bool) {
+	var input store.UpdateUserInput
+	var details []ValidationErrorDetail
+	applyProfileUserUpdates(request.DisplayName, request.AvatarKey, &input, &details)
+	if len(details) > 0 {
+		writeValidationErrors(w, details)
+		return store.UpdateUserInput{}, false
+	}
+	return input, true
+}
+
+func updateUserInputFromAdmin(w http.ResponseWriter, request updateUserRequest) (store.UpdateUserInput, bool) {
+	var input store.UpdateUserInput
+	var details []ValidationErrorDetail
+	applyProfileUserUpdates(request.DisplayName, request.AvatarKey, &input, &details)
+	if request.Role != nil {
+		role := store.UserRole(strings.TrimSpace(*request.Role))
+		switch role {
+		case store.UserRoleAdmin, store.UserRoleUser:
+			input.Role = &role
+		default:
+			details = append(details, ValidationErrorDetail{Field: "role", Location: "body", Message: "must be one of: admin, user"})
+		}
+	}
+	input.Disabled = request.Disabled
+	if len(details) > 0 {
+		writeValidationErrors(w, details)
+		return store.UpdateUserInput{}, false
+	}
+	return input, true
+}
+
+func applyProfileUserUpdates(
+	displayNameValue *string,
+	avatarKeyValue *string,
+	input *store.UpdateUserInput,
+	details *[]ValidationErrorDetail,
+) {
+	if displayNameValue != nil {
+		displayName := strings.TrimSpace(*displayNameValue)
+		if displayName == "" {
+			*details = append(*details, ValidationErrorDetail{Field: "display_name", Location: "body", Message: "is required"})
+		}
+		input.DisplayName = &displayName
+	}
+	if avatarKeyValue != nil {
+		avatarKey := strings.TrimSpace(*avatarKeyValue)
+		if !ValidAvatarKey(avatarKey) {
+			*details = append(*details, ValidationErrorDetail{
+				Field:    "avatar_key",
+				Location: "body",
+				Message:  "must be one of: default, ledger, wallet",
+			})
+		}
+		input.AvatarKey = &avatarKey
 	}
 }
 

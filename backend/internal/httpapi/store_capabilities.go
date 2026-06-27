@@ -12,12 +12,15 @@ type authStore interface {
 	BootstrapRequired(ctx context.Context) (bool, error)
 	CreateBootstrapAdmin(ctx context.Context, input store.CreateBootstrapAdminInput) (*store.User, error)
 	CreateUser(ctx context.Context, input store.CreateUserInput) (*store.User, error)
+	ListUsers(ctx context.Context) ([]store.User, error)
+	UpdateUser(ctx context.Context, id string, input store.UpdateUserInput) (*store.User, error)
 	FindUserByEmail(ctx context.Context, email string) (*store.User, error)
 	FindUserByID(ctx context.Context, id string) (*store.User, error)
 	CreateSession(ctx context.Context, input store.CreateSessionInput) (*store.Session, error)
 	FindSessionByHash(ctx context.Context, tokenHash string) (*store.Session, error)
 	RevokeSession(ctx context.Context, id string) error
 	CreateAccessToken(ctx context.Context, input store.CreateAccessTokenInput) (*store.AccessToken, error)
+	ListAccessTokens(ctx context.Context, userID string) ([]store.AccessToken, error)
 	FindAccessTokenByHash(ctx context.Context, tokenHash string) (*store.AccessToken, error)
 	RevokeAccessToken(ctx context.Context, id, userID string) error
 	CreateAccountSetupToken(ctx context.Context, input store.CreateAccountSetupTokenInput) (*store.AccountSetupToken, error)
