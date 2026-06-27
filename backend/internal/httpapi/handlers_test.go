@@ -116,12 +116,18 @@ type mockStore struct {
 	bootstrapRequired          bool
 	createdBootstrapAdmin      store.CreateBootstrapAdminInput
 	createdUser                store.CreateUserInput
+	users                      []store.User
+	updatedUserID              string
+	updatedUser                store.UpdateUserInput
+	updatedUserResult          *store.User
 	usersByEmail               map[string]*store.User
 	usersByID                  map[string]*store.User
 	createdSession             store.CreateSessionInput
 	sessionsByHash             map[string]*store.Session
 	revokedSessionID           string
 	createdAccessToken         store.CreateAccessTokenInput
+	accessTokens               []store.AccessToken
+	listedAccessTokensUserID   string
 	accessTokensByHash         map[string]*store.AccessToken
 	revokedAccessTokenID       string
 	revokedAccessUserID        string
@@ -161,6 +167,31 @@ func (m *mockStore) CreateUser(_ context.Context, input store.CreateUserInput) (
 		PasswordHash: input.PasswordHash,
 		Role:         input.Role,
 		AvatarKey:    input.AvatarKey,
+	}, nil
+}
+
+func (m *mockStore) ListUsers(_ context.Context) ([]store.User, error) {
+	return m.users, nil
+}
+
+func (m *mockStore) UpdateUser(_ context.Context, id string, input store.UpdateUserInput) (*store.User, error) {
+	m.updatedUserID = id
+	m.updatedUser = input
+	if m.updatedUserResult != nil {
+		return m.updatedUserResult, nil
+	}
+	if m.usersByID != nil {
+		if user, ok := m.usersByID[id]; ok {
+			return user, nil
+		}
+	}
+	return &store.User{
+		ID:          id,
+		TenantID:    id,
+		Email:       "updated@example.com",
+		DisplayName: "Updated",
+		Role:        store.UserRoleUser,
+		AvatarKey:   "default",
 	}, nil
 }
 
@@ -204,6 +235,11 @@ func (m *mockStore) RevokeSession(_ context.Context, id string) error {
 func (m *mockStore) CreateAccessToken(_ context.Context, input store.CreateAccessTokenInput) (*store.AccessToken, error) {
 	m.createdAccessToken = input
 	return &store.AccessToken{ID: "access-token-id", UserID: input.UserID, Name: input.Name, TokenHash: input.TokenHash, ExpiresAt: input.ExpiresAt}, nil
+}
+
+func (m *mockStore) ListAccessTokens(_ context.Context, userID string) ([]store.AccessToken, error) {
+	m.listedAccessTokensUserID = userID
+	return m.accessTokens, nil
 }
 
 func (m *mockStore) FindAccessTokenByHash(_ context.Context, tokenHash string) (*store.AccessToken, error) {

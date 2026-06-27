@@ -134,6 +134,127 @@ func TestAuthRepositoryStoresOnlyTokenHashes(t *testing.T) {
 	}
 }
 
+func TestAuthRepositoryListsActiveAccessTokenMetadata(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+
+	ctx := context.Background()
+	admin, err := ts.CreateBootstrapAdmin(ctx, store.CreateBootstrapAdminInput{
+		Email:        "admin@example.com",
+		DisplayName:  "Admin",
+		PasswordHash: "$2a$10$abcdefghijklmnopqrstuu6Z6RMcYbqVvB6KZlSmLfHLj6y8s3zme",
+		AvatarKey:    "default",
+	})
+	if err != nil {
+		t.Fatalf("CreateBootstrapAdmin() error = %v", err)
+	}
+	other, err := ts.CreateUser(ctx, store.CreateUserInput{
+		Email:       "other@example.com",
+		DisplayName: "Other",
+		Role:        store.UserRoleUser,
+		AvatarKey:   "ledger",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
+	}
+	adminToken, err := ts.CreateAccessToken(ctx, store.CreateAccessTokenInput{
+		UserID:    admin.ID,
+		Name:      "cli",
+		TokenHash: "sha256:admin-token",
+	})
+	if err != nil {
+		t.Fatalf("CreateAccessToken(admin) error = %v", err)
+	}
+	revokedToken, err := ts.CreateAccessToken(ctx, store.CreateAccessTokenInput{
+		UserID:    admin.ID,
+		Name:      "old",
+		TokenHash: "sha256:old-token",
+	})
+	if err != nil {
+		t.Fatalf("CreateAccessToken(revoked) error = %v", err)
+	}
+	if _, err := ts.CreateAccessToken(ctx, store.CreateAccessTokenInput{
+		UserID:    other.ID,
+		Name:      "other",
+		TokenHash: "sha256:other-token",
+	}); err != nil {
+		t.Fatalf("CreateAccessToken(other) error = %v", err)
+	}
+	if err := ts.RevokeAccessToken(ctx, revokedToken.ID, admin.ID); err != nil {
+		t.Fatalf("RevokeAccessToken() error = %v", err)
+	}
+
+	tokens, err := ts.ListAccessTokens(ctx, admin.ID)
+	if err != nil {
+		t.Fatalf("ListAccessTokens() error = %v", err)
+	}
+	if len(tokens) != 1 || tokens[0].ID != adminToken.ID || tokens[0].Name != "cli" {
+		t.Fatalf("tokens = %#v", tokens)
+	}
+	if tokens[0].TokenHash != "sha256:admin-token" {
+		t.Fatalf("token hash changed unexpectedly: %#v", tokens[0])
+	}
+}
+
+func TestAuthRepositoryListsAndUpdatesUsers(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+
+	ctx := context.Background()
+	admin, err := ts.CreateBootstrapAdmin(ctx, store.CreateBootstrapAdminInput{
+		Email:        "admin@example.com",
+		DisplayName:  "Admin",
+		PasswordHash: "$2a$10$abcdefghijklmnopqrstuu6Z6RMcYbqVvB6KZlSmLfHLj6y8s3zme",
+		AvatarKey:    "default",
+	})
+	if err != nil {
+		t.Fatalf("CreateBootstrapAdmin() error = %v", err)
+	}
+	user, err := ts.CreateUser(ctx, store.CreateUserInput{
+		Email:       "user@example.com",
+		DisplayName: "User",
+		Role:        store.UserRoleUser,
+		AvatarKey:   "ledger",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
+	}
+
+	displayName := "Updated User"
+	role := store.UserRoleAdmin
+	avatarKey := "wallet"
+	disabled := true
+	updated, err := ts.UpdateUser(ctx, user.ID, store.UpdateUserInput{
+		DisplayName: &displayName,
+		Role:        &role,
+		AvatarKey:   &avatarKey,
+		Disabled:    &disabled,
+	})
+	if err != nil {
+		t.Fatalf("UpdateUser() error = %v", err)
+	}
+	if updated.DisplayName != displayName || updated.Role != role || updated.AvatarKey != avatarKey || updated.DisabledAt == nil {
+		t.Fatalf("updated user = %#v", updated)
+	}
+
+	disabled = false
+	updated, err = ts.UpdateUser(ctx, user.ID, store.UpdateUserInput{Disabled: &disabled})
+	if err != nil {
+		t.Fatalf("UpdateUser(enable) error = %v", err)
+	}
+	if updated.DisabledAt != nil {
+		t.Fatalf("updated user remains disabled: %#v", updated)
+	}
+
+	users, err := ts.ListUsers(ctx)
+	if err != nil {
+		t.Fatalf("ListUsers() error = %v", err)
+	}
+	if len(users) != 2 || users[0].ID != admin.ID || users[1].ID != user.ID {
+		t.Fatalf("users = %#v", users)
+	}
+}
+
 func TestAuthRepositoryCompletesAccountSetupOnce(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()

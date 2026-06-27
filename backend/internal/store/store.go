@@ -121,6 +121,14 @@ func (s *Store) CreateUser(ctx context.Context, input CreateUserInput) (*User, e
 	return s.auth.CreateUser(ctx, input)
 }
 
+func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
+	return s.auth.ListUsers(ctx)
+}
+
+func (s *Store) UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, error) {
+	return s.auth.UpdateUser(ctx, id, input)
+}
+
 func (s *Store) FindUserByEmail(ctx context.Context, email string) (*User, error) {
 	return s.auth.FindUserByEmail(ctx, email)
 }
@@ -143,6 +151,10 @@ func (s *Store) RevokeSession(ctx context.Context, id string) error {
 
 func (s *Store) CreateAccessToken(ctx context.Context, input CreateAccessTokenInput) (*AccessToken, error) {
 	return s.auth.CreateAccessToken(ctx, input)
+}
+
+func (s *Store) ListAccessTokens(ctx context.Context, userID string) ([]AccessToken, error) {
+	return s.auth.ListAccessTokens(ctx, userID)
 }
 
 func (s *Store) FindAccessTokenByHash(ctx context.Context, tokenHash string) (*AccessToken, error) {

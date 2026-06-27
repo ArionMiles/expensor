@@ -61,6 +61,24 @@ func (s *InstrumentedStore) CreateUser(ctx context.Context, input CreateUserInpu
 	return user, err
 }
 
+func (s *InstrumentedStore) ListUsers(ctx context.Context) ([]User, error) {
+	ctx, span := s.scope.Start(ctx, "store.auth.list_users")
+	defer span.End()
+
+	users, err := s.next.ListUsers(ctx)
+	s.recordOperation(ctx, "auth.list_users", err)
+	return users, err
+}
+
+func (s *InstrumentedStore) UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, error) {
+	ctx, span := s.scope.Start(ctx, "store.auth.update_user")
+	defer span.End()
+
+	user, err := s.next.UpdateUser(ctx, id, input)
+	s.recordOperation(ctx, "auth.update_user", err)
+	return user, err
+}
+
 func (s *InstrumentedStore) FindUserByEmail(ctx context.Context, email string) (*User, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.find_user_by_email")
 	defer span.End()
@@ -113,6 +131,15 @@ func (s *InstrumentedStore) CreateAccessToken(ctx context.Context, input CreateA
 	token, err := s.next.CreateAccessToken(ctx, input)
 	s.recordOperation(ctx, "auth.create_access_token", err)
 	return token, err
+}
+
+func (s *InstrumentedStore) ListAccessTokens(ctx context.Context, userID string) ([]AccessToken, error) {
+	ctx, span := s.scope.Start(ctx, "store.auth.list_access_tokens")
+	defer span.End()
+
+	tokens, err := s.next.ListAccessTokens(ctx, userID)
+	s.recordOperation(ctx, "auth.list_access_tokens", err)
+	return tokens, err
 }
 
 func (s *InstrumentedStore) FindAccessTokenByHash(ctx context.Context, tokenHash string) (*AccessToken, error) {

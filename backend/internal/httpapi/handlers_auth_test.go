@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -193,6 +194,108 @@ func TestCreateAccessTokenReturnsRawTokenOnce(t *testing.T) {
 	}
 }
 
+func TestListAccessTokensReturnsCurrentUserTokenMetadata(t *testing.T) {
+	createdAt := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	lastUsedAt := createdAt.Add(time.Hour)
+	ms := &mockStore{
+		accessTokens: []store.AccessToken{
+			{
+				ID:         "token-a",
+				UserID:     "user-a",
+				Name:       "cli",
+				TokenHash:  "sha256:secret",
+				CreatedAt:  createdAt,
+				LastUsedAt: &lastUsedAt,
+			},
+		},
+	}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/tokens", nil)
+	rec := httptest.NewRecorder()
+
+	h.ListAccessTokens(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	if ms.listedAccessTokensUserID != "user-a" {
+		t.Fatalf("listed tokens for user = %q, want user-a", ms.listedAccessTokensUserID)
+	}
+	var resp []accessTokenResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp) != 1 || resp[0].ID != "token-a" || resp[0].Name != "cli" || resp[0].Token != "" {
+		t.Fatalf("tokens response = %#v", resp)
+	}
+	if !resp[0].CreatedAt.Equal(createdAt) || resp[0].LastUsedAt == nil || !resp[0].LastUsedAt.Equal(lastUsedAt) {
+		t.Fatalf("token timestamps = %#v", resp[0])
+	}
+	if strings.Contains(rec.Body.String(), "sha256:secret") {
+		t.Fatalf("token response leaked token hash: %s", rec.Body.String())
+	}
+}
+
+func TestUpdateProfileUpdatesCurrentUserOnly(t *testing.T) {
+	ms := &mockStore{
+		updatedUserResult: &store.User{
+			ID:          "user-a",
+			TenantID:    "tenant-a",
+			Email:       "a@example.com",
+			DisplayName: "Updated",
+			Role:        store.UserRoleUser,
+			AvatarKey:   "wallet",
+		},
+	}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(
+		ctx,
+		http.MethodPatch,
+		"/api/profile",
+		strings.NewReader(`{"display_name":" Updated ","avatar_key":"wallet"}`),
+	)
+	rec := httptest.NewRecorder()
+
+	h.UpdateProfile(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	if ms.updatedUserID != "user-a" {
+		t.Fatalf("updated user id = %q, want user-a", ms.updatedUserID)
+	}
+	if ms.updatedUser.DisplayName == nil || *ms.updatedUser.DisplayName != "Updated" {
+		t.Fatalf("updated display name = %#v", ms.updatedUser.DisplayName)
+	}
+	if ms.updatedUser.AvatarKey == nil || *ms.updatedUser.AvatarKey != "wallet" {
+		t.Fatalf("updated avatar = %#v", ms.updatedUser.AvatarKey)
+	}
+	var resp principalResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.DisplayName != "Updated" || resp.AvatarKey != "wallet" {
+		t.Fatalf("profile response = %#v", resp)
+	}
+}
+
+func TestUpdateProfileRejectsUnknownAvatarKey(t *testing.T) {
+	ms := &mockStore{}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodPatch, "/api/profile", strings.NewReader(`{"avatar_key":"unknown"}`))
+	rec := httptest.NewRecorder()
+
+	h.UpdateProfile(rec, req)
+
+	assertValidationError(t, rec, "avatar_key", "body", "must be one of: default, ledger, wallet")
+	if ms.updatedUserID != "" {
+		t.Fatalf("updated user id = %q, want no store write", ms.updatedUserID)
+	}
+}
+
 func TestCreateUserRequiresAdminRole(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
@@ -245,6 +348,161 @@ func TestCreateUserRejectsUnknownAvatarKey(t *testing.T) {
 	assertValidationError(t, rec, "avatar_key", "body", "must be one of: default, ledger, wallet")
 	if ms.createdUser.Email != "" {
 		t.Fatalf("created user = %#v, want no store write", ms.createdUser)
+	}
+}
+
+func TestListUsersRequiresAdminRole(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/admin/users", nil)
+	rec := httptest.NewRecorder()
+
+	h.ListUsers(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestListUsersAsAdmin(t *testing.T) {
+	createdAt := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	disabledAt := createdAt.Add(time.Hour)
+	ms := &mockStore{
+		users: []store.User{
+			{
+				ID:          "admin",
+				TenantID:    "admin",
+				Email:       "admin@example.com",
+				DisplayName: "Admin",
+				Role:        store.UserRoleAdmin,
+				AvatarKey:   "default",
+				CreatedAt:   createdAt,
+				UpdatedAt:   createdAt,
+			},
+			{
+				ID:          "user-b",
+				TenantID:    "user-b",
+				Email:       "b@example.com",
+				DisplayName: "B",
+				Role:        store.UserRoleUser,
+				AvatarKey:   "ledger",
+				DisabledAt:  &disabledAt,
+				CreatedAt:   createdAt,
+				UpdatedAt:   disabledAt,
+			},
+		},
+	}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "admin", TenantID: "admin", Role: auth.RoleAdmin})
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/admin/users", nil)
+	rec := httptest.NewRecorder()
+
+	h.ListUsers(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	var resp []userResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp) != 2 || resp[0].Email != "admin@example.com" || resp[1].DisabledAt == nil {
+		t.Fatalf("users response = %#v", resp)
+	}
+}
+
+func TestUpdateUserAsAdmin(t *testing.T) {
+	ms := &mockStore{
+		updatedUserResult: &store.User{
+			ID:          "user-b",
+			TenantID:    "user-b",
+			Email:       "b@example.com",
+			DisplayName: "B Updated",
+			Role:        store.UserRoleAdmin,
+			AvatarKey:   "wallet",
+		},
+	}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "admin", TenantID: "admin", Role: auth.RoleAdmin})
+	req := httptest.NewRequestWithContext(
+		ctx,
+		http.MethodPatch,
+		"/api/admin/users/user-b",
+		strings.NewReader(`{"display_name":" B Updated ","role":"admin","avatar_key":"wallet","disabled":true}`),
+	)
+	req.SetPathValue("id", "user-b")
+	rec := httptest.NewRecorder()
+
+	h.UpdateUser(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	if ms.updatedUserID != "user-b" {
+		t.Fatalf("updated user id = %q, want user-b", ms.updatedUserID)
+	}
+	if ms.updatedUser.DisplayName == nil || *ms.updatedUser.DisplayName != "B Updated" {
+		t.Fatalf("updated display name = %#v", ms.updatedUser.DisplayName)
+	}
+	if ms.updatedUser.Role == nil || *ms.updatedUser.Role != store.UserRoleAdmin {
+		t.Fatalf("updated role = %#v", ms.updatedUser.Role)
+	}
+	if ms.updatedUser.AvatarKey == nil || *ms.updatedUser.AvatarKey != "wallet" {
+		t.Fatalf("updated avatar = %#v", ms.updatedUser.AvatarKey)
+	}
+	if ms.updatedUser.Disabled == nil || !*ms.updatedUser.Disabled {
+		t.Fatalf("updated disabled = %#v", ms.updatedUser.Disabled)
+	}
+}
+
+func TestUpdateUserRejectsInvalidRoleBeforeWriting(t *testing.T) {
+	ms := &mockStore{}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "admin", TenantID: "admin", Role: auth.RoleAdmin})
+	req := httptest.NewRequestWithContext(ctx, http.MethodPatch, "/api/admin/users/user-b", strings.NewReader(`{"role":"owner"}`))
+	req.SetPathValue("id", "user-b")
+	rec := httptest.NewRecorder()
+
+	h.UpdateUser(rec, req)
+
+	assertValidationError(t, rec, "role", "body", "must be one of: admin, user")
+	if ms.updatedUserID != "" {
+		t.Fatalf("updated user id = %q, want no store write", ms.updatedUserID)
+	}
+}
+
+func TestUpdateUserReportsAllSemanticValidationErrors(t *testing.T) {
+	ms := &mockStore{}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "admin", TenantID: "admin", Role: auth.RoleAdmin})
+	req := httptest.NewRequestWithContext(
+		ctx,
+		http.MethodPatch,
+		"/api/admin/users/user-b",
+		strings.NewReader(`{"display_name":" ","role":"owner","avatar_key":"unknown"}`),
+	)
+	req.SetPathValue("id", "user-b")
+	rec := httptest.NewRecorder()
+
+	h.UpdateUser(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422; body = %s", rec.Code, rec.Body.String())
+	}
+	var resp ValidationErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	want := []ValidationErrorDetail{
+		{Field: "display_name", Location: "body", Message: "is required"},
+		{Field: "avatar_key", Location: "body", Message: "must be one of: default, ledger, wallet"},
+		{Field: "role", Location: "body", Message: "must be one of: admin, user"},
+	}
+	if !reflect.DeepEqual(resp.Details, want) {
+		t.Fatalf("details = %#v, want %#v", resp.Details, want)
+	}
+	if ms.updatedUserID != "" {
+		t.Fatalf("updated user id = %q, want no store write", ms.updatedUserID)
 	}
 }
 

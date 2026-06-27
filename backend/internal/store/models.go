@@ -53,6 +53,14 @@ type CreateUserInput struct {
 	PasswordHash string
 }
 
+// UpdateUserInput updates mutable account metadata.
+type UpdateUserInput struct {
+	DisplayName *string
+	Role        *UserRole
+	AvatarKey   *string
+	Disabled    *bool
+}
+
 // Session is a persisted browser session.
 type Session struct {
 	ID         string
