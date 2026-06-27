@@ -136,6 +136,36 @@ func TestBootstrapCreatesAdminAndSessionCookie(t *testing.T) {
 	}
 }
 
+func TestValidAvatarKeyAllowsCatalogKeys(t *testing.T) {
+	for _, key := range []string{"default", "ledger", "wallet"} {
+		if !ValidAvatarKey(key) {
+			t.Fatalf("ValidAvatarKey(%q) = false, want true", key)
+		}
+	}
+	if ValidAvatarKey("unknown") {
+		t.Fatal(`ValidAvatarKey("unknown") = true, want false`)
+	}
+}
+
+func TestBootstrapRejectsUnknownAvatarKey(t *testing.T) {
+	ms := &mockStore{bootstrapRequired: true}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/api/bootstrap",
+		strings.NewReader(`{"email":"admin@example.com","password":"correct horse battery staple","display_name":"Admin","avatar_key":"unknown"}`),
+	)
+	rec := httptest.NewRecorder()
+
+	h.Bootstrap(rec, req)
+
+	assertValidationError(t, rec, "avatar_key", "body", "must be one of: default, ledger, wallet")
+	if ms.createdBootstrapAdmin.Email != "" {
+		t.Fatalf("created admin = %#v, want no store write", ms.createdBootstrapAdmin)
+	}
+}
+
 func TestCreateAccessTokenReturnsRawTokenOnce(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
@@ -195,6 +225,26 @@ func TestCreateUserAsAdmin(t *testing.T) {
 	}
 	if ms.createdUser.Email != "b@example.com" || ms.createdUser.Role != store.UserRoleUser {
 		t.Fatalf("created user = %#v", ms.createdUser)
+	}
+}
+
+func TestCreateUserRejectsUnknownAvatarKey(t *testing.T) {
+	ms := &mockStore{}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "admin", TenantID: "admin", Role: auth.RoleAdmin})
+	req := httptest.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		"/api/admin/users",
+		strings.NewReader(`{"email":"b@example.com","display_name":"B","role":"user","avatar_key":"unknown"}`),
+	)
+	rec := httptest.NewRecorder()
+
+	h.CreateUser(rec, req)
+
+	assertValidationError(t, rec, "avatar_key", "body", "must be one of: default, ledger, wallet")
+	if ms.createdUser.Email != "" {
+		t.Fatalf("created user = %#v, want no store write", ms.createdUser)
 	}
 }
 

@@ -1121,6 +1121,10 @@ definitions:
   httpapi.bootstrapRequest:
     properties:
       avatar_key:
+        enum:
+        - default
+        - ledger
+        - wallet
         example: default
         type: string
       display_name:
@@ -1167,6 +1171,10 @@ definitions:
   httpapi.createUserRequest:
     properties:
       avatar_key:
+        enum:
+        - default
+        - ledger
+        - wallet
         example: default
         type: string
       display_name:
