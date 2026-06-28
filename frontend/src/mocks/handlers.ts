@@ -123,6 +123,138 @@ const extractionDiagnostics: ExtractionDiagnostic[] = [
 
 export const handlers = [
   http.get('/api/health', () => HttpResponse.json({ status: 'ok' })),
+  http.get('/api/bootstrap', () => HttpResponse.json({ required: false })),
+  http.get('/api/session', () =>
+    HttpResponse.json({
+      user_id: 'admin',
+      tenant_id: 'admin',
+      email: 'admin@example.com',
+      display_name: 'Admin',
+      role: 'admin',
+      avatar_key: 'default',
+    }),
+  ),
+  http.post('/api/session', async ({ request }) => {
+    const body = (await request.json()) as { email?: string }
+    return HttpResponse.json(
+      {
+        user_id: 'admin',
+        tenant_id: 'admin',
+        email: body.email ?? 'admin@example.com',
+        display_name: 'Admin',
+        role: 'admin',
+        avatar_key: 'default',
+      },
+      { status: 201 },
+    )
+  }),
+  http.delete('/api/session', () => new HttpResponse(null, { status: 204 })),
+  http.post('/api/bootstrap', async ({ request }) => {
+    const body = (await request.json()) as {
+      email?: string
+      display_name?: string
+      avatar_key?: string
+    }
+    return HttpResponse.json(
+      {
+        user_id: 'admin',
+        tenant_id: 'admin',
+        email: body.email ?? 'admin@example.com',
+        display_name: body.display_name ?? 'Admin',
+        role: 'admin',
+        avatar_key: body.avatar_key ?? 'default',
+      },
+      { status: 201 },
+    )
+  }),
+  http.post('/api/account-setup', () =>
+    HttpResponse.json(
+      {
+        user_id: 'user',
+        tenant_id: 'user',
+        email: 'user@example.com',
+        display_name: 'User',
+        role: 'user',
+        avatar_key: 'default',
+      },
+      { status: 201 },
+    ),
+  ),
+  http.patch('/api/profile', async ({ request }) => {
+    const body = (await request.json()) as { display_name?: string; avatar_key?: string }
+    return HttpResponse.json({
+      user_id: 'admin',
+      tenant_id: 'admin',
+      email: 'admin@example.com',
+      display_name: body.display_name ?? 'Admin',
+      role: 'admin',
+      avatar_key: body.avatar_key ?? 'default',
+    })
+  }),
+  http.get('/api/tokens', () => HttpResponse.json([])),
+  http.post('/api/tokens', async ({ request }) => {
+    const body = (await request.json()) as { name?: string }
+    return HttpResponse.json(
+      {
+        id: 'token-new',
+        name: body.name ?? '',
+        token: 'expensor_pat_mock',
+        created_at: new Date(0).toISOString(),
+        expires_at: null,
+        last_used_at: null,
+      },
+      { status: 201 },
+    )
+  }),
+  http.delete('/api/tokens/:id', () => new HttpResponse(null, { status: 204 })),
+  http.get('/api/admin/users', () => HttpResponse.json([])),
+  http.post('/api/admin/users', async ({ request }) => {
+    const body = (await request.json()) as {
+      email?: string
+      display_name?: string
+      role?: string
+      avatar_key?: string
+    }
+    return HttpResponse.json(
+      {
+        user_id: 'user-new',
+        tenant_id: 'user-new',
+        email: body.email ?? 'user@example.com',
+        display_name: body.display_name ?? 'User',
+        role: body.role ?? 'user',
+        avatar_key: body.avatar_key ?? 'default',
+      },
+      { status: 201 },
+    )
+  }),
+  http.patch('/api/admin/users/:id', async ({ params, request }) => {
+    const body = (await request.json()) as {
+      display_name?: string
+      role?: string
+      avatar_key?: string
+      disabled?: boolean
+    }
+    return HttpResponse.json({
+      user_id: String(params.id),
+      tenant_id: String(params.id),
+      email: `${String(params.id)}@example.com`,
+      display_name: body.display_name ?? String(params.id),
+      role: body.role ?? 'user',
+      avatar_key: body.avatar_key ?? 'default',
+      disabled_at: body.disabled ? new Date(0).toISOString() : null,
+      created_at: new Date(0).toISOString(),
+      updated_at: new Date(0).toISOString(),
+    })
+  }),
+  http.post('/api/admin/users/:id/setup-tokens', () =>
+    HttpResponse.json(
+      {
+        token: 'expensor_setup_mock',
+        expires_at: new Date(Date.UTC(2026, 0, 1)).toISOString(),
+      },
+      { status: 201 },
+    ),
+  ),
   http.get('/api/status', () =>
     HttpResponse.json({ daemon: { running: false }, stats: { base_currency: 'USD' } }),
   ),

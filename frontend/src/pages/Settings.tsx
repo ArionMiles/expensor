@@ -16,13 +16,15 @@ import { GeneralSettings } from './settings/GeneralSettings'
 import { SyncSettings } from './settings/SyncSettings'
 import { useI18n } from '@/i18n/I18nProvider'
 import type { MessageKey } from '@/i18n/messages'
+import { AccountSettings } from './settings/AccountSettings'
 
-type SettingsTab = 'general' | 'daemon' | 'sync'
+type SettingsTab = 'general' | 'daemon' | 'sync' | 'account'
 
 const TABS: { id: SettingsTab; labelKey: MessageKey }[] = [
   { id: 'general', labelKey: 'nav.settings.general.subtitle' },
   { id: 'daemon', labelKey: 'nav.settings.daemon.subtitle' },
   { id: 'sync', labelKey: 'nav.settings.sync.subtitle' },
+  { id: 'account', labelKey: 'nav.settings.account.subtitle' },
 ]
 
 function SettingField({
@@ -255,6 +257,7 @@ export default function Settings() {
       {tab === 'general' && <GeneralSettings />}
       {tab === 'daemon' && <DaemonSettings />}
       {tab === 'sync' && <SyncSettings />}
+      {tab === 'account' && <AccountSettings />}
     </div>
   )
 }

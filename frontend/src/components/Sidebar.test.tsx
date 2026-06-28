@@ -1,6 +1,8 @@
 import { screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useExtractionDiagnostics, useReaderStatus } from '@/api/queries'
+import { useExtractionDiagnostics, useLogout, useReaderStatus, useSession } from '@/api/queries'
 import { renderWithProviders } from '@/test/render'
 import { Sidebar } from './Sidebar'
 
@@ -10,11 +12,20 @@ vi.mock('@/api/queries', async (importOriginal) => {
     ...actual,
     useReaderStatus: vi.fn(),
     useExtractionDiagnostics: vi.fn(),
+    useSession: vi.fn(),
+    useLogout: vi.fn(),
   }
 })
 
 const mockUseReaderStatus = vi.mocked(useReaderStatus)
 const mockUseExtractionDiagnostics = vi.mocked(useExtractionDiagnostics)
+const mockUseSession = vi.mocked(useSession)
+const mockUseLogout = vi.mocked(useLogout)
+
+function LocationProbe() {
+  const location = useLocation()
+  return <div data-testid="location">{location.pathname}</div>
+}
 
 describe('Sidebar', () => {
   beforeEach(() => {
@@ -32,6 +43,20 @@ describe('Sidebar', () => {
     mockUseExtractionDiagnostics.mockReturnValue({
       data: [{ id: 'diag-1' }, { id: 'diag-2' }, { id: 'diag-3' }],
     } as ReturnType<typeof useExtractionDiagnostics>)
+    mockUseSession.mockReturnValue({
+      data: {
+        user_id: 'admin',
+        tenant_id: 'admin',
+        email: 'admin@example.com',
+        display_name: 'Admin',
+        role: 'admin',
+        avatar_key: 'default',
+      },
+    } as ReturnType<typeof useSession>)
+    mockUseLogout.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    } as unknown as ReturnType<typeof useLogout>)
   })
 
   it('shows the full Expensor logo in the expanded sidebar', () => {
@@ -103,5 +128,29 @@ describe('Sidebar', () => {
     const badge = screen.getByTestId('diagnostics-count-badge')
     expect(badge).toHaveTextContent('3')
     expect(badge).toHaveAttribute('aria-label', '3 open diagnostics')
+  })
+
+  it('navigates to login after signing out', async () => {
+    const user = userEvent.setup()
+    const mutate = vi.fn((_variables, options?: { onSuccess?: () => void }) => {
+      options?.onSuccess?.()
+    })
+    mockUseLogout.mockReturnValue({
+      mutate,
+      isPending: false,
+    } as unknown as ReturnType<typeof useLogout>)
+
+    renderWithProviders(
+      <>
+        <Sidebar collapsed={false} onToggle={() => undefined} />
+        <LocationProbe />
+      </>,
+      { route: '/transactions' },
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Sign out' }))
+
+    expect(mutate).toHaveBeenCalled()
+    expect(screen.getByTestId('location')).toHaveTextContent('/login')
   })
 })

@@ -1,12 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
 import type {
+  AdminUserPatch,
+  BootstrapRequest,
+  CompleteAccountSetupRequest,
   BankColor,
+  CreateUserRequest,
   DashboardData,
   ExtractionDiagnosticListStatus,
   ExtractionDiagnosticStatus,
+  LoginRequest,
   MonthlyBreakdownData,
   PreferencesPatch,
+  ProfilePatch,
   RuleDocument,
   RulePayload,
   SyncStatus,
@@ -15,6 +21,10 @@ import type {
 } from './types'
 
 export const queryKeys = {
+  bootstrap: ['auth', 'bootstrap'] as const,
+  session: ['auth', 'session'] as const,
+  accessTokens: ['auth', 'tokens'] as const,
+  adminUsers: ['auth', 'admin', 'users'] as const,
   health: ['health'] as const,
   status: ['status'] as const,
   chartData: ['stats', 'charts'] as const,
@@ -42,6 +52,144 @@ export const queryKeys = {
   activeReader: ['config', 'active-reader'] as const,
 }
 
+export function useBootstrapStatus() {
+  return useQuery({
+    queryKey: queryKeys.bootstrap,
+    queryFn: () => api.auth.bootstrapStatus().then((r) => r.data),
+    retry: false,
+    staleTime: 0,
+  })
+}
+
+export function useSession(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.session,
+    queryFn: () => api.auth.session().then((r) => r.data),
+    retry: false,
+    enabled,
+    staleTime: 0,
+  })
+}
+
+export function useLogin() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: LoginRequest) => api.auth.login(body).then((r) => r.data),
+    onSuccess: (principal) => {
+      qc.setQueryData(queryKeys.session, principal)
+      qc.invalidateQueries({ queryKey: ['transactions'] })
+      qc.invalidateQueries({ queryKey: queryKeys.setupStatus })
+    },
+  })
+}
+
+export function useBootstrapAdmin() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: BootstrapRequest) => api.auth.bootstrap(body).then((r) => r.data),
+    onSuccess: (principal) => {
+      qc.setQueryData(queryKeys.session, principal)
+      qc.setQueryData(queryKeys.bootstrap, { required: false })
+      qc.invalidateQueries({ queryKey: queryKeys.setupStatus })
+    },
+  })
+}
+
+export function useCompleteAccountSetup() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: CompleteAccountSetupRequest) =>
+      api.auth.completeAccountSetup(body).then((r) => r.data),
+    onSuccess: (principal) => {
+      qc.setQueryData(queryKeys.session, principal)
+      qc.invalidateQueries({ queryKey: queryKeys.setupStatus })
+    },
+  })
+}
+
+export function useLogout() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.auth.logout(),
+    onSuccess: () => {
+      qc.removeQueries()
+    },
+  })
+}
+
+export function useUpdateProfile() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (patch: ProfilePatch) => api.auth.updateProfile(patch).then((r) => r.data),
+    onSuccess: (principal) => {
+      qc.setQueryData(queryKeys.session, principal)
+    },
+  })
+}
+
+export function useAccessTokens() {
+  return useQuery({
+    queryKey: queryKeys.accessTokens,
+    queryFn: () => api.auth.tokens.list().then((r) => r.data),
+  })
+}
+
+export function useCreateAccessToken() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => api.auth.tokens.create(name).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.accessTokens })
+    },
+  })
+}
+
+export function useRevokeAccessToken() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.auth.tokens.revoke(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.accessTokens })
+    },
+  })
+}
+
+export function useAdminUsers(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.adminUsers,
+    queryFn: () => api.auth.admin.users().then((r) => r.data),
+    enabled,
+  })
+}
+
+export function useCreateUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: CreateUserRequest) => api.auth.admin.createUser(body).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.adminUsers })
+    },
+  })
+}
+
+export function useUpdateAdminUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: AdminUserPatch }) =>
+      api.auth.admin.updateUser(id, patch).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.adminUsers })
+      qc.invalidateQueries({ queryKey: queryKeys.session })
+    },
+  })
+}
+
+export function useCreateSetupToken() {
+  return useMutation({
+    mutationFn: (id: string) => api.auth.admin.createSetupToken(id).then((r) => r.data),
+  })
+}
+
 export function useVersion() {
   return useQuery({
     queryKey: ['version'] as const,
@@ -64,7 +212,7 @@ export function useSetupStatus() {
   return useQuery({
     queryKey: queryKeys.setupStatus,
     queryFn: () => api.config.getSetupStatus().then((r) => r.data),
-    staleTime: 30_000,
+    staleTime: 0,
   })
 }
 
