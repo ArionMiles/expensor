@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react'
+import { type FormEvent, type InputHTMLAttributes, useId, useMemo, useState } from 'react'
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   useBootstrapAdmin,
@@ -8,7 +8,7 @@ import {
   useSession,
 } from '@/api/queries'
 import type { AvatarKey } from '@/api/types'
-import { avatarCatalog } from '@/assets/avatars'
+import { avatarByKey, avatarCatalog } from '@/assets/avatars'
 import { useI18n } from '@/i18n/I18nProvider'
 import { cn } from '@/lib/utils'
 
@@ -17,11 +17,11 @@ function AuthSurface({ children }: { children: React.ReactNode }) {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto grid min-h-screen w-full max-w-6xl items-center gap-10 px-6 py-8 lg:grid-cols-[1.05fr_0.95fr] lg:px-10">
-        <section className="hidden min-h-[620px] flex-col justify-between overflow-hidden rounded-lg border border-border bg-card p-8 shadow-sm lg:flex">
+      <div className="mx-auto grid min-h-screen w-full max-w-5xl items-center gap-8 px-6 py-8 lg:grid-cols-[1fr_1px_0.9fr] lg:gap-12 lg:px-10">
+        <section className="hidden max-w-md lg:block">
           <div>
-            <div className="mb-12 flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-background">
+            <div className="mb-10 flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card">
                 <img
                   src="/brand/expensor-wallet.svg"
                   alt=""
@@ -34,17 +34,17 @@ function AuthSurface({ children }: { children: React.ReactNode }) {
             <p className="mb-3 text-xs font-medium uppercase tracking-wider text-primary">
               {t('auth.surface.eyebrow')}
             </p>
-            <h2 className="max-w-md text-4xl font-semibold leading-tight text-foreground">
+            <h2 className="text-4xl font-semibold leading-tight text-foreground">
               {t('auth.surface.title')}
             </h2>
-            <p className="mt-4 max-w-md text-sm leading-6 text-muted-foreground">
+            <p className="mt-4 text-sm leading-6 text-muted-foreground">
               {t('auth.surface.summary')}
             </p>
           </div>
 
-          <div className="space-y-6">
-            <div className="rounded-lg border border-border bg-background p-5">
-              <div className="mb-5 flex items-center justify-between">
+          <div className="mt-10 space-y-6">
+            <div className="rounded-lg border border-border bg-card/70 p-5 shadow-sm">
+              <div className="mb-4 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-foreground">
                     {t('auth.surface.previewTitle')}
@@ -58,12 +58,11 @@ function AuthSurface({ children }: { children: React.ReactNode }) {
               <div className="grid gap-3">
                 {[
                   [t('auth.surface.previewAccount'), t('auth.surface.previewAccountStatus')],
-                  [t('auth.surface.previewReaders'), t('auth.surface.previewReadersStatus')],
-                  [t('auth.surface.previewTokens'), t('auth.surface.previewTokensStatus')],
+                  [t('auth.surface.previewLocalData'), t('auth.surface.previewLocalDataStatus')],
                 ].map(([label, status]) => (
                   <div
                     key={label}
-                    className="flex items-center justify-between gap-4 rounded-md border border-border bg-card px-3 py-3"
+                    className="flex items-center justify-between gap-4 rounded-md border border-border bg-background px-3 py-3"
                   >
                     <p className="text-sm font-medium text-foreground">{label}</p>
                     <p className="text-right text-xs text-muted-foreground">{status}</p>
@@ -72,20 +71,16 @@ function AuthSurface({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            <div className="grid gap-3 text-sm text-muted-foreground">
-              {[
-                t('auth.surface.localData'),
-                t('auth.surface.accountControl'),
-                t('auth.surface.readerReady'),
-              ].map((item) => (
-                <div key={item} className="flex items-center gap-3">
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                  <span>{item}</span>
-                </div>
-              ))}
-            </div>
+            <p className="text-sm leading-6 text-muted-foreground">
+              {t('auth.surface.readerReady')}
+            </p>
           </div>
         </section>
+
+        <div
+          aria-hidden="true"
+          className="hidden h-[560px] w-px bg-gradient-to-b from-transparent via-border to-transparent lg:block"
+        />
 
         <div className="mx-auto w-full max-w-md">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
@@ -108,28 +103,98 @@ function Field({
   type = 'text',
   value,
   autoComplete,
+  inputMode,
+  message,
+  tone,
+  onBlur,
   onChange,
 }: {
   label: string
   type?: string
   value: string
   autoComplete?: string
+  inputMode?: InputHTMLAttributes<HTMLInputElement>['inputMode']
+  message?: string
+  tone?: 'warning'
+  onBlur?: () => void
   onChange: (value: string) => void
 }) {
+  const id = useId()
+  const messageId = `${id}-message`
+
   return (
     <label className="block">
       <span className="mb-1.5 block text-xs uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
       <input
+        id={id}
         type={type}
         value={value}
         autoComplete={autoComplete}
+        inputMode={inputMode}
+        aria-invalid={tone === 'warning'}
+        aria-describedby={message ? messageId : undefined}
+        onBlur={onBlur}
         onChange={(event) => onChange(event.currentTarget.value)}
-        className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-ring"
+        className={cn(
+          'h-11 w-full rounded-md border bg-background px-3 text-sm text-foreground outline-none transition-colors focus:ring-1',
+          tone === 'warning'
+            ? 'border-warning focus:border-warning focus:ring-warning/40'
+            : 'border-border focus:border-primary focus:ring-ring',
+        )}
       />
+      {message && (
+        <p id={messageId} className="mt-1.5 text-xs text-warning">
+          {message}
+        </p>
+      )}
     </label>
   )
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+}
+
+function passwordStrength(value: string): 'weak' | 'good' | 'strong' {
+  if (value.length >= 16 && (/[A-Z0-9]/.test(value) || /[^\w\s]/.test(value))) return 'strong'
+  if (value.length >= 12) return 'good'
+  return 'weak'
+}
+
+function PasswordStrength({ password }: { password: string }) {
+  const { t } = useI18n()
+  if (!password) return null
+
+  const strength = passwordStrength(password)
+  const width = strength === 'strong' ? 'w-full' : strength === 'good' ? 'w-2/3' : 'w-1/3'
+  const tone = strength === 'weak' ? 'bg-warning' : 'bg-primary'
+  const label = {
+    weak: t('auth.passwordStrength.weak'),
+    good: t('auth.passwordStrength.good'),
+    strong: t('auth.passwordStrength.strong'),
+  }[strength]
+
+  return (
+    <div className="space-y-2">
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div className={cn('h-full rounded-full transition-all', width, tone)} />
+      </div>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <p className={strength === 'weak' ? 'text-warning' : 'text-muted-foreground'}>
+          {t('auth.passwordStrength.label')}: {label}
+        </p>
+        {password.length < 12 && (
+          <p className="text-warning">{t('auth.validation.passwordLength')}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function isBootstrapFormValid(email: string, displayName: string, password: string) {
+  return isValidEmail(email) && displayName.trim().length > 0 && password.length >= 12
 }
 
 function ErrorText({ error }: { error: unknown }) {
@@ -204,13 +269,18 @@ export function BootstrapPage() {
   const { t } = useI18n()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
+  const [emailTouched, setEmailTouched] = useState(false)
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
   const [avatarKey, setAvatarKey] = useState<AvatarKey>('default')
   const bootstrap = useBootstrapAdmin()
+  const showEmailWarning = emailTouched && email.length > 0 && !isValidEmail(email)
+  const formValid = isBootstrapFormValid(email, displayName, password)
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
+    setEmailTouched(true)
+    if (!formValid) return
     bootstrap.mutate(
       {
         email,
@@ -226,16 +296,21 @@ export function BootstrapPage() {
 
   return (
     <AuthSurface>
-      <form onSubmit={submit} className="space-y-5">
+      <form onSubmit={submit} className="space-y-5" noValidate>
         <div>
           <h1 className="text-xl font-semibold text-foreground">{t('auth.bootstrap.title')}</h1>
           <p className="mt-2 text-sm text-muted-foreground">{t('auth.bootstrap.summary')}</p>
         </div>
+        <AvatarPicker value={avatarKey} onChange={setAvatarKey} />
         <Field
           label={t('account.email')}
-          type="email"
+          type="text"
           autoComplete="email"
+          inputMode="email"
           value={email}
+          message={showEmailWarning ? t('auth.validation.email') : undefined}
+          tone={showEmailWarning ? 'warning' : undefined}
+          onBlur={() => setEmailTouched(true)}
           onChange={setEmail}
         />
         <Field
@@ -251,11 +326,11 @@ export function BootstrapPage() {
           value={password}
           onChange={setPassword}
         />
-        <AvatarPicker value={avatarKey} onChange={setAvatarKey} />
+        <PasswordStrength password={password} />
         <ErrorText error={bootstrap.error} />
         <button
           type="submit"
-          disabled={bootstrap.isPending}
+          disabled={bootstrap.isPending || !formValid}
           className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {bootstrap.isPending ? t('auth.bootstrap.submitting') : t('auth.bootstrap.submit')}
@@ -272,9 +347,11 @@ export function AccountSetupPage() {
   const token = searchParams.get('token') ?? ''
   const [password, setPassword] = useState('')
   const setup = useCompleteAccountSetup()
+  const passwordValid = password.length >= 12
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
+    if (!passwordValid) return
     setup.mutate(
       { token, password },
       {
@@ -285,7 +362,7 @@ export function AccountSetupPage() {
 
   return (
     <AuthSurface>
-      <form onSubmit={submit} className="space-y-5">
+      <form onSubmit={submit} className="space-y-5" noValidate>
         <div>
           <h1 className="text-xl font-semibold text-foreground">{t('auth.accountSetup.title')}</h1>
           <p className="mt-2 text-sm text-muted-foreground">{t('auth.accountSetup.summary')}</p>
@@ -297,13 +374,14 @@ export function AccountSetupPage() {
           value={password}
           onChange={setPassword}
         />
+        <PasswordStrength password={password} />
         {!token && (
           <p className="text-sm text-destructive">{t('auth.accountSetup.missingToken')}</p>
         )}
         <ErrorText error={setup.error} />
         <button
           type="submit"
-          disabled={setup.isPending || token.length === 0}
+          disabled={setup.isPending || token.length === 0 || !passwordValid}
           className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {setup.isPending ? t('auth.accountSetup.submitting') : t('auth.accountSetup.submit')}
@@ -321,29 +399,50 @@ export function AvatarPicker({
   onChange: (value: AvatarKey) => void
 }) {
   const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  const selectedAvatar = avatarCatalog.find((avatar) => avatar.key === value) ?? avatarCatalog[0]
+  const options = avatarCatalog.filter((avatar) => avatar.key !== value)
 
   return (
-    <div>
-      <p className="mb-1.5 text-xs uppercase tracking-wider text-muted-foreground">
-        {t('account.avatar')}
+    <div className="flex flex-col items-center">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-label={t('auth.avatar.change')}
+        aria-expanded={open}
+        className="group flex h-20 w-20 items-center justify-center rounded-full border border-border bg-background p-3 shadow-sm transition-colors hover:border-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        <span
+          aria-hidden="true"
+          className="block h-full w-full [&_svg]:h-full [&_svg]:w-full"
+          dangerouslySetInnerHTML={{ __html: avatarByKey[selectedAvatar.key] }}
+        />
+      </button>
+      <p className="mt-2 text-xs uppercase tracking-wider text-muted-foreground">
+        {t('account.avatar')}: {selectedAvatar.label}
       </p>
-      <div className="grid grid-cols-3 gap-2">
-        {avatarCatalog.map((avatar) => (
-          <button
-            key={avatar.key}
-            type="button"
-            onClick={() => onChange(avatar.key)}
-            className={cn(
-              'h-10 rounded-md border px-3 text-sm transition-colors',
-              value === avatar.key
-                ? 'border-primary bg-accent text-accent-foreground'
-                : 'border-border text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {avatar.label}
-          </button>
-        ))}
-      </div>
+      {open && (
+        <div className="mt-3 flex w-full justify-center gap-3 overflow-x-auto rounded-md border border-border bg-background px-3 py-3">
+          {options.map((avatar) => (
+            <button
+              key={avatar.key}
+              type="button"
+              aria-label={t('auth.avatar.option', { label: avatar.label })}
+              onClick={() => {
+                onChange(avatar.key)
+                setOpen(false)
+              }}
+              className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-border bg-card p-2 transition-colors hover:border-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <span
+                aria-hidden="true"
+                className="block h-full w-full [&_svg]:h-full [&_svg]:w-full"
+                dangerouslySetInnerHTML={{ __html: avatarByKey[avatar.key] }}
+              />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

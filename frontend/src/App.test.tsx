@@ -140,16 +140,29 @@ describe('App auth routing', () => {
     expect(screen.getByText('Local data stays on this server.')).toBeInTheDocument()
     expect(screen.getByText('First admin required')).toBeInTheDocument()
     expect(screen.queryByText('2.4k')).not.toBeInTheDocument()
+    expect(screen.queryByText('Token access')).not.toBeInTheDocument()
     expect(window.location.pathname).toBe('/bootstrap')
   }, 15_000)
 
   it('creates the first admin and continues to setup', async () => {
     const user = userEvent.setup()
+    const bootstrapRequests: Array<{
+      email?: string
+      display_name?: string
+      password?: string
+      avatar_key?: string
+    }> = []
     window.history.pushState({}, '', '/bootstrap')
     server.use(
       http.get('/api/bootstrap', () => HttpResponse.json({ required: true })),
       http.post('/api/bootstrap', async ({ request }) => {
-        const body = (await request.json()) as { email?: string; display_name?: string }
+        const body = (await request.json()) as {
+          email?: string
+          display_name?: string
+          password?: string
+          avatar_key?: string
+        }
+        bootstrapRequests.push(body)
         return HttpResponse.json(
           {
             user_id: 'admin',
@@ -182,9 +195,38 @@ describe('App auth routing', () => {
     await user.type(await screen.findByLabelText('Email', {}, routeWait), 'admin@example.com')
     await user.type(screen.getByLabelText('Display name'), 'Admin')
     await user.type(screen.getByLabelText('Password'), 'correct horse battery staple')
-    await user.click(screen.getByRole('button', { name: 'Create admin' }))
+    expect(screen.getByText('Password strength: Good')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Change avatar' }))
+    await user.click(screen.getByRole('button', { name: 'Ledger avatar' }))
+    await user.click(screen.getByRole('button', { name: 'Initialize instance' }))
 
     await waitFor(() => expect(window.location.pathname).toBe('/setup'))
+    expect(bootstrapRequests).toEqual([
+      {
+        email: 'admin@example.com',
+        display_name: 'Admin',
+        password: 'correct horse battery staple',
+        avatar_key: 'ledger',
+      },
+    ])
+  }, 15_000)
+
+  it('shows local validation before first-admin bootstrap submission', async () => {
+    const user = userEvent.setup()
+    window.history.pushState({}, '', '/bootstrap')
+    server.use(http.get('/api/bootstrap', () => HttpResponse.json({ required: true })))
+
+    render(<App />)
+
+    await user.type(await screen.findByLabelText('Email', {}, routeWait), 'sas')
+    await user.tab()
+    await user.type(screen.getByLabelText('Display name'), 'Admin')
+    await user.type(screen.getByLabelText('Password'), 'short')
+
+    expect(screen.getByText('Enter a valid email address.')).toBeInTheDocument()
+    expect(screen.getByText('Password strength: Weak')).toBeInTheDocument()
+    expect(screen.getByText('Use at least 12 characters.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Initialize instance' })).toBeDisabled()
   }, 15_000)
 
   it('completes invited account setup from a setup token', async () => {
