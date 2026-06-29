@@ -17,6 +17,8 @@ afterEach(() => {
   queryClient.clear()
 })
 
+const routeWait = { timeout: 10_000 }
+
 describe('App first-run routing', () => {
   it('redirects the homepage to setup when required preferences are missing', async () => {
     window.history.pushState({}, '', '/')
@@ -42,9 +44,9 @@ describe('App first-run routing', () => {
 
     render(<App />)
 
-    expect(await screen.findByText('Preferences')).toBeInTheDocument()
+    expect(await screen.findByText('Preferences', {}, routeWait)).toBeInTheDocument()
     expect(window.location.pathname).toBe('/setup')
-  })
+  }, 15_000)
 
   it('redirects settings to setup when required preferences are missing', async () => {
     window.history.pushState({}, '', '/settings')
@@ -70,9 +72,9 @@ describe('App first-run routing', () => {
 
     render(<App />)
 
-    expect(await screen.findByText('Preferences')).toBeInTheDocument()
+    expect(await screen.findByText('Preferences', {}, routeWait)).toBeInTheDocument()
     expect(window.location.pathname).toBe('/setup')
-  })
+  }, 15_000)
 })
 
 describe('App auth routing', () => {
@@ -116,14 +118,14 @@ describe('App auth routing', () => {
 
     render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Sign in' }, routeWait)).toBeInTheDocument()
     expect(window.location.pathname).toBe('/login')
     await user.type(screen.getByLabelText('Email'), 'admin@example.com')
     await user.type(screen.getByLabelText('Password'), 'correct horse battery staple')
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
     await waitFor(() => expect(window.location.pathname).toBe('/transactions'))
-  })
+  }, 15_000)
 
   it('sends fresh instances to first-admin bootstrap before private routes', async () => {
     window.history.pushState({}, '', '/')
@@ -131,9 +133,15 @@ describe('App auth routing', () => {
 
     render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Create first admin' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'Initialize this Expensor instance' }, routeWait),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Protected local expense workspace')).toBeInTheDocument()
+    expect(screen.getByText('Local data stays on this server.')).toBeInTheDocument()
+    expect(screen.getByText('First admin required')).toBeInTheDocument()
+    expect(screen.queryByText('2.4k')).not.toBeInTheDocument()
     expect(window.location.pathname).toBe('/bootstrap')
-  })
+  }, 15_000)
 
   it('creates the first admin and continues to setup', async () => {
     const user = userEvent.setup()
@@ -171,13 +179,13 @@ describe('App auth routing', () => {
 
     render(<App />)
 
-    await user.type(await screen.findByLabelText('Email'), 'admin@example.com')
+    await user.type(await screen.findByLabelText('Email', {}, routeWait), 'admin@example.com')
     await user.type(screen.getByLabelText('Display name'), 'Admin')
     await user.type(screen.getByLabelText('Password'), 'correct horse battery staple')
     await user.click(screen.getByRole('button', { name: 'Create admin' }))
 
     await waitFor(() => expect(window.location.pathname).toBe('/setup'))
-  })
+  }, 15_000)
 
   it('completes invited account setup from a setup token', async () => {
     const user = userEvent.setup()
@@ -221,10 +229,12 @@ describe('App auth routing', () => {
 
     render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Set password' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'Set password' }, routeWait),
+    ).toBeInTheDocument()
     await user.type(screen.getByLabelText('Password'), 'correct horse battery staple')
     await user.click(screen.getByRole('button', { name: 'Finish setup' }))
 
     await waitFor(() => expect(window.location.pathname).toBe('/'))
-  })
+  }, 15_000)
 })

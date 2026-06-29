@@ -13,18 +13,91 @@ import { useI18n } from '@/i18n/I18nProvider'
 import { cn } from '@/lib/utils'
 
 function AuthSurface({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n()
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 flex items-end gap-2">
-          <img src="/brand/expensor-wallet.svg" alt="" aria-hidden="true" className="h-8 w-8" />
-          <img
-            src="/brand/expensor-wordmark.svg"
-            alt="Expensor"
-            className="h-8 w-auto translate-y-1"
-          />
+    <main className="min-h-screen bg-background text-foreground">
+      <div className="mx-auto grid min-h-screen w-full max-w-6xl items-center gap-10 px-6 py-8 lg:grid-cols-[1.05fr_0.95fr] lg:px-10">
+        <section className="hidden min-h-[620px] flex-col justify-between overflow-hidden rounded-lg border border-border bg-card p-8 shadow-sm lg:flex">
+          <div>
+            <div className="mb-12 flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-background">
+                <img
+                  src="/brand/expensor-wallet.svg"
+                  alt=""
+                  aria-hidden="true"
+                  className="h-6 w-6"
+                />
+              </span>
+              <img src="/brand/expensor-wordmark.svg" alt="Expensor" className="h-8 w-auto" />
+            </div>
+            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-primary">
+              {t('auth.surface.eyebrow')}
+            </p>
+            <h2 className="max-w-md text-4xl font-semibold leading-tight text-foreground">
+              {t('auth.surface.title')}
+            </h2>
+            <p className="mt-4 max-w-md text-sm leading-6 text-muted-foreground">
+              {t('auth.surface.summary')}
+            </p>
+          </div>
+
+          <div className="space-y-6">
+            <div className="rounded-lg border border-border bg-background p-5">
+              <div className="mb-5 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    {t('auth.surface.previewTitle')}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t('auth.surface.previewStatus')}
+                  </p>
+                </div>
+                <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+              </div>
+              <div className="grid gap-3">
+                {[
+                  [t('auth.surface.previewAccount'), t('auth.surface.previewAccountStatus')],
+                  [t('auth.surface.previewReaders'), t('auth.surface.previewReadersStatus')],
+                  [t('auth.surface.previewTokens'), t('auth.surface.previewTokensStatus')],
+                ].map(([label, status]) => (
+                  <div
+                    key={label}
+                    className="flex items-center justify-between gap-4 rounded-md border border-border bg-card px-3 py-3"
+                  >
+                    <p className="text-sm font-medium text-foreground">{label}</p>
+                    <p className="text-right text-xs text-muted-foreground">{status}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-3 text-sm text-muted-foreground">
+              {[
+                t('auth.surface.localData'),
+                t('auth.surface.accountControl'),
+                t('auth.surface.readerReady'),
+              ].map((item) => (
+                <div key={item} className="flex items-center gap-3">
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <div className="mx-auto w-full max-w-md">
+          <div className="mb-8 flex items-center gap-3 lg:hidden">
+            <span className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card">
+              <img src="/brand/expensor-wallet.svg" alt="" aria-hidden="true" className="h-6 w-6" />
+            </span>
+            <img src="/brand/expensor-wordmark.svg" alt="Expensor" className="h-8 w-auto" />
+          </div>
+          <div className="rounded-lg border border-border bg-card px-5 py-6 shadow-sm sm:px-7">
+            {children}
+          </div>
         </div>
-        {children}
       </div>
     </main>
   )
@@ -53,7 +126,7 @@ function Field({
         value={value}
         autoComplete={autoComplete}
         onChange={(event) => onChange(event.currentTarget.value)}
-        className="w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-ring"
+        className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-ring"
       />
     </label>
   )
@@ -261,7 +334,7 @@ export function AvatarPicker({
             type="button"
             onClick={() => onChange(avatar.key)}
             className={cn(
-              'rounded-md border px-3 py-2 text-sm transition-colors',
+              'h-10 rounded-md border px-3 text-sm transition-colors',
               value === avatar.key
                 ? 'border-primary bg-accent text-accent-foreground'
                 : 'border-border text-muted-foreground hover:text-foreground',
