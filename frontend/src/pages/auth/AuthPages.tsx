@@ -204,8 +204,20 @@ function passwordStrength(value: string): 'weak' | 'good' | 'strong' {
   return 'weak'
 }
 
+function useDebouncedValue<T>(value: T, delayMs: number) {
+  const [debouncedValue, setDebouncedValue] = useState(value)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedValue(value), delayMs)
+    return () => window.clearTimeout(timer)
+  }, [delayMs, value])
+
+  return debouncedValue
+}
+
 function PasswordStrength({ password }: { password: string }) {
   const { t } = useI18n()
+  const debouncedPassword = useDebouncedValue(password, 300)
   const strength = passwordStrength(password)
   const width = strength === 'strong' ? 'w-full' : strength === 'good' ? 'w-2/3' : 'w-1/3'
   const tone =
@@ -215,17 +227,26 @@ function PasswordStrength({ password }: { password: string }) {
     good: t('auth.passwordStrength.good'),
     strong: t('auth.passwordStrength.strong'),
   }[strength]
-  const missingHints = [
-    { met: password.length >= 12, label: t('auth.validation.passwordLength') },
-    { met: /[A-Z]/.test(password), label: t('auth.passwordHint.uppercase') },
-    { met: /[a-z]/.test(password), label: t('auth.passwordHint.lowercase') },
-    { met: /\d/.test(password), label: t('auth.passwordHint.number') },
-    { met: /[^\w\s]/.test(password), label: t('auth.passwordHint.symbol') },
-  ].filter((hint) => password.length > 0 && !hint.met)
+  const hint =
+    password.length === 0 || debouncedPassword.length === 0
+      ? ''
+      : ([
+          { met: /[A-Z]/.test(debouncedPassword), label: t('auth.passwordHint.uppercase') },
+          { met: /[a-z]/.test(debouncedPassword), label: t('auth.passwordHint.lowercase') },
+          { met: /\d/.test(debouncedPassword), label: t('auth.passwordHint.number') },
+          { met: /[^\w\s]/.test(debouncedPassword), label: t('auth.passwordHint.symbol') },
+          { met: debouncedPassword.length >= 12, label: t('auth.validation.passwordLength') },
+        ].find((requirement) => !requirement.met)?.label ?? '')
 
   return (
     <div data-testid="password-strength-feedback" className="min-h-16 space-y-2">
-      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+      <div
+        data-testid="password-strength-track"
+        className={cn(
+          'h-1.5 overflow-hidden rounded-full bg-muted transition-opacity duration-200',
+          password ? 'opacity-100' : 'opacity-0',
+        )}
+      >
         <div
           data-testid="password-strength-meter"
           className={cn(
@@ -236,27 +257,20 @@ function PasswordStrength({ password }: { password: string }) {
         />
       </div>
       <div className="flex items-center justify-between gap-3 text-xs">
-        <p
-          className={cn(
-            'transition-all duration-200',
-            password ? 'opacity-100' : 'opacity-0',
-            strength === 'weak' ? 'text-warning' : 'text-muted-foreground',
-          )}
-          aria-hidden={!password}
-        >
-          {t('auth.passwordStrength.label')}: {label}
-        </p>
-      </div>
-      <div className="flex min-h-6 flex-wrap gap-1.5" aria-hidden={!password}>
-        {missingHints.map((hint) => (
-          <span
-            key={hint.label}
-            className="rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs text-warning transition-opacity duration-200"
+        {password && (
+          <p
+            className={cn(
+              'transition-opacity duration-200',
+              strength === 'weak' ? 'text-warning' : 'text-muted-foreground',
+            )}
           >
-            {hint.label}
-          </span>
-        ))}
+            {t('auth.passwordStrength.label')}: {label}
+          </p>
+        )}
       </div>
+      <p data-testid="password-strength-hint" className="min-h-5 text-xs text-warning">
+        {hint}
+      </p>
     </div>
   )
 }
@@ -505,9 +519,10 @@ export function AvatarPicker({
       }}
     >
       <div
+        data-testid="avatar-picker-surface"
         className={cn(
-          'group relative flex h-24 items-center justify-center gap-3 overflow-hidden rounded-lg border border-border bg-background px-4 transition-all duration-200 ease-out',
-          expanded ? 'w-full' : 'w-28 focus-within:border-primary/60 hover:border-primary/60',
+          'group relative flex h-24 items-center justify-center gap-3 overflow-hidden px-4 transition-[width,opacity,transform] duration-300 ease-out',
+          expanded ? 'w-full opacity-100' : 'w-28 opacity-100',
         )}
       >
         {!expanded && (
@@ -537,10 +552,10 @@ export function AvatarPicker({
                 setExpanded(false)
               }}
               className={cn(
-                'flex shrink-0 items-center justify-center rounded-full border bg-background p-2 shadow-sm transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-ring',
+                'flex shrink-0 items-center justify-center rounded-full border bg-background p-2 shadow-sm transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-ring',
                 selected
                   ? 'h-20 w-20 scale-100 border-primary ring-2 ring-primary/25'
-                  : 'h-16 w-16 scale-95 border-border opacity-80 hover:scale-100 hover:border-primary hover:opacity-100',
+                  : 'h-16 w-16 scale-95 border-border opacity-80 delay-75 hover:scale-100 hover:border-primary hover:opacity-100',
               )}
             >
               <span

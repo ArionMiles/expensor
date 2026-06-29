@@ -200,9 +200,11 @@ describe('App auth routing', () => {
     await user.type(screen.getByLabelText('Display name'), 'Admin')
     await user.type(screen.getByLabelText('Password'), 'correct horse battery staple')
     expect(screen.getByText('Password strength: Good')).toBeInTheDocument()
-    expect(screen.getByText('Add uppercase')).toBeInTheDocument()
-    expect(screen.getByText('Add number')).toBeInTheDocument()
-    expect(screen.getByText('Add symbol')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByTestId('password-strength-hint')).toHaveTextContent('Add uppercase'),
+    )
+    expect(screen.queryByText('Add number')).not.toBeInTheDocument()
+    expect(screen.queryByText('Add symbol')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Change avatar' })).not.toBeInTheDocument()
     expect(screen.queryByText('Avatar: Default')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Ledger avatar' })).not.toBeInTheDocument()
@@ -233,6 +235,9 @@ describe('App auth routing', () => {
     await screen.findByLabelText('Email', {}, routeWait)
     expect(screen.getByTestId('email-feedback')).toHaveClass('min-h-5')
     expect(screen.getByTestId('password-strength-feedback')).toHaveClass('min-h-16')
+    expect(screen.getByTestId('password-strength-track')).toHaveClass('opacity-0')
+    expect(screen.queryByText(/Password strength:/)).not.toBeInTheDocument()
+    expect(screen.getByTestId('password-strength-hint')).toHaveTextContent('')
     expect(screen.getByRole('button', { name: 'Default avatar' })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -247,17 +252,30 @@ describe('App auth routing', () => {
 
     expect(screen.getByText('Enter a valid email address.')).toBeInTheDocument()
     expect(screen.getByText('Password strength: Weak')).toBeInTheDocument()
-    expect(screen.getByText('Use at least 12 characters.')).toBeInTheDocument()
-    expect(screen.getByText('Add uppercase')).toBeInTheDocument()
-    expect(screen.getByText('Add number')).toBeInTheDocument()
-    expect(screen.getByText('Add symbol')).toBeInTheDocument()
+    expect(screen.getByTestId('password-strength-track')).toHaveClass('opacity-100')
+    await waitFor(() =>
+      expect(screen.getByTestId('password-strength-hint')).toHaveTextContent('Add uppercase'),
+    )
+    expect(screen.queryByText('Use at least 12 characters.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Add number')).not.toBeInTheDocument()
+    expect(screen.queryByText('Add symbol')).not.toBeInTheDocument()
     expect(screen.getByTestId('password-strength-meter')).toHaveClass('bg-warning')
     expect(screen.getByRole('button', { name: 'Initialize instance' })).toBeDisabled()
+
+    await user.clear(screen.getByLabelText('Password'))
+    expect(screen.getByTestId('password-strength-track')).toHaveClass('opacity-0')
+    expect(screen.getByTestId('password-strength-hint')).toHaveTextContent('')
+    await user.type(screen.getByLabelText('Password'), 'Correct horse battery staple!')
+    expect(screen.getByText('Password strength: Good')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByTestId('password-strength-hint')).toHaveTextContent('Add number'),
+    )
 
     await user.clear(screen.getByLabelText('Password'))
     await user.type(screen.getByLabelText('Password'), 'Correct horse battery staple 1!')
     expect(screen.getByText('Password strength: Strong')).toBeInTheDocument()
     expect(screen.getByTestId('password-strength-meter')).toHaveClass('bg-success')
+    await waitFor(() => expect(screen.getByTestId('password-strength-hint')).toHaveTextContent(''))
   }, 15_000)
 
   it('opens avatar options in order and collapses on outside focus', async () => {
@@ -268,7 +286,10 @@ describe('App auth routing', () => {
     render(<App />)
 
     await screen.findByRole('button', { name: 'Default avatar' }, routeWait)
+    expect(screen.getByTestId('avatar-picker-surface')).not.toHaveClass('rounded-lg')
+    expect(screen.getByTestId('avatar-picker-surface')).not.toHaveClass('border')
     await user.click(screen.getByRole('button', { name: 'Default avatar' }))
+    expect(screen.getByTestId('avatar-picker-surface')).toHaveClass('opacity-100')
     expect(
       screen
         .getAllByRole('button', { name: /avatar$/ })

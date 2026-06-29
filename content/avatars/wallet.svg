@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Wallet avatar">
-  <rect width="96" height="96" rx="24" fill="#342f4f"/>
-  <path d="M22 32c0-5 4-9 9-9h34c5 0 9 4 9 9v6H22v-6Z" fill="#f4f7fb"/>
-  <path d="M22 36h52c5 0 9 4 9 9v22c0 5-4 9-9 9H22V36Z" fill="#7cc7ff"/>
-  <path d="M64 50h19v13H64c-3.6 0-6.5-2.9-6.5-6.5S60.4 50 64 50Z" fill="#f4f7fb"/>
-  <circle cx="66" cy="56.5" r="3" fill="#342f4f"/>
+  <circle cx="48" cy="48" r="48" fill="#342f4f"/>
+  <path d="M25 33c0-5 4-9 9-9h30c5 0 9 4 9 9v6H25v-6Z" fill="#f4f7fb"/>
+  <path d="M23 38h50c5 0 9 4 9 9v20c0 5-4 9-9 9H23V38Z" fill="#7cc7ff"/>
+  <path d="M62 51h20v13H62c-3.6 0-6.5-2.9-6.5-6.5S58.4 51 62 51Z" fill="#f4f7fb"/>
+  <circle cx="65" cy="57.5" r="3" fill="#342f4f"/>
 </svg>
