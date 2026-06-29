@@ -50,35 +50,7 @@ function AuthSurface({ children }: { children: React.ReactNode }) {
             </p>
           </div>
 
-          <div className="mt-10 space-y-6">
-            <div className="rounded-lg border border-border bg-card/70 p-5 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    {t('auth.surface.previewTitle')}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t('auth.surface.previewStatus')}
-                  </p>
-                </div>
-                <span className="h-2.5 w-2.5 rounded-full bg-primary" />
-              </div>
-              <div className="grid gap-3">
-                {[
-                  [t('auth.surface.previewAccount'), t('auth.surface.previewAccountStatus')],
-                  [t('auth.surface.previewLocalData'), t('auth.surface.previewLocalDataStatus')],
-                ].map(([label, status]) => (
-                  <div
-                    key={label}
-                    className="flex items-center justify-between gap-4 rounded-md border border-border bg-background px-3 py-3"
-                  >
-                    <p className="text-sm font-medium text-foreground">{label}</p>
-                    <p className="text-right text-xs text-muted-foreground">{status}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
+          <div className="mt-8">
             <p className="text-sm leading-6 text-muted-foreground">
               {t('auth.surface.readerReady')}
             </p>
@@ -116,6 +88,7 @@ function Field({
   tone,
   feedbackTestId,
   labelTestId,
+  reserveFeedback = true,
   onBlur,
   onChange,
 }: {
@@ -128,6 +101,7 @@ function Field({
   tone?: 'warning'
   feedbackTestId?: string
   labelTestId?: string
+  reserveFeedback?: boolean
   onBlur?: () => void
   onChange: (value: string) => void
 }) {
@@ -171,17 +145,19 @@ function Field({
           {label}
         </span>
       </div>
-      <p
-        id={messageId}
-        data-testid={feedbackTestId}
-        aria-hidden={!message}
-        className={cn(
-          'mt-1.5 min-h-5 text-xs transition-all duration-200',
-          tone === 'warning' ? 'text-warning opacity-100' : 'text-muted-foreground opacity-0',
-        )}
-      >
-        {message || ' '}
-      </p>
+      {reserveFeedback && (
+        <p
+          id={messageId}
+          data-testid={feedbackTestId}
+          aria-hidden={!message}
+          className={cn(
+            'mt-1.5 min-h-5 text-xs transition-all duration-200',
+            tone === 'warning' ? 'text-warning opacity-100' : 'text-muted-foreground opacity-0',
+          )}
+        >
+          {message || ' '}
+        </p>
+      )}
     </label>
   )
 }
@@ -403,14 +379,17 @@ export function BootstrapPage() {
           value={displayName}
           onChange={setDisplayName}
         />
-        <Field
-          label={t('account.password')}
-          type="password"
-          autoComplete="new-password"
-          value={password}
-          onChange={setPassword}
-        />
-        <PasswordStrength password={password} />
+        <div data-testid="password-entry-group" className="space-y-2">
+          <Field
+            label={t('account.password')}
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            reserveFeedback={false}
+            onChange={setPassword}
+          />
+          <PasswordStrength password={password} />
+        </div>
         <ErrorText error={bootstrap.error} />
         <button
           type="submit"
@@ -451,14 +430,17 @@ export function AccountSetupPage() {
           <h1 className="text-xl font-semibold text-foreground">{t('auth.accountSetup.title')}</h1>
           <p className="mt-2 text-sm text-muted-foreground">{t('auth.accountSetup.summary')}</p>
         </div>
-        <Field
-          label={t('account.password')}
-          type="password"
-          autoComplete="new-password"
-          value={password}
-          onChange={setPassword}
-        />
-        <PasswordStrength password={password} />
+        <div className="space-y-2">
+          <Field
+            label={t('account.password')}
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            reserveFeedback={false}
+            onChange={setPassword}
+          />
+          <PasswordStrength password={password} />
+        </div>
         {!token && (
           <p className="text-sm text-destructive">{t('auth.accountSetup.missingToken')}</p>
         )}

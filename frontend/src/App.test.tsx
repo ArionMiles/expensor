@@ -136,9 +136,18 @@ describe('App auth routing', () => {
     expect(
       await screen.findByRole('heading', { name: 'Initialize this Expensor instance' }, routeWait),
     ).toBeInTheDocument()
-    expect(screen.getByText('Protected local expense workspace')).toBeInTheDocument()
-    expect(screen.getByText('Local data stays on this server.')).toBeInTheDocument()
-    expect(screen.getByText('First admin required')).toBeInTheDocument()
+    expect(screen.getByText('First run setup')).toBeInTheDocument()
+    expect(screen.getByText('Set up Expensor')).toBeInTheDocument()
+    expect(
+      screen.getByText('Create the first admin account before connecting Gmail or Thunderbird.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Transactions, rules, and reader credentials stay on this server.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Protected local expense workspace')).not.toBeInTheDocument()
+    expect(screen.queryByText('Workspace lock')).not.toBeInTheDocument()
+    expect(screen.queryByText('Account gate')).not.toBeInTheDocument()
+    expect(screen.queryByText('Local data')).not.toBeInTheDocument()
     expect(screen.queryByText('2.4k')).not.toBeInTheDocument()
     expect(screen.queryByText('Token access')).not.toBeInTheDocument()
     expect(window.location.pathname).toBe('/bootstrap')
@@ -201,10 +210,12 @@ describe('App auth routing', () => {
     await user.type(screen.getByLabelText('Password'), 'correct horse battery staple')
     expect(screen.getByText('Password strength: Good')).toBeInTheDocument()
     await waitFor(() =>
-      expect(screen.getByTestId('password-strength-hint')).toHaveTextContent('Add uppercase'),
+      expect(screen.getByTestId('password-strength-hint')).toHaveTextContent(
+        'Include an uppercase character.',
+      ),
     )
-    expect(screen.queryByText('Add number')).not.toBeInTheDocument()
-    expect(screen.queryByText('Add symbol')).not.toBeInTheDocument()
+    expect(screen.queryByText('Include a number.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Include a symbol.')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Change avatar' })).not.toBeInTheDocument()
     expect(screen.queryByText('Avatar: Default')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Ledger avatar' })).not.toBeInTheDocument()
@@ -234,6 +245,7 @@ describe('App auth routing', () => {
 
     await screen.findByLabelText('Email', {}, routeWait)
     expect(screen.getByTestId('email-feedback')).toHaveClass('min-h-5')
+    expect(screen.getByTestId('password-entry-group')).toHaveClass('space-y-2')
     expect(screen.getByTestId('password-strength-feedback')).toHaveClass('min-h-16')
     expect(screen.getByTestId('password-strength-track')).toHaveClass('opacity-0')
     expect(screen.queryByText(/Password strength:/)).not.toBeInTheDocument()
@@ -254,11 +266,13 @@ describe('App auth routing', () => {
     expect(screen.getByText('Password strength: Weak')).toBeInTheDocument()
     expect(screen.getByTestId('password-strength-track')).toHaveClass('opacity-100')
     await waitFor(() =>
-      expect(screen.getByTestId('password-strength-hint')).toHaveTextContent('Add uppercase'),
+      expect(screen.getByTestId('password-strength-hint')).toHaveTextContent(
+        'Include an uppercase character.',
+      ),
     )
     expect(screen.queryByText('Use at least 12 characters.')).not.toBeInTheDocument()
-    expect(screen.queryByText('Add number')).not.toBeInTheDocument()
-    expect(screen.queryByText('Add symbol')).not.toBeInTheDocument()
+    expect(screen.queryByText('Include a number.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Include a symbol.')).not.toBeInTheDocument()
     expect(screen.getByTestId('password-strength-meter')).toHaveClass('bg-warning')
     expect(screen.getByRole('button', { name: 'Initialize instance' })).toBeDisabled()
 
@@ -268,7 +282,7 @@ describe('App auth routing', () => {
     await user.type(screen.getByLabelText('Password'), 'Correct horse battery staple!')
     expect(screen.getByText('Password strength: Good')).toBeInTheDocument()
     await waitFor(() =>
-      expect(screen.getByTestId('password-strength-hint')).toHaveTextContent('Add number'),
+      expect(screen.getByTestId('password-strength-hint')).toHaveTextContent('Include a number.'),
     )
 
     await user.clear(screen.getByLabelText('Password'))
