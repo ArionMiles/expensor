@@ -56,7 +56,6 @@ export const messages = {
     'auth.passwordStrength.weak': 'Weak',
     'auth.passwordStrength.good': 'Good',
     'auth.passwordStrength.strong': 'Strong',
-    'auth.avatar.change': 'Change avatar',
     'auth.avatar.option': '{label} avatar',
     'auth.login.title': 'Sign in',
     'auth.login.summary': 'Use your Expensor account to access this instance.',

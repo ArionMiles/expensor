@@ -103,7 +103,6 @@ describe('AccountSettings', () => {
     if (!profileSection) throw new Error('Profile section missing')
     await user.clear(screen.getByLabelText('Display name'))
     await user.type(screen.getByLabelText('Display name'), 'Admin Updated')
-    await user.click(within(profileSection).getByRole('button', { name: 'Change avatar' }))
     await user.click(within(profileSection).getByRole('button', { name: 'Ledger avatar' }))
     await user.click(screen.getByRole('button', { name: 'Save profile' }))
 

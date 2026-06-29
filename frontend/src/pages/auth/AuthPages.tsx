@@ -106,6 +106,7 @@ function Field({
   inputMode,
   message,
   tone,
+  feedbackTestId,
   onBlur,
   onChange,
 }: {
@@ -116,6 +117,7 @@ function Field({
   inputMode?: InputHTMLAttributes<HTMLInputElement>['inputMode']
   message?: string
   tone?: 'warning'
+  feedbackTestId?: string
   onBlur?: () => void
   onChange: (value: string) => void
 }) {
@@ -144,11 +146,17 @@ function Field({
             : 'border-border focus:border-primary focus:ring-ring',
         )}
       />
-      {message && (
-        <p id={messageId} className="mt-1.5 text-xs text-warning">
-          {message}
-        </p>
-      )}
+      <p
+        id={messageId}
+        data-testid={feedbackTestId}
+        aria-hidden={!message}
+        className={cn(
+          'mt-1.5 min-h-5 text-xs transition-all duration-200',
+          tone === 'warning' ? 'text-warning opacity-100' : 'text-muted-foreground opacity-0',
+        )}
+      >
+        {message || ' '}
+      </p>
     </label>
   )
 }
@@ -165,11 +173,10 @@ function passwordStrength(value: string): 'weak' | 'good' | 'strong' {
 
 function PasswordStrength({ password }: { password: string }) {
   const { t } = useI18n()
-  if (!password) return null
-
   const strength = passwordStrength(password)
   const width = strength === 'strong' ? 'w-full' : strength === 'good' ? 'w-2/3' : 'w-1/3'
-  const tone = strength === 'weak' ? 'bg-warning' : 'bg-primary'
+  const tone =
+    strength === 'strong' ? 'bg-success' : strength === 'good' ? 'bg-primary' : 'bg-warning'
   const label = {
     weak: t('auth.passwordStrength.weak'),
     good: t('auth.passwordStrength.good'),
@@ -177,17 +184,37 @@ function PasswordStrength({ password }: { password: string }) {
   }[strength]
 
   return (
-    <div className="space-y-2">
+    <div data-testid="password-strength-feedback" className="min-h-9 space-y-2">
       <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-        <div className={cn('h-full rounded-full transition-all', width, tone)} />
+        <div
+          data-testid="password-strength-meter"
+          className={cn(
+            'h-full rounded-full transition-all duration-300 ease-out',
+            password ? width : 'w-0',
+            tone,
+          )}
+        />
       </div>
       <div className="flex items-center justify-between gap-3 text-xs">
-        <p className={strength === 'weak' ? 'text-warning' : 'text-muted-foreground'}>
+        <p
+          className={cn(
+            'transition-all duration-200',
+            password ? 'opacity-100' : 'opacity-0',
+            strength === 'weak' ? 'text-warning' : 'text-muted-foreground',
+          )}
+          aria-hidden={!password}
+        >
           {t('auth.passwordStrength.label')}: {label}
         </p>
-        {password.length < 12 && (
-          <p className="text-warning">{t('auth.validation.passwordLength')}</p>
-        )}
+        <p
+          className={cn(
+            'text-warning transition-all duration-200',
+            password && password.length < 12 ? 'opacity-100' : 'opacity-0',
+          )}
+          aria-hidden={!password || password.length >= 12}
+        >
+          {t('auth.validation.passwordLength')}
+        </p>
       </div>
     </div>
   )
@@ -310,6 +337,7 @@ export function BootstrapPage() {
           value={email}
           message={showEmailWarning ? t('auth.validation.email') : undefined}
           tone={showEmailWarning ? 'warning' : undefined}
+          feedbackTestId="email-feedback"
           onBlur={() => setEmailTouched(true)}
           onChange={setEmail}
         />
@@ -399,50 +427,36 @@ export function AvatarPicker({
   onChange: (value: AvatarKey) => void
 }) {
   const { t } = useI18n()
-  const [open, setOpen] = useState(false)
   const selectedAvatar = avatarCatalog.find((avatar) => avatar.key === value) ?? avatarCatalog[0]
-  const options = avatarCatalog.filter((avatar) => avatar.key !== value)
+  const sideAvatars = avatarCatalog.filter((avatar) => avatar.key !== selectedAvatar.key)
+  const avatars = [sideAvatars[0], selectedAvatar, sideAvatars[1]].filter(Boolean)
 
   return (
-    <div className="flex flex-col items-center">
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        aria-label={t('auth.avatar.change')}
-        aria-expanded={open}
-        className="group flex h-20 w-20 items-center justify-center rounded-full border border-border bg-background p-3 shadow-sm transition-colors hover:border-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
-      >
-        <span
-          aria-hidden="true"
-          className="block h-full w-full [&_svg]:h-full [&_svg]:w-full"
-          dangerouslySetInnerHTML={{ __html: avatarByKey[selectedAvatar.key] }}
-        />
-      </button>
-      <p className="mt-2 text-xs uppercase tracking-wider text-muted-foreground">
-        {t('account.avatar')}: {selectedAvatar.label}
-      </p>
-      {open && (
-        <div className="mt-3 flex w-full justify-center gap-3 overflow-x-auto rounded-md border border-border bg-background px-3 py-3">
-          {options.map((avatar) => (
-            <button
-              key={avatar.key}
-              type="button"
-              aria-label={t('auth.avatar.option', { label: avatar.label })}
-              onClick={() => {
-                onChange(avatar.key)
-                setOpen(false)
-              }}
-              className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-border bg-card p-2 transition-colors hover:border-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <span
-                aria-hidden="true"
-                className="block h-full w-full [&_svg]:h-full [&_svg]:w-full"
-                dangerouslySetInnerHTML={{ __html: avatarByKey[avatar.key] }}
-              />
-            </button>
-          ))}
-        </div>
-      )}
+    <div className="flex h-24 items-center justify-center gap-3" aria-label={t('account.avatar')}>
+      {avatars.map((avatar) => {
+        const selected = avatar.key === value
+        return (
+          <button
+            key={avatar.key}
+            type="button"
+            aria-label={t('auth.avatar.option', { label: avatar.label })}
+            aria-pressed={selected}
+            onClick={() => onChange(avatar.key)}
+            className={cn(
+              'flex shrink-0 items-center justify-center rounded-full border bg-background p-2 shadow-sm transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-ring',
+              selected
+                ? 'h-20 w-20 scale-100 border-primary ring-2 ring-primary/25'
+                : 'h-16 w-16 scale-95 border-border opacity-80 hover:scale-100 hover:border-primary hover:opacity-100',
+            )}
+          >
+            <span
+              aria-hidden="true"
+              className="block h-full w-full [&_svg]:h-full [&_svg]:w-full"
+              dangerouslySetInnerHTML={{ __html: avatarByKey[avatar.key] }}
+            />
+          </button>
+        )
+      })}
     </div>
   )
 }
