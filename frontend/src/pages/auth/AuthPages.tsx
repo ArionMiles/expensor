@@ -1,4 +1,12 @@
-import { type FormEvent, type InputHTMLAttributes, useId, useMemo, useState } from 'react'
+import {
+  type FormEvent,
+  type InputHTMLAttributes,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   useBootstrapAdmin,
@@ -107,6 +115,7 @@ function Field({
   message,
   tone,
   feedbackTestId,
+  labelTestId,
   onBlur,
   onChange,
 }: {
@@ -118,34 +127,50 @@ function Field({
   message?: string
   tone?: 'warning'
   feedbackTestId?: string
+  labelTestId?: string
   onBlur?: () => void
   onChange: (value: string) => void
 }) {
   const id = useId()
   const messageId = `${id}-message`
+  const [focused, setFocused] = useState(false)
+  const active = focused || value.length > 0
 
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      <input
-        id={id}
-        type={type}
-        value={value}
-        autoComplete={autoComplete}
-        inputMode={inputMode}
-        aria-invalid={tone === 'warning'}
-        aria-describedby={message ? messageId : undefined}
-        onBlur={onBlur}
-        onChange={(event) => onChange(event.currentTarget.value)}
-        className={cn(
-          'h-11 w-full rounded-md border bg-background px-3 text-sm text-foreground outline-none transition-colors focus:ring-1',
-          tone === 'warning'
-            ? 'border-warning focus:border-warning focus:ring-warning/40'
-            : 'border-border focus:border-primary focus:ring-ring',
-        )}
-      />
+      <div className="relative">
+        <input
+          id={id}
+          type={type}
+          value={value}
+          autoComplete={autoComplete}
+          inputMode={inputMode}
+          aria-invalid={tone === 'warning'}
+          aria-describedby={message ? messageId : undefined}
+          onFocus={() => setFocused(true)}
+          onBlur={() => {
+            setFocused(false)
+            onBlur?.()
+          }}
+          onChange={(event) => onChange(event.currentTarget.value)}
+          className={cn(
+            'h-14 w-full rounded-md border bg-background px-3 pb-1.5 pt-4 text-sm text-foreground outline-none transition-colors focus:ring-1',
+            tone === 'warning'
+              ? 'border-warning focus:border-warning focus:ring-warning/40'
+              : 'border-border focus:border-primary focus:ring-ring',
+          )}
+        />
+        <span
+          data-testid={labelTestId}
+          className={cn(
+            'pointer-events-none absolute left-3 uppercase tracking-wider transition-all duration-200 ease-out',
+            active ? 'top-1.5 translate-y-0 text-[10px]' : 'top-1/2 -translate-y-1/2 text-sm',
+            tone === 'warning' ? 'text-warning' : 'text-muted-foreground',
+          )}
+        >
+          {label}
+        </span>
+      </div>
       <p
         id={messageId}
         data-testid={feedbackTestId}
@@ -166,7 +191,15 @@ function isValidEmail(value: string) {
 }
 
 function passwordStrength(value: string): 'weak' | 'good' | 'strong' {
-  if (value.length >= 16 && (/[A-Z0-9]/.test(value) || /[^\w\s]/.test(value))) return 'strong'
+  if (
+    value.length >= 12 &&
+    /[A-Z]/.test(value) &&
+    /[a-z]/.test(value) &&
+    /\d/.test(value) &&
+    /[^\w\s]/.test(value)
+  ) {
+    return 'strong'
+  }
   if (value.length >= 12) return 'good'
   return 'weak'
 }
@@ -182,9 +215,16 @@ function PasswordStrength({ password }: { password: string }) {
     good: t('auth.passwordStrength.good'),
     strong: t('auth.passwordStrength.strong'),
   }[strength]
+  const missingHints = [
+    { met: password.length >= 12, label: t('auth.validation.passwordLength') },
+    { met: /[A-Z]/.test(password), label: t('auth.passwordHint.uppercase') },
+    { met: /[a-z]/.test(password), label: t('auth.passwordHint.lowercase') },
+    { met: /\d/.test(password), label: t('auth.passwordHint.number') },
+    { met: /[^\w\s]/.test(password), label: t('auth.passwordHint.symbol') },
+  ].filter((hint) => password.length > 0 && !hint.met)
 
   return (
-    <div data-testid="password-strength-feedback" className="min-h-9 space-y-2">
+    <div data-testid="password-strength-feedback" className="min-h-16 space-y-2">
       <div className="h-1.5 overflow-hidden rounded-full bg-muted">
         <div
           data-testid="password-strength-meter"
@@ -206,15 +246,16 @@ function PasswordStrength({ password }: { password: string }) {
         >
           {t('auth.passwordStrength.label')}: {label}
         </p>
-        <p
-          className={cn(
-            'text-warning transition-all duration-200',
-            password && password.length < 12 ? 'opacity-100' : 'opacity-0',
-          )}
-          aria-hidden={!password || password.length >= 12}
-        >
-          {t('auth.validation.passwordLength')}
-        </p>
+      </div>
+      <div className="flex min-h-6 flex-wrap gap-1.5" aria-hidden={!password}>
+        {missingHints.map((hint) => (
+          <span
+            key={hint.label}
+            className="rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs text-warning transition-opacity duration-200"
+          >
+            {hint.label}
+          </span>
+        ))}
       </div>
     </div>
   )
@@ -338,6 +379,7 @@ export function BootstrapPage() {
           message={showEmailWarning ? t('auth.validation.email') : undefined}
           tone={showEmailWarning ? 'warning' : undefined}
           feedbackTestId="email-feedback"
+          labelTestId="email-floating-label"
           onBlur={() => setEmailTouched(true)}
           onChange={setEmail}
         />
@@ -428,35 +470,88 @@ export function AvatarPicker({
 }) {
   const { t } = useI18n()
   const selectedAvatar = avatarCatalog.find((avatar) => avatar.key === value) ?? avatarCatalog[0]
-  const sideAvatars = avatarCatalog.filter((avatar) => avatar.key !== selectedAvatar.key)
-  const avatars = [sideAvatars[0], selectedAvatar, sideAvatars[1]].filter(Boolean)
+  const [expanded, setExpanded] = useState(false)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const buttonRefs = useRef<Record<AvatarKey, HTMLButtonElement | null>>({
+    default: null,
+    ledger: null,
+    wallet: null,
+  })
+
+  useEffect(() => {
+    if (!expanded) return
+    const selectedButton = buttonRefs.current[value]
+    selectedButton?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+  }, [expanded, value])
+
+  useEffect(() => {
+    if (!expanded) return undefined
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setExpanded(false)
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePointer)
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer)
+  }, [expanded])
+
+  const visibleAvatars = expanded ? avatarCatalog : [selectedAvatar]
 
   return (
-    <div className="flex h-24 items-center justify-center gap-3" aria-label={t('account.avatar')}>
-      {avatars.map((avatar) => {
-        const selected = avatar.key === value
-        return (
-          <button
-            key={avatar.key}
-            type="button"
-            aria-label={t('auth.avatar.option', { label: avatar.label })}
-            aria-pressed={selected}
-            onClick={() => onChange(avatar.key)}
-            className={cn(
-              'flex shrink-0 items-center justify-center rounded-full border bg-background p-2 shadow-sm transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-ring',
-              selected
-                ? 'h-20 w-20 scale-100 border-primary ring-2 ring-primary/25'
-                : 'h-16 w-16 scale-95 border-border opacity-80 hover:scale-100 hover:border-primary hover:opacity-100',
-            )}
-          >
-            <span
-              aria-hidden="true"
-              className="block h-full w-full [&_svg]:h-full [&_svg]:w-full"
-              dangerouslySetInnerHTML={{ __html: avatarByKey[avatar.key] }}
-            />
-          </button>
-        )
-      })}
+    <div
+      ref={rootRef}
+      className="flex h-24 items-center justify-center"
+      aria-label={t('account.avatar')}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setExpanded(false)
+      }}
+    >
+      <div
+        className={cn(
+          'group relative flex h-24 items-center justify-center gap-3 overflow-hidden rounded-lg border border-border bg-background px-4 transition-all duration-200 ease-out',
+          expanded ? 'w-full' : 'w-28 focus-within:border-primary/60 hover:border-primary/60',
+        )}
+      >
+        {!expanded && (
+          <>
+            <span className="absolute left-3 h-2 w-2 rounded-full bg-primary/25 opacity-0 transition-opacity duration-200 group-focus-within:opacity-100 group-hover:opacity-100" />
+            <span className="absolute right-3 h-2 w-2 rounded-full bg-primary/25 opacity-0 transition-opacity duration-200 group-focus-within:opacity-100 group-hover:opacity-100" />
+          </>
+        )}
+        {visibleAvatars.map((avatar) => {
+          const selected = avatar.key === value
+          return (
+            <button
+              key={avatar.key}
+              ref={(button) => {
+                buttonRefs.current[avatar.key] = button
+              }}
+              type="button"
+              data-testid={`avatar-option-${avatar.key}`}
+              aria-label={t('auth.avatar.option', { label: avatar.label })}
+              aria-pressed={selected}
+              onClick={() => {
+                if (selected && !expanded) {
+                  setExpanded(true)
+                  return
+                }
+                onChange(avatar.key)
+                setExpanded(false)
+              }}
+              className={cn(
+                'flex shrink-0 items-center justify-center rounded-full border bg-background p-2 shadow-sm transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-ring',
+                selected
+                  ? 'h-20 w-20 scale-100 border-primary ring-2 ring-primary/25'
+                  : 'h-16 w-16 scale-95 border-border opacity-80 hover:scale-100 hover:border-primary hover:opacity-100',
+              )}
+            >
+              <span
+                aria-hidden="true"
+                className="block h-full w-full [&_svg]:h-full [&_svg]:w-full"
+                dangerouslySetInnerHTML={{ __html: avatarByKey[avatar.key] }}
+              />
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

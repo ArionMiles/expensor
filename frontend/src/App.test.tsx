@@ -192,13 +192,24 @@ describe('App auth routing', () => {
 
     render(<App />)
 
-    await user.type(await screen.findByLabelText('Email', {}, routeWait), 'admin@example.com')
+    const emailInput = await screen.findByLabelText('Email', {}, routeWait)
+    expect(screen.getByTestId('email-floating-label')).toHaveClass('top-1/2')
+    await user.click(emailInput)
+    expect(screen.getByTestId('email-floating-label')).toHaveClass('top-1.5')
+    await user.type(emailInput, 'admin@example.com')
     await user.type(screen.getByLabelText('Display name'), 'Admin')
     await user.type(screen.getByLabelText('Password'), 'correct horse battery staple')
     expect(screen.getByText('Password strength: Good')).toBeInTheDocument()
+    expect(screen.getByText('Add uppercase')).toBeInTheDocument()
+    expect(screen.getByText('Add number')).toBeInTheDocument()
+    expect(screen.getByText('Add symbol')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Change avatar' })).not.toBeInTheDocument()
     expect(screen.queryByText('Avatar: Default')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ledger avatar' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Default avatar' }))
     await user.click(screen.getByRole('button', { name: 'Ledger avatar' }))
+    expect(screen.queryByRole('button', { name: 'Ledger avatar' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Wallet avatar' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Initialize instance' }))
 
     await waitFor(() => expect(window.location.pathname).toBe('/setup'))
@@ -221,19 +232,13 @@ describe('App auth routing', () => {
 
     await screen.findByLabelText('Email', {}, routeWait)
     expect(screen.getByTestId('email-feedback')).toHaveClass('min-h-5')
-    expect(screen.getByTestId('password-strength-feedback')).toHaveClass('min-h-9')
+    expect(screen.getByTestId('password-strength-feedback')).toHaveClass('min-h-16')
     expect(screen.getByRole('button', { name: 'Default avatar' })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
-    expect(screen.getByRole('button', { name: 'Ledger avatar' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    )
-    expect(screen.getByRole('button', { name: 'Wallet avatar' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    )
+    expect(screen.queryByRole('button', { name: 'Ledger avatar' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Wallet avatar' })).not.toBeInTheDocument()
 
     await user.type(screen.getByLabelText('Email'), 'sas')
     await user.tab()
@@ -243,6 +248,9 @@ describe('App auth routing', () => {
     expect(screen.getByText('Enter a valid email address.')).toBeInTheDocument()
     expect(screen.getByText('Password strength: Weak')).toBeInTheDocument()
     expect(screen.getByText('Use at least 12 characters.')).toBeInTheDocument()
+    expect(screen.getByText('Add uppercase')).toBeInTheDocument()
+    expect(screen.getByText('Add number')).toBeInTheDocument()
+    expect(screen.getByText('Add symbol')).toBeInTheDocument()
     expect(screen.getByTestId('password-strength-meter')).toHaveClass('bg-warning')
     expect(screen.getByRole('button', { name: 'Initialize instance' })).toBeDisabled()
 
@@ -250,6 +258,36 @@ describe('App auth routing', () => {
     await user.type(screen.getByLabelText('Password'), 'Correct horse battery staple 1!')
     expect(screen.getByText('Password strength: Strong')).toBeInTheDocument()
     expect(screen.getByTestId('password-strength-meter')).toHaveClass('bg-success')
+  }, 15_000)
+
+  it('opens avatar options in order and collapses on outside focus', async () => {
+    const user = userEvent.setup()
+    window.history.pushState({}, '', '/bootstrap')
+    server.use(http.get('/api/bootstrap', () => HttpResponse.json({ required: true })))
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: 'Default avatar' }, routeWait)
+    await user.click(screen.getByRole('button', { name: 'Default avatar' }))
+    expect(
+      screen
+        .getAllByRole('button', { name: /avatar$/ })
+        .map((button) => button.getAttribute('data-testid')),
+    ).toEqual(['avatar-option-default', 'avatar-option-ledger', 'avatar-option-wallet'])
+    expect(screen.getByTestId('avatar-option-default')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('avatar-option-ledger')).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByTestId('avatar-option-wallet')).toHaveAttribute('aria-pressed', 'false')
+
+    await user.click(screen.getByRole('button', { name: 'Wallet avatar' }))
+    expect(screen.getByTestId('avatar-option-wallet')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByTestId('avatar-option-ledger')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Wallet avatar' }))
+    expect(screen.getByTestId('avatar-option-default')).toBeInTheDocument()
+    expect(screen.getByTestId('avatar-option-ledger')).toBeInTheDocument()
+    await user.click(screen.getByLabelText('Email'))
+    expect(screen.queryByTestId('avatar-option-default')).not.toBeInTheDocument()
+    expect(screen.getByTestId('avatar-option-wallet')).toHaveAttribute('aria-pressed', 'true')
   }, 15_000)
 
   it('completes invited account setup from a setup token', async () => {
