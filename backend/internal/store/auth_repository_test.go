@@ -134,6 +134,77 @@ func TestAuthRepositoryStoresOnlyTokenHashes(t *testing.T) {
 	}
 }
 
+func TestAuthRepositoryAllowsReusingRevokedAccessTokenName(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+
+	ctx := context.Background()
+	admin, err := ts.CreateBootstrapAdmin(ctx, store.CreateBootstrapAdminInput{
+		Email:        "admin@example.com",
+		DisplayName:  "Admin",
+		PasswordHash: "$2a$10$abcdefghijklmnopqrstuu6Z6RMcYbqVvB6KZlSmLfHLj6y8s3zme",
+		AvatarKey:    "default",
+	})
+	if err != nil {
+		t.Fatalf("CreateBootstrapAdmin() error = %v", err)
+	}
+	token, err := ts.CreateAccessToken(ctx, store.CreateAccessTokenInput{
+		UserID:    admin.ID,
+		Name:      "test",
+		TokenHash: "sha256:test-token-old",
+	})
+	if err != nil {
+		t.Fatalf("CreateAccessToken(old) error = %v", err)
+	}
+	if err := ts.RevokeAccessToken(ctx, token.ID, admin.ID); err != nil {
+		t.Fatalf("RevokeAccessToken() error = %v", err)
+	}
+
+	recreated, err := ts.CreateAccessToken(ctx, store.CreateAccessTokenInput{
+		UserID:    admin.ID,
+		Name:      "test",
+		TokenHash: "sha256:test-token-new",
+	})
+	if err != nil {
+		t.Fatalf("CreateAccessToken(recreated) error = %v", err)
+	}
+	if recreated.ID == token.ID || recreated.Name != "test" {
+		t.Fatalf("recreated token = %#v", recreated)
+	}
+}
+
+func TestAuthRepositoryRejectsActiveAccessTokenNameConflict(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+
+	ctx := context.Background()
+	admin, err := ts.CreateBootstrapAdmin(ctx, store.CreateBootstrapAdminInput{
+		Email:        "admin@example.com",
+		DisplayName:  "Admin",
+		PasswordHash: "$2a$10$abcdefghijklmnopqrstuu6Z6RMcYbqVvB6KZlSmLfHLj6y8s3zme",
+		AvatarKey:    "default",
+	})
+	if err != nil {
+		t.Fatalf("CreateBootstrapAdmin() error = %v", err)
+	}
+	if _, err := ts.CreateAccessToken(ctx, store.CreateAccessTokenInput{
+		UserID:    admin.ID,
+		Name:      "test",
+		TokenHash: "sha256:test-token-a",
+	}); err != nil {
+		t.Fatalf("CreateAccessToken(first) error = %v", err)
+	}
+
+	_, err = ts.CreateAccessToken(ctx, store.CreateAccessTokenInput{
+		UserID:    admin.ID,
+		Name:      "test",
+		TokenHash: "sha256:test-token-b",
+	})
+	if !errors.Is(err, store.ErrAccessTokenNameConflict) {
+		t.Fatalf("CreateAccessToken(duplicate) error = %v, want ErrAccessTokenNameConflict", err)
+	}
+}
+
 func TestAuthRepositoryListsActiveAccessTokenMetadata(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()

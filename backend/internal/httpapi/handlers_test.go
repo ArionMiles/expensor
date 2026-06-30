@@ -126,6 +126,7 @@ type mockStore struct {
 	sessionsByHash             map[string]*store.Session
 	revokedSessionID           string
 	createdAccessToken         store.CreateAccessTokenInput
+	createAccessTokenErr       error
 	accessTokens               []store.AccessToken
 	listedAccessTokensUserID   string
 	accessTokensByHash         map[string]*store.AccessToken
@@ -234,6 +235,9 @@ func (m *mockStore) RevokeSession(_ context.Context, id string) error {
 
 func (m *mockStore) CreateAccessToken(_ context.Context, input store.CreateAccessTokenInput) (*store.AccessToken, error) {
 	m.createdAccessToken = input
+	if m.createAccessTokenErr != nil {
+		return nil, m.createAccessTokenErr
+	}
 	return &store.AccessToken{ID: "access-token-id", UserID: input.UserID, Name: input.Name, TokenHash: input.TokenHash, ExpiresAt: input.ExpiresAt}, nil
 }
 

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -288,6 +289,7 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 // @Success 201 {object} accessTokenResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /tokens [post]
@@ -313,6 +315,10 @@ func (h *Handlers) CreateAccessToken(w http.ResponseWriter, r *http.Request) {
 		TokenHash: hash,
 	})
 	if err != nil {
+		if errors.Is(err, store.ErrAccessTokenNameConflict) {
+			writeError(w, http.StatusConflict, fmt.Sprintf("Token %s already exists.", strings.TrimSpace(body.Name)))
+			return
+		}
 		h.logger.Error("create access token", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create token")
 		return
@@ -476,6 +482,10 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
 	if input.Role != nil && userID == principal.UserID {
 		writeError(w, http.StatusForbidden, "cannot change your own role")
+		return
+	}
+	if input.Disabled != nil && *input.Disabled && userID == principal.UserID {
+		writeError(w, http.StatusForbidden, "cannot disable your own account")
 		return
 	}
 	user, err := h.authStore.UpdateUser(r.Context(), userID, input)

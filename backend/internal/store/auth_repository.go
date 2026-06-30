@@ -207,6 +207,9 @@ func (r *pgAuthRepository) CreateAccessToken(ctx context.Context, input CreateAc
 		RETURNING id, user_id, name, token_hash, created_at, expires_at, last_used_at, revoked_at
 	`, input.UserID, input.Name, input.TokenHash, input.ExpiresAt))
 	if err != nil {
+		if isAccessTokenNameConflict(err) {
+			return nil, ErrAccessTokenNameConflict
+		}
 		return nil, fmt.Errorf("creating access token: %w", err)
 	}
 	return token, nil

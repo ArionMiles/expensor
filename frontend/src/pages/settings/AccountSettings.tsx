@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { Check, Copy } from 'lucide-react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import {
   useAccessTokens,
   useAdminUsers,
@@ -75,23 +76,57 @@ function RoleButtons({
   const { t } = useI18n()
 
   return (
-    <div className="inline-flex rounded-md border border-border p-0.5">
+    <div className="inline-flex rounded-md border border-border bg-card p-0.5">
       {(['user', 'admin'] as const).map((role) => (
         <button
           key={role}
           type="button"
           onClick={() => onChange(role)}
           className={cn(
-            'rounded px-2 py-1 text-xs capitalize transition-colors',
+            'rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors',
             value === role
-              ? 'bg-accent text-accent-foreground'
+              ? role === 'admin'
+                ? 'bg-primary/15 text-primary'
+                : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
               : 'text-muted-foreground hover:text-foreground',
           )}
         >
-          {t(`account.role.${role}`)}
+          {t(`account.role.${role}`).toUpperCase()}
         </button>
       ))}
     </div>
+  )
+}
+
+function RoleChip({ role }: { role: UserRole }) {
+  const { t } = useI18n()
+  return (
+    <span
+      className={cn(
+        'inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider',
+        role === 'admin'
+          ? 'bg-primary/15 text-primary'
+          : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+      )}
+    >
+      {t(`account.role.${role}`).toUpperCase()}
+    </span>
+  )
+}
+
+function StatusChip({ disabled }: { disabled: boolean }) {
+  const { t } = useI18n()
+  return (
+    <span
+      className={cn(
+        'inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider',
+        disabled ? 'bg-destructive/15 text-destructive' : 'bg-success/15 text-success',
+      )}
+    >
+      {disabled
+        ? t('account.status.disabled').toUpperCase()
+        : t('account.status.active').toUpperCase()}
+    </span>
   )
 }
 
@@ -105,9 +140,10 @@ export function AccountSettings() {
   const revokeToken = useRevokeAccessToken()
   const [displayName, setDisplayName] = useState('')
   const [avatarKey, setAvatarKey] = useState<AvatarKey>('default')
-  const [profileUserID, setProfileUserID] = useState('')
+  const profileUserID = useRef('')
   const [tokenName, setTokenName] = useState('')
   const [newToken, setNewToken] = useState<string | null>(null)
+  const [tokenCopied, setTokenCopied] = useState(false)
 
   const isAdmin = session?.role === 'admin'
   const formatAccountDate = (value?: string | null) =>
@@ -115,16 +151,24 @@ export function AccountSettings() {
 
   useEffect(() => {
     if (!session) return
-    if (profileUserID === session.user_id) return
+    if (profileUserID.current === session.user_id) return
     setDisplayName(session.display_name)
     setAvatarKey(session.avatar_key)
-    setProfileUserID(session.user_id)
-  }, [profileUserID, session])
+    profileUserID.current = session.user_id
+  }, [session])
 
-  const saveProfile = (event: FormEvent) => {
-    event.preventDefault()
-    updateProfile.mutate({ display_name: displayName, avatar_key: avatarKey })
-  }
+  useEffect(() => {
+    if (!session || profileUserID.current !== session.user_id) return undefined
+    const nextDisplayName = displayName.trim()
+    if (nextDisplayName.length === 0) return undefined
+    if (nextDisplayName === session.display_name && avatarKey === session.avatar_key)
+      return undefined
+
+    const timer = window.setTimeout(() => {
+      updateProfile.mutate({ display_name: nextDisplayName, avatar_key: avatarKey })
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [avatarKey, displayName, session?.avatar_key, session?.display_name, session?.user_id])
 
   const submitToken = (event: FormEvent) => {
     event.preventDefault()
@@ -134,6 +178,13 @@ export function AccountSettings() {
         setTokenName('')
       },
     })
+  }
+
+  const copyToken = async () => {
+    if (!newToken) return
+    await window.navigator.clipboard?.writeText(newToken)
+    setTokenCopied(true)
+    window.setTimeout(() => setTokenCopied(false), 2000)
   }
 
   if (!session) {
@@ -152,35 +203,35 @@ export function AccountSettings() {
       </div>
 
       <Section title={t('account.profile.title')}>
-        <form onSubmit={saveProfile} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <TextField
-              label={t('account.email')}
-              value={session?.email ?? ''}
-              disabled
-              onChange={() => {}}
-            />
-            <TextField
-              label={t('account.displayName')}
-              value={displayName}
-              onChange={setDisplayName}
-            />
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TextField
+                label={t('account.email')}
+                value={session?.email ?? ''}
+                disabled
+                onChange={() => {}}
+              />
+              <TextField
+                label={t('account.displayName')}
+                value={displayName}
+                onChange={setDisplayName}
+              />
+            </div>
+            <div className="min-h-5">
+              {updateProfile.isPending && (
+                <span className="text-xs text-muted-foreground">{t('common.saving')}</span>
+              )}
+              {updateProfile.isSuccess && !updateProfile.isPending && (
+                <span className="text-xs text-success">{t('account.saved')}</span>
+              )}
+              <ErrorText error={updateProfile.error} />
+            </div>
           </div>
-          <AvatarPicker value={avatarKey} onChange={setAvatarKey} />
-          <div className="flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={updateProfile.isPending}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {updateProfile.isPending ? t('common.saving') : t('account.saveProfile')}
-            </button>
-            {updateProfile.isSuccess && (
-              <span className="text-xs text-success">{t('account.saved')}</span>
-            )}
-            <ErrorText error={updateProfile.error} />
+          <div className="flex justify-center lg:justify-end">
+            <AvatarPicker value={avatarKey} onChange={setAvatarKey} />
           </div>
-        </form>
+        </div>
       </Section>
 
       <Section title={t('account.tokens.title')}>
@@ -200,7 +251,22 @@ export function AccountSettings() {
         {newToken && (
           <div className="rounded-md border border-border bg-card px-3 py-2">
             <p className="mb-1 text-xs text-muted-foreground">{t('account.tokens.copyOnce')}</p>
-            <code className="break-all font-mono text-sm text-foreground">{newToken}</code>
+            <div className="flex items-center gap-2">
+              <code className="min-w-0 flex-1 break-all font-mono text-sm text-foreground">
+                {newToken}
+              </code>
+              <button
+                type="button"
+                onClick={copyToken}
+                aria-label={t('account.tokens.copy')}
+                className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+              >
+                {tokenCopied ? <Check size={15} /> : <Copy size={15} />}
+              </button>
+            </div>
+            {tokenCopied && (
+              <p className="mt-1 text-xs text-success">{t('account.tokens.copied')}</p>
+            )}
           </div>
         )}
         <div className="overflow-x-auto">
@@ -265,6 +331,7 @@ function AdminUsersSection() {
   const [role, setRole] = useState<UserRole>('user')
   const [avatarKey, setAvatarKey] = useState<AvatarKey>('default')
   const [visibleSetupToken, setVisibleSetupToken] = useState<string | null>(null)
+  const [copiedSetupUserID, setCopiedSetupUserID] = useState<string | null>(null)
 
   const submitUser = (event: FormEvent) => {
     event.preventDefault()
@@ -283,7 +350,13 @@ function AdminUsersSection() {
 
   const generateSetupToken = (userID: string) => {
     setupToken.mutate(userID, {
-      onSuccess: (token) => setVisibleSetupToken(`/account-setup?token=${token.token}`),
+      onSuccess: async (token) => {
+        const link = `/account-setup?token=${token.token}`
+        setVisibleSetupToken(link)
+        await window.navigator.clipboard?.writeText(link)
+        setCopiedSetupUserID(userID)
+        window.setTimeout(() => setCopiedSetupUserID(null), 2000)
+      },
     })
   }
 
@@ -344,6 +417,8 @@ function AdminUsersSection() {
                 key={account.user_id}
                 account={account}
                 canChangeRole={account.user_id !== session?.user_id}
+                canDisable={account.user_id !== session?.user_id}
+                setupCopied={copiedSetupUserID === account.user_id}
                 updating={updateUser.isPending}
                 setupPending={setupToken.isPending}
                 onRole={(nextRole) =>
@@ -373,6 +448,8 @@ function AdminUsersSection() {
 function AdminUserRow({
   account,
   canChangeRole,
+  canDisable,
+  setupCopied,
   updating,
   setupPending,
   onRole,
@@ -381,6 +458,8 @@ function AdminUserRow({
 }: {
   account: AccountUser
   canChangeRole: boolean
+  canDisable: boolean
+  setupCopied: boolean
   updating: boolean
   setupPending: boolean
   onRole: (role: UserRole) => void
@@ -399,13 +478,16 @@ function AdminUserRow({
         {canChangeRole ? (
           <RoleButtons value={account.role} onChange={onRole} />
         ) : (
-          <span className="text-sm text-muted-foreground">{t(`account.role.${account.role}`)}</span>
+          <RoleChip role={account.role} />
         )}
       </td>
-      <td className="py-2 pr-3 text-muted-foreground">
-        {disabled ? t('account.status.disabled') : t('account.status.active')}
+      <td className="py-2 pr-3">
+        <StatusChip disabled={disabled} />
       </td>
       <td className="space-x-2 py-2 text-right">
+        {setupCopied && (
+          <span className="text-xs text-success">{t('account.users.setupLinkCopied')}</span>
+        )}
         <button
           type="button"
           disabled={setupPending}
@@ -414,14 +496,21 @@ function AdminUserRow({
         >
           {t('account.users.generateSetupLink')}
         </button>
-        <button
-          type="button"
-          disabled={updating}
-          onClick={() => onDisabled(!disabled)}
-          className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {disabled ? t('account.users.enable') : t('account.users.disable')}
-        </button>
+        {canDisable && (
+          <button
+            type="button"
+            disabled={updating}
+            onClick={() => onDisabled(!disabled)}
+            className={cn(
+              'rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+              disabled
+                ? 'hover:border-success hover:text-success'
+                : 'hover:border-destructive hover:text-destructive',
+            )}
+          >
+            {disabled ? t('account.users.enable') : t('account.users.disable')}
+          </button>
+        )}
       </td>
     </tr>
   )

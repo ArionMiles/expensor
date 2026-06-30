@@ -194,6 +194,27 @@ func TestCreateAccessTokenReturnsRawTokenOnce(t *testing.T) {
 	}
 }
 
+func TestCreateAccessTokenNameConflictReturnsConflict(t *testing.T) {
+	ms := &mockStore{createAccessTokenErr: store.ErrAccessTokenNameConflict}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/tokens", strings.NewReader(`{"name":"test"}`))
+	rec := httptest.NewRecorder()
+
+	h.CreateAccessToken(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409; body = %s", rec.Code, rec.Body.String())
+	}
+	var resp ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Error != "Token test already exists." {
+		t.Fatalf("error = %q, want duplicate token message", resp.Error)
+	}
+}
+
 func TestListAccessTokensReturnsCurrentUserTokenMetadata(t *testing.T) {
 	createdAt := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	lastUsedAt := createdAt.Add(time.Hour)
@@ -460,6 +481,24 @@ func TestUpdateUserRejectsSelfRoleChange(t *testing.T) {
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "admin", TenantID: "admin", Role: auth.RoleAdmin})
 	req := httptest.NewRequestWithContext(ctx, http.MethodPatch, "/api/admin/users/admin", strings.NewReader(`{"role":"user"}`))
+	req.SetPathValue("id", "admin")
+	rec := httptest.NewRecorder()
+
+	h.UpdateUser(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body = %s", rec.Code, rec.Body.String())
+	}
+	if ms.updatedUserID != "" {
+		t.Fatalf("updated user id = %q, want no store write", ms.updatedUserID)
+	}
+}
+
+func TestUpdateUserRejectsSelfDisable(t *testing.T) {
+	ms := &mockStore{}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "admin", TenantID: "admin", Role: auth.RoleAdmin})
+	req := httptest.NewRequestWithContext(ctx, http.MethodPatch, "/api/admin/users/admin", strings.NewReader(`{"disabled":true}`))
 	req.SetPathValue("id", "admin")
 	rec := httptest.NewRecorder()
 
