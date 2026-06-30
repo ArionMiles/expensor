@@ -24,7 +24,7 @@ const mockUseLogout = vi.mocked(useLogout)
 
 function LocationProbe() {
   const location = useLocation()
-  return <div data-testid="location">{location.pathname}</div>
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>
 }
 
 describe('Sidebar', () => {
@@ -128,6 +128,36 @@ describe('Sidebar', () => {
     const badge = screen.getByTestId('diagnostics-count-badge')
     expect(badge).toHaveTextContent('3')
     expect(badge).toHaveAttribute('aria-label', '3 open diagnostics')
+  })
+
+  it('links the profile block to account settings and renders the selected avatar', async () => {
+    const user = userEvent.setup()
+    mockUseSession.mockReturnValue({
+      data: {
+        user_id: 'admin',
+        tenant_id: 'admin',
+        email: 'admin@example.com',
+        display_name: 'Admin',
+        role: 'admin',
+        avatar_key: 'ledger',
+      },
+    } as ReturnType<typeof useSession>)
+
+    renderWithProviders(
+      <>
+        <Sidebar collapsed={false} onToggle={() => undefined} />
+        <LocationProbe />
+      </>,
+      { route: '/transactions' },
+    )
+
+    const accountLink = screen.getByRole('link', { name: /Admin admin@example\.com/i })
+    expect(accountLink).toHaveAttribute('href', '/settings?tab=account')
+    expect(screen.getByTestId('sidebar-user-avatar').innerHTML).toContain('Ledger avatar')
+
+    await user.click(accountLink)
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/settings?tab=account')
   })
 
   it('navigates to login after signing out', async () => {

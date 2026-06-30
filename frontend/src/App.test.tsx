@@ -119,12 +119,45 @@ describe('App auth routing', () => {
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: 'Sign in' }, routeWait)).toBeInTheDocument()
+    expect(screen.getByText('Instance access')).toBeInTheDocument()
+    expect(screen.getByText('Sign in to Expensor')).toBeInTheDocument()
+    expect(screen.getByText('Use your account to access this instance.')).toBeInTheDocument()
+    expect(screen.queryByText('First run setup')).not.toBeInTheDocument()
+    expect(screen.queryByText('Set up Expensor')).not.toBeInTheDocument()
     expect(window.location.pathname).toBe('/login')
     await user.type(screen.getByLabelText('Email'), 'admin@example.com')
     await user.type(screen.getByLabelText('Password'), 'correct horse battery staple')
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
     await waitFor(() => expect(window.location.pathname).toBe('/transactions'))
+  }, 15_000)
+
+  it('shows custom login email validation instead of browser-native validation', async () => {
+    const user = userEvent.setup()
+    let loginAttempts = 0
+    window.history.pushState({}, '', '/login')
+    server.use(
+      http.get('/api/bootstrap', () => HttpResponse.json({ required: false })),
+      http.post('/api/session', () => {
+        loginAttempts += 1
+        return HttpResponse.json({ error: 'invalid email or password' }, { status: 401 })
+      }),
+    )
+
+    render(<App />)
+
+    const emailInput = await screen.findByLabelText('Email', {}, routeWait)
+    expect(emailInput).toHaveAttribute('type', 'text')
+    expect(emailInput).toHaveAttribute('inputmode', 'email')
+    expect(screen.getByTestId('login-email-feedback')).toHaveClass('min-h-5')
+    await user.type(emailInput, 'sdsdsd')
+    await user.tab()
+
+    expect(screen.getByText('Enter a valid email address.')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Password'), 'password')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(loginAttempts).toBe(0)
   }, 15_000)
 
   it('sends fresh instances to first-admin bootstrap before private routes', async () => {

@@ -17,6 +17,7 @@ import { useTooltip } from '@/hooks/useTooltip'
 import { ThemeToggle } from './ThemeToggle'
 import { useI18n } from '@/i18n/I18nProvider'
 import type { MessageKey } from '@/i18n/messages'
+import { avatarByKey, isAvatarKey } from '@/assets/avatars'
 import { shortcutLabel } from '@/lib/shortcuts'
 import { useExtractionDiagnostics, useLogout, useReaderStatus, useSession } from '@/api/queries'
 
@@ -84,6 +85,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
     gmailStatus?.auth_type === 'oauth' &&
     gmailStatus.auth_state === 'reauthorization_required'
   const openDiagnosticsCount = openDiagnostics?.length ?? 0
+  const avatarKey = session && isAvatarKey(session.avatar_key) ? session.avatar_key : 'default'
 
   const diagnosticsCountLabel =
     openDiagnosticsCount === 1
@@ -264,22 +266,28 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           </span>
         </a>
 
-        <div
-          className={cn(navItemCls(collapsed), !collapsed && 'border border-border/50')}
+        <NavLink
+          to="/settings?tab=account"
+          aria-label={
+            session
+              ? `${session.display_name} ${session.email}`
+              : t('nav.settings.account.subtitle')
+          }
+          className={({ isActive }) =>
+            cn(navItemCls(collapsed, isActive), !collapsed && 'border border-border/50')
+          }
           {...(collapsed && session
             ? tipHandlers(
                 `${session.display_name} · ${t(session.role === 'admin' ? 'account.role.admin' : 'account.role.user')}`,
               )
             : {})}
         >
-          <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-foreground">
-            {session?.display_name
-              .split(/\s+/)
-              .filter(Boolean)
-              .slice(0, 2)
-              .map((part) => part[0]?.toUpperCase())
-              .join('') || 'AC'}
-          </div>
+          <span
+            data-testid="sidebar-user-avatar"
+            className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full [&_svg]:h-full [&_svg]:w-full"
+            aria-hidden="true"
+            dangerouslySetInnerHTML={{ __html: avatarByKey[avatarKey] }}
+          />
           <div
             className={cn(
               'min-w-0 transition-opacity duration-200',
@@ -291,7 +299,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
             </p>
             <p className="truncate text-[10px] text-muted-foreground">{session?.email}</p>
           </div>
-        </div>
+        </NavLink>
         <button
           type="button"
           onClick={handleLogout}

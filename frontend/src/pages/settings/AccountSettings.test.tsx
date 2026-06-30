@@ -99,6 +99,7 @@ describe('AccountSettings', () => {
     renderWithProviders(<Settings />, { route: '/settings?tab=account' })
 
     expect(await screen.findByRole('heading', { name: 'Account' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Users' })).toBeInTheDocument()
     const profileSection = screen.getByRole('heading', { name: 'Profile' }).closest('section')
     if (!profileSection) throw new Error('Profile section missing')
     await user.clear(screen.getByLabelText('Display name'))

@@ -18,10 +18,43 @@ import {
 import type { AvatarKey } from '@/api/types'
 import { avatarByKey, avatarCatalog } from '@/assets/avatars'
 import { useI18n } from '@/i18n/I18nProvider'
+import type { MessageKey } from '@/i18n/messages'
 import { cn } from '@/lib/utils'
 
-function AuthSurface({ children }: { children: React.ReactNode }) {
+type AuthSurfaceVariant = 'setup' | 'login'
+
+const authSurfaceCopy: Record<
+  AuthSurfaceVariant,
+  {
+    eyebrow: MessageKey
+    title: MessageKey
+    summary: MessageKey
+    readerReady: MessageKey
+  }
+> = {
+  setup: {
+    eyebrow: 'auth.surface.eyebrow',
+    title: 'auth.surface.title',
+    summary: 'auth.surface.summary',
+    readerReady: 'auth.surface.readerReady',
+  },
+  login: {
+    eyebrow: 'auth.loginSurface.eyebrow',
+    title: 'auth.loginSurface.title',
+    summary: 'auth.loginSurface.summary',
+    readerReady: 'auth.loginSurface.readerReady',
+  },
+}
+
+function AuthSurface({
+  children,
+  variant = 'setup',
+}: {
+  children: React.ReactNode
+  variant?: AuthSurfaceVariant
+}) {
   const { t } = useI18n()
+  const copy = authSurfaceCopy[variant]
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -40,20 +73,16 @@ function AuthSurface({ children }: { children: React.ReactNode }) {
               <img src="/brand/expensor-wordmark.svg" alt="Expensor" className="h-8 w-auto" />
             </div>
             <p className="mb-3 text-xs font-medium uppercase tracking-wider text-primary">
-              {t('auth.surface.eyebrow')}
+              {t(copy.eyebrow)}
             </p>
             <h2 className="text-4xl font-semibold leading-tight text-foreground">
-              {t('auth.surface.title')}
+              {t(copy.title)}
             </h2>
-            <p className="mt-4 text-sm leading-6 text-muted-foreground">
-              {t('auth.surface.summary')}
-            </p>
+            <p className="mt-4 text-sm leading-6 text-muted-foreground">{t(copy.summary)}</p>
           </div>
 
           <div className="mt-8">
-            <p className="text-sm leading-6 text-muted-foreground">
-              {t('auth.surface.readerReady')}
-            </p>
+            <p className="text-sm leading-6 text-muted-foreground">{t(copy.readerReady)}</p>
           </div>
         </section>
 
@@ -276,11 +305,16 @@ export function LoginPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [email, setEmail] = useState('')
+  const [emailTouched, setEmailTouched] = useState(false)
   const [password, setPassword] = useState('')
   const login = useLogin()
+  const showEmailWarning = emailTouched && email.length > 0 && !isValidEmail(email)
+  const formValid = isValidEmail(email) && password.length > 0
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
+    setEmailTouched(true)
+    if (!formValid) return
     login.mutate(
       { email, password },
       {
@@ -290,17 +324,22 @@ export function LoginPage() {
   }
 
   return (
-    <AuthSurface>
-      <form onSubmit={submit} className="space-y-5">
+    <AuthSurface variant="login">
+      <form onSubmit={submit} className="space-y-5" noValidate>
         <div>
           <h1 className="text-xl font-semibold text-foreground">{t('auth.login.title')}</h1>
           <p className="mt-2 text-sm text-muted-foreground">{t('auth.login.summary')}</p>
         </div>
         <Field
           label={t('account.email')}
-          type="email"
+          type="text"
           autoComplete="email"
+          inputMode="email"
           value={email}
+          message={showEmailWarning ? t('auth.validation.email') : undefined}
+          tone={showEmailWarning ? 'warning' : undefined}
+          feedbackTestId="login-email-feedback"
+          onBlur={() => setEmailTouched(true)}
           onChange={setEmail}
         />
         <Field

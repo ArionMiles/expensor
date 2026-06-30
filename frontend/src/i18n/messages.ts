@@ -42,6 +42,11 @@ export const messages = {
     'auth.surface.summary':
       'Create the first admin account before connecting Gmail or Thunderbird.',
     'auth.surface.readerReady': 'Transactions, rules, and reader credentials stay on this server.',
+    'auth.loginSurface.eyebrow': 'Instance access',
+    'auth.loginSurface.title': 'Sign in to Expensor',
+    'auth.loginSurface.summary': 'Use your account to access this instance.',
+    'auth.loginSurface.readerReady':
+      'Transactions, rules, and reader credentials stay on this server.',
     'auth.validation.email': 'Enter a valid email address.',
     'auth.validation.passwordLength': 'Use at least 12 characters.',
     'auth.passwordStrength.label': 'Password strength',
