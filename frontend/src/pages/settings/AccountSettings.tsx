@@ -255,6 +255,7 @@ export function AccountSettings() {
 
 function AdminUsersSection() {
   const { t } = useI18n()
+  const { data: session } = useSession()
   const { data: users = [] } = useAdminUsers(true)
   const createUser = useCreateUser()
   const updateUser = useUpdateAdminUser()
@@ -342,6 +343,7 @@ function AdminUsersSection() {
               <AdminUserRow
                 key={account.user_id}
                 account={account}
+                canChangeRole={account.user_id !== session?.user_id}
                 updating={updateUser.isPending}
                 setupPending={setupToken.isPending}
                 onRole={(nextRole) =>
@@ -370,6 +372,7 @@ function AdminUsersSection() {
 
 function AdminUserRow({
   account,
+  canChangeRole,
   updating,
   setupPending,
   onRole,
@@ -377,6 +380,7 @@ function AdminUserRow({
   onSetupToken,
 }: {
   account: AccountUser
+  canChangeRole: boolean
   updating: boolean
   setupPending: boolean
   onRole: (role: UserRole) => void
@@ -392,7 +396,11 @@ function AdminUserRow({
         <div className="text-xs text-muted-foreground">{account.email}</div>
       </td>
       <td className="py-2 pr-3">
-        <RoleButtons value={account.role} onChange={onRole} />
+        {canChangeRole ? (
+          <RoleButtons value={account.role} onChange={onRole} />
+        ) : (
+          <span className="text-sm text-muted-foreground">{t(`account.role.${account.role}`)}</span>
+        )}
       </td>
       <td className="py-2 pr-3 text-muted-foreground">
         {disabled ? t('account.status.disabled') : t('account.status.active')}

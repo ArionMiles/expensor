@@ -455,6 +455,24 @@ func TestUpdateUserAsAdmin(t *testing.T) {
 	}
 }
 
+func TestUpdateUserRejectsSelfRoleChange(t *testing.T) {
+	ms := &mockStore{}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "admin", TenantID: "admin", Role: auth.RoleAdmin})
+	req := httptest.NewRequestWithContext(ctx, http.MethodPatch, "/api/admin/users/admin", strings.NewReader(`{"role":"user"}`))
+	req.SetPathValue("id", "admin")
+	rec := httptest.NewRecorder()
+
+	h.UpdateUser(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body = %s", rec.Code, rec.Body.String())
+	}
+	if ms.updatedUserID != "" {
+		t.Fatalf("updated user id = %q, want no store write", ms.updatedUserID)
+	}
+}
+
 func TestUpdateUserRejectsInvalidRoleBeforeWriting(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})

@@ -100,6 +100,10 @@ describe('AccountSettings', () => {
 
     expect(await screen.findByRole('heading', { name: 'Account' })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Users' })).toBeInTheDocument()
+    const adminRow = await screen.findByRole('row', { name: /admin@example.com/i })
+    expect(within(adminRow).getByText('admin')).toBeInTheDocument()
+    expect(within(adminRow).queryByRole('button', { name: 'user' })).not.toBeInTheDocument()
+    expect(within(adminRow).queryByRole('button', { name: 'admin' })).not.toBeInTheDocument()
     const profileSection = screen.getByRole('heading', { name: 'Profile' }).closest('section')
     if (!profileSection) throw new Error('Profile section missing')
     await user.clear(screen.getByLabelText('Display name'))
@@ -119,6 +123,8 @@ describe('AccountSettings', () => {
     expect(createdTokens).toEqual(['Deploy key'])
 
     const invitedRow = await screen.findByRole('row', { name: /b@example.com/i })
+    expect(within(invitedRow).getByRole('button', { name: 'user' })).toBeInTheDocument()
+    expect(within(invitedRow).getByRole('button', { name: 'admin' })).toBeInTheDocument()
     await user.click(within(invitedRow).getByRole('button', { name: 'Generate setup link' }))
 
     expect(await screen.findByText(/expensor_setup_visible_once/)).toBeInTheDocument()

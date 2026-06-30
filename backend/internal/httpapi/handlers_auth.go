@@ -460,6 +460,11 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if !requireAdmin(w, r) {
 		return
 	}
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
 	body, ok := decodeAndValidateJSON[updateUserRequest](h, w, r)
 	if !ok {
 		return
@@ -468,7 +473,12 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	user, err := h.authStore.UpdateUser(r.Context(), r.PathValue("id"), input)
+	userID := r.PathValue("id")
+	if input.Role != nil && userID == principal.UserID {
+		writeError(w, http.StatusForbidden, "cannot change your own role")
+		return
+	}
+	user, err := h.authStore.UpdateUser(r.Context(), userID, input)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "user not found")
