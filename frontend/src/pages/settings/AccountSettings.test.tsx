@@ -21,7 +21,10 @@ describe('AccountSettings', () => {
     const writeText = vi.spyOn(window.navigator.clipboard, 'writeText').mockResolvedValue(undefined)
     const updatedProfiles: Array<{ display_name?: string; avatar_key?: string }> = []
     const createdTokens: string[] = []
+    const revokedTokens: string[] = []
     const setupTokenRequests: string[] = []
+    const updatedUsers: Array<{ id: string; patch: Record<string, unknown> }> = []
+    const createdUsers: Array<Record<string, unknown>> = []
     server.use(
       http.get('/api/session', () => HttpResponse.json(adminPrincipal)),
       http.patch('/api/profile', async ({ request }) => {
@@ -59,6 +62,10 @@ describe('AccountSettings', () => {
           { status: 201 },
         )
       }),
+      http.delete('/api/tokens/:id', ({ params }) => {
+        revokedTokens.push(String(params.id))
+        return new HttpResponse(null, { status: 204 })
+      }),
       http.get('/api/admin/users', () =>
         HttpResponse.json([
           {
@@ -85,6 +92,39 @@ describe('AccountSettings', () => {
           },
         ]),
       ),
+      http.post('/api/admin/users', async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        createdUsers.push(body)
+        return HttpResponse.json(
+          {
+            user_id: 'user-c',
+            tenant_id: 'user-c',
+            email: body.email,
+            display_name: body.display_name,
+            role: body.role,
+            avatar_key: body.avatar_key,
+            disabled_at: null,
+            created_at: '2026-06-01T10:00:00Z',
+            updated_at: '2026-06-01T10:00:00Z',
+          },
+          { status: 201 },
+        )
+      }),
+      http.patch('/api/admin/users/:id', async ({ params, request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        updatedUsers.push({ id: String(params.id), patch: body })
+        return HttpResponse.json({
+          user_id: params.id,
+          tenant_id: params.id,
+          email: 'b@example.com',
+          display_name: 'B',
+          role: body.role ?? 'user',
+          avatar_key: 'ledger',
+          disabled_at: body.disabled === true ? '2026-06-04T10:00:00Z' : null,
+          created_at: '2026-06-01T10:00:00Z',
+          updated_at: '2026-06-04T10:00:00Z',
+        })
+      }),
       http.post('/api/admin/users/:id/setup-tokens', ({ params }) => {
         setupTokenRequests.push(String(params.id))
         return HttpResponse.json(
@@ -105,11 +145,13 @@ describe('AccountSettings', () => {
     const adminRow = await screen.findByRole('row', { name: /admin@example.com/i })
     expect(within(adminRow).getByText('ADMIN')).toBeInTheDocument()
     expect(within(adminRow).getByText('ACTIVE')).toBeInTheDocument()
-    expect(within(adminRow).queryByRole('button', { name: 'user' })).not.toBeInTheDocument()
-    expect(within(adminRow).queryByRole('button', { name: 'admin' })).not.toBeInTheDocument()
+    expect(within(adminRow).queryByRole('button', { name: /edit user/i })).not.toBeInTheDocument()
     expect(within(adminRow).queryByRole('button', { name: 'Disable' })).not.toBeInTheDocument()
     const profileSection = screen.getByRole('heading', { name: 'Profile' }).closest('section')
     if (!profileSection) throw new Error('Profile section missing')
+    const profileInputs = within(profileSection).getAllByRole('textbox')
+    expect(profileInputs[0]).toHaveAccessibleName('Email')
+    expect(profileInputs[1]).toHaveAccessibleName('Display name')
     await user.clear(screen.getByLabelText('Display name'))
     await user.type(screen.getByLabelText('Display name'), 'Admin Updated')
     await user.click(within(profileSection).getByRole('button', { name: 'Default avatar' }))
@@ -125,26 +167,70 @@ describe('AccountSettings', () => {
     await user.type(screen.getByLabelText('Token name'), 'Deploy key')
     await user.click(screen.getByRole('button', { name: 'Create token' }))
 
-    expect(await screen.findByText('expensor_pat_visible_once')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Copy token' }))
+    const tokenDialog = await screen.findByRole('dialog', { name: 'Deploy key' })
+    expect(within(tokenDialog).getByText('expensor_pat_visible_once')).toBeInTheDocument()
+    await user.click(within(tokenDialog).getByRole('button', { name: 'Copy token' }))
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('expensor_pat_visible_once'))
-    expect(await screen.findByText('Token copied.')).toBeInTheDocument()
+    expect(await within(tokenDialog).findByText('Token copied.')).toBeInTheDocument()
+    await user.click(within(tokenDialog).getByRole('button', { name: 'Close' }))
     expect(createdTokens).toEqual(['Deploy key'])
 
-    const invitedRow = await screen.findByRole('row', { name: /b@example.com/i })
-    expect(within(invitedRow).getByRole('button', { name: 'USER' })).toBeInTheDocument()
-    expect(within(invitedRow).getByRole('button', { name: 'ADMIN' })).toBeInTheDocument()
-    expect(within(invitedRow).getByText('ACTIVE')).toBeInTheDocument()
-    expect(within(invitedRow).getByRole('button', { name: 'Disable' })).toHaveClass(
-      'hover:border-destructive',
-    )
-    await user.click(within(invitedRow).getByRole('button', { name: 'Generate setup link' }))
+    const tokenRow = await screen.findByRole('row', { name: /CI/i })
+    await user.click(within(tokenRow).getByRole('button', { name: 'Revoke token CI' }))
+    const revokeDialog = await screen.findByRole('dialog', { name: 'Revoke token' })
+    await user.click(within(revokeDialog).getByRole('button', { name: 'Revoke' }))
+    expect(revokedTokens).toEqual(['token-1'])
 
-    expect(await screen.findByText(/expensor_setup_visible_once/)).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'User email' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'New user' }))
+    const newUserDialog = await screen.findByRole('dialog', { name: 'New user' })
+    await user.type(within(newUserDialog).getByLabelText('User email'), 'c@example.com')
+    await user.type(within(newUserDialog).getByLabelText('User display name'), 'C')
+    await user.click(within(newUserDialog).getByRole('button', { name: 'Default avatar' }))
+    await user.click(within(newUserDialog).getByRole('button', { name: 'Ledger avatar' }))
+    await user.click(within(newUserDialog).getByRole('button', { name: 'Create user' }))
+    await waitFor(() =>
+      expect(createdUsers).toContainEqual({
+        email: 'c@example.com',
+        display_name: 'C',
+        role: 'user',
+        avatar_key: 'ledger',
+      }),
+    )
+
+    const invitedRow = await screen.findByRole('row', { name: /b@example.com/i })
+    expect(within(invitedRow).getByText('USER')).toBeInTheDocument()
+    expect(within(invitedRow).getByText('ACTIVE')).toBeInTheDocument()
+    expect(within(invitedRow).queryByRole('button', { name: 'USER' })).not.toBeInTheDocument()
+    expect(within(invitedRow).queryByRole('button', { name: 'ADMIN' })).not.toBeInTheDocument()
+    expect(within(invitedRow).queryByRole('button', { name: 'Disable' })).not.toBeInTheDocument()
+
+    const copySetupButton = within(invitedRow).getByRole('button', { name: 'Copy setup link' })
+    await user.hover(copySetupButton)
+    expect(await screen.findByText('Copy setup link')).toBeInTheDocument()
+    await user.click(copySetupButton)
+
     expect(writeText).toHaveBeenCalledWith('/account-setup?token=expensor_setup_visible_once')
-    expect(await screen.findByText('Setup link copied.')).toBeInTheDocument()
+    expect(await screen.findByText('Copied!')).toBeInTheDocument()
     expect(setupTokenRequests).toEqual(['user-b'])
-  })
+
+    await user.click(within(invitedRow).getByRole('button', { name: 'Edit user B' }))
+    const editDialog = await screen.findByRole('dialog', { name: 'Edit user B' })
+    await user.click(within(editDialog).getByRole('button', { name: 'Admin' }))
+    await user.click(within(editDialog).getByRole('button', { name: 'Save changes' }))
+    await waitFor(() =>
+      expect(updatedUsers).toContainEqual({ id: 'user-b', patch: { role: 'admin' } }),
+    )
+
+    await user.click(within(invitedRow).getByRole('button', { name: 'Edit user B' }))
+    const disableDialog = await screen.findByRole('dialog', { name: 'Edit user B' })
+    await user.click(within(disableDialog).getByRole('button', { name: 'Disable account' }))
+    const confirmDisableDialog = await screen.findByRole('dialog', { name: 'Disable user' })
+    await user.click(within(confirmDisableDialog).getByRole('button', { name: 'Disable' }))
+    await waitFor(() =>
+      expect(updatedUsers).toContainEqual({ id: 'user-b', patch: { disabled: true } }),
+    )
+  }, 10000)
 
   it('shows active duplicate access token names as conflicts', async () => {
     const user = userEvent.setup()
