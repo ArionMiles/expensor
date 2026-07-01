@@ -193,11 +193,11 @@ describe('AccountSettings', () => {
     await user.click(within(revokeDialog).getByRole('button', { name: 'Revoke' }))
     expect(revokedTokens).toEqual(['token-1'])
 
-    expect(screen.queryByRole('textbox', { name: 'User email' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'New user' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'New user' }))
     const newUserDialog = await screen.findByRole('dialog', { name: 'New user' })
-    await user.type(within(newUserDialog).getByLabelText('User email'), 'c@example.com')
-    await user.type(within(newUserDialog).getByLabelText('User display name'), 'C')
+    await user.type(within(newUserDialog).getByLabelText('Email'), 'c@example.com')
+    await user.type(within(newUserDialog).getByLabelText('Display name'), 'C')
     await user.click(within(newUserDialog).getByRole('button', { name: 'Default avatar' }))
     await user.click(within(newUserDialog).getByRole('button', { name: 'Ledger avatar' }))
     await user.click(within(newUserDialog).getByRole('button', { name: 'Create user' }))
@@ -294,8 +294,8 @@ describe('AccountSettings', () => {
 
     await user.click(await screen.findByRole('button', { name: 'New user' }))
     const newUserDialog = await screen.findByRole('dialog', { name: 'New user' })
-    await user.type(within(newUserDialog).getByLabelText('User email'), 'john@example.com')
-    await user.type(within(newUserDialog).getByLabelText('User display name'), 'John')
+    await user.type(within(newUserDialog).getByLabelText('Email'), 'john@example.com')
+    await user.type(within(newUserDialog).getByLabelText('Display name'), 'John')
     await user.click(within(newUserDialog).getByRole('button', { name: 'Create user' }))
 
     expect(
@@ -305,8 +305,8 @@ describe('AccountSettings', () => {
     await user.click(within(newUserDialog).getByRole('button', { name: 'Cancel' }))
     await user.click(screen.getByRole('button', { name: 'New user' }))
     const reopenedUserDialog = await screen.findByRole('dialog', { name: 'New user' })
-    expect(within(reopenedUserDialog).getByLabelText('User email')).toHaveValue('')
-    expect(within(reopenedUserDialog).getByLabelText('User display name')).toHaveValue('')
+    expect(within(reopenedUserDialog).getByLabelText('Email')).toHaveValue('')
+    expect(within(reopenedUserDialog).getByLabelText('Display name')).toHaveValue('')
     expect(
       within(reopenedUserDialog).queryByText('User john@example.com already exists.'),
     ).not.toBeInTheDocument()
