@@ -268,4 +268,55 @@ describe('AccountSettings', () => {
 
     expect(await screen.findByText('Token test already exists.')).toBeInTheDocument()
   })
+
+  it('shows delete user failures inside the confirmation dialog', async () => {
+    const user = userEvent.setup()
+    server.use(
+      http.get('/api/session', () => HttpResponse.json(adminPrincipal)),
+      http.get('/api/tokens', () => HttpResponse.json([])),
+      http.get('/api/admin/users', () =>
+        HttpResponse.json([
+          {
+            user_id: 'admin',
+            tenant_id: 'admin',
+            email: 'admin@example.com',
+            display_name: 'Admin',
+            role: 'admin',
+            avatar_key: 'default',
+            disabled_at: null,
+            created_at: '2026-06-01T10:00:00Z',
+            updated_at: '2026-06-01T10:00:00Z',
+          },
+          {
+            user_id: 'user-b',
+            tenant_id: 'user-b',
+            email: 'b@example.com',
+            display_name: 'B',
+            role: 'user',
+            avatar_key: 'ledger',
+            disabled_at: null,
+            created_at: '2026-06-01T10:00:00Z',
+            updated_at: '2026-06-01T10:00:00Z',
+          },
+        ]),
+      ),
+      http.delete('/api/admin/users/:id', () =>
+        HttpResponse.json({ error: 'failed to delete user' }, { status: 500 }),
+      ),
+    )
+
+    renderWithProviders(<Settings />, { route: '/settings?tab=account' })
+
+    const invitedRow = await screen.findByRole('row', { name: /b@example.com/i })
+    await user.click(within(invitedRow).getByRole('button', { name: 'Edit user B' }))
+    const editDialog = await screen.findByRole('dialog', { name: 'Edit user B' })
+    await user.click(within(editDialog).getByRole('button', { name: 'Delete user' }))
+    const confirmDeleteDialog = await screen.findByRole('dialog', { name: 'Delete user' })
+    await user.click(within(confirmDeleteDialog).getByRole('button', { name: 'Delete' }))
+
+    expect(
+      await within(confirmDeleteDialog).findByText('failed to delete user'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Edit user B' })).toBeInTheDocument()
+  })
 })

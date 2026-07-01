@@ -127,6 +127,7 @@ export const messages = {
     'account.users.deleteTitle': 'Delete user',
     'account.users.deleteMessage':
       'Delete {name}? Their sign-in sessions, setup links, and access tokens will be removed.',
+    'account.users.deleting': 'Deleting...',
     'account.role.user': 'user',
     'account.role.admin': 'admin',
     'account.roleTitle.user': 'User',

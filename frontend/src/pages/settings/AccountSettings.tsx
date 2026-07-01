@@ -731,9 +731,15 @@ function AdminUsersSection() {
       {deleteCandidate && (
         <ConfirmModal
           title={t('account.users.deleteTitle')}
-          message={t('account.users.deleteMessage', { name: deleteCandidate.display_name })}
-          confirmLabel={t('common.delete')}
+          message={
+            <div className="space-y-2">
+              <p>{t('account.users.deleteMessage', { name: deleteCandidate.display_name })}</p>
+              <ErrorText error={deleteUser.error} />
+            </div>
+          }
+          confirmLabel={deleteUser.isPending ? t('account.users.deleting') : t('common.delete')}
           variant="destructive"
+          confirmDisabled={deleteUser.isPending}
           onCancel={() => setDeleteCandidate(null)}
           onConfirm={() => {
             deleteUser.mutate(deleteCandidate.user_id, {
