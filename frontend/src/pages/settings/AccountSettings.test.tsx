@@ -269,6 +269,14 @@ describe('AccountSettings', () => {
     expect(
       await within(createTokenDialog).findByText('Token test already exists.'),
     ).toBeInTheDocument()
+
+    await user.click(within(createTokenDialog).getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: 'New token' }))
+    const reopenedTokenDialog = await screen.findByRole('dialog', { name: 'New token' })
+    expect(within(reopenedTokenDialog).getByLabelText('Token name')).toHaveValue('')
+    expect(
+      within(reopenedTokenDialog).queryByText('Token test already exists.'),
+    ).not.toBeInTheDocument()
   })
 
   it('shows duplicate user email conflicts inside the new user dialog', async () => {
@@ -293,6 +301,15 @@ describe('AccountSettings', () => {
     expect(
       await within(newUserDialog).findByText('User john@example.com already exists.'),
     ).toBeInTheDocument()
+
+    await user.click(within(newUserDialog).getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: 'New user' }))
+    const reopenedUserDialog = await screen.findByRole('dialog', { name: 'New user' })
+    expect(within(reopenedUserDialog).getByLabelText('User email')).toHaveValue('')
+    expect(within(reopenedUserDialog).getByLabelText('User display name')).toHaveValue('')
+    expect(
+      within(reopenedUserDialog).queryByText('User john@example.com already exists.'),
+    ).not.toBeInTheDocument()
   })
 
   it('shows delete user failures inside the confirmation dialog', async () => {

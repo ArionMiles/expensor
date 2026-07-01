@@ -372,6 +372,18 @@ export function AccountSettings() {
     })
   }
 
+  const openCreateToken = () => {
+    createToken.reset()
+    setTokenName('')
+    setCreatingToken(true)
+  }
+
+  const closeCreateToken = () => {
+    createToken.reset()
+    setTokenName('')
+    setCreatingToken(false)
+  }
+
   const copyToken = async () => {
     if (!newToken) return
     await window.navigator.clipboard?.writeText(newToken.token)
@@ -433,7 +445,7 @@ export function AccountSettings() {
         action={
           <button
             type="button"
-            onClick={() => setCreatingToken(true)}
+            onClick={openCreateToken}
             className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             <Plus size={15} />
@@ -494,12 +506,12 @@ export function AccountSettings() {
       {creatingToken && (
         <AccountModal
           title={t('account.tokens.new')}
-          onClose={() => setCreatingToken(false)}
+          onClose={closeCreateToken}
           footer={
             <>
               <button
                 type="button"
-                onClick={() => setCreatingToken(false)}
+                onClick={closeCreateToken}
                 className="rounded-md px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
               >
                 {t('common.cancel')}
@@ -634,13 +646,33 @@ function AdminUsersSection() {
     })
   }
 
+  const openCreateUser = () => {
+    createUser.reset()
+    setCreatingUser(true)
+  }
+
+  const closeCreateUser = () => {
+    createUser.reset()
+    setCreatingUser(false)
+  }
+
+  const openEditUser = (account: AccountUser) => {
+    updateUser.reset()
+    setEditingUser(account)
+  }
+
+  const closeEditUser = () => {
+    updateUser.reset()
+    setEditingUser(null)
+  }
+
   return (
     <Section
       title={t('account.users.title')}
       action={
         <button
           type="button"
-          onClick={() => setCreatingUser(true)}
+          onClick={openCreateUser}
           className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           <Plus size={15} />
@@ -672,7 +704,7 @@ function AdminUsersSection() {
             canEdit={account.user_id !== session?.user_id}
             setupCopied={copiedSetupUserID === account.user_id}
             setupPending={setupToken.isPending}
-            onEdit={() => setEditingUser(account)}
+            onEdit={() => openEditUser(account)}
             onSetupToken={() => generateSetupToken(account.user_id)}
           />
         ))}
@@ -691,7 +723,7 @@ function AdminUsersSection() {
           mode="create"
           pending={createUser.isPending}
           error={createUser.error}
-          onClose={() => setCreatingUser(false)}
+          onClose={closeCreateUser}
           onSubmit={(input) =>
             createUser.mutate(
               {
@@ -701,7 +733,7 @@ function AdminUsersSection() {
                 avatar_key: input.avatar_key,
               },
               {
-                onSuccess: () => setCreatingUser(false),
+                onSuccess: closeCreateUser,
               },
             )
           }
@@ -714,7 +746,7 @@ function AdminUsersSection() {
           user={editingUser}
           pending={updateUser.isPending}
           error={updateUser.error}
-          onClose={() => setEditingUser(null)}
+          onClose={closeEditUser}
           onDelete={() => setDeleteCandidate(editingUser)}
           onSubmit={(input) =>
             updateUser.mutate(
@@ -722,7 +754,7 @@ function AdminUsersSection() {
                 id: editingUser.user_id,
                 patch: { role: input.role, disabled: input.disabled },
               },
-              { onSuccess: () => setEditingUser(null) },
+              { onSuccess: closeEditUser },
             )
           }
         />
