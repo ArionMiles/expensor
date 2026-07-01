@@ -373,6 +373,9 @@ func insertUser(ctx context.Context, tx pgx.Tx, input CreateUserInput) (*User, e
 		          disabled_at, created_at, updated_at
 	`, input.Email, input.PasswordHash, input.DisplayName, role, avatarKey))
 	if err != nil {
+		if isUserEmailConflict(err) {
+			return nil, ErrUserEmailConflict
+		}
 		return nil, fmt.Errorf("creating user: %w", err)
 	}
 	return user, nil

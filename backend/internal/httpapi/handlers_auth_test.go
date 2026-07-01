@@ -352,6 +352,32 @@ func TestCreateUserAsAdmin(t *testing.T) {
 	}
 }
 
+func TestCreateUserEmailConflictReturnsConflict(t *testing.T) {
+	ms := &mockStore{createUserErr: store.ErrUserEmailConflict}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "admin", TenantID: "admin", Role: auth.RoleAdmin})
+	req := httptest.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		"/api/admin/users",
+		strings.NewReader(`{"email":"B@Example.com","display_name":"B","role":"user","avatar_key":"default"}`),
+	)
+	rec := httptest.NewRecorder()
+
+	h.CreateUser(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409; body = %s", rec.Code, rec.Body.String())
+	}
+	var resp ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Error != "User b@example.com already exists." {
+		t.Fatalf("error = %q, want duplicate user message", resp.Error)
+	}
+}
+
 func TestCreateUserRejectsUnknownAvatarKey(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})

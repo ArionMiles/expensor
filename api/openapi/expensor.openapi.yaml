@@ -1383,6 +1383,10 @@ paths:
           description: Forbidden
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:

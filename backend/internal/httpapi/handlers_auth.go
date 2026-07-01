@@ -392,6 +392,7 @@ func (h *Handlers) RevokeAccessToken(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /admin/users [post]
@@ -414,6 +415,10 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 		AvatarKey:   normalizeAvatarKey(body.AvatarKey),
 	})
 	if err != nil {
+		if errors.Is(err, store.ErrUserEmailConflict) {
+			writeError(w, http.StatusConflict, fmt.Sprintf("User %s already exists.", strings.ToLower(strings.TrimSpace(body.Email))))
+			return
+		}
 		h.logger.Error("create user", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create user")
 		return

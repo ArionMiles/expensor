@@ -116,6 +116,7 @@ type mockStore struct {
 	bootstrapRequired          bool
 	createdBootstrapAdmin      store.CreateBootstrapAdminInput
 	createdUser                store.CreateUserInput
+	createUserErr              error
 	users                      []store.User
 	updatedUserID              string
 	updatedUser                store.UpdateUserInput
@@ -161,6 +162,9 @@ func (m *mockStore) CreateBootstrapAdmin(_ context.Context, input store.CreateBo
 
 func (m *mockStore) CreateUser(_ context.Context, input store.CreateUserInput) (*store.User, error) {
 	m.createdUser = input
+	if m.createUserErr != nil {
+		return nil, m.createUserErr
+	}
 	return &store.User{
 		ID:           "user-id",
 		TenantID:     "user-id",

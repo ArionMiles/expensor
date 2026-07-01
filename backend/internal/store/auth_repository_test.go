@@ -205,6 +205,31 @@ func TestAuthRepositoryRejectsActiveAccessTokenNameConflict(t *testing.T) {
 	}
 }
 
+func TestAuthRepositoryRejectsDuplicateUserEmail(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+
+	ctx := context.Background()
+	if _, err := ts.CreateUser(ctx, store.CreateUserInput{
+		Email:       "duplicate@example.com",
+		DisplayName: "First",
+		Role:        store.UserRoleUser,
+		AvatarKey:   "default",
+	}); err != nil {
+		t.Fatalf("CreateUser(first) error = %v", err)
+	}
+
+	_, err := ts.CreateUser(ctx, store.CreateUserInput{
+		Email:       "duplicate@example.com",
+		DisplayName: "Second",
+		Role:        store.UserRoleUser,
+		AvatarKey:   "ledger",
+	})
+	if !errors.Is(err, store.ErrUserEmailConflict) {
+		t.Fatalf("CreateUser(duplicate) error = %v, want ErrUserEmailConflict", err)
+	}
+}
+
 func TestAuthRepositoryListsActiveAccessTokenMetadata(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
