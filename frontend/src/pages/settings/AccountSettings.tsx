@@ -441,7 +441,6 @@ export function AccountSettings() {
           </button>
         }
       >
-        <ErrorText error={createToken.error} />
         <AccountTable
           label={t('account.tokens.title')}
           headers={[
@@ -518,6 +517,7 @@ export function AccountSettings() {
         >
           <form id="account-token-form" onSubmit={submitToken} className="space-y-4">
             <TextField label={t('account.tokens.name')} value={tokenName} onChange={setTokenName} />
+            <ErrorText error={createToken.error} />
           </form>
         </AccountModal>
       )}
@@ -684,14 +684,13 @@ function AdminUsersSection() {
           </tr>
         )}
       </AccountTable>
-      <ErrorText
-        error={updateUser.error ?? setupToken.error ?? createUser.error ?? deleteUser.error}
-      />
+      <ErrorText error={setupToken.error} />
 
       {creatingUser && (
         <UserFormModal
           mode="create"
           pending={createUser.isPending}
+          error={createUser.error}
           onClose={() => setCreatingUser(false)}
           onSubmit={(input) =>
             createUser.mutate(
@@ -714,6 +713,7 @@ function AdminUsersSection() {
           mode="edit"
           user={editingUser}
           pending={updateUser.isPending}
+          error={updateUser.error}
           onClose={() => setEditingUser(null)}
           onDelete={() => setDeleteCandidate(editingUser)}
           onSubmit={(input) =>
@@ -759,6 +759,7 @@ function UserFormModal({
   mode,
   user,
   pending,
+  error,
   onClose,
   onSubmit,
   onDelete,
@@ -766,6 +767,7 @@ function UserFormModal({
   mode: 'create' | 'edit'
   user?: AccountUser
   pending: boolean
+  error?: unknown
   onClose: () => void
   onSubmit: (input: {
     email: string
@@ -869,6 +871,7 @@ function UserFormModal({
             <AvatarPicker value={avatarKey} onChange={setAvatarKey} />
           </div>
         )}
+        <ErrorText error={error} />
       </form>
     </AccountModal>
   )

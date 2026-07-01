@@ -266,7 +266,33 @@ describe('AccountSettings', () => {
     await user.type(within(createTokenDialog).getByLabelText('Token name'), 'test')
     await user.click(within(createTokenDialog).getByRole('button', { name: 'Create token' }))
 
-    expect(await screen.findByText('Token test already exists.')).toBeInTheDocument()
+    expect(
+      await within(createTokenDialog).findByText('Token test already exists.'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows duplicate user email conflicts inside the new user dialog', async () => {
+    const user = userEvent.setup()
+    server.use(
+      http.get('/api/session', () => HttpResponse.json(adminPrincipal)),
+      http.get('/api/tokens', () => HttpResponse.json([])),
+      http.get('/api/admin/users', () => HttpResponse.json([])),
+      http.post('/api/admin/users', () =>
+        HttpResponse.json({ error: 'User john@example.com already exists.' }, { status: 409 }),
+      ),
+    )
+
+    renderWithProviders(<Settings />, { route: '/settings?tab=account' })
+
+    await user.click(await screen.findByRole('button', { name: 'New user' }))
+    const newUserDialog = await screen.findByRole('dialog', { name: 'New user' })
+    await user.type(within(newUserDialog).getByLabelText('User email'), 'john@example.com')
+    await user.type(within(newUserDialog).getByLabelText('User display name'), 'John')
+    await user.click(within(newUserDialog).getByRole('button', { name: 'Create user' }))
+
+    expect(
+      await within(newUserDialog).findByText('User john@example.com already exists.'),
+    ).toBeInTheDocument()
   })
 
   it('shows delete user failures inside the confirmation dialog', async () => {
