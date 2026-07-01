@@ -505,7 +505,7 @@ export function AccountSettings() {
 
       {creatingToken && (
         <AccountModal
-          title={t('account.tokens.new')}
+          title={t('account.tokens.createTitle')}
           onClose={closeCreateToken}
           footer={
             <>
@@ -634,7 +634,10 @@ function AdminUsersSection() {
   const generateSetupToken = (userID: string) => {
     setupToken.mutate(userID, {
       onSuccess: async (token) => {
-        const link = `/account-setup?token=${token.token}`
+        const link = new URL(
+          `/account-setup?token=${encodeURIComponent(token.token)}`,
+          window.location.origin,
+        ).toString()
         await window.navigator.clipboard?.writeText(link)
         setCopiedSetupUserID(userID)
         if (copiedSetupTimerRef.current !== null) window.clearTimeout(copiedSetupTimerRef.current)
@@ -818,7 +821,7 @@ function UserFormModal({
   const [disabledAccount, setDisabledAccount] = useState(!!user?.disabled_at)
   const title =
     mode === 'create'
-      ? t('account.users.new')
+      ? t('account.users.createTitle')
       : t('account.users.edit', { name: user?.display_name ?? '' })
   const disabled = pending || (mode === 'create' && (!email.trim() || !displayName.trim()))
 

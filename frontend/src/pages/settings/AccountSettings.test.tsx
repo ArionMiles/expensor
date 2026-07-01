@@ -172,7 +172,7 @@ describe('AccountSettings', () => {
 
     expect(screen.queryByRole('textbox', { name: 'Token name' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'New token' }))
-    const createTokenDialog = await screen.findByRole('dialog', { name: 'New token' })
+    const createTokenDialog = await screen.findByRole('dialog', { name: 'Create New Token' })
     await user.type(within(createTokenDialog).getByLabelText('Token name'), 'Deploy key')
     await user.click(within(createTokenDialog).getByRole('button', { name: 'Create token' }))
 
@@ -193,9 +193,9 @@ describe('AccountSettings', () => {
     await user.click(within(revokeDialog).getByRole('button', { name: 'Revoke' }))
     expect(revokedTokens).toEqual(['token-1'])
 
-    expect(screen.queryByRole('dialog', { name: 'New user' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Create New User' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'New user' }))
-    const newUserDialog = await screen.findByRole('dialog', { name: 'New user' })
+    const newUserDialog = await screen.findByRole('dialog', { name: 'Create New User' })
     await user.type(within(newUserDialog).getByLabelText('Email'), 'c@example.com')
     await user.type(within(newUserDialog).getByLabelText('Display name'), 'C')
     await user.click(within(newUserDialog).getByRole('button', { name: 'Default avatar' }))
@@ -222,7 +222,12 @@ describe('AccountSettings', () => {
     expect(await screen.findByText('Copy setup link')).toBeInTheDocument()
     await user.click(copySetupButton)
 
-    expect(writeText).toHaveBeenCalledWith('/account-setup?token=expensor_setup_visible_once')
+    expect(writeText).toHaveBeenCalledWith(
+      new URL(
+        '/account-setup?token=expensor_setup_visible_once',
+        window.location.origin,
+      ).toString(),
+    )
     expect(await screen.findByText('Copied!')).toBeInTheDocument()
     expect(setupTokenRequests).toEqual(['user-b'])
 
@@ -262,7 +267,7 @@ describe('AccountSettings', () => {
     renderWithProviders(<Settings />, { route: '/settings?tab=account' })
 
     await user.click(await screen.findByRole('button', { name: 'New token' }))
-    const createTokenDialog = await screen.findByRole('dialog', { name: 'New token' })
+    const createTokenDialog = await screen.findByRole('dialog', { name: 'Create New Token' })
     await user.type(within(createTokenDialog).getByLabelText('Token name'), 'test')
     await user.click(within(createTokenDialog).getByRole('button', { name: 'Create token' }))
 
@@ -272,7 +277,7 @@ describe('AccountSettings', () => {
 
     await user.click(within(createTokenDialog).getByRole('button', { name: 'Cancel' }))
     await user.click(screen.getByRole('button', { name: 'New token' }))
-    const reopenedTokenDialog = await screen.findByRole('dialog', { name: 'New token' })
+    const reopenedTokenDialog = await screen.findByRole('dialog', { name: 'Create New Token' })
     expect(within(reopenedTokenDialog).getByLabelText('Token name')).toHaveValue('')
     expect(
       within(reopenedTokenDialog).queryByText('Token test already exists.'),
@@ -293,7 +298,7 @@ describe('AccountSettings', () => {
     renderWithProviders(<Settings />, { route: '/settings?tab=account' })
 
     await user.click(await screen.findByRole('button', { name: 'New user' }))
-    const newUserDialog = await screen.findByRole('dialog', { name: 'New user' })
+    const newUserDialog = await screen.findByRole('dialog', { name: 'Create New User' })
     await user.type(within(newUserDialog).getByLabelText('Email'), 'john@example.com')
     await user.type(within(newUserDialog).getByLabelText('Display name'), 'John')
     await user.click(within(newUserDialog).getByRole('button', { name: 'Create user' }))
@@ -304,7 +309,7 @@ describe('AccountSettings', () => {
 
     await user.click(within(newUserDialog).getByRole('button', { name: 'Cancel' }))
     await user.click(screen.getByRole('button', { name: 'New user' }))
-    const reopenedUserDialog = await screen.findByRole('dialog', { name: 'New user' })
+    const reopenedUserDialog = await screen.findByRole('dialog', { name: 'Create New User' })
     expect(within(reopenedUserDialog).getByLabelText('Email')).toHaveValue('')
     expect(within(reopenedUserDialog).getByLabelText('Display name')).toHaveValue('')
     expect(
