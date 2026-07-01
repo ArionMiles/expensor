@@ -1,14 +1,5 @@
 import { Check, Copy, Pencil, Plus, Trash2 } from 'lucide-react'
-import {
-  FormEvent,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type FocusEvent,
-  type MouseEvent,
-  type ReactNode,
-} from 'react'
+import { FormEvent, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import {
   useAccessTokens,
@@ -28,6 +19,7 @@ import { useI18n } from '@/i18n/I18nProvider'
 import { AvatarPicker } from '@/pages/auth/AuthPages'
 import { cn, formatDate } from '@/lib/utils'
 import { ConfirmModal } from '@/components/ConfirmModal'
+import { useCopyTooltip } from '@/hooks/useCopyTooltip'
 
 function TextField({
   label,
@@ -265,51 +257,6 @@ function StatusChip({ disabled }: { disabled: boolean }) {
   )
 }
 
-function useCopyTooltip(initialLabel: string) {
-  const [tooltip, setTooltip] = useState<{ label: string; x: number; y: number } | null>(null)
-  const labelRef = useRef(initialLabel)
-
-  useEffect(() => {
-    labelRef.current = initialLabel
-    setTooltip((current) => (current ? { ...current, label: initialLabel } : current))
-  }, [initialLabel])
-
-  const handlers = {
-    onMouseEnter: (event: MouseEvent<Element>) => {
-      const rect = event.currentTarget.getBoundingClientRect()
-      setTooltip({
-        label: labelRef.current,
-        x: rect.left + rect.width / 2,
-        y: rect.bottom + 6,
-      })
-    },
-    onMouseLeave: () => setTooltip(null),
-    onFocus: (event: FocusEvent<Element>) => {
-      const rect = event.currentTarget.getBoundingClientRect()
-      setTooltip({
-        label: labelRef.current,
-        x: rect.left + rect.width / 2,
-        y: rect.bottom + 6,
-      })
-    },
-    onBlur: () => setTooltip(null),
-  }
-
-  const tip =
-    tooltip &&
-    createPortal(
-      <div
-        className="pointer-events-none fixed z-50 -translate-x-1/2 rounded bg-foreground px-2 py-1 text-xs text-background shadow"
-        style={{ left: tooltip.x, top: tooltip.y }}
-      >
-        {tooltip.label}
-      </div>,
-      document.body,
-    )
-
-  return { handlers, tip }
-}
-
 export function AccountSettings() {
   const { t } = useI18n()
   const { timezone, timeFormat } = useDisplay()
@@ -528,7 +475,7 @@ export function AccountSettings() {
           }
         >
           <form id="account-token-form" onSubmit={submitToken} className="space-y-4">
-            <TextField label={t('account.tokens.name')} value={tokenName} onChange={setTokenName} />
+            <TokenNameField value={tokenName} onChange={setTokenName} />
             <ErrorText error={createToken.error} />
           </form>
         </AccountModal>
@@ -556,6 +503,30 @@ export function AccountSettings() {
           }}
         />
       )}
+    </div>
+  )
+}
+
+function TokenNameField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const { t } = useI18n()
+  const id = useId()
+
+  return (
+    <div>
+      <label htmlFor={id} className="block">
+        <span className="mb-3 block text-lg font-semibold text-foreground">
+          {t('account.tokens.name')}
+        </span>
+        <input
+          id={id}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-12 w-full rounded-lg border border-border bg-input px-3 py-2 text-base text-foreground outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-ring"
+        />
+      </label>
+      <p className="mt-3 text-sm font-medium text-muted-foreground">
+        {t('account.tokens.nameHint')}
+      </p>
     </div>
   )
 }

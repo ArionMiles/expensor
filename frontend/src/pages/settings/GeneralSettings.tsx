@@ -2,7 +2,10 @@ import { usePreferences, useUpdatePreferences, useVersion } from '@/api/queries'
 import { TIME_FORMATS, type TimeFormatValue } from '@/contexts/DisplayContext'
 import { FloatingDropdown, comboboxOptionClass, useComboboxNavigation } from '@/components/Combobox'
 import { getBrowserTimezone, getTimezoneOptions, normalizeTimezone } from '@/lib/timezone'
+import { useCopyTooltip } from '@/hooks/useCopyTooltip'
+import { useI18n } from '@/i18n/I18nProvider'
 import { cn } from '@/lib/utils'
+import { Check, Copy } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 export const COMMON_CURRENCIES = [
@@ -362,14 +365,30 @@ export function TimeFormatSelect({
 }
 
 function VersionSection() {
+  const { t } = useI18n()
   const { data: version } = useVersion()
   const [copied, setCopied] = useState(false)
+  const timerRef = useRef<number | null>(null)
+  const { handlers, tip } = useCopyTooltip(
+    copied ? t('settings.general.version.copied') : t('settings.general.version.copy'),
+  )
+
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+    },
+    [],
+  )
 
   const handleCopy = () => {
     if (!version) return
-    void navigator.clipboard.writeText(version).then(() => {
+    void navigator.clipboard?.writeText(version).then(() => {
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+      timerRef.current = window.setTimeout(() => {
+        setCopied(false)
+        timerRef.current = null
+      }, 2000)
     })
   }
 
@@ -383,12 +402,16 @@ function VersionSection() {
             <span className="ml-2 font-mono text-sm text-muted-foreground">{version ?? '—'}</span>
           </div>
           <button
+            type="button"
             onClick={handleCopy}
+            aria-label={t('settings.general.version.copy')}
             disabled={!version}
-            className="rounded border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            {...handlers}
           >
-            {copied ? 'Copied!' : 'Copy'}
+            {copied ? <Check size={15} /> : <Copy size={15} />}
           </button>
+          {tip}
         </div>
       </div>
     </div>

@@ -170,10 +170,11 @@ describe('AccountSettings', () => {
       }),
     )
 
-    expect(screen.queryByRole('textbox', { name: 'Token name' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Name' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'New token' }))
     const createTokenDialog = await screen.findByRole('dialog', { name: 'Create New Token' })
-    await user.type(within(createTokenDialog).getByLabelText('Token name'), 'Deploy key')
+    expect(within(createTokenDialog).getByText("What's this token for?")).toBeInTheDocument()
+    await user.type(within(createTokenDialog).getByLabelText('Name'), 'Deploy key')
     await user.click(within(createTokenDialog).getByRole('button', { name: 'Create token' }))
 
     const tokenDialog = await screen.findByRole('dialog', { name: 'Deploy key' })
@@ -268,7 +269,7 @@ describe('AccountSettings', () => {
 
     await user.click(await screen.findByRole('button', { name: 'New token' }))
     const createTokenDialog = await screen.findByRole('dialog', { name: 'Create New Token' })
-    await user.type(within(createTokenDialog).getByLabelText('Token name'), 'test')
+    await user.type(within(createTokenDialog).getByLabelText('Name'), 'test')
     await user.click(within(createTokenDialog).getByRole('button', { name: 'Create token' }))
 
     expect(
@@ -278,7 +279,7 @@ describe('AccountSettings', () => {
     await user.click(within(createTokenDialog).getByRole('button', { name: 'Cancel' }))
     await user.click(screen.getByRole('button', { name: 'New token' }))
     const reopenedTokenDialog = await screen.findByRole('dialog', { name: 'Create New Token' })
-    expect(within(reopenedTokenDialog).getByLabelText('Token name')).toHaveValue('')
+    expect(within(reopenedTokenDialog).getByLabelText('Name')).toHaveValue('')
     expect(
       within(reopenedTokenDialog).queryByText('Token test already exists.'),
     ).not.toBeInTheDocument()
