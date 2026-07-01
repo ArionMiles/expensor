@@ -133,6 +133,7 @@ export const api = {
       createUser: (body: CreateUserRequest) => apiClient.post<Principal>('/admin/users', body),
       updateUser: (id: string, patch: AdminUserPatch) =>
         apiClient.patch<AccountUser>(`/admin/users/${encodeURIComponent(id)}`, patch),
+      deleteUser: (id: string) => apiClient.delete(`/admin/users/${encodeURIComponent(id)}`),
       createSetupToken: (id: string) =>
         apiClient.post<SetupToken>(`/admin/users/${encodeURIComponent(id)}/setup-tokens`),
     },

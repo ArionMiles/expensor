@@ -120,6 +120,7 @@ type mockStore struct {
 	updatedUserID              string
 	updatedUser                store.UpdateUserInput
 	updatedUserResult          *store.User
+	deletedUserID              string
 	usersByEmail               map[string]*store.User
 	usersByID                  map[string]*store.User
 	createdSession             store.CreateSessionInput
@@ -194,6 +195,17 @@ func (m *mockStore) UpdateUser(_ context.Context, id string, input store.UpdateU
 		Role:        store.UserRoleUser,
 		AvatarKey:   "default",
 	}, nil
+}
+
+func (m *mockStore) DeleteUser(_ context.Context, id string) error {
+	m.deletedUserID = id
+	if m.usersByID != nil {
+		if _, ok := m.usersByID[id]; !ok {
+			return store.ErrNotFound
+		}
+		delete(m.usersByID, id)
+	}
+	return nil
 }
 
 func (m *mockStore) FindUserByEmail(_ context.Context, email string) (*store.User, error) {

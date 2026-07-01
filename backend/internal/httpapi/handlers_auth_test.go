@@ -512,6 +512,42 @@ func TestUpdateUserRejectsSelfDisable(t *testing.T) {
 	}
 }
 
+func TestDeleteUserDeletesOtherUser(t *testing.T) {
+	ms := &mockStore{}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "admin", TenantID: "admin", Role: auth.RoleAdmin})
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/api/admin/users/user-b", nil)
+	req.SetPathValue("id", "user-b")
+	rec := httptest.NewRecorder()
+
+	h.DeleteUser(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204; body = %s", rec.Code, rec.Body.String())
+	}
+	if ms.deletedUserID != "user-b" {
+		t.Fatalf("deleted user id = %q, want user-b", ms.deletedUserID)
+	}
+}
+
+func TestDeleteUserRejectsSelfDelete(t *testing.T) {
+	ms := &mockStore{}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "admin", TenantID: "admin", Role: auth.RoleAdmin})
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/api/admin/users/admin", nil)
+	req.SetPathValue("id", "admin")
+	rec := httptest.NewRecorder()
+
+	h.DeleteUser(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body = %s", rec.Code, rec.Body.String())
+	}
+	if ms.deletedUserID != "" {
+		t.Fatalf("deleted user id = %q, want no store write", ms.deletedUserID)
+	}
+}
+
 func TestUpdateUserRejectsInvalidRoleBeforeWriting(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})

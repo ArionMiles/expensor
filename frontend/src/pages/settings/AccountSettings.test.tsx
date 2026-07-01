@@ -25,6 +25,7 @@ describe('AccountSettings', () => {
     const setupTokenRequests: string[] = []
     const updatedUsers: Array<{ id: string; patch: Record<string, unknown> }> = []
     const createdUsers: Array<Record<string, unknown>> = []
+    const deletedUsers: string[] = []
     server.use(
       http.get('/api/session', () => HttpResponse.json(adminPrincipal)),
       http.patch('/api/profile', async ({ request }) => {
@@ -125,6 +126,10 @@ describe('AccountSettings', () => {
           updated_at: '2026-06-04T10:00:00Z',
         })
       }),
+      http.delete('/api/admin/users/:id', ({ params }) => {
+        deletedUsers.push(String(params.id))
+        return new HttpResponse(null, { status: 204 })
+      }),
       http.post('/api/admin/users/:id/setup-tokens', ({ params }) => {
         setupTokenRequests.push(String(params.id))
         return HttpResponse.json(
@@ -164,14 +169,20 @@ describe('AccountSettings', () => {
       }),
     )
 
-    await user.type(screen.getByLabelText('Token name'), 'Deploy key')
-    await user.click(screen.getByRole('button', { name: 'Create token' }))
+    expect(screen.queryByRole('textbox', { name: 'Token name' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'New token' }))
+    const createTokenDialog = await screen.findByRole('dialog', { name: 'New token' })
+    await user.type(within(createTokenDialog).getByLabelText('Token name'), 'Deploy key')
+    await user.click(within(createTokenDialog).getByRole('button', { name: 'Create token' }))
 
     const tokenDialog = await screen.findByRole('dialog', { name: 'Deploy key' })
     expect(within(tokenDialog).getByText('expensor_pat_visible_once')).toBeInTheDocument()
-    await user.click(within(tokenDialog).getByRole('button', { name: 'Copy token' }))
+    const copyTokenButton = within(tokenDialog).getByRole('button', { name: 'Copy token' })
+    await user.hover(copyTokenButton)
+    expect(await screen.findByText('Copy token')).toBeInTheDocument()
+    await user.click(copyTokenButton)
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('expensor_pat_visible_once'))
-    expect(await within(tokenDialog).findByText('Token copied.')).toBeInTheDocument()
+    expect(await screen.findByText('Copied!')).toBeInTheDocument()
     await user.click(within(tokenDialog).getByRole('button', { name: 'Close' }))
     expect(createdTokens).toEqual(['Deploy key'])
 
@@ -217,19 +228,22 @@ describe('AccountSettings', () => {
     await user.click(within(invitedRow).getByRole('button', { name: 'Edit user B' }))
     const editDialog = await screen.findByRole('dialog', { name: 'Edit user B' })
     await user.click(within(editDialog).getByRole('button', { name: 'Admin' }))
+    await user.click(within(editDialog).getByRole('button', { name: 'Disabled' }))
     await user.click(within(editDialog).getByRole('button', { name: 'Save changes' }))
     await waitFor(() =>
-      expect(updatedUsers).toContainEqual({ id: 'user-b', patch: { role: 'admin' } }),
+      expect(updatedUsers).toContainEqual({
+        id: 'user-b',
+        patch: { role: 'admin', disabled: true },
+      }),
     )
 
     await user.click(within(invitedRow).getByRole('button', { name: 'Edit user B' }))
-    const disableDialog = await screen.findByRole('dialog', { name: 'Edit user B' })
-    await user.click(within(disableDialog).getByRole('button', { name: 'Disable account' }))
-    const confirmDisableDialog = await screen.findByRole('dialog', { name: 'Disable user' })
-    await user.click(within(confirmDisableDialog).getByRole('button', { name: 'Disable' }))
-    await waitFor(() =>
-      expect(updatedUsers).toContainEqual({ id: 'user-b', patch: { disabled: true } }),
-    )
+    const deleteDialog = await screen.findByRole('dialog', { name: 'Edit user B' })
+    await user.click(within(deleteDialog).getByRole('button', { name: 'Delete user' }))
+    const confirmDeleteDialog = await screen.findByRole('dialog', { name: 'Delete user' })
+    await user.click(within(confirmDeleteDialog).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(deletedUsers).toEqual(['user-b']))
+    expect(screen.queryByRole('dialog', { name: 'Edit user B' })).not.toBeInTheDocument()
   }, 10000)
 
   it('shows active duplicate access token names as conflicts', async () => {
@@ -245,8 +259,10 @@ describe('AccountSettings', () => {
 
     renderWithProviders(<Settings />, { route: '/settings?tab=account' })
 
-    await user.type(await screen.findByLabelText('Token name'), 'test')
-    await user.click(screen.getByRole('button', { name: 'Create token' }))
+    await user.click(await screen.findByRole('button', { name: 'New token' }))
+    const createTokenDialog = await screen.findByRole('dialog', { name: 'New token' })
+    await user.type(within(createTokenDialog).getByLabelText('Token name'), 'test')
+    await user.click(within(createTokenDialog).getByRole('button', { name: 'Create token' }))
 
     expect(await screen.findByText('Token test already exists.')).toBeInTheDocument()
   })

@@ -246,6 +246,7 @@ export const handlers = [
       updated_at: new Date(0).toISOString(),
     })
   }),
+  http.delete('/api/admin/users/:id', () => new HttpResponse(null, { status: 204 })),
   http.post('/api/admin/users/:id/setup-tokens', () =>
     HttpResponse.json(
       {

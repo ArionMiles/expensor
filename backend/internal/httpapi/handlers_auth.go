@@ -501,6 +501,42 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, userFromStore(user))
 }
 
+// DeleteUser deletes an instance user for administrators.
+// @Summary Delete an instance user
+// @Tags Auth
+// @Param id path string true "User ID" example(00000000-0000-0000-0000-00000000c0de)
+// @Success 204
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /admin/users/{id} [delete]
+func (h *Handlers) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	if !requireAdmin(w, r) {
+		return
+	}
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	userID := r.PathValue("id")
+	if userID == principal.UserID {
+		writeError(w, http.StatusForbidden, "cannot delete your own account")
+		return
+	}
+	if err := h.authStore.DeleteUser(r.Context(), userID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		h.logger.Error("delete user", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to delete user")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // CreateSetupToken creates a one-time setup token for an instance user.
 // @Summary Create a user setup token
 // @Tags Auth

@@ -83,11 +83,12 @@ export const messages = {
     'account.saved': 'Saved.',
     'account.tokens.title': 'Access tokens',
     'account.tokens.name': 'Token name',
+    'account.tokens.new': 'New token',
     'account.tokens.create': 'Create token',
     'account.tokens.creating': 'Creating...',
     'account.tokens.copyOnce': 'Copy this token now. It will not be shown again.',
     'account.tokens.copy': 'Copy token',
-    'account.tokens.copied': 'Token copied.',
+    'account.tokens.copied': 'Copied!',
     'account.tokens.revokeTitle': 'Revoke token',
     'account.tokens.revokeMessage':
       'Revoke "{name}"? Existing clients using this token will lose access.',
@@ -122,6 +123,10 @@ export const messages = {
     'account.users.disableTitle': 'Disable user',
     'account.users.disableMessage':
       'Disable {name}? They will not be able to sign in until re-enabled.',
+    'account.users.deleteUser': 'Delete user',
+    'account.users.deleteTitle': 'Delete user',
+    'account.users.deleteMessage':
+      'Delete {name}? Their sign-in sessions, setup links, and access tokens will be removed.',
     'account.role.user': 'user',
     'account.role.admin': 'admin',
     'account.roleTitle.user': 'User',

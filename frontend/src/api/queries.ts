@@ -184,6 +184,16 @@ export function useUpdateAdminUser() {
   })
 }
 
+export function useDeleteAdminUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.auth.admin.deleteUser(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.adminUsers })
+    },
+  })
+}
+
 export function useCreateSetupToken() {
   return useMutation({
     mutationFn: (id: string) => api.auth.admin.createSetupToken(id).then((r) => r.data),

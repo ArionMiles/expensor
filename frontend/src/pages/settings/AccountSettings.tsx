@@ -5,6 +5,7 @@ import {
   useId,
   useRef,
   useState,
+  type FocusEvent,
   type MouseEvent,
   type ReactNode,
 } from 'react'
@@ -15,6 +16,7 @@ import {
   useCreateAccessToken,
   useCreateSetupToken,
   useCreateUser,
+  useDeleteAdminUser,
   useRevokeAccessToken,
   useSession,
   useUpdateAdminUser,
@@ -213,6 +215,40 @@ function RoleChip({ role }: { role: UserRole }) {
   )
 }
 
+function StatusChoice({
+  disabled,
+  onChange,
+}: {
+  disabled: boolean
+  onChange: (value: boolean) => void
+}) {
+  const { t } = useI18n()
+  return (
+    <div className="inline-flex rounded-md border border-border bg-card p-0.5">
+      {[
+        { disabled: false, label: t('account.status.active') },
+        { disabled: true, label: t('account.status.disabled') },
+      ].map((option) => (
+        <button
+          key={option.label}
+          type="button"
+          onClick={() => onChange(option.disabled)}
+          className={cn(
+            'rounded px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors',
+            disabled === option.disabled
+              ? option.disabled
+                ? 'bg-destructive/15 text-destructive'
+                : 'bg-success/15 text-success'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function StatusChip({ disabled }: { disabled: boolean }) {
   const { t } = useI18n()
   return (
@@ -248,6 +284,15 @@ function useCopyTooltip(initialLabel: string) {
       })
     },
     onMouseLeave: () => setTooltip(null),
+    onFocus: (event: FocusEvent<Element>) => {
+      const rect = event.currentTarget.getBoundingClientRect()
+      setTooltip({
+        label: labelRef.current,
+        x: rect.left + rect.width / 2,
+        y: rect.bottom + 6,
+      })
+    },
+    onBlur: () => setTooltip(null),
   }
 
   const tip =
@@ -277,6 +322,7 @@ export function AccountSettings() {
   const [avatarKey, setAvatarKey] = useState<AvatarKey>('default')
   const profileUserID = useRef('')
   const [tokenName, setTokenName] = useState('')
+  const [creatingToken, setCreatingToken] = useState(false)
   const [newToken, setNewToken] = useState<{ name: string; token: string } | null>(null)
   const [tokenCopied, setTokenCopied] = useState(false)
   const tokenCopiedTimerRef = useRef<number | null>(null)
@@ -320,6 +366,7 @@ export function AccountSettings() {
       onSuccess: (token) => {
         if (token.token) setNewToken({ name: token.name, token: token.token })
         setTokenName('')
+        setCreatingToken(false)
         setTokenCopied(false)
       },
     })
@@ -353,7 +400,7 @@ export function AccountSettings() {
 
       <Section title={t('account.profile.title')}>
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
-          <div className="space-y-4">
+          <div className="w-full max-w-xl space-y-4">
             <TextField
               label={t('account.email')}
               value={session?.email ?? ''}
@@ -381,19 +428,19 @@ export function AccountSettings() {
         </div>
       </Section>
 
-      <Section title={t('account.tokens.title')}>
-        <form onSubmit={submitToken} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="min-w-0 flex-1">
-            <TextField label={t('account.tokens.name')} value={tokenName} onChange={setTokenName} />
-          </div>
+      <Section
+        title={t('account.tokens.title')}
+        action={
           <button
-            type="submit"
-            disabled={createToken.isPending || tokenName.trim().length === 0}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            type="button"
+            onClick={() => setCreatingToken(true)}
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            {createToken.isPending ? t('account.tokens.creating') : t('account.tokens.create')}
+            <Plus size={15} />
+            {t('account.tokens.new')}
           </button>
-        </form>
+        }
+      >
         <ErrorText error={createToken.error} />
         <AccountTable
           label={t('account.tokens.title')}
@@ -445,38 +492,43 @@ export function AccountSettings() {
 
       {isAdmin && <AdminUsersSection />}
 
-      {newToken && (
+      {creatingToken && (
         <AccountModal
-          title={newToken.name}
-          onClose={() => setNewToken(null)}
+          title={t('account.tokens.new')}
+          onClose={() => setCreatingToken(false)}
           footer={
-            <button
-              type="button"
-              onClick={() => setNewToken(null)}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-            >
-              {t('common.close')}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setCreatingToken(false)}
+                className="rounded-md px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="submit"
+                form="account-token-form"
+                disabled={createToken.isPending || tokenName.trim().length === 0}
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {createToken.isPending ? t('account.tokens.creating') : t('account.tokens.create')}
+              </button>
+            </>
           }
         >
-          <p className="text-xs text-muted-foreground">{t('account.tokens.copyOnce')}</p>
-          <div className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
-            <code className="min-w-0 flex-1 break-all font-mono text-sm text-foreground">
-              {newToken.token}
-            </code>
-            <button
-              type="button"
-              onClick={copyToken}
-              aria-label={t('account.tokens.copy')}
-              className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-            >
-              {tokenCopied ? <Check size={15} /> : <Copy size={15} />}
-            </button>
-          </div>
-          <div className="min-h-4">
-            {tokenCopied && <p className="text-xs text-success">{t('account.tokens.copied')}</p>}
-          </div>
+          <form id="account-token-form" onSubmit={submitToken} className="space-y-4">
+            <TextField label={t('account.tokens.name')} value={tokenName} onChange={setTokenName} />
+          </form>
         </AccountModal>
+      )}
+
+      {newToken && (
+        <TokenRevealModal
+          token={newToken}
+          copied={tokenCopied}
+          onCopy={copyToken}
+          onClose={() => setNewToken(null)}
+        />
       )}
 
       {revokeCandidate && (
@@ -496,16 +548,67 @@ export function AccountSettings() {
   )
 }
 
+function TokenRevealModal({
+  token,
+  copied,
+  onCopy,
+  onClose,
+}: {
+  token: { name: string; token: string }
+  copied: boolean
+  onCopy: () => void
+  onClose: () => void
+}) {
+  const { t } = useI18n()
+  const { handlers, tip } = useCopyTooltip(
+    copied ? t('account.tokens.copied') : t('account.tokens.copy'),
+  )
+
+  return (
+    <AccountModal
+      title={token.name}
+      onClose={onClose}
+      footer={
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          {t('common.close')}
+        </button>
+      }
+    >
+      <p className="text-xs text-muted-foreground">{t('account.tokens.copyOnce')}</p>
+      <div className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
+        <code className="min-w-0 flex-1 break-all font-mono text-sm text-foreground">
+          {token.token}
+        </code>
+        <button
+          type="button"
+          onClick={onCopy}
+          aria-label={t('account.tokens.copy')}
+          className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+          {...handlers}
+        >
+          {copied ? <Check size={15} /> : <Copy size={15} />}
+        </button>
+        {tip}
+      </div>
+    </AccountModal>
+  )
+}
+
 function AdminUsersSection() {
   const { t } = useI18n()
   const { data: session } = useSession()
   const { data: users = [] } = useAdminUsers(true)
   const createUser = useCreateUser()
   const updateUser = useUpdateAdminUser()
+  const deleteUser = useDeleteAdminUser()
   const setupToken = useCreateSetupToken()
   const [creatingUser, setCreatingUser] = useState(false)
   const [editingUser, setEditingUser] = useState<AccountUser | null>(null)
-  const [disableCandidate, setDisableCandidate] = useState<AccountUser | null>(null)
+  const [deleteCandidate, setDeleteCandidate] = useState<AccountUser | null>(null)
   const [copiedSetupUserID, setCopiedSetupUserID] = useState<string | null>(null)
   const copiedSetupTimerRef = useRef<number | null>(null)
 
@@ -581,7 +684,9 @@ function AdminUsersSection() {
           </tr>
         )}
       </AccountTable>
-      <ErrorText error={updateUser.error ?? setupToken.error ?? createUser.error} />
+      <ErrorText
+        error={updateUser.error ?? setupToken.error ?? createUser.error ?? deleteUser.error}
+      />
 
       {creatingUser && (
         <UserFormModal
@@ -589,9 +694,17 @@ function AdminUsersSection() {
           pending={createUser.isPending}
           onClose={() => setCreatingUser(false)}
           onSubmit={(input) =>
-            createUser.mutate(input, {
-              onSuccess: () => setCreatingUser(false),
-            })
+            createUser.mutate(
+              {
+                email: input.email,
+                display_name: input.display_name,
+                role: input.role,
+                avatar_key: input.avatar_key,
+              },
+              {
+                onSuccess: () => setCreatingUser(false),
+              },
+            )
           }
         />
       )}
@@ -602,39 +715,33 @@ function AdminUsersSection() {
           user={editingUser}
           pending={updateUser.isPending}
           onClose={() => setEditingUser(null)}
-          onDisable={() => setDisableCandidate(editingUser)}
-          onEnable={() =>
-            updateUser.mutate(
-              { id: editingUser.user_id, patch: { disabled: false } },
-              { onSuccess: () => setEditingUser(null) },
-            )
-          }
+          onDelete={() => setDeleteCandidate(editingUser)}
           onSubmit={(input) =>
             updateUser.mutate(
-              { id: editingUser.user_id, patch: { role: input.role } },
+              {
+                id: editingUser.user_id,
+                patch: { role: input.role, disabled: input.disabled },
+              },
               { onSuccess: () => setEditingUser(null) },
             )
           }
         />
       )}
 
-      {disableCandidate && (
+      {deleteCandidate && (
         <ConfirmModal
-          title={t('account.users.disableTitle')}
-          message={t('account.users.disableMessage', { name: disableCandidate.display_name })}
-          confirmLabel={t('account.users.disable')}
+          title={t('account.users.deleteTitle')}
+          message={t('account.users.deleteMessage', { name: deleteCandidate.display_name })}
+          confirmLabel={t('common.delete')}
           variant="destructive"
-          onCancel={() => setDisableCandidate(null)}
+          onCancel={() => setDeleteCandidate(null)}
           onConfirm={() => {
-            updateUser.mutate(
-              { id: disableCandidate.user_id, patch: { disabled: true } },
-              {
-                onSuccess: () => {
-                  setDisableCandidate(null)
-                  setEditingUser(null)
-                },
+            deleteUser.mutate(deleteCandidate.user_id, {
+              onSuccess: () => {
+                setDeleteCandidate(null)
+                setEditingUser(null)
               },
-            )
+            })
           }}
         />
       )}
@@ -648,8 +755,7 @@ function UserFormModal({
   pending,
   onClose,
   onSubmit,
-  onDisable,
-  onEnable,
+  onDelete,
 }: {
   mode: 'create' | 'edit'
   user?: AccountUser
@@ -660,15 +766,16 @@ function UserFormModal({
     display_name: string
     role: UserRole
     avatar_key: AvatarKey
+    disabled: boolean
   }) => void
-  onDisable?: () => void
-  onEnable?: () => void
+  onDelete?: () => void
 }) {
   const { t } = useI18n()
   const [email, setEmail] = useState(user?.email ?? '')
   const [displayName, setDisplayName] = useState(user?.display_name ?? '')
   const [role, setRole] = useState<UserRole>(user?.role ?? 'user')
   const [avatarKey, setAvatarKey] = useState<AvatarKey>(user?.avatar_key ?? 'default')
+  const [disabledAccount, setDisabledAccount] = useState(!!user?.disabled_at)
   const title =
     mode === 'create'
       ? t('account.users.new')
@@ -682,6 +789,7 @@ function UserFormModal({
       display_name: displayName.trim(),
       role,
       avatar_key: avatarKey,
+      disabled: disabledAccount,
     })
   }
 
@@ -691,22 +799,13 @@ function UserFormModal({
       onClose={onClose}
       footer={
         <>
-          {mode === 'edit' && user && !user.disabled_at && onDisable && (
+          {mode === 'edit' && user && onDelete && (
             <button
               type="button"
-              onClick={onDisable}
+              onClick={onDelete}
               className="mr-auto rounded-md px-4 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
             >
-              {t('account.users.disableAccount')}
-            </button>
-          )}
-          {mode === 'edit' && user?.disabled_at && onEnable && (
-            <button
-              type="button"
-              onClick={onEnable}
-              className="mr-auto rounded-md px-4 py-2 text-sm text-success transition-colors hover:bg-success/10"
-            >
-              {t('account.users.enableAccount')}
+              {t('account.users.deleteUser')}
             </button>
           )}
           <button
@@ -751,6 +850,14 @@ function UserFormModal({
           </span>
           <RoleChoice value={role} onChange={setRole} />
         </div>
+        {mode === 'edit' && (
+          <div>
+            <span className="mb-1.5 block text-xs uppercase tracking-wider text-muted-foreground">
+              {t('account.users.columns.status')}
+            </span>
+            <StatusChoice disabled={disabledAccount} onChange={setDisabledAccount} />
+          </div>
+        )}
         {mode === 'create' && (
           <div className="flex justify-center pt-2">
             <AvatarPicker value={avatarKey} onChange={setAvatarKey} />

@@ -130,6 +130,17 @@ func (r *pgAuthRepository) UpdateUser(ctx context.Context, id string, input Upda
 	return user, nil
 }
 
+func (r *pgAuthRepository) DeleteUser(ctx context.Context, id string) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("deleting user: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *pgAuthRepository) FindUserByEmail(ctx context.Context, email string) (*User, error) {
 	user, err := scanUser(r.pool.QueryRow(ctx, `
 		SELECT id, id AS tenant_id, email, COALESCE(password_hash, ''), display_name, role, avatar_key,

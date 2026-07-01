@@ -324,6 +324,20 @@ func TestAuthRepositoryListsAndUpdatesUsers(t *testing.T) {
 	if len(users) != 2 || users[0].ID != admin.ID || users[1].ID != user.ID {
 		t.Fatalf("users = %#v", users)
 	}
+
+	if err := ts.DeleteUser(ctx, user.ID); err != nil {
+		t.Fatalf("DeleteUser() error = %v", err)
+	}
+	users, err = ts.ListUsers(ctx)
+	if err != nil {
+		t.Fatalf("ListUsers(after delete) error = %v", err)
+	}
+	if len(users) != 1 || users[0].ID != admin.ID {
+		t.Fatalf("users after delete = %#v", users)
+	}
+	if err := ts.DeleteUser(ctx, user.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("DeleteUser(missing) error = %v, want ErrNotFound", err)
+	}
 }
 
 func TestAuthRepositoryCompletesAccountSetupOnce(t *testing.T) {
