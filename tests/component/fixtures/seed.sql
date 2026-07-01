@@ -18,7 +18,7 @@ INSERT INTO access_tokens (user_id, name, token_hash) VALUES (
   '00000000-0000-0000-0000-00000000c0de',
   'component contract token',
   'sha256:136a976b1f2c9c3d0fe47759b8f1b112a7dcb1c77197d213c6bd1715c54c111b'
-) ON CONFLICT (user_id, name) DO UPDATE SET
+) ON CONFLICT (user_id, name) WHERE revoked_at IS NULL DO UPDATE SET
   token_hash = EXCLUDED.token_hash,
   revoked_at = NULL;
 
