@@ -400,7 +400,7 @@ export function AccountSettings() {
 
       <Section title={t('account.profile.title')}>
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
-          <div className="w-full max-w-xl space-y-4">
+          <div className="w-full max-w-md space-y-4">
             <TextField
               label={t('account.email')}
               value={session?.email ?? ''}
