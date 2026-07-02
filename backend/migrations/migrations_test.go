@@ -105,7 +105,7 @@ func TestRunUsesSchemaMigrationsInExpensor(t *testing.T) {
 	if dirty {
 		t.Fatal("schema_migrations marked dirty after migration run")
 	}
-	if version != 6 {
-		t.Fatalf("schema_migrations version = %d, want 6", version)
+	if version != 7 {
+		t.Fatalf("schema_migrations version = %d, want 7", version)
 	}
 }

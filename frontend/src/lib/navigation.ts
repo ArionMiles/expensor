@@ -109,4 +109,12 @@ export const NAVIGATION_TARGETS: NavigationTarget[] = [
     path: '/settings?tab=sync',
     keywords: ['settings', 'sync', 'community'],
   },
+  {
+    id: 'settings-account',
+    titleKey: 'nav.settings',
+    subtitleKey: 'nav.settings.account.subtitle',
+    descriptionKey: 'nav.settings.account.description',
+    path: '/settings?tab=account',
+    keywords: ['settings', 'account', 'profile', 'tokens', 'users'],
+  },
 ]

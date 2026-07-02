@@ -129,6 +129,10 @@ func (s *Store) UpdateUser(ctx context.Context, id string, input UpdateUserInput
 	return s.auth.UpdateUser(ctx, id, input)
 }
 
+func (s *Store) DeleteUser(ctx context.Context, id string) error {
+	return s.auth.DeleteUser(ctx, id)
+}
+
 func (s *Store) FindUserByEmail(ctx context.Context, email string) (*User, error) {
 	return s.auth.FindUserByEmail(ctx, email)
 }

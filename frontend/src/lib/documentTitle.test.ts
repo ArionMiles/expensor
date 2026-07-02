@@ -13,6 +13,9 @@ describe('resolveDocumentTitle', () => {
     expect(resolveDocumentTitle({ pathname: '/settings', search: '?tab=sync' }, t)).toBe(
       'Settings - Community Sync',
     )
+    expect(resolveDocumentTitle({ pathname: '/settings', search: '?tab=account' }, t)).toBe(
+      'Settings - Account',
+    )
   })
 
   it('falls back to the page default tab when the tab query param is missing or invalid', () => {

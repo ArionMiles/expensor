@@ -73,4 +73,21 @@ describe('Settings', () => {
     expect(await screen.findByText('Timezone')).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: /Asia\/Calcutta/ })).toBeInTheDocument()
   })
+
+  it('copies the version with the shared copy tooltip behavior', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.spyOn(window.navigator.clipboard, 'writeText').mockResolvedValue(undefined)
+
+    renderSettings('/settings')
+
+    expect(await screen.findByText('Version')).toBeInTheDocument()
+    const copyButton = await screen.findByRole('button', { name: 'Copy version' })
+    await user.hover(copyButton)
+    expect(await screen.findByText('Copy version')).toBeInTheDocument()
+
+    await user.click(copyButton)
+
+    expect(writeText).toHaveBeenCalledWith('test')
+    expect(await screen.findByText('Copied!')).toBeInTheDocument()
+  })
 })

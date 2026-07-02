@@ -15,6 +15,8 @@ describe('avatar assets', () => {
 
       expect(svg.trim().startsWith('<svg')).toBe(true)
       expect(svg).toContain('viewBox=')
+      expect(svg).toContain('<circle cx="48" cy="48" r="48"')
+      expect(svg).not.toContain('<rect width="96" height="96"')
       expect(svg).not.toMatch(/<script|<foreignObject|<image/i)
       expect(svg).not.toMatch(/\son[a-z]+\s*=/i)
       expect(svg).not.toMatch(/\s(?:href|src)=["'](?:https?:|data:|javascript:)/i)

@@ -1383,6 +1383,10 @@ paths:
           description: Forbidden
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "422":
           description: Unprocessable Entity
           schema:
@@ -1395,6 +1399,36 @@ paths:
       tags:
       - Auth
   /admin/users/{id}:
+    delete:
+      parameters:
+      - description: User ID
+        example: 00000000-0000-0000-0000-00000000c0de
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Delete an instance user
+      tags:
+      - Auth
     patch:
       consumes:
       - application/json
@@ -3741,6 +3775,10 @@ paths:
             $ref: '#/definitions/httpapi.ErrorResponse'
         "401":
           description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
         "422":

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -288,6 +289,7 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 // @Success 201 {object} accessTokenResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /tokens [post]
@@ -313,6 +315,10 @@ func (h *Handlers) CreateAccessToken(w http.ResponseWriter, r *http.Request) {
 		TokenHash: hash,
 	})
 	if err != nil {
+		if errors.Is(err, store.ErrAccessTokenNameConflict) {
+			writeError(w, http.StatusConflict, fmt.Sprintf("Token %s already exists.", strings.TrimSpace(body.Name)))
+			return
+		}
 		h.logger.Error("create access token", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create token")
 		return
@@ -386,6 +392,7 @@ func (h *Handlers) RevokeAccessToken(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /admin/users [post]
@@ -408,6 +415,10 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 		AvatarKey:   normalizeAvatarKey(body.AvatarKey),
 	})
 	if err != nil {
+		if errors.Is(err, store.ErrUserEmailConflict) {
+			writeError(w, http.StatusConflict, fmt.Sprintf("User %s already exists.", strings.ToLower(strings.TrimSpace(body.Email))))
+			return
+		}
 		h.logger.Error("create user", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create user")
 		return
@@ -460,6 +471,11 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if !requireAdmin(w, r) {
 		return
 	}
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
 	body, ok := decodeAndValidateJSON[updateUserRequest](h, w, r)
 	if !ok {
 		return
@@ -468,7 +484,16 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	user, err := h.authStore.UpdateUser(r.Context(), r.PathValue("id"), input)
+	userID := r.PathValue("id")
+	if input.Role != nil && userID == principal.UserID {
+		writeError(w, http.StatusForbidden, "cannot change your own role")
+		return
+	}
+	if input.Disabled != nil && *input.Disabled && userID == principal.UserID {
+		writeError(w, http.StatusForbidden, "cannot disable your own account")
+		return
+	}
+	user, err := h.authStore.UpdateUser(r.Context(), userID, input)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "user not found")
@@ -479,6 +504,42 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, userFromStore(user))
+}
+
+// DeleteUser deletes an instance user for administrators.
+// @Summary Delete an instance user
+// @Tags Auth
+// @Param id path string true "User ID" example(00000000-0000-0000-0000-00000000c0de)
+// @Success 204
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /admin/users/{id} [delete]
+func (h *Handlers) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	if !requireAdmin(w, r) {
+		return
+	}
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	userID := r.PathValue("id")
+	if userID == principal.UserID {
+		writeError(w, http.StatusForbidden, "cannot delete your own account")
+		return
+	}
+	if err := h.authStore.DeleteUser(r.Context(), userID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		h.logger.Error("delete user", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to delete user")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // CreateSetupToken creates a one-time setup token for an instance user.

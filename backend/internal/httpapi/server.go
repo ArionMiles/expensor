@@ -105,6 +105,7 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("GET /api/admin/users", h.ListUsers)
 	mux.HandleFunc("POST /api/admin/users", h.CreateUser)
 	mux.HandleFunc("PATCH /api/admin/users/{id}", h.UpdateUser)
+	mux.HandleFunc("DELETE /api/admin/users/{id}", h.DeleteUser)
 	mux.HandleFunc("POST /api/admin/users/{id}/setup-tokens", h.CreateSetupToken)
 	mux.HandleFunc("POST /api/daemon/start", h.StartDaemon)
 	mux.HandleFunc("POST /api/daemon/rescan", h.Rescan)

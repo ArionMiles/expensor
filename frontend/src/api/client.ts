@@ -1,12 +1,19 @@
 import axios from 'axios'
 import type {
+  AccessToken,
   AnnualHeatmapData,
+  AccountUser,
+  AdminUserPatch,
   AuthStartResponse,
   AuthStatus,
   BankColor,
+  BootstrapRequest,
+  BootstrapStatus,
   Bucket,
   Category,
   ChartData,
+  CompleteAccountSetupRequest,
+  CreateUserRequest,
   DashboardData,
   CredentialsStatus,
   ExtractionDiagnostic,
@@ -16,17 +23,21 @@ import type {
   HeatmapData,
   HealthResponse,
   Label,
+  LoginRequest,
   MonthlyBreakdownData,
   MutedMerchantWithCount,
   PluginInfo,
   Preferences,
   PreferencesPatch,
+  Principal,
+  ProfilePatch,
   ReaderConfig,
   ReaderGuide,
   ReaderStatus,
   Rule,
   RuleDocument,
   RulePayload,
+  SetupToken,
   SetupStatus,
   StatusResponse,
   SyncStatus,
@@ -103,6 +114,31 @@ function transactionFilterParams(filters: TransactionFilters): URLSearchParams {
 }
 
 export const api = {
+  auth: {
+    bootstrapStatus: () => apiClient.get<BootstrapStatus>('/bootstrap'),
+    bootstrap: (body: BootstrapRequest) => apiClient.post<Principal>('/bootstrap', body),
+    login: (body: LoginRequest) => apiClient.post<Principal>('/session', body),
+    session: () => apiClient.get<Principal>('/session'),
+    logout: () => apiClient.delete('/session'),
+    updateProfile: (patch: ProfilePatch) => apiClient.patch<Principal>('/profile', patch),
+    completeAccountSetup: (body: CompleteAccountSetupRequest) =>
+      apiClient.post<Principal>('/account-setup', body),
+    tokens: {
+      list: () => apiClient.get<AccessToken[]>('/tokens'),
+      create: (name: string) => apiClient.post<AccessToken>('/tokens', { name }),
+      revoke: (id: string) => apiClient.delete(`/tokens/${encodeURIComponent(id)}`),
+    },
+    admin: {
+      users: () => apiClient.get<AccountUser[]>('/admin/users'),
+      createUser: (body: CreateUserRequest) => apiClient.post<Principal>('/admin/users', body),
+      updateUser: (id: string, patch: AdminUserPatch) =>
+        apiClient.patch<AccountUser>(`/admin/users/${encodeURIComponent(id)}`, patch),
+      deleteUser: (id: string) => apiClient.delete(`/admin/users/${encodeURIComponent(id)}`),
+      createSetupToken: (id: string) =>
+        apiClient.post<SetupToken>(`/admin/users/${encodeURIComponent(id)}/setup-tokens`),
+    },
+  },
+
   health: {
     get: () => apiClient.get<HealthResponse>('/health'),
   },
