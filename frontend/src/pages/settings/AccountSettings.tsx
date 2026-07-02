@@ -509,22 +509,11 @@ export function AccountSettings() {
 
 function TokenNameField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const { t } = useI18n()
-  const id = useId()
 
   return (
     <div>
-      <label htmlFor={id} className="block">
-        <span className="mb-3 block text-lg font-semibold text-foreground">
-          {t('account.tokens.name')}
-        </span>
-        <input
-          id={id}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          className="h-12 w-full rounded-lg border border-border bg-input px-3 py-2 text-base text-foreground outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-ring"
-        />
-      </label>
-      <p className="mt-3 text-sm font-medium text-muted-foreground">
+      <TextField label={t('account.tokens.name')} value={value} onChange={onChange} />
+      <p className="mt-2 text-xs font-medium text-muted-foreground">
         {t('account.tokens.nameHint')}
       </p>
     </div>
