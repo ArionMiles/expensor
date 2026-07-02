@@ -68,9 +68,7 @@ export interface BootstrapRequest {
 
 export interface CreateUserRequest {
   email: string
-  display_name: string
   role: UserRole
-  avatar_key: AvatarKey
 }
 
 export interface LoginRequest {
@@ -80,7 +78,14 @@ export interface LoginRequest {
 
 export interface CompleteAccountSetupRequest {
   token: string
+  display_name: string
   password: string
+  avatar_key: AvatarKey
+}
+
+export interface AccountSetupMetadata {
+  email: string
+  avatar_key: AvatarKey
 }
 
 export interface ProfilePatch {
@@ -104,6 +109,7 @@ export interface AccountUser {
   display_name: string
   role: UserRole
   avatar_key: AvatarKey
+  setup_pending: boolean
   disabled_at?: string | null
   created_at: string
   updated_at: string

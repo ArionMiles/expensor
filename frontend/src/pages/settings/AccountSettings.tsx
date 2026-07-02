@@ -582,22 +582,27 @@ function AdminUsersSection() {
   const [editingUser, setEditingUser] = useState<AccountUser | null>(null)
   const [deleteCandidate, setDeleteCandidate] = useState<AccountUser | null>(null)
   const [copiedSetupUserID, setCopiedSetupUserID] = useState<string | null>(null)
+  const [createdInvite, setCreatedInvite] = useState<{ email: string; link: string } | null>(null)
+  const [createdInviteCopied, setCreatedInviteCopied] = useState(false)
   const copiedSetupTimerRef = useRef<number | null>(null)
+  const createdInviteCopiedTimerRef = useRef<number | null>(null)
 
   useEffect(
     () => () => {
       if (copiedSetupTimerRef.current !== null) window.clearTimeout(copiedSetupTimerRef.current)
+      if (createdInviteCopiedTimerRef.current !== null)
+        window.clearTimeout(createdInviteCopiedTimerRef.current)
     },
     [],
   )
 
+  const setupLinkFromToken = (token: string) =>
+    new URL(`/account-setup?token=${encodeURIComponent(token)}`, window.location.origin).toString()
+
   const generateSetupToken = (userID: string) => {
     setupToken.mutate(userID, {
       onSuccess: async (token) => {
-        const link = new URL(
-          `/account-setup?token=${encodeURIComponent(token.token)}`,
-          window.location.origin,
-        ).toString()
+        const link = setupLinkFromToken(token.token)
         await window.navigator.clipboard?.writeText(link)
         setCopiedSetupUserID(userID)
         if (copiedSetupTimerRef.current !== null) window.clearTimeout(copiedSetupTimerRef.current)
@@ -611,12 +616,30 @@ function AdminUsersSection() {
 
   const openCreateUser = () => {
     createUser.reset()
+    setupToken.reset()
+    setCreatedInvite(null)
+    setCreatedInviteCopied(false)
     setCreatingUser(true)
   }
 
   const closeCreateUser = () => {
     createUser.reset()
+    setupToken.reset()
+    setCreatedInvite(null)
+    setCreatedInviteCopied(false)
     setCreatingUser(false)
+  }
+
+  const copyCreatedInvite = async () => {
+    if (!createdInvite) return
+    await window.navigator.clipboard?.writeText(createdInvite.link)
+    setCreatedInviteCopied(true)
+    if (createdInviteCopiedTimerRef.current !== null)
+      window.clearTimeout(createdInviteCopiedTimerRef.current)
+    createdInviteCopiedTimerRef.current = window.setTimeout(() => {
+      setCreatedInviteCopied(false)
+      createdInviteCopiedTimerRef.current = null
+    }, 2000)
   }
 
   const openEditUser = (account: AccountUser) => {
@@ -681,25 +704,41 @@ function AdminUsersSection() {
       </AccountTable>
       <ErrorText error={setupToken.error} />
 
-      {creatingUser && (
+      {creatingUser && !createdInvite && (
         <UserFormModal
           mode="create"
-          pending={createUser.isPending}
-          error={createUser.error}
+          pending={createUser.isPending || setupToken.isPending}
+          error={createUser.error ?? setupToken.error}
           onClose={closeCreateUser}
           onSubmit={(input) =>
             createUser.mutate(
               {
                 email: input.email,
-                display_name: input.display_name,
                 role: input.role,
-                avatar_key: input.avatar_key,
               },
               {
-                onSuccess: closeCreateUser,
+                onSuccess: (created) => {
+                  setupToken.mutate(created.user_id, {
+                    onSuccess: (token) =>
+                      setCreatedInvite({
+                        email: created.email,
+                        link: setupLinkFromToken(token.token),
+                      }),
+                  })
+                },
               },
             )
           }
+        />
+      )}
+
+      {createdInvite && (
+        <SetupLinkRevealModal
+          email={createdInvite.email}
+          link={createdInvite.link}
+          copied={createdInviteCopied}
+          onCopy={copyCreatedInvite}
+          onClose={closeCreateUser}
         />
       )}
 
@@ -764,34 +803,24 @@ function UserFormModal({
   pending: boolean
   error?: unknown
   onClose: () => void
-  onSubmit: (input: {
-    email: string
-    display_name: string
-    role: UserRole
-    avatar_key: AvatarKey
-    disabled: boolean
-  }) => void
+  onSubmit: (input: { email: string; role: UserRole; disabled: boolean }) => void
   onDelete?: () => void
 }) {
   const { t } = useI18n()
   const [email, setEmail] = useState(user?.email ?? '')
-  const [displayName, setDisplayName] = useState(user?.display_name ?? '')
   const [role, setRole] = useState<UserRole>(user?.role ?? 'user')
-  const [avatarKey, setAvatarKey] = useState<AvatarKey>(user?.avatar_key ?? 'default')
   const [disabledAccount, setDisabledAccount] = useState(!!user?.disabled_at)
   const title =
     mode === 'create'
       ? t('account.users.createTitle')
-      : t('account.users.edit', { name: user?.display_name ?? '' })
-  const disabled = pending || (mode === 'create' && (!email.trim() || !displayName.trim()))
+      : t('account.users.edit', { name: displayNameForUser(user) })
+  const disabled = pending || (mode === 'create' && !email.trim())
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
     onSubmit({
       email: email.trim(),
-      display_name: displayName.trim(),
       role,
-      avatar_key: avatarKey,
       disabled: disabledAccount,
     })
   }
@@ -841,12 +870,14 @@ function UserFormModal({
           disabled={mode === 'edit'}
           onChange={setEmail}
         />
-        <TextField
-          label={t('account.users.displayName')}
-          value={displayName}
-          disabled={mode === 'edit'}
-          onChange={setDisplayName}
-        />
+        {mode === 'edit' && (
+          <TextField
+            label={t('account.users.displayName')}
+            value={user?.display_name ?? ''}
+            disabled
+            onChange={() => {}}
+          />
+        )}
         <div>
           <span className="mb-1.5 block text-xs uppercase tracking-wider text-muted-foreground">
             {t('account.users.columns.role')}
@@ -861,15 +892,64 @@ function UserFormModal({
             <StatusChoice disabled={disabledAccount} onChange={setDisabledAccount} />
           </div>
         )}
-        {mode === 'create' && (
-          <div className="flex justify-center pt-2">
-            <AvatarPicker value={avatarKey} onChange={setAvatarKey} />
-          </div>
-        )}
         <ErrorText error={error} />
       </form>
     </AccountModal>
   )
+}
+
+function SetupLinkRevealModal({
+  email,
+  link,
+  copied,
+  onCopy,
+  onClose,
+}: {
+  email: string
+  link: string
+  copied: boolean
+  onCopy: () => void
+  onClose: () => void
+}) {
+  const { t } = useI18n()
+  const { handlers, tip } = useCopyTooltip(
+    copied ? t('account.users.copied') : t('account.users.copySetupLink'),
+  )
+
+  return (
+    <AccountModal
+      title={t('account.users.inviteTitle', { email })}
+      onClose={onClose}
+      footer={
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          {t('common.close')}
+        </button>
+      }
+    >
+      <p className="text-xs text-muted-foreground">{t('account.users.inviteSummary')}</p>
+      <div className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
+        <code className="min-w-0 flex-1 break-all font-mono text-sm text-foreground">{link}</code>
+        <button
+          type="button"
+          onClick={onCopy}
+          aria-label={t('account.users.copySetupLink')}
+          className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+          {...handlers}
+        >
+          {copied ? <Check size={15} /> : <Copy size={15} />}
+        </button>
+        {tip}
+      </div>
+    </AccountModal>
+  )
+}
+
+function displayNameForUser(user?: AccountUser | null) {
+  return user?.display_name?.trim() || user?.email || ''
 }
 
 function AdminUserRow({
@@ -892,10 +972,11 @@ function AdminUserRow({
     setupCopied ? t('account.users.copied') : t('account.users.copySetupLink'),
   )
   const disabled = !!account.disabled_at
+  const displayName = displayNameForUser(account)
   return (
     <tr className="border-b border-border last:border-0 hover:bg-accent/40">
       <td className="px-4 py-3">
-        <div className="text-foreground">{account.display_name}</div>
+        <div className="text-foreground">{displayName}</div>
         <div className="text-xs text-muted-foreground">{account.email}</div>
       </td>
       <td className="px-4 py-3">
@@ -905,22 +986,26 @@ function AdminUserRow({
         <StatusChip disabled={disabled} />
       </td>
       <td className="px-4 py-3 text-right">
-        <button
-          type="button"
-          disabled={setupPending}
-          onClick={onSetupToken}
-          aria-label={t('account.users.copySetupLink')}
-          className="mr-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          {...handlers}
-        >
-          <Copy size={15} />
-        </button>
-        {tip}
+        {account.setup_pending && (
+          <>
+            <button
+              type="button"
+              disabled={setupPending}
+              onClick={onSetupToken}
+              aria-label={t('account.users.copySetupLink')}
+              className="mr-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              {...handlers}
+            >
+              <Copy size={15} />
+            </button>
+            {tip}
+          </>
+        )}
         {canEdit && (
           <button
             type="button"
             onClick={onEdit}
-            aria-label={t('account.users.editAria', { name: account.display_name })}
+            aria-label={t('account.users.editAria', { name: displayName })}
             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <Pencil size={15} />

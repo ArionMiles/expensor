@@ -139,6 +139,8 @@ type mockStore struct {
 	usedSetupTokenID           string
 	completedSetupTokenHash    string
 	completedSetupPasswordHash string
+	completedSetupDisplayName  string
+	completedSetupAvatarKey    string
 	completedSetupUser         *store.User
 	lastAppConfigTenant        store.Tenant
 }
@@ -296,9 +298,11 @@ func (m *mockStore) MarkAccountSetupTokenUsed(_ context.Context, id string) erro
 	return nil
 }
 
-func (m *mockStore) CompleteAccountSetup(_ context.Context, tokenHash, passwordHash string) (*store.User, error) {
-	m.completedSetupTokenHash = tokenHash
-	m.completedSetupPasswordHash = passwordHash
+func (m *mockStore) CompleteAccountSetup(_ context.Context, input store.CompleteAccountSetupInput) (*store.User, error) {
+	m.completedSetupTokenHash = input.TokenHash
+	m.completedSetupPasswordHash = input.PasswordHash
+	m.completedSetupDisplayName = input.DisplayName
+	m.completedSetupAvatarKey = input.AvatarKey
 	if m.completedSetupUser != nil {
 		return m.completedSetupUser, nil
 	}

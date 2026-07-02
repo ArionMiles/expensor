@@ -363,10 +363,27 @@ describe('App auth routing', () => {
     window.history.pushState({}, '', '/account-setup?token=expensor_setup_test')
     server.use(
       http.get('/api/bootstrap', () => HttpResponse.json({ required: false })),
+      http.get('/api/account-setup', ({ request }) => {
+        const token = new URL(request.url).searchParams.get('token')
+        if (token !== 'expensor_setup_test') {
+          return HttpResponse.json({ error: 'invalid or expired setup token' }, { status: 401 })
+        }
+        return HttpResponse.json({
+          email: 'b@example.com',
+          avatar_key: 'default',
+        })
+      }),
       http.post('/api/account-setup', async ({ request }) => {
-        const body = (await request.json()) as { token?: string; password?: string }
+        const body = (await request.json()) as {
+          token?: string
+          display_name?: string
+          password?: string
+          avatar_key?: string
+        }
         if (
           body.token !== 'expensor_setup_test' ||
+          body.display_name !== 'B Updated' ||
+          body.avatar_key !== 'wallet' ||
           body.password !== 'correct horse battery staple'
         ) {
           return HttpResponse.json({ error: 'invalid or expired setup token' }, { status: 401 })
@@ -376,9 +393,9 @@ describe('App auth routing', () => {
             user_id: 'user-b',
             tenant_id: 'user-b',
             email: 'b@example.com',
-            display_name: 'B',
+            display_name: 'B Updated',
             role: 'user',
-            avatar_key: 'default',
+            avatar_key: 'wallet',
           },
           { status: 201 },
         )
@@ -388,9 +405,9 @@ describe('App auth routing', () => {
           user_id: 'user-b',
           tenant_id: 'user-b',
           email: 'b@example.com',
-          display_name: 'B',
+          display_name: 'B Updated',
           role: 'user',
-          avatar_key: 'default',
+          avatar_key: 'wallet',
         }),
       ),
       http.get('/api/config/setup-status', () =>
@@ -401,8 +418,13 @@ describe('App auth routing', () => {
     render(<App />)
 
     expect(
-      await screen.findByRole('heading', { name: 'Set password' }, routeWait),
+      await screen.findByRole('heading', { name: 'Set up your account' }, routeWait),
     ).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Email')).toHaveValue('b@example.com'))
+    expect(screen.getByLabelText('Email')).toBeDisabled()
+    await user.type(screen.getByLabelText('Display name'), 'B Updated')
+    await user.click(screen.getByRole('button', { name: 'Default avatar' }))
+    await user.click(screen.getByRole('button', { name: 'Wallet avatar' }))
     await user.type(screen.getByLabelText('Password'), 'correct horse battery staple')
     await user.click(screen.getByRole('button', { name: 'Finish setup' }))
 

@@ -1,6 +1,7 @@
 import axios from 'axios'
 import type {
   AccessToken,
+  AccountSetupMetadata,
   AnnualHeatmapData,
   AccountUser,
   AdminUserPatch,
@@ -121,6 +122,8 @@ export const api = {
     session: () => apiClient.get<Principal>('/session'),
     logout: () => apiClient.delete('/session'),
     updateProfile: (patch: ProfilePatch) => apiClient.patch<Principal>('/profile', patch),
+    accountSetup: (token: string) =>
+      apiClient.get<AccountSetupMetadata>(`/account-setup?token=${encodeURIComponent(token)}`),
     completeAccountSetup: (body: CompleteAccountSetupRequest) =>
       apiClient.post<Principal>('/account-setup', body),
     tokens: {
@@ -130,7 +133,7 @@ export const api = {
     },
     admin: {
       users: () => apiClient.get<AccountUser[]>('/admin/users'),
-      createUser: (body: CreateUserRequest) => apiClient.post<Principal>('/admin/users', body),
+      createUser: (body: CreateUserRequest) => apiClient.post<AccountUser>('/admin/users', body),
       updateUser: (id: string, patch: AdminUserPatch) =>
         apiClient.patch<AccountUser>(`/admin/users/${encodeURIComponent(id)}`, patch),
       deleteUser: (id: string) => apiClient.delete(`/admin/users/${encodeURIComponent(id)}`),

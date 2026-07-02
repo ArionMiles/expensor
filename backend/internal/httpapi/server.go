@@ -94,6 +94,7 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("GET /api/bootstrap", h.GetBootstrap)
 	mux.HandleFunc("POST /api/bootstrap", h.Bootstrap)
 	mux.HandleFunc("POST /api/session", h.Login)
+	mux.HandleFunc("GET /api/account-setup", h.GetAccountSetup)
 	mux.HandleFunc("POST /api/account-setup", h.CompleteAccountSetup)
 	mux.HandleFunc("GET /api/session", h.GetSession)
 	mux.HandleFunc("DELETE /api/session", h.Logout)

@@ -76,6 +76,7 @@ describe('AccountSettings', () => {
             display_name: 'Admin',
             role: 'admin',
             avatar_key: 'default',
+            setup_pending: false,
             disabled_at: null,
             created_at: '2026-06-01T10:00:00Z',
             updated_at: '2026-06-01T10:00:00Z',
@@ -84,9 +85,10 @@ describe('AccountSettings', () => {
             user_id: 'user-b',
             tenant_id: 'user-b',
             email: 'b@example.com',
-            display_name: 'B',
+            display_name: '',
             role: 'user',
-            avatar_key: 'ledger',
+            avatar_key: 'default',
+            setup_pending: true,
             disabled_at: null,
             created_at: '2026-06-01T10:00:00Z',
             updated_at: '2026-06-01T10:00:00Z',
@@ -101,9 +103,10 @@ describe('AccountSettings', () => {
             user_id: 'user-c',
             tenant_id: 'user-c',
             email: body.email,
-            display_name: body.display_name,
+            display_name: '',
             role: body.role,
-            avatar_key: body.avatar_key,
+            avatar_key: 'default',
+            setup_pending: true,
             disabled_at: null,
             created_at: '2026-06-01T10:00:00Z',
             updated_at: '2026-06-01T10:00:00Z',
@@ -151,6 +154,9 @@ describe('AccountSettings', () => {
     expect(within(adminRow).getByText('ADMIN')).toBeInTheDocument()
     expect(within(adminRow).getByText('ACTIVE')).toBeInTheDocument()
     expect(within(adminRow).queryByRole('button', { name: /edit user/i })).not.toBeInTheDocument()
+    expect(
+      within(adminRow).queryByRole('button', { name: 'Copy setup link' }),
+    ).not.toBeInTheDocument()
     expect(within(adminRow).queryByRole('button', { name: 'Disable' })).not.toBeInTheDocument()
     const profileSection = screen.getByRole('heading', { name: 'Profile' }).closest('section')
     if (!profileSection) throw new Error('Profile section missing')
@@ -198,18 +204,28 @@ describe('AccountSettings', () => {
     await user.click(screen.getByRole('button', { name: 'New user' }))
     const newUserDialog = await screen.findByRole('dialog', { name: 'Create New User' })
     await user.type(within(newUserDialog).getByLabelText('Email'), 'c@example.com')
-    await user.type(within(newUserDialog).getByLabelText('Display name'), 'C')
-    await user.click(within(newUserDialog).getByRole('button', { name: 'Default avatar' }))
-    await user.click(within(newUserDialog).getByRole('button', { name: 'Ledger avatar' }))
+    expect(within(newUserDialog).queryByLabelText('Display name')).not.toBeInTheDocument()
+    expect(within(newUserDialog).queryByRole('button', { name: /avatar$/ })).not.toBeInTheDocument()
+    await user.click(within(newUserDialog).getByRole('button', { name: 'Admin' }))
     await user.click(within(newUserDialog).getByRole('button', { name: 'Create user' }))
     await waitFor(() =>
       expect(createdUsers).toContainEqual({
         email: 'c@example.com',
-        display_name: 'C',
-        role: 'user',
-        avatar_key: 'ledger',
+        role: 'admin',
       }),
     )
+    const inviteDialog = await screen.findByRole('dialog', { name: 'Invite c@example.com' })
+    const copyCreatedSetupButton = within(inviteDialog).getByRole('button', {
+      name: 'Copy setup link',
+    })
+    await user.click(copyCreatedSetupButton)
+    expect(writeText).toHaveBeenCalledWith(
+      new URL(
+        '/account-setup?token=expensor_setup_visible_once',
+        window.location.origin,
+      ).toString(),
+    )
+    await user.click(within(inviteDialog).getByRole('button', { name: 'Close' }))
 
     const invitedRow = await screen.findByRole('row', { name: /b@example.com/i })
     expect(within(invitedRow).getByText('USER')).toBeInTheDocument()
@@ -230,10 +246,10 @@ describe('AccountSettings', () => {
       ).toString(),
     )
     expect(await screen.findByText('Copied!')).toBeInTheDocument()
-    expect(setupTokenRequests).toEqual(['user-b'])
+    expect(setupTokenRequests).toEqual(['user-c', 'user-b'])
 
-    await user.click(within(invitedRow).getByRole('button', { name: 'Edit user B' }))
-    const editDialog = await screen.findByRole('dialog', { name: 'Edit user B' })
+    await user.click(within(invitedRow).getByRole('button', { name: 'Edit user b@example.com' }))
+    const editDialog = await screen.findByRole('dialog', { name: 'Edit user b@example.com' })
     await user.click(within(editDialog).getByRole('button', { name: 'Admin' }))
     await user.click(within(editDialog).getByRole('button', { name: 'Disabled' }))
     await user.click(within(editDialog).getByRole('button', { name: 'Save changes' }))
@@ -244,14 +260,16 @@ describe('AccountSettings', () => {
       }),
     )
 
-    await user.click(within(invitedRow).getByRole('button', { name: 'Edit user B' }))
-    const deleteDialog = await screen.findByRole('dialog', { name: 'Edit user B' })
+    await user.click(within(invitedRow).getByRole('button', { name: 'Edit user b@example.com' }))
+    const deleteDialog = await screen.findByRole('dialog', { name: 'Edit user b@example.com' })
     await user.click(within(deleteDialog).getByRole('button', { name: 'Delete user' }))
     const confirmDeleteDialog = await screen.findByRole('dialog', { name: 'Delete user' })
     expect(confirmDeleteDialog.closest('.z-\\[70\\]')).toBeInTheDocument()
     await user.click(within(confirmDeleteDialog).getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(deletedUsers).toEqual(['user-b']))
-    expect(screen.queryByRole('dialog', { name: 'Edit user B' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('dialog', { name: 'Edit user b@example.com' }),
+    ).not.toBeInTheDocument()
   }, 10000)
 
   it('shows active duplicate access token names as conflicts', async () => {
@@ -301,7 +319,6 @@ describe('AccountSettings', () => {
     await user.click(await screen.findByRole('button', { name: 'New user' }))
     const newUserDialog = await screen.findByRole('dialog', { name: 'Create New User' })
     await user.type(within(newUserDialog).getByLabelText('Email'), 'john@example.com')
-    await user.type(within(newUserDialog).getByLabelText('Display name'), 'John')
     await user.click(within(newUserDialog).getByRole('button', { name: 'Create user' }))
 
     expect(
@@ -312,7 +329,6 @@ describe('AccountSettings', () => {
     await user.click(screen.getByRole('button', { name: 'New user' }))
     const reopenedUserDialog = await screen.findByRole('dialog', { name: 'Create New User' })
     expect(within(reopenedUserDialog).getByLabelText('Email')).toHaveValue('')
-    expect(within(reopenedUserDialog).getByLabelText('Display name')).toHaveValue('')
     expect(
       within(reopenedUserDialog).queryByText('User john@example.com already exists.'),
     ).not.toBeInTheDocument()

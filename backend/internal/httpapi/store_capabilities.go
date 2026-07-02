@@ -27,7 +27,7 @@ type authStore interface {
 	CreateAccountSetupToken(ctx context.Context, input store.CreateAccountSetupTokenInput) (*store.AccountSetupToken, error)
 	FindAccountSetupTokenByHash(ctx context.Context, tokenHash string) (*store.AccountSetupToken, error)
 	MarkAccountSetupTokenUsed(ctx context.Context, id string) error
-	CompleteAccountSetup(ctx context.Context, tokenHash, passwordHash string) (*store.User, error)
+	CompleteAccountSetup(ctx context.Context, input store.CompleteAccountSetupInput) (*store.User, error)
 }
 
 type settingsStore interface {

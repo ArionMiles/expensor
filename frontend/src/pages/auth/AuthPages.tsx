@@ -9,6 +9,7 @@ import {
 } from 'react'
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
+  useAccountSetup,
   useBootstrapAdmin,
   useBootstrapStatus,
   useCompleteAccountSetup,
@@ -113,6 +114,7 @@ function Field({
   value,
   autoComplete,
   inputMode,
+  disabled = false,
   message,
   tone,
   feedbackTestId,
@@ -126,6 +128,7 @@ function Field({
   value: string
   autoComplete?: string
   inputMode?: InputHTMLAttributes<HTMLInputElement>['inputMode']
+  disabled?: boolean
   message?: string
   tone?: 'warning'
   feedbackTestId?: string
@@ -146,6 +149,7 @@ function Field({
           id={id}
           type={type}
           value={value}
+          disabled={disabled}
           autoComplete={autoComplete}
           inputMode={inputMode}
           aria-invalid={tone === 'warning'}
@@ -157,7 +161,7 @@ function Field({
           }}
           onChange={(event) => onChange(event.currentTarget.value)}
           className={cn(
-            'h-14 w-full rounded-md border bg-background px-3 pb-1.5 pt-4 text-sm text-foreground outline-none transition-colors focus:ring-1',
+            'h-14 w-full rounded-md border bg-background px-3 pb-1.5 pt-4 text-sm text-foreground outline-none transition-colors focus:ring-1 disabled:opacity-70',
             tone === 'warning'
               ? 'border-warning focus:border-warning focus:ring-warning/40'
               : 'border-border focus:border-primary focus:ring-ring',
@@ -447,15 +451,23 @@ export function AccountSetupPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') ?? ''
+  const metadata = useAccountSetup(token)
+  const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
+  const [avatarKey, setAvatarKey] = useState<AvatarKey>('default')
   const setup = useCompleteAccountSetup()
   const passwordValid = password.length >= 12
+  const formValid = displayName.trim().length > 0 && passwordValid
+
+  useEffect(() => {
+    if (metadata.data?.avatar_key) setAvatarKey(metadata.data.avatar_key)
+  }, [metadata.data?.avatar_key])
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (!passwordValid) return
+    if (!formValid) return
     setup.mutate(
-      { token, password },
+      { token, display_name: displayName.trim(), password, avatar_key: avatarKey },
       {
         onSuccess: () => navigate('/', { replace: true }),
       },
@@ -469,6 +481,23 @@ export function AccountSetupPage() {
           <h1 className="text-xl font-semibold text-foreground">{t('auth.accountSetup.title')}</h1>
           <p className="mt-2 text-sm text-muted-foreground">{t('auth.accountSetup.summary')}</p>
         </div>
+        <AvatarPicker value={avatarKey} onChange={setAvatarKey} />
+        <Field
+          label={t('account.email')}
+          type="text"
+          autoComplete="email"
+          inputMode="email"
+          disabled
+          value={metadata.data?.email ?? ''}
+          reserveFeedback={false}
+          onChange={() => {}}
+        />
+        <Field
+          label={t('account.displayName')}
+          autoComplete="name"
+          value={displayName}
+          onChange={setDisplayName}
+        />
         <div className="space-y-2">
           <Field
             label={t('account.password')}
@@ -483,10 +512,11 @@ export function AccountSetupPage() {
         {!token && (
           <p className="text-sm text-destructive">{t('auth.accountSetup.missingToken')}</p>
         )}
+        <ErrorText error={metadata.error} />
         <ErrorText error={setup.error} />
         <button
           type="submit"
-          disabled={setup.isPending || token.length === 0 || !passwordValid}
+          disabled={setup.isPending || metadata.isLoading || token.length === 0 || !formValid}
           className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {setup.isPending ? t('auth.accountSetup.submitting') : t('auth.accountSetup.submit')}

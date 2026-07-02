@@ -371,10 +371,9 @@ func TestAuthRepositoryCompletesAccountSetupOnce(t *testing.T) {
 
 	ctx := context.Background()
 	user, err := ts.CreateUser(ctx, store.CreateUserInput{
-		Email:       "setup@example.com",
-		DisplayName: "Setup User",
-		Role:        store.UserRoleUser,
-		AvatarKey:   "default",
+		Email:     "setup@example.com",
+		Role:      store.UserRoleUser,
+		AvatarKey: "default",
 	})
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
@@ -388,11 +387,17 @@ func TestAuthRepositoryCompletesAccountSetupOnce(t *testing.T) {
 		t.Fatalf("CreateAccountSetupToken() error = %v", err)
 	}
 
-	updated, err := ts.CompleteAccountSetup(ctx, "sha256:setup-token", "$2a$10$newhashabcdefghijklmnop")
+	updated, err := ts.CompleteAccountSetup(ctx, store.CompleteAccountSetupInput{
+		TokenHash:    "sha256:setup-token",
+		PasswordHash: "$2a$10$newhashabcdefghijklmnop",
+		DisplayName:  "Setup User",
+		AvatarKey:    "wallet",
+	})
 	if err != nil {
 		t.Fatalf("CompleteAccountSetup() error = %v", err)
 	}
-	if updated.ID != user.ID || updated.PasswordHash != "$2a$10$newhashabcdefghijklmnop" {
+	if updated.ID != user.ID || updated.PasswordHash != "$2a$10$newhashabcdefghijklmnop" ||
+		updated.DisplayName != "Setup User" || updated.AvatarKey != "wallet" {
 		t.Fatalf("updated user = %#v", updated)
 	}
 	used, err := ts.FindAccountSetupTokenByHash(ctx, token.TokenHash)
@@ -402,7 +407,13 @@ func TestAuthRepositoryCompletesAccountSetupOnce(t *testing.T) {
 	if used.UsedAt == nil {
 		t.Fatalf("setup token was not marked used: %#v", used)
 	}
-	if _, err := ts.CompleteAccountSetup(ctx, "sha256:setup-token", "$2a$10$otherhashabcdefghijklmn"); !errors.Is(err, store.ErrNotFound) {
+	_, err = ts.CompleteAccountSetup(ctx, store.CompleteAccountSetupInput{
+		TokenHash:    "sha256:setup-token",
+		PasswordHash: "$2a$10$otherhashabcdefghijklmn",
+		DisplayName:  "Setup User",
+		AvatarKey:    "default",
+	})
+	if !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("second CompleteAccountSetup() error = %v, want ErrNotFound", err)
 	}
 }

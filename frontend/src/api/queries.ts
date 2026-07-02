@@ -95,6 +95,15 @@ export function useBootstrapAdmin() {
   })
 }
 
+export function useAccountSetup(token: string) {
+  return useQuery({
+    queryKey: ['auth', 'account-setup', token] as const,
+    queryFn: () => api.auth.accountSetup(token).then((r) => r.data),
+    enabled: token.length > 0,
+    retry: false,
+  })
+}
+
 export function useCompleteAccountSetup() {
   const qc = useQueryClient()
   return useMutation({

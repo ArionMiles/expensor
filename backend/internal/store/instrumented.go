@@ -196,11 +196,11 @@ func (s *InstrumentedStore) MarkAccountSetupTokenUsed(ctx context.Context, id st
 	return err
 }
 
-func (s *InstrumentedStore) CompleteAccountSetup(ctx context.Context, tokenHash, passwordHash string) (*User, error) {
+func (s *InstrumentedStore) CompleteAccountSetup(ctx context.Context, input CompleteAccountSetupInput) (*User, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.complete_account_setup")
 	defer span.End()
 
-	user, err := s.next.CompleteAccountSetup(ctx, tokenHash, passwordHash)
+	user, err := s.next.CompleteAccountSetup(ctx, input)
 	s.recordOperation(ctx, "auth.complete_account_setup", err)
 	return user, err
 }

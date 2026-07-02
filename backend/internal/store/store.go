@@ -181,8 +181,8 @@ func (s *Store) MarkAccountSetupTokenUsed(ctx context.Context, id string) error 
 	return s.auth.MarkAccountSetupTokenUsed(ctx, id)
 }
 
-func (s *Store) CompleteAccountSetup(ctx context.Context, tokenHash, passwordHash string) (*User, error) {
-	return s.auth.CompleteAccountSetup(ctx, tokenHash, passwordHash)
+func (s *Store) CompleteAccountSetup(ctx context.Context, input CompleteAccountSetupInput) (*User, error) {
+	return s.auth.CompleteAccountSetup(ctx, input)
 }
 
 func (s *Store) queryTransactionTotals(

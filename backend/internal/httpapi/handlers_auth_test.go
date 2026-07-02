@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -338,7 +339,7 @@ func TestCreateUserAsAdmin(t *testing.T) {
 		ctx,
 		http.MethodPost,
 		"/api/admin/users",
-		strings.NewReader(`{"email":"b@example.com","display_name":"B","role":"user","avatar_key":"default"}`),
+		strings.NewReader(`{"email":"b@example.com","role":"user"}`),
 	)
 	rec := httptest.NewRecorder()
 
@@ -350,6 +351,9 @@ func TestCreateUserAsAdmin(t *testing.T) {
 	if ms.createdUser.Email != "b@example.com" || ms.createdUser.Role != store.UserRoleUser {
 		t.Fatalf("created user = %#v", ms.createdUser)
 	}
+	if ms.createdUser.DisplayName != "" || ms.createdUser.AvatarKey != "default" || ms.createdUser.PasswordHash != "" {
+		t.Fatalf("created invited user = %#v, want pending user with default avatar and no profile/password", ms.createdUser)
+	}
 }
 
 func TestCreateUserEmailConflictReturnsConflict(t *testing.T) {
@@ -360,7 +364,7 @@ func TestCreateUserEmailConflictReturnsConflict(t *testing.T) {
 		ctx,
 		http.MethodPost,
 		"/api/admin/users",
-		strings.NewReader(`{"email":"B@Example.com","display_name":"B","role":"user","avatar_key":"default"}`),
+		strings.NewReader(`{"email":"B@Example.com","role":"user"}`),
 	)
 	rec := httptest.NewRecorder()
 
@@ -375,26 +379,6 @@ func TestCreateUserEmailConflictReturnsConflict(t *testing.T) {
 	}
 	if resp.Error != "User b@example.com already exists." {
 		t.Fatalf("error = %q, want duplicate user message", resp.Error)
-	}
-}
-
-func TestCreateUserRejectsUnknownAvatarKey(t *testing.T) {
-	ms := &mockStore{}
-	h := newTestHandlers(t, ms, &mockDaemon{})
-	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "admin", TenantID: "admin", Role: auth.RoleAdmin})
-	req := httptest.NewRequestWithContext(
-		ctx,
-		http.MethodPost,
-		"/api/admin/users",
-		strings.NewReader(`{"email":"b@example.com","display_name":"B","role":"user","avatar_key":"unknown"}`),
-	)
-	rec := httptest.NewRecorder()
-
-	h.CreateUser(rec, req)
-
-	assertValidationError(t, rec, "avatar_key", "body", "must be one of: default, ledger, wallet")
-	if ms.createdUser.Email != "" {
-		t.Fatalf("created user = %#v, want no store write", ms.createdUser)
 	}
 }
 
@@ -417,25 +401,25 @@ func TestListUsersAsAdmin(t *testing.T) {
 	ms := &mockStore{
 		users: []store.User{
 			{
-				ID:          "admin",
-				TenantID:    "admin",
-				Email:       "admin@example.com",
-				DisplayName: "Admin",
-				Role:        store.UserRoleAdmin,
-				AvatarKey:   "default",
-				CreatedAt:   createdAt,
-				UpdatedAt:   createdAt,
+				ID:           "admin",
+				TenantID:     "admin",
+				Email:        "admin@example.com",
+				PasswordHash: "hash",
+				DisplayName:  "Admin",
+				Role:         store.UserRoleAdmin,
+				AvatarKey:    "default",
+				CreatedAt:    createdAt,
+				UpdatedAt:    createdAt,
 			},
 			{
-				ID:          "user-b",
-				TenantID:    "user-b",
-				Email:       "b@example.com",
-				DisplayName: "B",
-				Role:        store.UserRoleUser,
-				AvatarKey:   "ledger",
-				DisabledAt:  &disabledAt,
-				CreatedAt:   createdAt,
-				UpdatedAt:   disabledAt,
+				ID:         "user-b",
+				TenantID:   "user-b",
+				Email:      "b@example.com",
+				Role:       store.UserRoleUser,
+				AvatarKey:  "default",
+				DisabledAt: &disabledAt,
+				CreatedAt:  createdAt,
+				UpdatedAt:  disabledAt,
 			},
 		},
 	}
@@ -453,7 +437,7 @@ func TestListUsersAsAdmin(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(resp) != 2 || resp[0].Email != "admin@example.com" || resp[1].DisabledAt == nil {
+	if len(resp) != 2 || resp[0].SetupPending || resp[1].Email != "b@example.com" || !resp[1].SetupPending || resp[1].DisabledAt == nil {
 		t.Fatalf("users response = %#v", resp)
 	}
 }
@@ -651,6 +635,73 @@ func TestCreateSetupTokenAsAdmin(t *testing.T) {
 	}
 }
 
+func TestCreateSetupTokenRejectsCompletedAccount(t *testing.T) {
+	user := &store.User{
+		ID:           "user-b",
+		TenantID:     "user-b",
+		Email:        "b@example.com",
+		DisplayName:  "B",
+		PasswordHash: "hash",
+		Role:         store.UserRoleUser,
+		AvatarKey:    "default",
+	}
+	ms := &mockStore{usersByID: map[string]*store.User{user.ID: user}}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "admin", TenantID: "admin", Role: auth.RoleAdmin})
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/admin/users/user-b/setup-tokens", nil)
+	req.SetPathValue("id", user.ID)
+	rec := httptest.NewRecorder()
+
+	h.CreateSetupToken(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409; body = %s", rec.Code, rec.Body.String())
+	}
+	if ms.createdSetupToken.UserID != "" {
+		t.Fatalf("created setup token = %#v, want no token", ms.createdSetupToken)
+	}
+}
+
+func TestGetAccountSetupReturnsInvitedEmail(t *testing.T) {
+	raw, hash, err := auth.NewOpaqueToken(setupTokenPrefix)
+	if err != nil {
+		t.Fatalf("NewOpaqueToken() error = %v", err)
+	}
+	user := &store.User{
+		ID:        "user-b",
+		TenantID:  "user-b",
+		Email:     "b@example.com",
+		Role:      store.UserRoleUser,
+		AvatarKey: "default",
+	}
+	token := &store.AccountSetupToken{
+		ID:        "setup-token-id",
+		UserID:    user.ID,
+		TokenHash: hash,
+		ExpiresAt: time.Now().Add(time.Hour),
+	}
+	ms := &mockStore{
+		setupTokensByHash: map[string]*store.AccountSetupToken{hash: token},
+		usersByID:         map[string]*store.User{user.ID: user},
+	}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/account-setup?token="+url.QueryEscape(raw), nil)
+	rec := httptest.NewRecorder()
+
+	h.GetAccountSetup(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	var resp accountSetupResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Email != user.Email || resp.AvatarKey != "default" {
+		t.Fatalf("setup response = %#v", resp)
+	}
+}
+
 func TestCompleteAccountSetupSetsPasswordAndSessionCookie(t *testing.T) {
 	raw, hash, err := auth.NewOpaqueToken(setupTokenPrefix)
 	if err != nil {
@@ -663,7 +714,7 @@ func TestCompleteAccountSetupSetsPasswordAndSessionCookie(t *testing.T) {
 		context.Background(),
 		http.MethodPost,
 		"/api/account-setup",
-		strings.NewReader(`{"token":"`+raw+`","password":"correct horse battery staple"}`),
+		strings.NewReader(`{"token":"`+raw+`","display_name":"B Updated","password":"correct horse battery staple","avatar_key":"wallet"}`),
 	)
 	rec := httptest.NewRecorder()
 
@@ -677,6 +728,9 @@ func TestCompleteAccountSetupSetsPasswordAndSessionCookie(t *testing.T) {
 	}
 	if ms.completedSetupPasswordHash == "" || strings.Contains(ms.completedSetupPasswordHash, "correct horse") {
 		t.Fatalf("password hash was not persisted safely: %#v", ms.completedSetupPasswordHash)
+	}
+	if ms.completedSetupDisplayName != "B Updated" || ms.completedSetupAvatarKey != "wallet" {
+		t.Fatalf("completed setup profile = %q/%q, want display name and avatar", ms.completedSetupDisplayName, ms.completedSetupAvatarKey)
 	}
 	if ms.createdSession.UserID != user.ID || ms.createdSession.TokenHash == "" {
 		t.Fatalf("created session = %#v", ms.createdSession)

@@ -316,7 +316,7 @@ func (r *pgAuthRepository) MarkAccountSetupTokenUsed(ctx context.Context, id str
 	return nil
 }
 
-func (r *pgAuthRepository) CompleteAccountSetup(ctx context.Context, tokenHash, passwordHash string) (*User, error) {
+func (r *pgAuthRepository) CompleteAccountSetup(ctx context.Context, input CompleteAccountSetupInput) (*User, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("beginning account setup transaction: %w", err)
@@ -330,7 +330,7 @@ func (r *pgAuthRepository) CompleteAccountSetup(ctx context.Context, tokenHash, 
 		FROM account_setup_tokens
 		WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()
 		FOR UPDATE
-	`, tokenHash))
+	`, input.TokenHash))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -340,11 +340,14 @@ func (r *pgAuthRepository) CompleteAccountSetup(ctx context.Context, tokenHash, 
 
 	user, err := scanUser(tx.QueryRow(ctx, `
 		UPDATE users
-		SET password_hash = $2, updated_at = NOW()
+		SET password_hash = $2,
+		    display_name = $3,
+		    avatar_key = $4,
+		    updated_at = NOW()
 		WHERE id = $1
 		RETURNING id, id AS tenant_id, email, COALESCE(password_hash, ''), display_name, role, avatar_key,
 		          disabled_at, created_at, updated_at
-	`, token.UserID, passwordHash))
+	`, token.UserID, input.PasswordHash, input.DisplayName, input.AvatarKey))
 	if err != nil {
 		return nil, fmt.Errorf("updating setup password: %w", err)
 	}
