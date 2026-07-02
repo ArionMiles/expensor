@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { useLocation } from 'react-router-dom'
@@ -32,6 +32,17 @@ vi.mock('@/api/queries', () => ({
         merchant_regex: 'merchant',
         currency_regex: '',
         source: { type: 'UPI', label: 'ICICI UPI', bank: 'ICICI' },
+        predefined: false,
+      },
+      {
+        id: 'rule-3',
+        name: 'SBI Debit Card',
+        sender_emails: ['alerts@sbi.co.in'],
+        subject_contains: 'SBI Debit',
+        amount_regex: 'amount',
+        merchant_regex: 'merchant',
+        currency_regex: '',
+        source: { type: 'Debit Card', label: 'SBI Debit Card', bank: 'SBI' },
         predefined: false,
       },
     ],
@@ -79,6 +90,45 @@ describe('Rules', () => {
     await user.click(screen.getByRole('link', { name: 'HDFC Credit Card' }))
 
     expect(screen.getByTestId('location')).toHaveTextContent('/rules/rule-1')
+  })
+
+  it('opens the rule editor when clicking non-interactive row cells', async () => {
+    const user = userEvent.setup()
+
+    renderWithProviders(
+      <>
+        <Rules />
+        <LocationProbe />
+      </>,
+      { route: '/rules' },
+    )
+
+    await user.click(screen.getByRole('cell', { name: 'ICICI' }))
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/rules/rule-2')
+  })
+
+  it('selects contiguous rules with shift-click', async () => {
+    renderWithProviders(<Rules />, { route: '/rules' })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select HDFC Credit Card' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select SBI Debit Card' }), {
+      shiftKey: true,
+    })
+
+    expect(screen.getByRole('checkbox', { name: 'Select HDFC Credit Card' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Select ICICI UPI' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Select SBI Debit Card' })).toBeChecked()
+  })
+
+  it('keeps sender cells to one visible email plus overflow count', () => {
+    renderWithProviders(<Rules />, { route: '/rules' })
+
+    const hdfcRow = screen.getByRole('row', { name: /HDFC Credit Card/ })
+
+    expect(within(hdfcRow).getByText('alerts@hdfcbank.net')).toBeInTheDocument()
+    expect(within(hdfcRow).getByText('+1')).toBeInTheDocument()
+    expect(within(hdfcRow).queryByText('alerts@hdfcbank.bank.in')).not.toBeInTheDocument()
   })
 
   it('persists type filters in the URL', async () => {

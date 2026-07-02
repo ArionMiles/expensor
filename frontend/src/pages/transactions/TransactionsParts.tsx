@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTooltip } from '@/hooks/useTooltip'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 
 export function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -460,7 +461,7 @@ export function TransactionRow({
   tx: Transaction
   banks?: BankColor[]
   selected: boolean
-  onToggleSelect: () => void
+  onToggleSelect: (event: ReactMouseEvent<HTMLInputElement>) => void
   searchQuery: string
 }) {
   const { timezone, timeFormat } = useDisplay()
@@ -477,7 +478,8 @@ export function TransactionRow({
         <input
           type="checkbox"
           checked={selected}
-          onChange={onToggleSelect}
+          onClick={onToggleSelect}
+          onChange={() => {}}
           aria-label={`Select transaction ${tx.merchant_info || tx.message_id}`}
         />
       </td>

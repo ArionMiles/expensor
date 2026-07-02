@@ -23,6 +23,7 @@ import type { MessageKey } from '@/i18n/messages'
 import { cn } from '@/lib/utils'
 
 type AuthSurfaceVariant = 'setup' | 'login'
+type AuthSurfaceLayout = 'split' | 'centered'
 
 const authSurfaceCopy: Record<
   AuthSurfaceVariant,
@@ -50,12 +51,37 @@ const authSurfaceCopy: Record<
 function AuthSurface({
   children,
   variant = 'setup',
+  layout = 'split',
 }: {
   children: React.ReactNode
   variant?: AuthSurfaceVariant
+  layout?: AuthSurfaceLayout
 }) {
   const { t } = useI18n()
   const copy = authSurfaceCopy[variant]
+
+  if (layout === 'centered') {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-6 py-8 text-foreground">
+        <div data-testid="auth-centered-surface" className="w-full max-w-md">
+          <div className="rounded-lg border border-border bg-card px-5 py-6 shadow-sm sm:px-7">
+            <div data-testid="auth-form-logo" className="mb-8 flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card">
+                <img
+                  src="/brand/expensor-wallet.svg"
+                  alt=""
+                  aria-hidden="true"
+                  className="h-6 w-6"
+                />
+              </span>
+              <img src="/brand/expensor-wordmark.svg" alt="Expensor" className="h-8 w-auto" />
+            </div>
+            {children}
+          </div>
+        </div>
+      </main>
+    )
+  }
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -328,7 +354,7 @@ export function LoginPage() {
   }
 
   return (
-    <AuthSurface variant="login">
+    <AuthSurface variant="login" layout="centered">
       <form onSubmit={submit} className="space-y-5" noValidate>
         <div>
           <h1 className="text-xl font-semibold text-foreground">{t('auth.login.title')}</h1>
@@ -475,11 +501,10 @@ export function AccountSetupPage() {
   }
 
   return (
-    <AuthSurface>
+    <AuthSurface layout="centered">
       <form onSubmit={submit} className="space-y-5" noValidate>
         <div>
           <h1 className="text-xl font-semibold text-foreground">{t('auth.accountSetup.title')}</h1>
-          <p className="mt-2 text-sm text-muted-foreground">{t('auth.accountSetup.summary')}</p>
         </div>
         <AvatarPicker value={avatarKey} onChange={setAvatarKey} />
         <Field

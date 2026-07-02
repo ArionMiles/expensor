@@ -119,9 +119,10 @@ describe('App auth routing', () => {
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: 'Sign in' }, routeWait)).toBeInTheDocument()
-    expect(screen.getByText('Instance access')).toBeInTheDocument()
-    expect(screen.getByText('Sign in to Expensor')).toBeInTheDocument()
-    expect(screen.getByText('Use your account to access this instance.')).toBeInTheDocument()
+    expect(screen.getByTestId('auth-centered-surface')).toBeInTheDocument()
+    expect(screen.getByTestId('auth-form-logo')).toBeInTheDocument()
+    expect(screen.queryByText('Instance access')).not.toBeInTheDocument()
+    expect(screen.queryByText('Sign in to Expensor')).not.toBeInTheDocument()
     expect(screen.queryByText('First run setup')).not.toBeInTheDocument()
     expect(screen.queryByText('Set up Expensor')).not.toBeInTheDocument()
     expect(window.location.pathname).toBe('/login')
@@ -420,6 +421,13 @@ describe('App auth routing', () => {
     expect(
       await screen.findByRole('heading', { name: 'Set up your account' }, routeWait),
     ).toBeInTheDocument()
+    expect(screen.getByTestId('auth-centered-surface')).toBeInTheDocument()
+    expect(screen.getByTestId('auth-form-logo')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Choose how your account appears before setting your password.'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('First run setup')).not.toBeInTheDocument()
+    expect(screen.queryByText('Set up Expensor')).not.toBeInTheDocument()
     await waitFor(() => expect(screen.getByLabelText('Email')).toHaveValue('b@example.com'))
     expect(screen.getByLabelText('Email')).toBeDisabled()
     await user.type(screen.getByLabelText('Display name'), 'B Updated')

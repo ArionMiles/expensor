@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useDeleteRule, useImportRules, useRules } from '@/api/queries'
 import type { Rule, RuleDocument, RuleImport } from '@/api/types'
 import { ComboboxListbox, comboboxOptionClass, useComboboxNavigation } from '@/components/Combobox'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { useI18n } from '@/i18n/I18nProvider'
+import { toggleOrderedSelection } from '@/lib/rangeSelection'
 import { Trash2 } from 'lucide-react'
 
 type FilterKey = 'type' | 'bank' | 'origin'
@@ -159,14 +160,34 @@ function downloadRules(rules: Rule[], selectedIds: Set<string>) {
   URL.revokeObjectURL(url)
 }
 
+function SenderEmailCell({ senders }: { senders: string[] }) {
+  const [firstSender, ...remainingSenders] = senders
+  if (!firstSender) return <span className="text-xs text-muted-foreground">—</span>
+
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      <span className="truncate rounded-full border border-border bg-background px-2 py-1 font-mono text-[11px] text-muted-foreground">
+        {firstSender}
+      </span>
+      {remainingSenders.length > 0 && (
+        <span className="shrink-0 rounded-full border border-border bg-secondary px-2 py-1 font-mono text-[11px] text-muted-foreground">
+          +{remainingSenders.length}
+        </span>
+      )}
+    </div>
+  )
+}
+
 export default function Rules() {
   const { t } = useI18n()
+  const navigate = useNavigate()
   const { data: rules = [], isLoading } = useRules()
   const { mutate: deleteRule } = useDeleteRule()
   const { mutate: importRules, isPending: importing } = useImportRules()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const selectionAnchorIdRef = useRef<string | null>(null)
   const [importMsg, setImportMsg] = useState('')
   const [openFilter, setOpenFilter] = useState<FilterKey | null>(null)
   const [predefinedTooltip, setPredefinedTooltip] = useState<{ x: number; y: number } | null>(null)
@@ -235,7 +256,8 @@ export default function Rules() {
     setSearchParams(next, { replace: true })
   }
 
-  const toggleAll = () =>
+  const toggleAll = () => {
+    selectionAnchorIdRef.current = null
     setSelected((prev) => {
       if (allSelected) {
         const next = new Set(prev)
@@ -244,13 +266,26 @@ export default function Rules() {
       }
       return new Set([...prev, ...visibleRules.map((rule) => rule.id)])
     })
+  }
 
-  const toggleRow = (id: string) =>
+  const toggleRow = (id: string, extendRange: boolean) =>
     setSelected((prev) => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
+      const result = toggleOrderedSelection({
+        orderedIds: visibleRules.map((rule) => rule.id),
+        selectedIds: prev,
+        id,
+        anchorId: selectionAnchorIdRef.current,
+        extendRange,
+      })
+      selectionAnchorIdRef.current = result.anchorId
+      return result.selectedIds
     })
+
+  const openRuleFromRow = (rule: Rule, event: React.MouseEvent<HTMLTableRowElement>) => {
+    const target = event.target as HTMLElement
+    if (target.closest('a,button,input,label,select,textarea,[data-row-action]')) return
+    navigate(`/rules/${rule.id}`)
+  }
 
   const bulkDelete = () => {
     const deletable = rules.filter((r) => selected.has(r.id) && !r.predefined)
@@ -484,13 +519,15 @@ export default function Rules() {
             {visibleRules.map((rule) => (
               <tr
                 key={rule.id}
-                className={`hover:bg-secondary/50 ${selected.has(rule.id) ? 'bg-secondary/30' : ''}`}
+                onClick={(event) => openRuleFromRow(rule, event)}
+                className={`cursor-pointer hover:bg-secondary/50 ${selected.has(rule.id) ? 'bg-secondary/30' : ''}`}
               >
                 <td className="px-3 py-3">
                   <input
                     type="checkbox"
                     checked={selected.has(rule.id)}
-                    onChange={() => toggleRow(rule.id)}
+                    onClick={(event) => toggleRow(rule.id, event.shiftKey)}
+                    onChange={() => {}}
                     aria-label={t('rules.selectRule', { name: rule.name })}
                   />
                 </td>
@@ -507,20 +544,7 @@ export default function Rules() {
                   {rule.subject_contains || '—'}
                 </td>
                 <td className="px-3 py-3">
-                  <div className="flex flex-wrap gap-1.5">
-                    {rule.sender_emails.length > 0 ? (
-                      rule.sender_emails.map((sender) => (
-                        <span
-                          key={sender}
-                          className="rounded-full border border-border bg-background px-2 py-1 font-mono text-[11px] text-muted-foreground"
-                        >
-                          {sender}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </div>
+                  <SenderEmailCell senders={rule.sender_emails} />
                 </td>
                 <td className="px-3 py-3 text-sm text-muted-foreground">
                   {rule.source.type || '—'}
@@ -539,6 +563,7 @@ export default function Rules() {
                 <td className="px-2 py-3 text-center">
                   {rule.predefined ? (
                     <span
+                      data-row-action
                       className="inline-flex cursor-not-allowed"
                       onMouseEnter={(e) => {
                         const deleteRect = e.currentTarget.getBoundingClientRect()
