@@ -418,11 +418,6 @@ export function AccountSettings() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-lg font-semibold text-foreground">{t('account.title')}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t('account.summary')}</p>
-      </div>
-
       <Section title={t('account.profile.title')}>
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
           <div className="w-full max-w-md space-y-4">

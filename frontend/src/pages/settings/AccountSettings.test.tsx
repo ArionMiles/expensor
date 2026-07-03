@@ -22,6 +22,32 @@ function LocationProbe() {
 }
 
 describe('AccountSettings', () => {
+  it('uses compact account tab copy for regular users', async () => {
+    server.use(
+      http.get('/api/session', () =>
+        HttpResponse.json({
+          ...adminPrincipal,
+          user_id: 'user-b',
+          tenant_id: 'user-b',
+          email: 'b@example.com',
+          display_name: 'B',
+          role: 'user',
+        }),
+      ),
+      http.get('/api/tokens', () => HttpResponse.json([])),
+    )
+
+    renderWithProviders(<Settings />, { route: '/settings?tab=account' })
+
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Profile' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Account', level: 1 })).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Manage your profile, personal access tokens, and instance users.'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Users' })).not.toBeInTheDocument()
+  })
+
   it('updates profile details, creates access tokens, and generates setup links for invited users', async () => {
     const user = userEvent.setup()
     const writeText = vi.spyOn(window.navigator.clipboard, 'writeText').mockResolvedValue(undefined)
@@ -153,7 +179,7 @@ describe('AccountSettings', () => {
 
     renderWithProviders(<Settings />, { route: '/settings?tab=account' })
 
-    expect(await screen.findByRole('heading', { name: 'Account' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Profile' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save profile' })).not.toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Users' })).toBeInTheDocument()
     const adminRow = await screen.findByRole('row', { name: /admin@example.com/i })

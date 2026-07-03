@@ -72,7 +72,6 @@ export const messages = {
     'auth.accountSetup.submit': 'Finish setup',
     'auth.accountSetup.submitting': 'Finishing...',
     'account.title': 'Account',
-    'account.summary': 'Manage your profile, personal access tokens, and instance users.',
     'account.profile.title': 'Profile',
     'account.email': 'Email',
     'account.displayName': 'Display name',
