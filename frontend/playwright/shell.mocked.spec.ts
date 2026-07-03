@@ -44,7 +44,7 @@ test('command palette closes with one escape press after typing in the search in
       new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', ctrlKey: true, bubbles: true }),
     )
   })
-  await page.getByRole('textbox', { name: 'Search destinations' }).fill('trans')
+  await page.getByRole('textbox', { name: 'Search commands' }).fill('trans')
 
   await page.keyboard.press('Escape')
 
