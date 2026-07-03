@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/ArionMiles/expensor/backend/internal/bootstrap"
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
@@ -41,6 +42,15 @@ func (s *InstrumentedStore) BootstrapRequired(ctx context.Context) (bool, error)
 	required, err := s.next.BootstrapRequired(ctx)
 	s.recordOperation(ctx, "auth.bootstrap_required", err)
 	return required, err
+}
+
+func (s *InstrumentedStore) PreviewLegacyClaim(ctx context.Context) (bootstrap.LegacyPreview, error) {
+	ctx, span := s.scope.Start(ctx, "store.auth.preview_legacy_claim")
+	defer span.End()
+
+	preview, err := s.next.PreviewLegacyClaim(ctx)
+	s.recordOperation(ctx, "auth.preview_legacy_claim", err)
+	return preview, err
 }
 
 func (s *InstrumentedStore) CreateBootstrapAdmin(ctx context.Context, input CreateBootstrapAdminInput) (*User, error) {

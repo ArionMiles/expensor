@@ -1153,6 +1153,8 @@ definitions:
     type: object
   httpapi.bootstrapResponse:
     properties:
+      legacy_preview:
+        $ref: '#/definitions/httpapi.legacyPreviewResponse'
       required:
         type: boolean
     type: object
@@ -1201,6 +1203,37 @@ definitions:
         type: string
     required:
     - email
+    type: object
+  httpapi.legacyPreviewResponse:
+    properties:
+      app_config:
+        type: integer
+      blocking_reasons:
+        items:
+          type: string
+        type: array
+      buckets:
+        type: integer
+      categories:
+        type: integer
+      extraction_diagnostics:
+        type: integer
+      label_merchants:
+        type: integer
+      labels:
+        type: integer
+      merchant_categories:
+        type: integer
+      muted_merchants:
+        type: integer
+      processed_messages:
+        type: integer
+      reader_runtime:
+        type: integer
+      rules:
+        type: integer
+      transactions:
+        type: integer
     type: object
   httpapi.loginRequest:
     properties:

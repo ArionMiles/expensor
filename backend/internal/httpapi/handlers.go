@@ -44,6 +44,12 @@ type DaemonStatusProvider interface {
 	Status() DaemonStatus
 }
 
+// DaemonRunRequest identifies the authenticated tenant and reader for one daemon action.
+type DaemonRunRequest struct {
+	Tenant store.Tenant
+	Reader string
+}
+
 // Handlers holds all dependencies for HTTP endpoint handlers.
 type Handlers struct {
 	registry           *plugins.Registry
@@ -62,13 +68,13 @@ type Handlers struct {
 	baseURL            string // e.g. "http://localhost:8080"
 	frontendURL        string // e.g. "http://localhost:5173" — used for OAuth redirects
 	thunderbirdDataDir string
-	scanInterval       int                 // default scan interval in seconds
-	lookbackDays       int                 // default lookback in days
-	startFn            func(reader string) // called by POST /api/daemon/start; may be nil
-	stopFn             func()              // called when active reader runtime is removed; may be nil
-	rescanFn           func(reader string) // called by POST /api/daemon/rescan; may be nil
-	restartFn          func(reader string) // called after checkpoint clear to reload from DB; may be nil
-	syncFn             func()              // called by POST /api/config/sync; may be nil
+	scanInterval       int                    // default scan interval in seconds
+	lookbackDays       int                    // default lookback in days
+	startFn            func(DaemonRunRequest) // called by POST /api/daemon/start; may be nil
+	stopFn             func()                 // called when active reader runtime is removed; may be nil
+	rescanFn           func(DaemonRunRequest) // called by POST /api/daemon/rescan; may be nil
+	restartFn          func(DaemonRunRequest) // called after checkpoint clear to reload from DB; may be nil
+	syncFn             func()                 // called by POST /api/config/sync; may be nil
 	banksData          []byte
 	logger             *slog.Logger
 	validate           *validator.Validate
@@ -90,10 +96,10 @@ type HandlersConfig struct {
 	ThunderbirdDataDir string
 	ScanInterval       int
 	LookbackDays       int
-	StartFn            func(reader string)
+	StartFn            func(DaemonRunRequest)
 	StopFn             func()
-	RescanFn           func(reader string)
-	RestartFn          func(reader string)
+	RescanFn           func(DaemonRunRequest)
+	RestartFn          func(DaemonRunRequest)
 	SyncFn             func()
 	BanksData          []byte
 	Logger             *slog.Logger

@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"sort"
 
-	"github.com/ArionMiles/expensor/backend/internal/httpapi"
 	"github.com/ArionMiles/expensor/backend/internal/rules"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
@@ -72,12 +71,12 @@ func regexString(re *regexp.Regexp) string {
 	return re.String()
 }
 
-// loadUserRules compiles user-created rules, skipping invalid persisted regexes.
-func loadUserRules(ctx context.Context, st httpapi.Storer, logger *slog.Logger) []api.Rule {
+// loadUserRules compiles tenant user-created rules, skipping invalid persisted regexes.
+func loadUserRules(ctx context.Context, st daemonStore, tenant store.Tenant, logger *slog.Logger) []api.Rule {
 	if st == nil {
 		return nil
 	}
-	rows, err := st.ListRules(ctx, store.Tenant{})
+	rows, err := st.ListRules(ctx, tenant)
 	if err != nil {
 		logger.Warn("failed to load rules from DB, falling back to embedded rules", "error", err)
 		return nil

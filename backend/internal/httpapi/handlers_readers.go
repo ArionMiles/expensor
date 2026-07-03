@@ -282,13 +282,13 @@ func (h *Handlers) exchangeAndSaveToken(ctx context.Context, tenant store.Tenant
 	if err := h.readerRuntimeStore.SetReaderToken(ctx, tenant, name, tokenJSON); err != nil {
 		return fmt.Errorf("failed to save token: %w", err)
 	}
-	h.restartReaderDaemonAfterAuth(name)
+	h.restartReaderDaemonAfterAuth(tenant, name)
 	return nil
 }
 
-func (h *Handlers) restartReaderDaemonAfterAuth(name string) {
+func (h *Handlers) restartReaderDaemonAfterAuth(tenant store.Tenant, name string) {
 	if h.daemon.Status().Running && h.restartFn != nil {
-		h.restartFn(name)
+		h.restartFn(DaemonRunRequest{Tenant: tenant, Reader: name})
 	}
 }
 
@@ -788,7 +788,7 @@ func (h *Handlers) DiscoverProfiles(w http.ResponseWriter, _ *http.Request) {
 		if p == "" {
 			return
 		}
-		if _, err := os.Stat(p); err == nil { //nolint:gosec // path built from well-known OS locations, not user input
+		if _, err := os.Stat(p); err == nil {
 			if _, exists := seen[p]; !exists {
 				seen[p] = struct{}{}
 				paths = append(paths, p)

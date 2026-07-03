@@ -24,6 +24,14 @@ type Client struct {
 func NewClient(t *testing.T) *Client {
 	t.Helper()
 
+	client := NewUnauthenticatedClient(t)
+	client.login(t)
+	return client
+}
+
+func NewUnauthenticatedClient(t *testing.T) *Client {
+	t.Helper()
+
 	baseURL := strings.TrimRight(os.Getenv("COMPONENT_BASE_URL"), "/")
 	if baseURL == "" {
 		baseURL = "http://backend:8080"
@@ -40,7 +48,6 @@ func NewClient(t *testing.T) *Client {
 			Jar:     jar,
 		},
 	}
-	client.login(t)
 	return client
 }
 

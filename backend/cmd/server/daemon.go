@@ -44,6 +44,13 @@ type daemonRuntimeStore interface {
 	MarkMessageProcessed(ctx context.Context, tenant store.Tenant, key string, at time.Time) error
 }
 
+type daemonStore interface {
+	GetAppConfig(ctx context.Context, tenant store.Tenant, key string) (string, error)
+	SetAppConfig(ctx context.Context, tenant store.Tenant, key, value string) error
+	SetActiveReader(ctx context.Context, tenant store.Tenant, reader string) error
+	ListRules(ctx context.Context, tenant store.Tenant) ([]store.RuleRow, error)
+}
+
 func (m *daemonManager) setRunning(t time.Time) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -73,18 +80,19 @@ func (m *daemonManager) Status() httpapi.DaemonStatus {
 }
 
 // daemonCoordinator owns the mutex and shared dependencies for starting daemon runs.
-// It exposes start and rescan as plain methods so they can be passed as func(string)
-// values without adding closure complexity to main.
+// It exposes start and rescan as plain methods so they can be passed directly
+// to the HTTP handlers without adding closure complexity to main.
 type daemonCoordinator struct {
 	mu            sync.Mutex
 	ctx           context.Context
 	cancelFn      context.CancelFunc // cancels the current daemon run; nil when idle
 	activeReader  string             // reader name currently running or last launched
+	activeTenant  store.Tenant       // tenant currently running or last launched
 	registry      *plugins.Registry
 	cfg           config.App
 	systemRules   []api.Rule
 	resolver      api.CategoryResolver
-	st            httpapi.Storer
+	st            daemonStore
 	runtimeStore  daemonRuntimeStore
 	resolverStore categorySnapshotStore
 	diagnostics   api.DiagnosticSink
@@ -104,15 +112,16 @@ type daemonRun struct {
 
 // launch builds runtime config and merged rules then spawns runDaemon in a goroutine.
 // Must be called with c.mu held.
-func (c *daemonCoordinator) launch(readerName string, forceRescan bool) {
+func (c *daemonCoordinator) launch(req httpapi.DaemonRunRequest, forceRescan bool) {
 	runCtx, cancel := context.WithCancel(c.ctx)
 	c.cancelFn = cancel
-	c.activeReader = readerName
-	runtimeCfg := applyScanOverrides(runCtx, c.cfg, c.st)
+	c.activeReader = req.Reader
+	c.activeTenant = req.Tenant
+	runtimeCfg := applyScanOverrides(runCtx, c.cfg, c.st, req.Tenant)
 
 	// Load scanning checkpoint from DB.
 	if !forceRescan {
-		runtimeCfg.LastScanAt = loadLastScanAt(c.ctx, c.st, readerName, c.logger)
+		runtimeCfg.LastScanAt = loadLastScanAt(c.ctx, c.st, req.Tenant, req.Reader, c.logger)
 	} else {
 		runtimeCfg.ForceFullScan = true
 	}
@@ -120,19 +129,19 @@ func (c *daemonCoordinator) launch(readerName string, forceRescan bool) {
 	// OnCheckpoint saves the scan timestamp back to DB after each successful scan.
 	if c.st != nil {
 		runtimeCfg.OnCheckpoint = func(t time.Time) {
-			key := "reader." + readerName + ".last_scan_at"
-			if err := c.st.SetAppConfig(c.ctx, store.Tenant{}, key, t.Format(time.RFC3339)); err != nil {
-				c.logger.Warn("failed to save scan checkpoint", "reader", readerName, "error", err)
+			key := "reader." + req.Reader + ".last_scan_at"
+			if err := c.st.SetAppConfig(c.ctx, req.Tenant, key, t.Format(time.RFC3339)); err != nil {
+				c.logger.Warn("failed to save scan checkpoint", "reader", req.Reader, "error", err)
 			} else {
-				c.logger.Debug("scan checkpoint saved", "reader", readerName, "at", t.Format(time.RFC3339))
+				c.logger.Debug("scan checkpoint saved", "reader", req.Reader, "at", t.Format(time.RFC3339))
 			}
 		}
 	}
 
-	merged := rules.MergeRules(c.systemRules, loadUserRules(c.ctx, c.st, c.logger))
+	merged := rules.MergeRules(c.systemRules, loadUserRules(c.ctx, c.st, req.Tenant, c.logger))
 	run := daemonRun{
-		readerName:    readerName,
-		tenant:        store.Tenant{},
+		readerName:    req.Reader,
+		tenant:        req.Tenant,
 		cfg:           runtimeCfg,
 		compiledRules: merged,
 		resolver:      c.resolver,
@@ -146,12 +155,12 @@ func (c *daemonCoordinator) launch(readerName string, forceRescan bool) {
 
 // loadLastScanAt reads the last scan checkpoint for a reader from app_config.
 // Returns nil if no checkpoint exists (first run).
-func loadLastScanAt(ctx context.Context, st httpapi.Storer, readerName string, logger *slog.Logger) *time.Time {
+func loadLastScanAt(ctx context.Context, st daemonStore, tenant store.Tenant, readerName string, logger *slog.Logger) *time.Time {
 	if st == nil {
 		return nil
 	}
 	key := "reader." + readerName + ".last_scan_at"
-	val, err := st.GetAppConfig(ctx, store.Tenant{}, key)
+	val, err := st.GetAppConfig(ctx, tenant, key)
 	if err != nil {
 		return nil // no checkpoint yet; the reader will use the full lookback window
 	}
@@ -182,10 +191,10 @@ func (c *daemonCoordinator) waitStopped() {
 }
 
 // start launches the requested reader, stopping a different active reader first.
-func (c *daemonCoordinator) start(readerName string) {
+func (c *daemonCoordinator) start(req httpapi.DaemonRunRequest) {
 	c.mu.Lock()
 	if c.dm.Status().Running {
-		if c.activeReader == readerName {
+		if c.activeReader == req.Reader && c.activeTenant.ID == req.Tenant.ID {
 			c.mu.Unlock()
 			return
 		}
@@ -198,10 +207,10 @@ func (c *daemonCoordinator) start(readerName string) {
 			return
 		}
 	}
-	if err := saveActiveReader(c.ctx, c.st, readerName); err != nil {
+	if err := saveActiveReader(c.ctx, c.st, req.Tenant, req.Reader); err != nil {
 		c.logger.Warn("failed to persist active reader", "error", err)
 	}
-	c.launch(readerName, false)
+	c.launch(req, false)
 	c.mu.Unlock()
 }
 
@@ -215,11 +224,12 @@ func (c *daemonCoordinator) stop() {
 		return
 	}
 	c.activeReader = ""
+	c.activeTenant = store.Tenant{}
 	c.mu.Unlock()
 }
 
 // rescan relaunches the reader without checkpoint or deduplication constraints.
-func (c *daemonCoordinator) rescan(readerName string) {
+func (c *daemonCoordinator) rescan(req httpapi.DaemonRunRequest) {
 	c.mu.Lock()
 	if c.dm.Status().Running {
 		c.stopCurrent()
@@ -231,12 +241,15 @@ func (c *daemonCoordinator) rescan(readerName string) {
 			return
 		}
 	}
-	c.launch(readerName, true)
+	if err := saveActiveReader(c.ctx, c.st, req.Tenant, req.Reader); err != nil {
+		c.logger.Warn("failed to persist active reader", "error", err)
+	}
+	c.launch(req, true)
 	c.mu.Unlock()
 }
 
 // restart reloads the persisted checkpoint and retains normal deduplication.
-func (c *daemonCoordinator) restart(readerName string) {
+func (c *daemonCoordinator) restart(req httpapi.DaemonRunRequest) {
 	c.mu.Lock()
 	if c.dm.Status().Running {
 		c.stopCurrent()
@@ -248,7 +261,7 @@ func (c *daemonCoordinator) restart(readerName string) {
 			return
 		}
 	}
-	c.launch(readerName, false)
+	c.launch(req, false)
 	c.mu.Unlock()
 }
 
@@ -262,12 +275,13 @@ func (c *daemonCoordinator) refreshResolver(ctx context.Context) {
 	c.mu.Lock()
 	c.resolver = resolver
 	active := c.activeReader
+	tenant := c.activeTenant
 	running := c.dm.Status().Running
 	c.mu.Unlock()
 
 	if running && active != "" {
 		c.logger.Info("restarting daemon to apply updated category resolver")
-		c.start(active)
+		c.start(httpapi.DaemonRunRequest{Tenant: tenant, Reader: active})
 	}
 }
 
@@ -352,37 +366,24 @@ func (c *daemonCoordinator) runDaemon(
 }
 
 // saveActiveReader persists the reader name so startup can resume it.
-func saveActiveReader(ctx context.Context, st httpapi.Storer, readerName string) error {
+func saveActiveReader(ctx context.Context, st daemonStore, tenant store.Tenant, readerName string) error {
 	if st == nil {
 		return nil
 	}
-	return st.SetActiveReader(ctx, store.Tenant{}, readerName)
-}
-
-// loadActiveReader returns the persisted reader name, or empty when unavailable.
-func loadActiveReader(ctx context.Context, st httpapi.Storer, logger *slog.Logger) string {
-	if st == nil {
-		return ""
-	}
-	reader, err := st.GetActiveReader(ctx, store.Tenant{})
-	if err != nil {
-		logger.Warn("failed to read active reader", "error", err)
-		return ""
-	}
-	return reader
+	return st.SetActiveReader(ctx, tenant, readerName)
 }
 
 // applyScanOverrides applies valid UI-managed scan settings to a config copy.
-func applyScanOverrides(ctx context.Context, cfg config.App, st httpapi.Storer) config.App {
+func applyScanOverrides(ctx context.Context, cfg config.App, st daemonStore, tenant store.Tenant) config.App {
 	if st == nil {
 		return cfg
 	}
-	if v, err := getAppConfigWithTimeout(ctx, st, "scan_interval", cfg.Persisted.ReadTimeout); err == nil {
+	if v, err := getAppConfigWithTimeout(ctx, st, tenant, "scan_interval", cfg.Persisted.ReadTimeout); err == nil {
 		if n, convErr := strconv.Atoi(v); convErr == nil && n > 0 {
 			cfg.ScanInterval = n
 		}
 	}
-	if v, err := getAppConfigWithTimeout(ctx, st, "lookback_days", cfg.Persisted.ReadTimeout); err == nil {
+	if v, err := getAppConfigWithTimeout(ctx, st, tenant, "lookback_days", cfg.Persisted.ReadTimeout); err == nil {
 		if n, convErr := strconv.Atoi(v); convErr == nil && n > 0 {
 			cfg.LookbackDays = n
 		}
@@ -390,8 +391,8 @@ func applyScanOverrides(ctx context.Context, cfg config.App, st httpapi.Storer) 
 	return cfg
 }
 
-func getAppConfigWithTimeout(ctx context.Context, st httpapi.Storer, key string, timeout time.Duration) (string, error) {
+func getAppConfigWithTimeout(ctx context.Context, st daemonStore, tenant store.Tenant, key string, timeout time.Duration) (string, error) {
 	readCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	return st.GetAppConfig(readCtx, store.Tenant{}, key)
+	return st.GetAppConfig(readCtx, tenant, key)
 }
