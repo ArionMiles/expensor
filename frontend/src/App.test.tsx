@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -131,6 +131,133 @@ describe('App auth routing', () => {
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
     await waitFor(() => expect(window.location.pathname).toBe('/transactions'))
+  }, 15_000)
+
+  it('signs out from the command palette action', async () => {
+    const user = userEvent.setup()
+    let logoutRequests = 0
+    window.history.pushState({}, '', '/')
+    server.use(
+      http.get('/api/bootstrap', () => HttpResponse.json({ required: false })),
+      http.get('/api/session', () =>
+        HttpResponse.json({
+          user_id: 'admin',
+          tenant_id: 'admin',
+          email: 'admin@example.com',
+          display_name: 'Admin',
+          role: 'admin',
+          avatar_key: 'default',
+        }),
+      ),
+      http.get('/api/config/setup-status', () =>
+        HttpResponse.json({ required: false, missing: [] }),
+      ),
+      http.delete('/api/session', () => {
+        logoutRequests += 1
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard' }, routeWait)).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    expect(await screen.findByRole('dialog', { name: 'Command palette' })).toBeInTheDocument()
+    await user.type(screen.getByRole('textbox', { name: 'Search commands' }), 'logout')
+    await user.keyboard('{Enter}')
+
+    await waitFor(() => expect(logoutRequests).toBe(1))
+    await waitFor(() => expect(window.location.pathname).toBe('/login'))
+  }, 15_000)
+
+  it('offers admin command palette actions and runs daemon actions', async () => {
+    const user = userEvent.setup()
+    let rescanRequests = 0
+    let clearCheckpointRequests = 0
+    window.history.pushState({}, '', '/')
+    server.use(
+      http.get('/api/bootstrap', () => HttpResponse.json({ required: false })),
+      http.get('/api/session', () =>
+        HttpResponse.json({
+          user_id: 'admin',
+          tenant_id: 'admin',
+          email: 'admin@example.com',
+          display_name: 'Admin',
+          role: 'admin',
+          avatar_key: 'default',
+        }),
+      ),
+      http.get('/api/config/setup-status', () =>
+        HttpResponse.json({ required: false, missing: [] }),
+      ),
+      http.get('/api/config/active-reader', () => HttpResponse.json({ reader: 'gmail' })),
+      http.post('/api/daemon/rescan', async ({ request }) => {
+        const body = (await request.json()) as { reader?: string }
+        if (body.reader === 'gmail') rescanRequests += 1
+        return HttpResponse.json({ status: 'rescanning' })
+      }),
+      http.delete('/api/config/readers/:reader/checkpoint', ({ params }) => {
+        if (params.reader === 'gmail') clearCheckpointRequests += 1
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard' }, routeWait)).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    const palette = await screen.findByRole('dialog', { name: 'Command palette' })
+    expect(within(palette).getByText('Actions')).toBeInTheDocument()
+    expect(within(palette).getByText('Navigation')).toBeInTheDocument()
+    expect(within(palette).getByRole('button', { name: /Create new rule/ })).toBeInTheDocument()
+    expect(within(palette).getByRole('button', { name: /Create access token/ })).toBeInTheDocument()
+    expect(within(palette).getByRole('button', { name: /Create new user/ })).toBeInTheDocument()
+    expect(within(palette).getByRole('button', { name: /Force rescan/ })).toBeEnabled()
+    expect(within(palette).getByRole('button', { name: /Clear checkpoint/ })).toBeEnabled()
+
+    await user.type(within(palette).getByRole('textbox', { name: 'Search commands' }), 'rescan')
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(rescanRequests).toBe(1))
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    const checkpointPalette = await screen.findByRole('dialog', { name: 'Command palette' })
+    await user.type(
+      within(checkpointPalette).getByRole('textbox', { name: 'Search commands' }),
+      'checkpoint',
+    )
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(clearCheckpointRequests).toBe(1))
+  }, 15_000)
+
+  it('hides admin-only command palette actions from regular users', async () => {
+    window.history.pushState({}, '', '/')
+    server.use(
+      http.get('/api/bootstrap', () => HttpResponse.json({ required: false })),
+      http.get('/api/session', () =>
+        HttpResponse.json({
+          user_id: 'user-b',
+          tenant_id: 'user-b',
+          email: 'b@example.com',
+          display_name: 'B',
+          role: 'user',
+          avatar_key: 'default',
+        }),
+      ),
+      http.get('/api/config/setup-status', () =>
+        HttpResponse.json({ required: false, missing: [] }),
+      ),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard' }, routeWait)).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+
+    const palette = await screen.findByRole('dialog', { name: 'Command palette' })
+    expect(
+      within(palette).queryByRole('button', { name: /Create new user/ }),
+    ).not.toBeInTheDocument()
+    expect(within(palette).getByRole('button', { name: /Create access token/ })).toBeInTheDocument()
   }, 15_000)
 
   it('shows custom login email validation instead of browser-native validation', async () => {

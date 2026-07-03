@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
+import { useLocation } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import Settings from '../Settings'
 import { server } from '@/test/server'
@@ -13,6 +14,11 @@ const adminPrincipal = {
   display_name: 'Admin',
   role: 'admin',
   avatar_key: 'default',
+}
+
+function LocationProbe() {
+  const location = useLocation()
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>
 }
 
 describe('AccountSettings', () => {
@@ -309,6 +315,44 @@ describe('AccountSettings', () => {
     expect(
       within(reopenedTokenDialog).queryByText('Token test already exists.'),
     ).not.toBeInTheDocument()
+  })
+
+  it('opens the create token dialog from the account action query param', async () => {
+    server.use(
+      http.get('/api/session', () => HttpResponse.json(adminPrincipal)),
+      http.get('/api/tokens', () => HttpResponse.json([])),
+      http.get('/api/admin/users', () => HttpResponse.json([])),
+    )
+
+    renderWithProviders(
+      <>
+        <Settings />
+        <LocationProbe />
+      </>,
+      { route: '/settings?tab=account&action=create-token' },
+    )
+
+    expect(await screen.findByRole('dialog', { name: 'Create New Token' })).toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('/settings?tab=account')
+  })
+
+  it('opens the create user dialog from the account action query param for admins', async () => {
+    server.use(
+      http.get('/api/session', () => HttpResponse.json(adminPrincipal)),
+      http.get('/api/tokens', () => HttpResponse.json([])),
+      http.get('/api/admin/users', () => HttpResponse.json([])),
+    )
+
+    renderWithProviders(
+      <>
+        <Settings />
+        <LocationProbe />
+      </>,
+      { route: '/settings?tab=account&action=create-user' },
+    )
+
+    expect(await screen.findByRole('dialog', { name: 'Create New User' })).toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('/settings?tab=account')
   })
 
   it('shows duplicate user email conflicts inside the new user dialog', async () => {

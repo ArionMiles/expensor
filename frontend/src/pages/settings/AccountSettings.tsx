@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { useSearchParams } from 'react-router-dom'
 import {
   useAccessTokens,
   useAdminUsers,
@@ -311,6 +312,7 @@ function StatusChip({ disabled }: { disabled: boolean }) {
 
 export function AccountSettings() {
   const { t } = useI18n()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { timezone, timeFormat } = useDisplay()
   const { data: session } = useSession()
   const updateProfile = useUpdateProfile()
@@ -382,6 +384,18 @@ export function AccountSettings() {
     setTokenName('')
     setCreatingToken(false)
   }
+
+  const clearAccountAction = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('action')
+    setSearchParams(next, { replace: true })
+  }
+
+  useEffect(() => {
+    if (!session || searchParams.get('action') !== 'create-token') return
+    openCreateToken()
+    clearAccountAction()
+  }, [session?.user_id, searchParams, setSearchParams])
 
   const copyToken = async () => {
     if (!newToken) return
@@ -624,6 +638,7 @@ function TokenRevealModal({
 
 function AdminUsersSection() {
   const { t } = useI18n()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { data: session } = useSession()
   const { data: users = [] } = useAdminUsers(true)
   const createUser = useCreateUser()
@@ -681,6 +696,18 @@ function AdminUsersSection() {
     setCreatedInviteCopied(false)
     setCreatingUser(false)
   }
+
+  const clearAccountAction = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('action')
+    setSearchParams(next, { replace: true })
+  }
+
+  useEffect(() => {
+    if (searchParams.get('action') !== 'create-user') return
+    openCreateUser()
+    clearAccountAction()
+  }, [searchParams, setSearchParams])
 
   const copyCreatedInvite = async () => {
     if (!createdInvite) return
