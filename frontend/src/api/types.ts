@@ -43,6 +43,90 @@ export interface SetupStatus {
   missing: Array<'base_currency' | 'timezone' | 'time_format'>
 }
 
+export interface BootstrapStatus {
+  required: boolean
+}
+
+export type UserRole = 'admin' | 'user'
+export type AvatarKey = 'default' | 'ledger' | 'wallet'
+
+export interface Principal {
+  user_id: string
+  tenant_id: string
+  email: string
+  display_name: string
+  role: UserRole
+  avatar_key: AvatarKey
+}
+
+export interface BootstrapRequest {
+  email: string
+  password: string
+  display_name: string
+  avatar_key: AvatarKey
+}
+
+export interface CreateUserRequest {
+  email: string
+  role: UserRole
+}
+
+export interface LoginRequest {
+  email: string
+  password: string
+}
+
+export interface CompleteAccountSetupRequest {
+  token: string
+  display_name: string
+  password: string
+  avatar_key: AvatarKey
+}
+
+export interface AccountSetupMetadata {
+  email: string
+  avatar_key: AvatarKey
+}
+
+export interface ProfilePatch {
+  display_name?: string
+  avatar_key?: AvatarKey
+}
+
+export interface AccessToken {
+  id: string
+  name: string
+  token?: string
+  created_at: string
+  expires_at?: string | null
+  last_used_at?: string | null
+}
+
+export interface AccountUser {
+  user_id: string
+  tenant_id: string
+  email: string
+  display_name: string
+  role: UserRole
+  avatar_key: AvatarKey
+  setup_pending: boolean
+  disabled_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AdminUserPatch {
+  display_name?: string
+  role?: UserRole
+  avatar_key?: AvatarKey
+  disabled?: boolean
+}
+
+export interface SetupToken {
+  token: string
+  expires_at: string
+}
+
 export interface Preferences {
   base_currency: string
   scan_interval: number

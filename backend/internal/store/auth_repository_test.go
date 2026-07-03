@@ -134,6 +134,102 @@ func TestAuthRepositoryStoresOnlyTokenHashes(t *testing.T) {
 	}
 }
 
+func TestAuthRepositoryAllowsReusingRevokedAccessTokenName(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+
+	ctx := context.Background()
+	admin, err := ts.CreateBootstrapAdmin(ctx, store.CreateBootstrapAdminInput{
+		Email:        "admin@example.com",
+		DisplayName:  "Admin",
+		PasswordHash: "$2a$10$abcdefghijklmnopqrstuu6Z6RMcYbqVvB6KZlSmLfHLj6y8s3zme",
+		AvatarKey:    "default",
+	})
+	if err != nil {
+		t.Fatalf("CreateBootstrapAdmin() error = %v", err)
+	}
+	token, err := ts.CreateAccessToken(ctx, store.CreateAccessTokenInput{
+		UserID:    admin.ID,
+		Name:      "test",
+		TokenHash: "sha256:test-token-old",
+	})
+	if err != nil {
+		t.Fatalf("CreateAccessToken(old) error = %v", err)
+	}
+	if err := ts.RevokeAccessToken(ctx, token.ID, admin.ID); err != nil {
+		t.Fatalf("RevokeAccessToken() error = %v", err)
+	}
+
+	recreated, err := ts.CreateAccessToken(ctx, store.CreateAccessTokenInput{
+		UserID:    admin.ID,
+		Name:      "test",
+		TokenHash: "sha256:test-token-new",
+	})
+	if err != nil {
+		t.Fatalf("CreateAccessToken(recreated) error = %v", err)
+	}
+	if recreated.ID == token.ID || recreated.Name != "test" {
+		t.Fatalf("recreated token = %#v", recreated)
+	}
+}
+
+func TestAuthRepositoryRejectsActiveAccessTokenNameConflict(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+
+	ctx := context.Background()
+	admin, err := ts.CreateBootstrapAdmin(ctx, store.CreateBootstrapAdminInput{
+		Email:        "admin@example.com",
+		DisplayName:  "Admin",
+		PasswordHash: "$2a$10$abcdefghijklmnopqrstuu6Z6RMcYbqVvB6KZlSmLfHLj6y8s3zme",
+		AvatarKey:    "default",
+	})
+	if err != nil {
+		t.Fatalf("CreateBootstrapAdmin() error = %v", err)
+	}
+	if _, err := ts.CreateAccessToken(ctx, store.CreateAccessTokenInput{
+		UserID:    admin.ID,
+		Name:      "test",
+		TokenHash: "sha256:test-token-a",
+	}); err != nil {
+		t.Fatalf("CreateAccessToken(first) error = %v", err)
+	}
+
+	_, err = ts.CreateAccessToken(ctx, store.CreateAccessTokenInput{
+		UserID:    admin.ID,
+		Name:      "test",
+		TokenHash: "sha256:test-token-b",
+	})
+	if !errors.Is(err, store.ErrAccessTokenNameConflict) {
+		t.Fatalf("CreateAccessToken(duplicate) error = %v, want ErrAccessTokenNameConflict", err)
+	}
+}
+
+func TestAuthRepositoryRejectsDuplicateUserEmail(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+
+	ctx := context.Background()
+	if _, err := ts.CreateUser(ctx, store.CreateUserInput{
+		Email:       "duplicate@example.com",
+		DisplayName: "First",
+		Role:        store.UserRoleUser,
+		AvatarKey:   "default",
+	}); err != nil {
+		t.Fatalf("CreateUser(first) error = %v", err)
+	}
+
+	_, err := ts.CreateUser(ctx, store.CreateUserInput{
+		Email:       "duplicate@example.com",
+		DisplayName: "Second",
+		Role:        store.UserRoleUser,
+		AvatarKey:   "ledger",
+	})
+	if !errors.Is(err, store.ErrUserEmailConflict) {
+		t.Fatalf("CreateUser(duplicate) error = %v, want ErrUserEmailConflict", err)
+	}
+}
+
 func TestAuthRepositoryListsActiveAccessTokenMetadata(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
@@ -253,6 +349,20 @@ func TestAuthRepositoryListsAndUpdatesUsers(t *testing.T) {
 	if len(users) != 2 || users[0].ID != admin.ID || users[1].ID != user.ID {
 		t.Fatalf("users = %#v", users)
 	}
+
+	if err := ts.DeleteUser(ctx, user.ID); err != nil {
+		t.Fatalf("DeleteUser() error = %v", err)
+	}
+	users, err = ts.ListUsers(ctx)
+	if err != nil {
+		t.Fatalf("ListUsers(after delete) error = %v", err)
+	}
+	if len(users) != 1 || users[0].ID != admin.ID {
+		t.Fatalf("users after delete = %#v", users)
+	}
+	if err := ts.DeleteUser(ctx, user.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("DeleteUser(missing) error = %v, want ErrNotFound", err)
+	}
 }
 
 func TestAuthRepositoryCompletesAccountSetupOnce(t *testing.T) {
@@ -261,10 +371,9 @@ func TestAuthRepositoryCompletesAccountSetupOnce(t *testing.T) {
 
 	ctx := context.Background()
 	user, err := ts.CreateUser(ctx, store.CreateUserInput{
-		Email:       "setup@example.com",
-		DisplayName: "Setup User",
-		Role:        store.UserRoleUser,
-		AvatarKey:   "default",
+		Email:     "setup@example.com",
+		Role:      store.UserRoleUser,
+		AvatarKey: "default",
 	})
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
@@ -278,11 +387,17 @@ func TestAuthRepositoryCompletesAccountSetupOnce(t *testing.T) {
 		t.Fatalf("CreateAccountSetupToken() error = %v", err)
 	}
 
-	updated, err := ts.CompleteAccountSetup(ctx, "sha256:setup-token", "$2a$10$newhashabcdefghijklmnop")
+	updated, err := ts.CompleteAccountSetup(ctx, store.CompleteAccountSetupInput{
+		TokenHash:    "sha256:setup-token",
+		PasswordHash: "$2a$10$newhashabcdefghijklmnop",
+		DisplayName:  "Setup User",
+		AvatarKey:    "wallet",
+	})
 	if err != nil {
 		t.Fatalf("CompleteAccountSetup() error = %v", err)
 	}
-	if updated.ID != user.ID || updated.PasswordHash != "$2a$10$newhashabcdefghijklmnop" {
+	if updated.ID != user.ID || updated.PasswordHash != "$2a$10$newhashabcdefghijklmnop" ||
+		updated.DisplayName != "Setup User" || updated.AvatarKey != "wallet" {
 		t.Fatalf("updated user = %#v", updated)
 	}
 	used, err := ts.FindAccountSetupTokenByHash(ctx, token.TokenHash)
@@ -292,7 +407,13 @@ func TestAuthRepositoryCompletesAccountSetupOnce(t *testing.T) {
 	if used.UsedAt == nil {
 		t.Fatalf("setup token was not marked used: %#v", used)
 	}
-	if _, err := ts.CompleteAccountSetup(ctx, "sha256:setup-token", "$2a$10$otherhashabcdefghijklmn"); !errors.Is(err, store.ErrNotFound) {
+	_, err = ts.CompleteAccountSetup(ctx, store.CompleteAccountSetupInput{
+		TokenHash:    "sha256:setup-token",
+		PasswordHash: "$2a$10$otherhashabcdefghijklmn",
+		DisplayName:  "Setup User",
+		AvatarKey:    "default",
+	})
+	if !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("second CompleteAccountSetup() error = %v, want ErrNotFound", err)
 	}
 }

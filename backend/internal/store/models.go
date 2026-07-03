@@ -61,6 +61,14 @@ type UpdateUserInput struct {
 	Disabled    *bool
 }
 
+// CompleteAccountSetupInput completes an invited user's profile and password setup.
+type CompleteAccountSetupInput struct {
+	TokenHash    string
+	PasswordHash string
+	DisplayName  string
+	AvatarKey    string
+}
+
 // Session is a persisted browser session.
 type Session struct {
 	ID         string

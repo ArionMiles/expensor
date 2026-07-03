@@ -3,6 +3,7 @@ import {
   CircleAlert,
   EyeOff,
   LayoutDashboard,
+  LogOut,
   type LucideIcon,
   PanelLeft,
   Plug,
@@ -10,14 +11,15 @@ import {
   Settings2,
   Layers,
 } from 'lucide-react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useTooltip } from '@/hooks/useTooltip'
 import { ThemeToggle } from './ThemeToggle'
 import { useI18n } from '@/i18n/I18nProvider'
 import type { MessageKey } from '@/i18n/messages'
+import { avatarByKey, isAvatarKey } from '@/assets/avatars'
 import { shortcutLabel } from '@/lib/shortcuts'
-import { useExtractionDiagnostics, useReaderStatus } from '@/api/queries'
+import { useExtractionDiagnostics, useLogout, useReaderStatus, useSession } from '@/api/queries'
 
 interface NavItemDef {
   labelKey: MessageKey
@@ -72,6 +74,9 @@ function navItemCls(collapsed: boolean, active = false) {
 export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const { handlers: tipHandlers, tip } = useTooltip('right')
   const { t } = useI18n()
+  const { data: session } = useSession()
+  const logout = useLogout()
+  const navigate = useNavigate()
   const sidebarToggleLabel = `${collapsed ? t('sidebar.open') : t('sidebar.close')} (${shortcutLabel('.')})`
   const { data: gmailStatus, isSuccess: gmailStatusLoaded } = useReaderStatus('gmail')
   const { data: openDiagnostics } = useExtractionDiagnostics('open')
@@ -80,11 +85,17 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
     gmailStatus?.auth_type === 'oauth' &&
     gmailStatus.auth_state === 'reauthorization_required'
   const openDiagnosticsCount = openDiagnostics?.length ?? 0
+  const avatarKey = session && isAvatarKey(session.avatar_key) ? session.avatar_key : 'default'
 
   const diagnosticsCountLabel =
     openDiagnosticsCount === 1
       ? t('sidebar.diagnosticsCount.one')
       : t('sidebar.diagnosticsCount', { count: openDiagnosticsCount })
+  const handleLogout = () => {
+    logout.mutate(undefined, {
+      onSuccess: () => navigate('/login', { replace: true }),
+    })
+  }
 
   return (
     <div
@@ -255,34 +266,57 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           </span>
         </a>
 
-        {/* Admin / workspace placeholder — coming soon for multi-tenant */}
-        <div
-          className={cn(
-            navItemCls(collapsed),
-            'cursor-not-allowed select-none opacity-60',
-            !collapsed && 'border border-border/50',
-          )}
-          {...(collapsed ? tipHandlers('Admin · Multi-tenant coming soon') : {})}
-          aria-disabled="true"
+        <NavLink
+          to="/settings?tab=account"
+          aria-label={
+            session
+              ? `${session.display_name} ${session.email}`
+              : t('nav.settings.account.subtitle')
+          }
+          className={({ isActive }) =>
+            cn(navItemCls(collapsed, isActive), !collapsed && 'border border-border/50')
+          }
+          {...(collapsed && session
+            ? tipHandlers(
+                `${session.display_name} · ${t(session.role === 'admin' ? 'account.role.admin' : 'account.role.user')}`,
+              )
+            : {})}
         >
-          <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-foreground">
-            AD
-          </div>
+          <span
+            data-testid="sidebar-user-avatar"
+            className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full [&_svg]:h-full [&_svg]:w-full"
+            aria-hidden="true"
+            dangerouslySetInnerHTML={{ __html: avatarByKey[avatarKey] }}
+          />
           <div
             className={cn(
               'min-w-0 transition-opacity duration-200',
               collapsed ? 'w-0 overflow-hidden opacity-0' : 'opacity-100',
             )}
           >
-            <p className="truncate text-xs font-medium text-foreground">Admin</p>
-            <p className="flex items-center gap-1 text-[10px] text-muted-foreground">
-              Multi-tenant
-              <span className="rounded border border-border px-1 py-0.5 text-[9px] leading-none">
-                Soon
-              </span>
+            <p className="truncate text-xs font-medium text-foreground">
+              {session?.display_name ?? t('account.title')}
             </p>
+            <p className="truncate text-[10px] text-muted-foreground">{session?.email}</p>
           </div>
-        </div>
+        </NavLink>
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={logout.isPending}
+          {...(collapsed ? tipHandlers(t('sidebar.signOut')) : {})}
+          className={navItemCls(collapsed)}
+        >
+          <LogOut size={16} className="flex-shrink-0" />
+          <span
+            className={cn(
+              'whitespace-nowrap transition-opacity duration-200',
+              collapsed ? 'w-0 overflow-hidden opacity-0' : 'opacity-100',
+            )}
+          >
+            {t('sidebar.signOut')}
+          </span>
+        </button>
       </div>
 
       {tip}

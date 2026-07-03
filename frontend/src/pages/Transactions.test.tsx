@@ -42,8 +42,26 @@ const transactionFixtures = vi.hoisted(() => {
     updated_at: '2026-04-01T08:00:00Z',
   }
 
+  const pharmacy = {
+    id: 'tx-3',
+    message_id: 'msg-3',
+    amount: 3200,
+    currency: 'USD',
+    timestamp: '2026-04-05T09:15:00Z',
+    merchant_info: 'Neighborhood Pharmacy',
+    category: 'Health',
+    bucket: 'Needs',
+    source: { type: 'Debit Card', label: 'SBI Debit Card', bank: 'SBI' },
+    description: 'Medicine',
+    labels: ['Health'],
+    muted: false,
+    muted_by_merchant: false,
+    created_at: '2026-04-05T09:15:00Z',
+    updated_at: '2026-04-05T09:15:00Z',
+  }
+
   return {
-    allTransactions: [coffee, rent],
+    allTransactions: [coffee, pharmacy, rent],
     foodTransactions: [coffee],
     housingTransactions: [rent],
     creditCardTransactions: [coffee],
@@ -203,7 +221,7 @@ describe('Transactions', () => {
 
     expect(await screen.findByText('Corner Coffee')).toBeInTheDocument()
     expect(screen.getByText('City Apartments')).toBeInTheDocument()
-    expect(screen.getByText('2 transactions')).toBeInTheDocument()
+    expect(screen.getByText('3 transactions')).toBeInTheDocument()
     const search = screen.getByRole('searchbox', { name: 'Search transactions' })
     expect(search).toHaveAttribute('type', 'search')
     expect(search).toHaveClass('no-native-search-clear')
@@ -284,6 +302,21 @@ describe('Transactions', () => {
     expect(screen.getByText('1 selected')).toBeInTheDocument()
     expect(screen.getByText(/selected total/i)).toBeInTheDocument()
     expect(screen.queryByText(/total spend/i)).not.toBeInTheDocument()
+  })
+
+  it('selects contiguous transactions with shift-click', async () => {
+    renderTransactions('/transactions')
+
+    await screen.findByText('Corner Coffee')
+    fireEvent.click(screen.getByLabelText(/select transaction corner coffee/i))
+    fireEvent.click(screen.getByLabelText(/select transaction city apartments/i), {
+      shiftKey: true,
+    })
+
+    expect(screen.getByText('3 selected')).toBeInTheDocument()
+    expect(screen.getByLabelText(/select transaction corner coffee/i)).toBeChecked()
+    expect(screen.getByLabelText(/select transaction neighborhood pharmacy/i)).toBeChecked()
+    expect(screen.getByLabelText(/select transaction city apartments/i)).toBeChecked()
   })
 
   it('renders ignore tooltip through the document portal', async () => {

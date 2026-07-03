@@ -1,22 +1,33 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { CommandPalette } from './CommandPalette'
+import { CommandPalette, type CommandPaletteAction } from './CommandPalette'
 import { I18nProvider } from '@/i18n/I18nProvider'
 import { NAVIGATION_TARGETS, type NavigationTarget } from '@/lib/navigation'
 
 function renderCommandPalette({
   targets,
+  actions,
   onClose = vi.fn(),
   onNavigate = vi.fn(),
+  onAction = vi.fn(),
 }: {
   targets: NavigationTarget[]
+  actions?: CommandPaletteAction[]
   onClose?: () => void
   onNavigate?: (path: string) => void
+  onAction?: (id: string) => void
 }) {
   return render(
     <I18nProvider>
-      <CommandPalette open targets={targets} onClose={onClose} onNavigate={onNavigate} />
+      <CommandPalette
+        open
+        targets={targets}
+        actions={actions}
+        onClose={onClose}
+        onNavigate={onNavigate}
+        onAction={onAction}
+      />
     </I18nProvider>,
   )
 }
@@ -38,7 +49,7 @@ describe('CommandPalette', () => {
       'aria-modal',
       'true',
     )
-    expect(screen.getByRole('textbox', { name: 'Search destinations' })).toHaveAttribute(
+    expect(screen.getByRole('textbox', { name: 'Search commands' })).toHaveAttribute(
       'autocomplete',
       'off',
     )
@@ -159,5 +170,96 @@ describe('CommandPalette', () => {
 
     expect(screen.getByText('Expense Groups / Labels')).toBeInTheDocument()
     expect(onNavigate).toHaveBeenCalledWith('/expense-groups?tab=labels')
+  })
+
+  it('renders quick actions separately from navigation and runs the selected action', async () => {
+    const user = userEvent.setup()
+    const onAction = vi.fn()
+    const onNavigate = vi.fn()
+
+    renderCommandPalette({
+      targets: [
+        {
+          id: 'dashboard',
+          titleKey: 'nav.dashboard',
+          descriptionKey: 'nav.dashboard.description',
+          path: '/',
+        },
+      ],
+      actions: [
+        {
+          id: 'logout',
+          titleKey: 'sidebar.signOut',
+          descriptionKey: 'command.actions.signOut.description',
+          variant: 'destructive',
+        },
+      ],
+      onAction,
+      onNavigate,
+    })
+
+    expect(screen.getByText('Navigation')).toBeInTheDocument()
+    expect(screen.getByText('Actions')).toBeInTheDocument()
+    expect(screen.getByText('End this browser session')).toBeInTheDocument()
+
+    const signOut = screen.getByRole('button', { name: /Sign out/ })
+    expect(signOut).toHaveClass('text-destructive')
+    await user.click(signOut)
+
+    expect(onAction).toHaveBeenCalledWith('logout')
+    expect(onNavigate).not.toHaveBeenCalled()
+  })
+
+  it('orders actions before navigation in the result list', () => {
+    renderCommandPalette({
+      targets: [
+        {
+          id: 'dashboard',
+          titleKey: 'nav.dashboard',
+          descriptionKey: 'nav.dashboard.description',
+          path: '/',
+        },
+      ],
+      actions: [
+        {
+          id: 'create-rule',
+          titleKey: 'command.actions.createRule',
+          descriptionKey: 'command.actions.createRule.description',
+        },
+      ],
+    })
+
+    const labels = screen.getAllByText(/Actions|Navigation/).map((element) => element.textContent)
+    expect(labels).toEqual(['Actions', 'Navigation'])
+  })
+
+  it('includes command actions in keyboard search results', async () => {
+    const user = userEvent.setup()
+    const onAction = vi.fn()
+
+    renderCommandPalette({
+      targets: [
+        {
+          id: 'dashboard',
+          titleKey: 'nav.dashboard',
+          descriptionKey: 'nav.dashboard.description',
+          path: '/',
+        },
+      ],
+      actions: [
+        {
+          id: 'logout',
+          titleKey: 'sidebar.signOut',
+          descriptionKey: 'command.actions.signOut.description',
+          variant: 'destructive',
+        },
+      ],
+      onAction,
+    })
+
+    await user.type(screen.getByRole('textbox'), 'logout')
+    await user.keyboard('{Enter}')
+
+    expect(onAction).toHaveBeenCalledWith('logout')
   })
 })

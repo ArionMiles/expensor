@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -41,10 +42,8 @@ type updateProfileRequest struct {
 }
 
 type createUserRequest struct {
-	Email       string `json:"email" validate:"required,email" example:"contract-user@example.com"`
-	DisplayName string `json:"display_name" validate:"required,no_control_chars" example:"Contract User"`
-	Role        string `json:"role" validate:"omitempty,oneof=admin user" example:"user"`
-	AvatarKey   string `json:"avatar_key" validate:"omitempty,no_control_chars,oneof=default ledger wallet" example:"default"`
+	Email string `json:"email" validate:"required,email" example:"contract-user@example.com"`
+	Role  string `json:"role" validate:"omitempty,oneof=admin user" example:"user"`
 }
 
 type updateUserRequest struct {
@@ -55,8 +54,10 @@ type updateUserRequest struct {
 }
 
 type completeAccountSetupRequest struct {
-	Token    string `json:"token" validate:"required" example:"expensor_setup_invalid"`
-	Password string `json:"password" validate:"required,min=12" example:"correct horse battery staple"`
+	Token       string `json:"token" validate:"required" example:"expensor_setup_invalid"`
+	DisplayName string `json:"display_name" validate:"required,no_control_chars" example:"Contract User"`
+	Password    string `json:"password" validate:"required,min=12" example:"correct horse battery staple"`
+	AvatarKey   string `json:"avatar_key" validate:"omitempty,no_control_chars,oneof=default ledger wallet" example:"default"`
 }
 
 type bootstrapResponse struct {
@@ -82,15 +83,21 @@ type accessTokenResponse struct {
 }
 
 type userResponse struct {
-	UserID      string     `json:"user_id"`
-	TenantID    string     `json:"tenant_id"`
-	Email       string     `json:"email"`
-	DisplayName string     `json:"display_name"`
-	Role        string     `json:"role"`
-	AvatarKey   string     `json:"avatar_key"`
-	DisabledAt  *time.Time `json:"disabled_at,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	UserID       string     `json:"user_id"`
+	TenantID     string     `json:"tenant_id"`
+	Email        string     `json:"email"`
+	DisplayName  string     `json:"display_name"`
+	Role         string     `json:"role"`
+	AvatarKey    string     `json:"avatar_key"`
+	SetupPending bool       `json:"setup_pending"`
+	DisabledAt   *time.Time `json:"disabled_at,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+type accountSetupResponse struct {
+	Email     string `json:"email"`
+	AvatarKey string `json:"avatar_key"`
 }
 
 type setupTokenResponse struct {
@@ -288,6 +295,7 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 // @Success 201 {object} accessTokenResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /tokens [post]
@@ -313,6 +321,10 @@ func (h *Handlers) CreateAccessToken(w http.ResponseWriter, r *http.Request) {
 		TokenHash: hash,
 	})
 	if err != nil {
+		if errors.Is(err, store.ErrAccessTokenNameConflict) {
+			writeError(w, http.StatusConflict, fmt.Sprintf("Token %s already exists.", strings.TrimSpace(body.Name)))
+			return
+		}
 		h.logger.Error("create access token", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create token")
 		return
@@ -386,6 +398,7 @@ func (h *Handlers) RevokeAccessToken(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /admin/users [post]
@@ -402,17 +415,20 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 		role = store.UserRoleUser
 	}
 	user, err := h.authStore.CreateUser(r.Context(), store.CreateUserInput{
-		Email:       strings.ToLower(strings.TrimSpace(body.Email)),
-		DisplayName: strings.TrimSpace(body.DisplayName),
-		Role:        role,
-		AvatarKey:   normalizeAvatarKey(body.AvatarKey),
+		Email:     strings.ToLower(strings.TrimSpace(body.Email)),
+		Role:      role,
+		AvatarKey: "default",
 	})
 	if err != nil {
+		if errors.Is(err, store.ErrUserEmailConflict) {
+			writeError(w, http.StatusConflict, fmt.Sprintf("User %s already exists.", strings.ToLower(strings.TrimSpace(body.Email))))
+			return
+		}
 		h.logger.Error("create user", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create user")
 		return
 	}
-	writeJSON(w, http.StatusCreated, principalFromUser(user))
+	writeJSON(w, http.StatusCreated, userFromStore(user))
 }
 
 // ListUsers returns instance users for administrators.
@@ -460,6 +476,11 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if !requireAdmin(w, r) {
 		return
 	}
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
 	body, ok := decodeAndValidateJSON[updateUserRequest](h, w, r)
 	if !ok {
 		return
@@ -468,7 +489,16 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	user, err := h.authStore.UpdateUser(r.Context(), r.PathValue("id"), input)
+	userID := r.PathValue("id")
+	if input.Role != nil && userID == principal.UserID {
+		writeError(w, http.StatusForbidden, "cannot change your own role")
+		return
+	}
+	if input.Disabled != nil && *input.Disabled && userID == principal.UserID {
+		writeError(w, http.StatusForbidden, "cannot disable your own account")
+		return
+	}
+	user, err := h.authStore.UpdateUser(r.Context(), userID, input)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "user not found")
@@ -481,6 +511,42 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, userFromStore(user))
 }
 
+// DeleteUser deletes an instance user for administrators.
+// @Summary Delete an instance user
+// @Tags Auth
+// @Param id path string true "User ID" example(00000000-0000-0000-0000-00000000c0de)
+// @Success 204
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /admin/users/{id} [delete]
+func (h *Handlers) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	if !requireAdmin(w, r) {
+		return
+	}
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	userID := r.PathValue("id")
+	if userID == principal.UserID {
+		writeError(w, http.StatusForbidden, "cannot delete your own account")
+		return
+	}
+	if err := h.authStore.DeleteUser(r.Context(), userID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		h.logger.Error("delete user", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to delete user")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // CreateSetupToken creates a one-time setup token for an instance user.
 // @Summary Create a user setup token
 // @Tags Auth
@@ -490,6 +556,7 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /admin/users/{id}/setup-tokens [post]
 func (h *Handlers) CreateSetupToken(w http.ResponseWriter, r *http.Request) {
@@ -497,13 +564,18 @@ func (h *Handlers) CreateSetupToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := r.PathValue("id")
-	if _, err := h.authStore.FindUserByID(r.Context(), userID); err != nil {
+	user, err := h.authStore.FindUserByID(r.Context(), userID)
+	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "user not found")
 			return
 		}
 		h.logger.Error("find setup token user", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create setup token")
+		return
+	}
+	if strings.TrimSpace(user.PasswordHash) != "" {
+		writeError(w, http.StatusConflict, "account already set up")
 		return
 	}
 	raw, hash, err := auth.NewOpaqueToken(setupTokenPrefix)
@@ -524,6 +596,26 @@ func (h *Handlers) CreateSetupToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, setupTokenResponse{Token: raw, ExpiresAt: token.ExpiresAt})
+}
+
+// GetAccountSetup returns public setup metadata for a valid one-time setup token.
+// @Summary Get account setup metadata
+// @Tags Auth
+// @Produce json
+// @Param token query string true "Setup token" example(expensor_setup_invalid)
+// @Success 200 {object} accountSetupResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /account-setup [get]
+func (h *Handlers) GetAccountSetup(w http.ResponseWriter, r *http.Request) {
+	user, ok := h.accountSetupUserFromToken(w, r)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, accountSetupResponse{
+		Email:     user.Email,
+		AvatarKey: normalizeAvatarKey(user.AvatarKey),
+	})
 }
 
 // CompleteAccountSetup sets a password from a one-time setup token.
@@ -549,7 +641,12 @@ func (h *Handlers) CompleteAccountSetup(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, "failed to complete account setup")
 		return
 	}
-	user, err := h.authStore.CompleteAccountSetup(r.Context(), auth.HashOpaqueToken(strings.TrimSpace(body.Token)), passwordHash)
+	user, err := h.authStore.CompleteAccountSetup(r.Context(), store.CompleteAccountSetupInput{
+		TokenHash:    auth.HashOpaqueToken(strings.TrimSpace(body.Token)),
+		PasswordHash: passwordHash,
+		DisplayName:  strings.TrimSpace(body.DisplayName),
+		AvatarKey:    normalizeAvatarKey(body.AvatarKey),
+	})
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusUnauthorized, "invalid or expired setup token")
@@ -563,6 +660,39 @@ func (h *Handlers) CompleteAccountSetup(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusCreated, principalFromUser(user))
+}
+
+func (h *Handlers) accountSetupUserFromToken(w http.ResponseWriter, r *http.Request) (*store.User, bool) {
+	tokenValue := strings.TrimSpace(r.URL.Query().Get("token"))
+	if tokenValue == "" {
+		writeError(w, http.StatusUnauthorized, "invalid or expired setup token")
+		return nil, false
+	}
+	setupToken, err := h.authStore.FindAccountSetupTokenByHash(r.Context(), auth.HashOpaqueToken(tokenValue))
+	if err != nil || setupToken.UsedAt != nil || !setupToken.ExpiresAt.After(time.Now()) {
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			h.logger.Error("find account setup token", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to fetch account setup")
+			return nil, false
+		}
+		writeError(w, http.StatusUnauthorized, "invalid or expired setup token")
+		return nil, false
+	}
+	user, err := h.authStore.FindUserByID(r.Context(), setupToken.UserID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusUnauthorized, "invalid or expired setup token")
+			return nil, false
+		}
+		h.logger.Error("find setup token user", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to fetch account setup")
+		return nil, false
+	}
+	if strings.TrimSpace(user.PasswordHash) != "" {
+		writeError(w, http.StatusUnauthorized, "invalid or expired setup token")
+		return nil, false
+	}
+	return user, true
 }
 
 func (h *Handlers) createSessionCookie(w http.ResponseWriter, r *http.Request, user *store.User) bool {
@@ -636,15 +766,16 @@ func principalFromUser(user *store.User) principalResponse {
 
 func userFromStore(user *store.User) userResponse {
 	return userResponse{
-		UserID:      user.ID,
-		TenantID:    user.TenantID,
-		Email:       user.Email,
-		DisplayName: user.DisplayName,
-		Role:        string(user.Role),
-		AvatarKey:   user.AvatarKey,
-		DisabledAt:  user.DisabledAt,
-		CreatedAt:   user.CreatedAt,
-		UpdatedAt:   user.UpdatedAt,
+		UserID:       user.ID,
+		TenantID:     user.TenantID,
+		Email:        user.Email,
+		DisplayName:  user.DisplayName,
+		Role:         string(user.Role),
+		AvatarKey:    user.AvatarKey,
+		SetupPending: strings.TrimSpace(user.PasswordHash) == "",
+		DisabledAt:   user.DisabledAt,
+		CreatedAt:    user.CreatedAt,
+		UpdatedAt:    user.UpdatedAt,
 	}
 }
 

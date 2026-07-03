@@ -14,6 +14,7 @@ type authStore interface {
 	CreateUser(ctx context.Context, input store.CreateUserInput) (*store.User, error)
 	ListUsers(ctx context.Context) ([]store.User, error)
 	UpdateUser(ctx context.Context, id string, input store.UpdateUserInput) (*store.User, error)
+	DeleteUser(ctx context.Context, id string) error
 	FindUserByEmail(ctx context.Context, email string) (*store.User, error)
 	FindUserByID(ctx context.Context, id string) (*store.User, error)
 	CreateSession(ctx context.Context, input store.CreateSessionInput) (*store.Session, error)
@@ -26,7 +27,7 @@ type authStore interface {
 	CreateAccountSetupToken(ctx context.Context, input store.CreateAccountSetupTokenInput) (*store.AccountSetupToken, error)
 	FindAccountSetupTokenByHash(ctx context.Context, tokenHash string) (*store.AccountSetupToken, error)
 	MarkAccountSetupTokenUsed(ctx context.Context, id string) error
-	CompleteAccountSetup(ctx context.Context, tokenHash, passwordHash string) (*store.User, error)
+	CompleteAccountSetup(ctx context.Context, input store.CompleteAccountSetupInput) (*store.User, error)
 }
 
 type settingsStore interface {

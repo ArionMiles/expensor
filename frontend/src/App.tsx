@@ -6,6 +6,7 @@ import { AppLayout } from '@/components/AppLayout'
 import { DisplayProvider } from '@/contexts/DisplayContext'
 import { I18nProvider } from '@/i18n/I18nProvider'
 import { useSetupStatus } from '@/api/queries'
+import { AuthGate } from '@/pages/auth/AuthPages'
 
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const Transactions = lazy(() => import('@/pages/Transactions'))
@@ -16,8 +17,17 @@ const RuleForm = lazy(() => import('@/pages/rules/RuleForm').then((m) => ({ defa
 const Diagnostics = lazy(() => import('@/pages/Diagnostics'))
 const ExpenseGroupsPage = lazy(() => import('@/pages/ExpenseGroupsPage'))
 const IgnoredPage = lazy(() => import('@/pages/IgnoredPage'))
+const LoginPage = lazy(() =>
+  import('@/pages/auth/AuthPages').then((m) => ({ default: m.LoginPage })),
+)
+const BootstrapPage = lazy(() =>
+  import('@/pages/auth/AuthPages').then((m) => ({ default: m.BootstrapPage })),
+)
+const AccountSetupPage = lazy(() =>
+  import('@/pages/auth/AuthPages').then((m) => ({ default: m.AccountSetupPage })),
+)
 
-const queryClient = new QueryClient({
+export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 2,
@@ -71,93 +81,137 @@ export function App() {
         <DisplayProvider>
           <BrowserRouter>
             <ErrorBoundary>
-              <FirstRunGate>
+              <AuthGate>
                 <Routes>
+                  <Route
+                    path="/login"
+                    element={
+                      <PageSuspense>
+                        <LoginPage />
+                      </PageSuspense>
+                    }
+                  />
+                  <Route
+                    path="/bootstrap"
+                    element={
+                      <PageSuspense>
+                        <BootstrapPage />
+                      </PageSuspense>
+                    }
+                  />
+                  <Route
+                    path="/account-setup"
+                    element={
+                      <PageSuspense>
+                        <AccountSetupPage />
+                      </PageSuspense>
+                    }
+                  />
                   <Route element={<AppLayout />}>
                     <Route
                       path="/"
                       element={
-                        <PageSuspense>
-                          <Dashboard />
-                        </PageSuspense>
+                        <FirstRunGate>
+                          <PageSuspense>
+                            <Dashboard />
+                          </PageSuspense>
+                        </FirstRunGate>
                       }
                     />
                     <Route
                       path="/transactions"
                       element={
-                        <PageSuspense>
-                          <Transactions />
-                        </PageSuspense>
+                        <FirstRunGate>
+                          <PageSuspense>
+                            <Transactions />
+                          </PageSuspense>
+                        </FirstRunGate>
                       }
                     />
                     <Route
                       path="/setup"
                       element={
-                        <PageSuspense>
-                          <Wizard />
-                        </PageSuspense>
+                        <FirstRunGate>
+                          <PageSuspense>
+                            <Wizard />
+                          </PageSuspense>
+                        </FirstRunGate>
                       }
                     />
                     <Route
                       path="/settings"
                       element={
-                        <PageSuspense>
-                          <Settings />
-                        </PageSuspense>
+                        <FirstRunGate>
+                          <PageSuspense>
+                            <Settings />
+                          </PageSuspense>
+                        </FirstRunGate>
                       }
                     />
                     <Route
                       path="/rules"
                       element={
-                        <PageSuspense>
-                          <Rules />
-                        </PageSuspense>
+                        <FirstRunGate>
+                          <PageSuspense>
+                            <Rules />
+                          </PageSuspense>
+                        </FirstRunGate>
                       }
                     />
                     <Route
                       path="/rules/new"
                       element={
-                        <PageSuspense>
-                          <RuleForm />
-                        </PageSuspense>
+                        <FirstRunGate>
+                          <PageSuspense>
+                            <RuleForm />
+                          </PageSuspense>
+                        </FirstRunGate>
                       }
                     />
                     <Route
                       path="/rules/:id"
                       element={
-                        <PageSuspense>
-                          <RuleForm />
-                        </PageSuspense>
+                        <FirstRunGate>
+                          <PageSuspense>
+                            <RuleForm />
+                          </PageSuspense>
+                        </FirstRunGate>
                       }
                     />
                     <Route
                       path="/diagnostics"
                       element={
-                        <PageSuspense>
-                          <Diagnostics />
-                        </PageSuspense>
+                        <FirstRunGate>
+                          <PageSuspense>
+                            <Diagnostics />
+                          </PageSuspense>
+                        </FirstRunGate>
                       }
                     />
                     <Route
                       path="/expense-groups"
                       element={
-                        <PageSuspense>
-                          <ExpenseGroupsPage />
-                        </PageSuspense>
+                        <FirstRunGate>
+                          <PageSuspense>
+                            <ExpenseGroupsPage />
+                          </PageSuspense>
+                        </FirstRunGate>
                       }
                     />
                     <Route
                       path="/ignored"
                       element={
-                        <PageSuspense>
-                          <IgnoredPage />
-                        </PageSuspense>
+                        <FirstRunGate>
+                          <PageSuspense>
+                            <IgnoredPage />
+                          </PageSuspense>
+                        </FirstRunGate>
                       }
                     />
                     <Route path="/muted" element={<RedirectToIgnored />} />
                   </Route>
                 </Routes>
-              </FirstRunGate>
+              </AuthGate>
             </ErrorBoundary>
           </BrowserRouter>
         </DisplayProvider>

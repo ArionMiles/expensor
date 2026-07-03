@@ -130,6 +130,17 @@ func (r *pgAuthRepository) UpdateUser(ctx context.Context, id string, input Upda
 	return user, nil
 }
 
+func (r *pgAuthRepository) DeleteUser(ctx context.Context, id string) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("deleting user: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *pgAuthRepository) FindUserByEmail(ctx context.Context, email string) (*User, error) {
 	user, err := scanUser(r.pool.QueryRow(ctx, `
 		SELECT id, id AS tenant_id, email, COALESCE(password_hash, ''), display_name, role, avatar_key,
@@ -207,6 +218,9 @@ func (r *pgAuthRepository) CreateAccessToken(ctx context.Context, input CreateAc
 		RETURNING id, user_id, name, token_hash, created_at, expires_at, last_used_at, revoked_at
 	`, input.UserID, input.Name, input.TokenHash, input.ExpiresAt))
 	if err != nil {
+		if isAccessTokenNameConflict(err) {
+			return nil, ErrAccessTokenNameConflict
+		}
 		return nil, fmt.Errorf("creating access token: %w", err)
 	}
 	return token, nil
@@ -302,7 +316,7 @@ func (r *pgAuthRepository) MarkAccountSetupTokenUsed(ctx context.Context, id str
 	return nil
 }
 
-func (r *pgAuthRepository) CompleteAccountSetup(ctx context.Context, tokenHash, passwordHash string) (*User, error) {
+func (r *pgAuthRepository) CompleteAccountSetup(ctx context.Context, input CompleteAccountSetupInput) (*User, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("beginning account setup transaction: %w", err)
@@ -316,7 +330,7 @@ func (r *pgAuthRepository) CompleteAccountSetup(ctx context.Context, tokenHash, 
 		FROM account_setup_tokens
 		WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()
 		FOR UPDATE
-	`, tokenHash))
+	`, input.TokenHash))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -326,11 +340,14 @@ func (r *pgAuthRepository) CompleteAccountSetup(ctx context.Context, tokenHash, 
 
 	user, err := scanUser(tx.QueryRow(ctx, `
 		UPDATE users
-		SET password_hash = $2, updated_at = NOW()
+		SET password_hash = $2,
+		    display_name = $3,
+		    avatar_key = $4,
+		    updated_at = NOW()
 		WHERE id = $1
 		RETURNING id, id AS tenant_id, email, COALESCE(password_hash, ''), display_name, role, avatar_key,
 		          disabled_at, created_at, updated_at
-	`, token.UserID, passwordHash))
+	`, token.UserID, input.PasswordHash, input.DisplayName, input.AvatarKey))
 	if err != nil {
 		return nil, fmt.Errorf("updating setup password: %w", err)
 	}
@@ -359,6 +376,9 @@ func insertUser(ctx context.Context, tx pgx.Tx, input CreateUserInput) (*User, e
 		          disabled_at, created_at, updated_at
 	`, input.Email, input.PasswordHash, input.DisplayName, role, avatarKey))
 	if err != nil {
+		if isUserEmailConflict(err) {
+			return nil, ErrUserEmailConflict
+		}
 		return nil, fmt.Errorf("creating user: %w", err)
 	}
 	return user, nil

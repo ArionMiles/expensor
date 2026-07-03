@@ -79,6 +79,15 @@ func (s *InstrumentedStore) UpdateUser(ctx context.Context, id string, input Upd
 	return user, err
 }
 
+func (s *InstrumentedStore) DeleteUser(ctx context.Context, id string) error {
+	ctx, span := s.scope.Start(ctx, "store.auth.delete_user")
+	defer span.End()
+
+	err := s.next.DeleteUser(ctx, id)
+	s.recordOperation(ctx, "auth.delete_user", err)
+	return err
+}
+
 func (s *InstrumentedStore) FindUserByEmail(ctx context.Context, email string) (*User, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.find_user_by_email")
 	defer span.End()
@@ -187,11 +196,11 @@ func (s *InstrumentedStore) MarkAccountSetupTokenUsed(ctx context.Context, id st
 	return err
 }
 
-func (s *InstrumentedStore) CompleteAccountSetup(ctx context.Context, tokenHash, passwordHash string) (*User, error) {
+func (s *InstrumentedStore) CompleteAccountSetup(ctx context.Context, input CompleteAccountSetupInput) (*User, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.complete_account_setup")
 	defer span.End()
 
-	user, err := s.next.CompleteAccountSetup(ctx, tokenHash, passwordHash)
+	user, err := s.next.CompleteAccountSetup(ctx, input)
 	s.recordOperation(ctx, "auth.complete_account_setup", err)
 	return user, err
 }

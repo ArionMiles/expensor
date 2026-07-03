@@ -11,6 +11,7 @@ import { useDisplay } from '@/contexts/DisplayContext'
 import { useTooltip } from '@/hooks/useTooltip'
 import { formatNumberForLocale } from '@/i18n/format'
 import { useI18n } from '@/i18n/I18nProvider'
+import { toggleOrderedSelection } from '@/lib/rangeSelection'
 import { cn, formatCurrency } from '@/lib/utils'
 import { ChevronDown, ChevronUp, Eye, EyeOff, Funnel, X } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -179,11 +180,15 @@ export function Transactions() {
   const totalAmount = data?.total_amount ?? 0
   const baseCurrency = data?.base_currency ?? 'INR'
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const selectionAnchorIdRef = useRef<string | null>(null)
   const [bulkIgnoreMode, setBulkIgnoreMode] = useState<'transactions' | 'merchants' | null>(null)
   const [bulkReason, setBulkReason] = useState('')
 
   useEffect(() => {
     const currentPageIDs = new Set(transactions.map((tx) => tx.id))
+    if (selectionAnchorIdRef.current && !currentPageIDs.has(selectionAnchorIdRef.current)) {
+      selectionAnchorIdRef.current = null
+    }
     setSelectedIds((prev) => new Set([...prev].filter((id) => currentPageIDs.has(id))))
   }, [transactions])
 
@@ -221,16 +226,22 @@ export function Transactions() {
   const toggleSort = () =>
     updateParams({ sort_dir: sortDir === 'desc' ? 'asc' : 'desc', page: '1' })
 
-  const toggleRowSelection = (id: string) => {
+  const toggleRowSelection = (id: string, extendRange: boolean) => {
     setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
+      const result = toggleOrderedSelection({
+        orderedIds: transactions.map((tx) => tx.id),
+        selectedIds: prev,
+        id,
+        anchorId: selectionAnchorIdRef.current,
+        extendRange,
+      })
+      selectionAnchorIdRef.current = result.anchorId
+      return result.selectedIds
     })
   }
 
   const toggleSelectAllCurrentPage = () => {
+    selectionAnchorIdRef.current = null
     setSelectedIds(() => {
       if (allSelected) return new Set()
       return new Set(transactions.map((tx) => tx.id))
@@ -529,7 +540,7 @@ export function Transactions() {
                     tx={tx}
                     banks={banks}
                     selected={selectedIds.has(tx.id)}
-                    onToggleSelect={() => toggleRowSelection(tx.id)}
+                    onToggleSelect={(event) => toggleRowSelection(tx.id, event.shiftKey)}
                     searchQuery={debouncedSearch}
                   />
                 ))}

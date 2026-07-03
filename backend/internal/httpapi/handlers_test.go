@@ -116,16 +116,19 @@ type mockStore struct {
 	bootstrapRequired          bool
 	createdBootstrapAdmin      store.CreateBootstrapAdminInput
 	createdUser                store.CreateUserInput
+	createUserErr              error
 	users                      []store.User
 	updatedUserID              string
 	updatedUser                store.UpdateUserInput
 	updatedUserResult          *store.User
+	deletedUserID              string
 	usersByEmail               map[string]*store.User
 	usersByID                  map[string]*store.User
 	createdSession             store.CreateSessionInput
 	sessionsByHash             map[string]*store.Session
 	revokedSessionID           string
 	createdAccessToken         store.CreateAccessTokenInput
+	createAccessTokenErr       error
 	accessTokens               []store.AccessToken
 	listedAccessTokensUserID   string
 	accessTokensByHash         map[string]*store.AccessToken
@@ -136,6 +139,8 @@ type mockStore struct {
 	usedSetupTokenID           string
 	completedSetupTokenHash    string
 	completedSetupPasswordHash string
+	completedSetupDisplayName  string
+	completedSetupAvatarKey    string
 	completedSetupUser         *store.User
 	lastAppConfigTenant        store.Tenant
 }
@@ -159,6 +164,9 @@ func (m *mockStore) CreateBootstrapAdmin(_ context.Context, input store.CreateBo
 
 func (m *mockStore) CreateUser(_ context.Context, input store.CreateUserInput) (*store.User, error) {
 	m.createdUser = input
+	if m.createUserErr != nil {
+		return nil, m.createUserErr
+	}
 	return &store.User{
 		ID:           "user-id",
 		TenantID:     "user-id",
@@ -193,6 +201,17 @@ func (m *mockStore) UpdateUser(_ context.Context, id string, input store.UpdateU
 		Role:        store.UserRoleUser,
 		AvatarKey:   "default",
 	}, nil
+}
+
+func (m *mockStore) DeleteUser(_ context.Context, id string) error {
+	m.deletedUserID = id
+	if m.usersByID != nil {
+		if _, ok := m.usersByID[id]; !ok {
+			return store.ErrNotFound
+		}
+		delete(m.usersByID, id)
+	}
+	return nil
 }
 
 func (m *mockStore) FindUserByEmail(_ context.Context, email string) (*store.User, error) {
@@ -234,6 +253,9 @@ func (m *mockStore) RevokeSession(_ context.Context, id string) error {
 
 func (m *mockStore) CreateAccessToken(_ context.Context, input store.CreateAccessTokenInput) (*store.AccessToken, error) {
 	m.createdAccessToken = input
+	if m.createAccessTokenErr != nil {
+		return nil, m.createAccessTokenErr
+	}
 	return &store.AccessToken{ID: "access-token-id", UserID: input.UserID, Name: input.Name, TokenHash: input.TokenHash, ExpiresAt: input.ExpiresAt}, nil
 }
 
@@ -276,9 +298,11 @@ func (m *mockStore) MarkAccountSetupTokenUsed(_ context.Context, id string) erro
 	return nil
 }
 
-func (m *mockStore) CompleteAccountSetup(_ context.Context, tokenHash, passwordHash string) (*store.User, error) {
-	m.completedSetupTokenHash = tokenHash
-	m.completedSetupPasswordHash = passwordHash
+func (m *mockStore) CompleteAccountSetup(_ context.Context, input store.CompleteAccountSetupInput) (*store.User, error) {
+	m.completedSetupTokenHash = input.TokenHash
+	m.completedSetupPasswordHash = input.PasswordHash
+	m.completedSetupDisplayName = input.DisplayName
+	m.completedSetupAvatarKey = input.AvatarKey
 	if m.completedSetupUser != nil {
 		return m.completedSetupUser, nil
 	}

@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n/I18nProvider'
 import { type ReactNode, useEffect, useId } from 'react'
+import { createPortal } from 'react-dom'
 
 interface ConfirmModalProps {
   title: string
@@ -39,9 +40,9 @@ export function ConfirmModal({
     return () => document.removeEventListener('keydown', handler)
   }, [onCancel])
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-background/80 backdrop-blur-sm"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCancel()
       }}
@@ -86,6 +87,7 @@ export function ConfirmModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

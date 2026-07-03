@@ -52,6 +52,7 @@ const TITLE_ROUTES: Record<string, TitleRoute> = {
         general: 'nav.settings.general.subtitle',
         daemon: 'nav.settings.daemon.subtitle',
         sync: 'nav.settings.sync.subtitle',
+        account: 'nav.settings.account.subtitle',
       },
     },
   },

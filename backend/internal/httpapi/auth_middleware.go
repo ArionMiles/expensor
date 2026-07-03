@@ -40,6 +40,8 @@ func isPublicRoute(r *http.Request) bool {
 		return true
 	case r.Method == http.MethodPost && r.URL.Path == "/api/session":
 		return true
+	case r.Method == http.MethodGet && r.URL.Path == "/api/account-setup":
+		return true
 	case r.Method == http.MethodPost && r.URL.Path == "/api/account-setup":
 		return true
 	case r.Method == http.MethodGet && r.URL.Path == "/api/auth/callback":
