@@ -108,7 +108,7 @@ export const messages = {
     'account.users.new': 'New user',
     'account.users.createTitle': 'Create New User',
     'account.users.inviteTitle': 'Invite {email}',
-    'account.users.inviteSummary': 'Copy this setup link now, or use the pending user row later.',
+    'account.users.inviteSummary': 'Share this link with the user to finish account setup',
     'account.users.edit': 'Edit user {name}',
     'account.users.editAria': 'Edit user {name}',
     'account.users.saveChanges': 'Save changes',

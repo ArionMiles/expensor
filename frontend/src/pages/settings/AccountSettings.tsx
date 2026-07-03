@@ -1,5 +1,13 @@
 import { Check, Copy, Pencil, Plus, Trash2 } from 'lucide-react'
-import { FormEvent, useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import {
+  FormEvent,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from 'react'
 import { createPortal } from 'react-dom'
 import {
   useAccessTokens,
@@ -25,28 +33,61 @@ function TextField({
   label,
   value,
   type = 'text',
+  inputMode,
   disabled = false,
+  message,
+  tone,
   onChange,
 }: {
   label: string
   value: string
   type?: string
+  inputMode?: InputHTMLAttributes<HTMLInputElement>['inputMode']
   disabled?: boolean
+  message?: string
+  tone?: 'warning' | 'destructive'
   onChange: (value: string) => void
 }) {
+  const id = useId()
+  const messageId = `${id}-message`
+
   return (
-    <label className="block">
-      <span className="mb-1.5 block text-xs uppercase tracking-wider text-muted-foreground">
+    <div className="block">
+      <label
+        htmlFor={id}
+        className="mb-1.5 block text-xs uppercase tracking-wider text-muted-foreground"
+      >
         {label}
-      </span>
+      </label>
       <input
+        id={id}
         type={type}
         value={value}
         disabled={disabled}
+        inputMode={inputMode}
+        aria-invalid={tone === 'warning' || tone === 'destructive'}
+        aria-describedby={message ? messageId : undefined}
         onChange={(event) => onChange(event.currentTarget.value)}
-        className="w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-ring disabled:opacity-70"
+        className={cn(
+          'w-full rounded-md border bg-input px-3 py-2 text-sm text-foreground outline-none transition-colors focus:ring-1 disabled:opacity-70',
+          tone === 'warning' && 'border-warning focus:border-warning focus:ring-warning/40',
+          tone === 'destructive' &&
+            'border-destructive focus:border-destructive focus:ring-destructive/40',
+          !tone && 'border-border focus:border-primary focus:ring-ring',
+        )}
       />
-    </label>
+      {message && (
+        <p
+          id={messageId}
+          className={cn(
+            'mt-1.5 text-xs',
+            tone === 'destructive' ? 'text-destructive' : 'text-warning',
+          )}
+        >
+          {message}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -79,6 +120,17 @@ function ErrorText({ error }: { error: unknown }) {
       {error instanceof Error ? error.message : t('auth.error.requestFailed')}
     </p>
   )
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+}
+
+function userEmailConflictMessage(error: unknown, email: string) {
+  if (!(error instanceof Error)) return ''
+  const match = /^User (.+) already exists\.$/.exec(error.message)
+  if (!match) return ''
+  return match[1].toLowerCase() === email.trim().toLowerCase() ? error.message : ''
 }
 
 function AccountModal({
@@ -767,7 +819,9 @@ function AdminUsersSection() {
           title={t('account.users.deleteTitle')}
           message={
             <div className="space-y-2">
-              <p>{t('account.users.deleteMessage', { name: deleteCandidate.display_name })}</p>
+              <p>
+                {t('account.users.deleteMessage', { name: displayNameForUser(deleteCandidate) })}
+              </p>
               <ErrorText error={deleteUser.error} />
             </div>
           }
@@ -808,6 +862,7 @@ function UserFormModal({
 }) {
   const { t } = useI18n()
   const [email, setEmail] = useState(user?.email ?? '')
+  const [emailTouched, setEmailTouched] = useState(false)
   const [role, setRole] = useState<UserRole>(user?.role ?? 'user')
   const [disabledAccount, setDisabledAccount] = useState(!!user?.disabled_at)
   const title =
@@ -815,9 +870,18 @@ function UserFormModal({
       ? t('account.users.createTitle')
       : t('account.users.edit', { name: displayNameForUser(user) })
   const disabled = pending || (mode === 'create' && !email.trim())
+  const showEmailWarning =
+    mode === 'create' && emailTouched && email.trim().length > 0 && !isValidEmail(email)
+  const emailConflictMessage = mode === 'create' ? userEmailConflictMessage(error, email) : ''
+  const emailMessage = showEmailWarning
+    ? t('auth.validation.email')
+    : emailConflictMessage || undefined
+  const emailTone = showEmailWarning ? 'warning' : emailConflictMessage ? 'destructive' : undefined
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
+    setEmailTouched(true)
+    if (mode === 'create' && !isValidEmail(email)) return
     onSubmit({
       email: email.trim(),
       role,
@@ -865,9 +929,12 @@ function UserFormModal({
       <form id="account-user-form" onSubmit={submit} className="space-y-4">
         <TextField
           label={t('account.users.email')}
-          type="email"
+          type="text"
+          inputMode="email"
           value={email}
           disabled={mode === 'edit'}
+          message={emailMessage}
+          tone={emailTone}
           onChange={setEmail}
         />
         {mode === 'edit' && (
@@ -892,7 +959,7 @@ function UserFormModal({
             <StatusChoice disabled={disabledAccount} onChange={setDisabledAccount} />
           </div>
         )}
-        <ErrorText error={error} />
+        {!emailConflictMessage && <ErrorText error={error} />}
       </form>
     </AccountModal>
   )

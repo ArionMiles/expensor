@@ -215,6 +215,9 @@ describe('AccountSettings', () => {
       }),
     )
     const inviteDialog = await screen.findByRole('dialog', { name: 'Invite c@example.com' })
+    expect(
+      within(inviteDialog).getByText('Share this link with the user to finish account setup'),
+    ).toBeInTheDocument()
     const copyCreatedSetupButton = within(inviteDialog).getByRole('button', {
       name: 'Copy setup link',
     })
@@ -265,6 +268,11 @@ describe('AccountSettings', () => {
     await user.click(within(deleteDialog).getByRole('button', { name: 'Delete user' }))
     const confirmDeleteDialog = await screen.findByRole('dialog', { name: 'Delete user' })
     expect(confirmDeleteDialog.closest('.z-\\[70\\]')).toBeInTheDocument()
+    expect(
+      within(confirmDeleteDialog).getByText(
+        'Delete b@example.com? Their sign-in sessions, setup links, and access tokens will be removed.',
+      ),
+    ).toBeInTheDocument()
     await user.click(within(confirmDeleteDialog).getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(deletedUsers).toEqual(['user-b']))
     expect(
@@ -324,6 +332,7 @@ describe('AccountSettings', () => {
     expect(
       await within(newUserDialog).findByText('User john@example.com already exists.'),
     ).toBeInTheDocument()
+    expect(within(newUserDialog).getByLabelText('Email')).toHaveClass('border-destructive')
 
     await user.click(within(newUserDialog).getByRole('button', { name: 'Cancel' }))
     await user.click(screen.getByRole('button', { name: 'New user' }))
@@ -332,6 +341,35 @@ describe('AccountSettings', () => {
     expect(
       within(reopenedUserDialog).queryByText('User john@example.com already exists.'),
     ).not.toBeInTheDocument()
+  })
+
+  it('validates new user email locally before creating the user', async () => {
+    const user = userEvent.setup()
+    let createUserRequests = 0
+    server.use(
+      http.get('/api/session', () => HttpResponse.json(adminPrincipal)),
+      http.get('/api/tokens', () => HttpResponse.json([])),
+      http.get('/api/admin/users', () => HttpResponse.json([])),
+      http.post('/api/admin/users', () => {
+        createUserRequests += 1
+        return HttpResponse.json({ error: 'request validation failed' }, { status: 422 })
+      }),
+    )
+
+    renderWithProviders(<Settings />, { route: '/settings?tab=account' })
+
+    await user.click(await screen.findByRole('button', { name: 'New user' }))
+    const newUserDialog = await screen.findByRole('dialog', { name: 'Create New User' })
+    const emailInput = within(newUserDialog).getByLabelText('Email')
+    expect(emailInput).toHaveAttribute('type', 'text')
+    expect(emailInput).toHaveAttribute('inputmode', 'email')
+
+    await user.type(emailInput, 'test@example')
+    await user.click(within(newUserDialog).getByRole('button', { name: 'Create user' }))
+
+    expect(within(newUserDialog).getByText('Enter a valid email address.')).toBeInTheDocument()
+    expect(within(newUserDialog).queryByText('request validation failed')).not.toBeInTheDocument()
+    expect(createUserRequests).toBe(0)
   })
 
   it('shows delete user failures inside the confirmation dialog', async () => {
