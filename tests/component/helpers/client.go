@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	componentEmail    = "component-admin@example.com"
+	componentEmail    = "john.smith@example.com"
 	componentPassword = "component admin password"
 )
 

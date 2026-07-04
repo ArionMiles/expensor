@@ -15,10 +15,11 @@ WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
-# Copy frontend source; then materialise the symlink target so Vite can
-# resolve frontend/public/readers -> ../../content/readers at build time.
+# Copy frontend source; then materialise content symlink targets so Vite can
+# resolve frontend/public assets that point back to ../../content at build time.
 COPY frontend/ .
 COPY content/readers/ /build/content/readers/
+COPY content/avatars/ /build/content/avatars/
 RUN npm run build
 
 # ─── Stage 2: Backend ────────────────────────────────────────────────────────

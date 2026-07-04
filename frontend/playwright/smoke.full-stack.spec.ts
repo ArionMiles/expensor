@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 test('real stack smoke renders seeded dashboard and transactions @smoke', async ({ page }) => {
   const login = await page.request.post('/api/session', {
     data: {
-      email: 'component-admin@example.com',
+      email: 'john.smith@example.com',
       password: 'component admin password',
     },
   })

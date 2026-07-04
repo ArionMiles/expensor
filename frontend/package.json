@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "test": "vitest run",
+    "test:scripts": "node --test scripts/*.node-test.mjs",
     "test:watch": "vitest",
     "test:cover": "vitest run --coverage",
     "test:e2e": "PLAYWRIGHT_ARTIFACT_PREFIX=mocked playwright test --project=mocked",
