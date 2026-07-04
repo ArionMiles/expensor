@@ -4,6 +4,8 @@ import type {
   AccountSetupMetadata,
   AnnualHeatmapData,
   AccountUser,
+  AdminScanningSettings,
+  AdminScanningSettingsPatch,
   AdminUserPatch,
   AuthStartResponse,
   AuthStatus,
@@ -15,6 +17,8 @@ import type {
   ChartData,
   CompleteAccountSetupRequest,
   CreateUserRequest,
+  CommunitySyncSettings,
+  CommunitySyncSettingsPatch,
   DashboardData,
   CredentialsStatus,
   ExtractionDiagnostic,
@@ -38,6 +42,9 @@ import type {
   Rule,
   RuleDocument,
   RulePayload,
+  ScanningSettings,
+  ScanningSettingsPatch,
+  ScanningStatus,
   SetupToken,
   SetupStatus,
   StatusResponse,
@@ -139,6 +146,9 @@ export const api = {
       deleteUser: (id: string) => apiClient.delete(`/admin/users/${encodeURIComponent(id)}`),
       createSetupToken: (id: string) =>
         apiClient.post<SetupToken>(`/admin/users/${encodeURIComponent(id)}/setup-tokens`),
+      scanningSettings: () => apiClient.get<AdminScanningSettings>('/admin/scanning/settings'),
+      updateScanningSettings: (patch: AdminScanningSettingsPatch) =>
+        apiClient.patch<AdminScanningSettings>('/admin/scanning/settings', patch),
     },
   },
 
@@ -176,6 +186,15 @@ export const api = {
     start: (reader: string) => apiClient.post<{ status: string }>('/daemon/start', { reader }),
     rescan: (reader: string) =>
       apiClient.post<{ status: 'rescanning' | 'queued' }>('/daemon/rescan', { reader }),
+  },
+
+  scanning: {
+    status: () => apiClient.get<ScanningStatus>('/scanning/status'),
+    settings: () => apiClient.get<ScanningSettings>('/scanning/settings'),
+    updateSettings: (patch: ScanningSettingsPatch) =>
+      apiClient.patch<ScanningSettings>('/scanning/settings', patch),
+    rescan: (reader: string) =>
+      apiClient.post<{ status: 'rescanning' | 'queued' }>('/scanning/rescans', { reader }),
   },
 
   plugins: {
@@ -312,6 +331,9 @@ export const api = {
   sync: {
     trigger: () => apiClient.post<{ status: string }>('/config/sync'),
     status: () => apiClient.get<SyncStatus>('/config/sync/status'),
+    settings: () => apiClient.get<CommunitySyncSettings>('/config/sync/settings'),
+    updateSettings: (patch: CommunitySyncSettingsPatch) =>
+      apiClient.patch<CommunitySyncSettings>('/config/sync/settings', patch),
   },
 
   rules: {

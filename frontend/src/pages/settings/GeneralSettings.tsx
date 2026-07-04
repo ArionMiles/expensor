@@ -4,9 +4,14 @@ import { FloatingDropdown, comboboxOptionClass, useComboboxNavigation } from '@/
 import { getBrowserTimezone, getTimezoneOptions, normalizeTimezone } from '@/lib/timezone'
 import { useCopyTooltip } from '@/hooks/useCopyTooltip'
 import { useI18n } from '@/i18n/I18nProvider'
+import {
+  isScanningStatusBreathingEnabled,
+  setScanningStatusBreathingEnabled,
+  subscribeScanningStatusBreathing,
+} from '@/lib/scanningStatusIndicator'
 import { cn } from '@/lib/utils'
 import { Check, Copy } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export const COMMON_CURRENCIES = [
   { code: 'INR', name: 'Indian Rupee', symbol: '₹' },
@@ -418,10 +423,51 @@ function VersionSection() {
   )
 }
 
+function StatusIndicatorSection() {
+  const { t } = useI18n()
+  const [breathing, setBreathing] = useState(isScanningStatusBreathingEnabled)
+
+  useEffect(() => subscribeScanningStatusBreathing(setBreathing), [])
+
+  return (
+    <div className="border-t border-border pt-6">
+      <div
+        data-testid="status-indicator-row"
+        className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+      >
+        <div className="min-w-0">
+          <h2 className="mb-1 text-sm font-medium text-foreground">
+            {t('settings.general.statusIndicatorTitle')}
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {t('settings.general.statusIndicatorHint')}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-label={t('settings.general.statusIndicatorTitle')}
+          aria-checked={breathing}
+          onClick={() => setScanningStatusBreathingEnabled(!breathing)}
+          className={cn(
+            'inline-flex h-7 w-12 flex-shrink-0 items-center rounded-full border border-border p-0.5 transition-colors',
+            breathing ? 'bg-primary' : 'bg-secondary',
+          )}
+        >
+          <span
+            className={cn(
+              'h-5 w-5 rounded-full bg-background shadow-sm transition-transform',
+              breathing && 'translate-x-5',
+            )}
+          />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function GeneralSettings() {
   const [currency, setCurrency] = useState('INR')
-  const [saved, setSaved] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const { data: preferences, isLoading } = usePreferences()
   const updatePreferences = useUpdatePreferences()
@@ -436,69 +482,43 @@ export function GeneralSettings() {
     setTimeFormatDraft(preferences.time_format as TimeFormatValue)
   }, [preferences])
 
-  const handleSave = async () => {
-    setSaved(false)
-    setError(null)
-    try {
-      await updatePreferences.mutateAsync({
-        base_currency: currency,
-        timezone,
-        time_format: timeFormat,
-      })
-      setSaved(true)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+  const save = useCallback(() => {
+    if (!preferences) return
+    const patch = {
+      ...(currency !== preferences.base_currency ? { base_currency: currency } : {}),
+      ...(timezone !== normalizeTimezone(preferences.timezone) ? { timezone } : {}),
+      ...(timeFormat !== preferences.time_format ? { time_format: timeFormat } : {}),
     }
-  }
+    if (Object.keys(patch).length > 0) updatePreferences.mutate(patch)
+  }, [currency, preferences, timeFormat, timezone, updatePreferences])
+  const saveRef = useRef(save)
+
+  useEffect(() => {
+    saveRef.current = save
+  }, [save])
+
+  useEffect(() => () => saveRef.current(), [])
 
   if (isLoading) return <p className="text-xs text-muted-foreground">Loading...</p>
 
   return (
     <div className="space-y-6">
       <SettingField label="Base currency" hint="Used for aggregate totals on the Dashboard.">
-        <CurrencyCombobox
-          value={currency}
-          onChange={(v) => {
-            setCurrency(v)
-            setSaved(false)
-          }}
-        />
+        <CurrencyCombobox value={currency} onChange={setCurrency} />
       </SettingField>
 
       <SettingField
         label="Timezone"
         hint="Used for date display and hour-of-day filtering across the app."
       >
-        <TimezoneCombobox
-          value={timezone}
-          onChange={(v) => {
-            setTimezoneDraft(v)
-            setSaved(false)
-          }}
-        />
+        <TimezoneCombobox value={timezone} onChange={setTimezoneDraft} />
       </SettingField>
 
       <SettingField label="Time format" hint="Controls how times are displayed throughout the app.">
-        <TimeFormatSelect
-          value={timeFormat}
-          onChange={(v) => {
-            setTimeFormatDraft(v)
-            setSaved(false)
-          }}
-        />
+        <TimeFormatSelect value={timeFormat} onChange={setTimeFormatDraft} />
       </SettingField>
 
-      <div className="space-y-2">
-        <button
-          onClick={handleSave}
-          disabled={!currency}
-          className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Save
-        </button>
-        {saved && <p className="text-xs text-success">Saved.</p>}
-        {error && <p className="text-xs text-destructive">{error}</p>}
-      </div>
+      <StatusIndicatorSection />
 
       <VersionSection />
     </div>

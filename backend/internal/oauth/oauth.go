@@ -4,14 +4,21 @@ package oauth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
+)
+
+var (
+	ErrCredentialsMissing = errors.New("reader credentials missing")
+	ErrTokenMissing       = errors.New("reader token missing")
 )
 
 // ReaderTokenStore is the DB persistence surface used by store-backed OAuth clients.
@@ -44,7 +51,7 @@ func NewFromJSONAndStore(ctx context.Context, input StoreClientInput) (*http.Cli
 		return nil, fmt.Errorf("loading token for reader %q: %w", input.Reader, err)
 	}
 	if !ok {
-		return nil, fmt.Errorf("loading token for reader %q: token missing (use web interface to authenticate)", input.Reader)
+		return nil, fmt.Errorf("loading token for reader %q: %w", input.Reader, ErrTokenMissing)
 	}
 	tok := &oauth2.Token{}
 	if err := json.Unmarshal(tokenJSON, tok); err != nil {
@@ -57,6 +64,9 @@ func NewFromJSONAndStore(ctx context.Context, input StoreClientInput) (*http.Cli
 		reader:      input.Reader,
 		store:       input.Store,
 		tokenSource: config.TokenSource(ctx, tok),
+	}
+	if _, err := tokenSource.Token(); err != nil {
+		return nil, fmt.Errorf("refreshing token for reader %q: %w", input.Reader, err)
 	}
 	return oauth2.NewClient(ctx, tokenSource), nil
 }
@@ -99,4 +109,12 @@ func GetOAuthConfig(secretJSON []byte, redirectURL string, scopes ...string) (*o
 
 	config.RedirectURL = redirectURL
 	return config, nil
+}
+
+func IsInvalidGrant(err error) bool {
+	var retrieveErr *oauth2.RetrieveError
+	if errors.As(err, &retrieveErr) && retrieveErr.ErrorCode == "invalid_grant" {
+		return true
+	}
+	return strings.Contains(err.Error(), "invalid_grant")
 }

@@ -291,6 +291,7 @@ func (h *Handlers) exchangeAndSaveToken(ctx context.Context, tenant store.Tenant
 	if err := h.readerRuntimeStore.SetReaderToken(ctx, tenant, name, tokenJSON); err != nil {
 		return fmt.Errorf("failed to save token: %w", err)
 	}
+	h.queueReaderScanning(ctx, tenant, name)
 	h.restartReaderDaemonAfterAuth(tenant, name)
 	return nil
 }
@@ -604,7 +605,13 @@ func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if activeReader == name {
-		if err := h.readerRuntimeStore.SetActiveReader(r.Context(), requestTenant(r), ""); err != nil {
+		tenant := requestTenant(r)
+		if err := h.scanningStore.ClearActiveScanningReader(r.Context(), tenant); err != nil {
+			h.logger.Error("failed to clear active scanning reader", "reader", name, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
+			return
+		}
+		if err := h.readerRuntimeStore.SetActiveReader(r.Context(), tenant, ""); err != nil {
 			h.logger.Error("failed to clear active reader", "reader", name, "error", err)
 			writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
 			return
@@ -647,6 +654,18 @@ func (h *Handlers) RevokeToken(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error("failed to remove token", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to remove token")
 		return
+	}
+	if state, err := h.scanningStore.GetScanningState(r.Context(), requestTenant(r)); err == nil && state.ActiveReader == name {
+		now := time.Now()
+		if err := h.scanningStore.UpdateScanningState(r.Context(), requestTenant(r), store.ScanningStateUpdate{
+			State:         store.ScanningStateNeedsAuth,
+			ReasonCode:    store.ScanningReasonMissingToken,
+			PublicMessage: "Connect your reader account to continue scanning.",
+			LastFailedAt:  &now,
+			RetryCount:    intPointer(0),
+		}); err != nil {
+			h.logger.Warn("failed to update scanning state after token removal", "reader", name, "error", err)
+		}
 	}
 
 	h.logger.Info("token revoked", "reader", name)
@@ -728,6 +747,7 @@ func (h *Handlers) SaveReaderConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.queueReaderScanning(r.Context(), requestTenant(r), name)
 	h.logger.Info("reader config saved", "reader", name)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }

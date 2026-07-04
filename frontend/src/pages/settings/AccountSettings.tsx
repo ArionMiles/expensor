@@ -329,7 +329,6 @@ export function AccountSettings() {
   const tokenCopiedTimerRef = useRef<number | null>(null)
   const [revokeCandidate, setRevokeCandidate] = useState<AccessToken | null>(null)
 
-  const isAdmin = session?.role === 'admin'
   const formatAccountDate = (value?: string | null) =>
     value ? formatDate(value, true, timezone, timeFormat) : t('account.never')
 
@@ -509,8 +508,6 @@ export function AccountSettings() {
         </AccountTable>
       </Section>
 
-      {isAdmin && <AdminUsersSection />}
-
       {creatingToken && (
         <AccountModal
           title={t('account.tokens.createTitle')}
@@ -631,7 +628,7 @@ function TokenRevealModal({
   )
 }
 
-function AdminUsersSection() {
+export function AdminUsersSection() {
   const { t } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
   const { data: session } = useSession()

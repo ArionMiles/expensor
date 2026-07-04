@@ -30,6 +30,7 @@ type Reader struct {
 	interval            time.Duration
 	lastScanAt          *time.Time // checkpoint: skip emails older than this on normal scans
 	forceFullScan       bool       // bypass checkpoint and scan all emails in the mailbox
+	runOnce             bool       // return after the first scan iteration
 	onCheckpoint        func(time.Time)
 	diagnosticSink      api.DiagnosticSink
 	diagnosticSlots     chan struct{}
@@ -61,6 +62,8 @@ type Config struct {
 	LastScanAt *time.Time
 	// ForceFullScan bypasses LastScanAt and processes all messages.
 	ForceFullScan bool
+	// RunOnce returns after the first scan iteration.
+	RunOnce bool
 	// OnCheckpoint is called with time.Now() after each successful scan iteration.
 	OnCheckpoint func(time.Time)
 	// DiagnosticSink records best-effort extraction diagnostics.
@@ -96,6 +99,7 @@ func New(cfg Config, logger *slog.Logger) (*Reader, error) {
 		interval:        interval,
 		lastScanAt:      cfg.LastScanAt,
 		forceFullScan:   cfg.ForceFullScan,
+		runOnce:         cfg.RunOnce,
 		onCheckpoint:    cfg.OnCheckpoint,
 		diagnosticSink:  cfg.DiagnosticSink,
 		diagnosticSlots: make(chan struct{}, maxConcurrentDiagnostics),
@@ -138,6 +142,9 @@ func (r *Reader) Read(ctx context.Context, out chan<- *api.TransactionDetails, a
 		// means this run was interrupted; writing a timestamp here would
 		// overwrite whatever the caller set in the DB before the restart.
 		r.saveCheckpoint()
+	}
+	if r.runOnce {
+		return nil
 	}
 
 	for {

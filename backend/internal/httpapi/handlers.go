@@ -56,6 +56,7 @@ type Handlers struct {
 	registry           *plugins.Registry
 	authStore          authStore
 	settingsStore      settingsStore
+	scanningStore      scanningStore
 	analyticsStore     analyticsStore
 	transactionStore   transactionStore
 	muteStore          muteStore
@@ -122,6 +123,7 @@ func NewHandlers(cfg HandlersConfig) *Handlers {
 		registry:           cfg.Registry,
 		authStore:          cfg.Store,
 		settingsStore:      cfg.Store,
+		scanningStore:      cfg.Store,
 		analyticsStore:     cfg.Store,
 		transactionStore:   cfg.Store,
 		muteStore:          cfg.Store,

@@ -37,6 +37,18 @@ type settingsStore interface {
 	SetAppConfig(ctx context.Context, tenant store.Tenant, key, value string) error
 }
 
+type scanningStore interface {
+	GetSchedulerConfig(ctx context.Context) (store.SchedulerConfig, error)
+	PatchSchedulerConfig(ctx context.Context, patch store.SchedulerConfigPatch) (store.SchedulerConfig, error)
+	EnsureScanningStateForTenant(ctx context.Context, tenant store.Tenant) error
+	GetScanningState(ctx context.Context, tenant store.Tenant) (store.TenantScanningState, error)
+	ListScanningStates(ctx context.Context) ([]store.TenantScanningState, error)
+	SetActiveScanningReader(ctx context.Context, tenant store.Tenant, reader string) error
+	ClearActiveScanningReader(ctx context.Context, tenant store.Tenant) error
+	SetScanningEnabled(ctx context.Context, tenant store.Tenant, enabled bool) error
+	UpdateScanningState(ctx context.Context, tenant store.Tenant, update store.ScanningStateUpdate) error
+}
+
 type analyticsStore interface {
 	GetStats(ctx context.Context, tenant store.Tenant, baseCurrency string) (*store.Stats, error)
 	GetChartData(ctx context.Context, tenant store.Tenant) (*store.ChartData, error)
@@ -113,6 +125,8 @@ type ruleStore interface {
 
 type syncStore interface {
 	GetSyncStatus(ctx context.Context) (store.SyncStatus, error)
+	GetCommunitySyncSettings(ctx context.Context) (store.CommunitySyncSettings, error)
+	PatchCommunitySyncSettings(ctx context.Context, patch store.CommunitySyncSettingsPatch) (store.CommunitySyncSettings, error)
 }
 
 type diagnosticStore interface {

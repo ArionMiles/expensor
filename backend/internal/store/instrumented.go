@@ -377,6 +377,96 @@ func (s *InstrumentedStore) GetActiveReader(ctx context.Context, tenant Tenant) 
 	return reader, err
 }
 
+func (s *InstrumentedStore) GetSchedulerConfig(ctx context.Context) (SchedulerConfig, error) {
+	ctx, span := s.scope.Start(ctx, "store.scanning.get_scheduler_config")
+	defer span.End()
+
+	cfg, err := s.next.GetSchedulerConfig(ctx)
+	s.recordOperation(ctx, "scanning.get_scheduler_config", err)
+	return cfg, err
+}
+
+func (s *InstrumentedStore) PatchSchedulerConfig(ctx context.Context, patch SchedulerConfigPatch) (SchedulerConfig, error) {
+	ctx, span := s.scope.Start(ctx, "store.scanning.patch_scheduler_config")
+	defer span.End()
+
+	cfg, err := s.next.PatchSchedulerConfig(ctx, patch)
+	s.recordOperation(ctx, "scanning.patch_scheduler_config", err)
+	return cfg, err
+}
+
+func (s *InstrumentedStore) EnsureScanningStateForTenant(ctx context.Context, tenant Tenant) error {
+	ctx, span := s.scope.Start(ctx, "store.scanning.ensure_tenant_state")
+	defer span.End()
+
+	err := s.next.EnsureScanningStateForTenant(ctx, tenant)
+	s.recordOperation(ctx, "scanning.ensure_tenant_state", err)
+	return err
+}
+
+func (s *InstrumentedStore) GetScanningState(ctx context.Context, tenant Tenant) (TenantScanningState, error) {
+	ctx, span := s.scope.Start(ctx, "store.scanning.get_state")
+	defer span.End()
+
+	state, err := s.next.GetScanningState(ctx, tenant)
+	s.recordOperation(ctx, "scanning.get_state", err)
+	return state, err
+}
+
+func (s *InstrumentedStore) ListRunnableScanningStates(ctx context.Context) ([]TenantScanningState, error) {
+	ctx, span := s.scope.Start(ctx, "store.scanning.list_runnable_states")
+	defer span.End()
+
+	states, err := s.next.ListRunnableScanningStates(ctx)
+	s.recordOperation(ctx, "scanning.list_runnable_states", err)
+	return states, err
+}
+
+func (s *InstrumentedStore) ListScanningStates(ctx context.Context) ([]TenantScanningState, error) {
+	ctx, span := s.scope.Start(ctx, "store.scanning.list_states")
+	defer span.End()
+
+	states, err := s.next.ListScanningStates(ctx)
+	s.recordOperation(ctx, "scanning.list_states", err)
+	return states, err
+}
+
+func (s *InstrumentedStore) SetActiveScanningReader(ctx context.Context, tenant Tenant, reader string) error {
+	ctx, span := s.scope.Start(ctx, "store.scanning.set_active_reader")
+	defer span.End()
+
+	err := s.next.SetActiveScanningReader(ctx, tenant, reader)
+	s.recordOperation(ctx, "scanning.set_active_reader", err)
+	return err
+}
+
+func (s *InstrumentedStore) ClearActiveScanningReader(ctx context.Context, tenant Tenant) error {
+	ctx, span := s.scope.Start(ctx, "store.scanning.clear_active_reader")
+	defer span.End()
+
+	err := s.next.ClearActiveScanningReader(ctx, tenant)
+	s.recordOperation(ctx, "scanning.clear_active_reader", err)
+	return err
+}
+
+func (s *InstrumentedStore) SetScanningEnabled(ctx context.Context, tenant Tenant, enabled bool) error {
+	ctx, span := s.scope.Start(ctx, "store.scanning.set_enabled")
+	defer span.End()
+
+	err := s.next.SetScanningEnabled(ctx, tenant, enabled)
+	s.recordOperation(ctx, "scanning.set_enabled", err)
+	return err
+}
+
+func (s *InstrumentedStore) UpdateScanningState(ctx context.Context, tenant Tenant, update ScanningStateUpdate) error {
+	ctx, span := s.scope.Start(ctx, "store.scanning.update_state")
+	defer span.End()
+
+	err := s.next.UpdateScanningState(ctx, tenant, update)
+	s.recordOperation(ctx, "scanning.update_state", err)
+	return err
+}
+
 func (s *InstrumentedStore) SetReaderSecret(ctx context.Context, tenant Tenant, reader string, secret []byte) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.set_reader_secret")
 	defer span.End()
@@ -879,6 +969,27 @@ func (s *InstrumentedStore) SetSyncStatus(ctx context.Context, status SyncStatus
 	err := s.next.SetSyncStatus(ctx, status)
 	s.recordOperation(ctx, "runtime.set_sync_status", err)
 	return err
+}
+
+func (s *InstrumentedStore) GetCommunitySyncSettings(ctx context.Context) (CommunitySyncSettings, error) {
+	ctx, span := s.scope.Start(ctx, "store.runtime.get_community_sync_settings")
+	defer span.End()
+
+	settings, err := s.next.GetCommunitySyncSettings(ctx)
+	s.recordOperation(ctx, "runtime.get_community_sync_settings", err)
+	return settings, err
+}
+
+func (s *InstrumentedStore) PatchCommunitySyncSettings(
+	ctx context.Context,
+	patch CommunitySyncSettingsPatch,
+) (CommunitySyncSettings, error) {
+	ctx, span := s.scope.Start(ctx, "store.runtime.patch_community_sync_settings")
+	defer span.End()
+
+	settings, err := s.next.PatchCommunitySyncSettings(ctx, patch)
+	s.recordOperation(ctx, "runtime.patch_community_sync_settings", err)
+	return settings, err
 }
 
 func (s *InstrumentedStore) ListExtractionDiagnostics(ctx context.Context, tenant Tenant, filter DiagnosticFilter) ([]ExtractionDiagnosticRow, error) {

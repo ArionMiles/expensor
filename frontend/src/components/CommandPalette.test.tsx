@@ -156,7 +156,7 @@ describe('CommandPalette', () => {
       ],
     })
 
-    expect(screen.getByText('Settings / Community Sync')).toBeInTheDocument()
+    expect(screen.getByText('Settings / Community')).toBeInTheDocument()
   })
 
   it('navigates directly to the matching expense group tab', async () => {

@@ -48,7 +48,7 @@ describe('AccountSettings', () => {
     expect(screen.queryByRole('heading', { name: 'Users' })).not.toBeInTheDocument()
   })
 
-  it('updates profile details, creates access tokens, and generates setup links for invited users', async () => {
+  it('updates profile details, creates access tokens, and manages users from the admin tab', async () => {
     const user = userEvent.setup()
     const writeText = vi.spyOn(window.navigator.clipboard, 'writeText').mockResolvedValue(undefined)
     const updatedProfiles: Array<{ display_name?: string; avatar_key?: string }> = []
@@ -181,15 +181,7 @@ describe('AccountSettings', () => {
 
     expect(await screen.findByRole('heading', { name: 'Profile' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save profile' })).not.toBeInTheDocument()
-    expect(await screen.findByRole('heading', { name: 'Users' })).toBeInTheDocument()
-    const adminRow = await screen.findByRole('row', { name: /admin@example.com/i })
-    expect(within(adminRow).getByText('ADMIN')).toBeInTheDocument()
-    expect(within(adminRow).getByText('ACTIVE')).toBeInTheDocument()
-    expect(within(adminRow).queryByRole('button', { name: /edit user/i })).not.toBeInTheDocument()
-    expect(
-      within(adminRow).queryByRole('button', { name: 'Copy setup link' }),
-    ).not.toBeInTheDocument()
-    expect(within(adminRow).queryByRole('button', { name: 'Disable' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Users' })).not.toBeInTheDocument()
     const profileSection = screen.getByRole('heading', { name: 'Profile' }).closest('section')
     if (!profileSection) throw new Error('Profile section missing')
     expect(profileSection.querySelector('.max-w-md')).toBeInTheDocument()
@@ -231,6 +223,17 @@ describe('AccountSettings', () => {
     const revokeDialog = await screen.findByRole('dialog', { name: 'Revoke token' })
     await user.click(within(revokeDialog).getByRole('button', { name: 'Revoke' }))
     expect(revokedTokens).toEqual(['token-1'])
+
+    await user.click(screen.getByRole('button', { name: 'Admin' }))
+    expect(await screen.findByRole('heading', { name: 'Users' })).toBeInTheDocument()
+    const adminRow = await screen.findByRole('row', { name: /admin@example.com/i })
+    expect(within(adminRow).getByText('ADMIN')).toBeInTheDocument()
+    expect(within(adminRow).getByText('ACTIVE')).toBeInTheDocument()
+    expect(within(adminRow).queryByRole('button', { name: /edit user/i })).not.toBeInTheDocument()
+    expect(
+      within(adminRow).queryByRole('button', { name: 'Copy setup link' }),
+    ).not.toBeInTheDocument()
+    expect(within(adminRow).queryByRole('button', { name: 'Disable' })).not.toBeInTheDocument()
 
     expect(screen.queryByRole('dialog', { name: 'Create New User' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'New user' }))
@@ -362,7 +365,7 @@ describe('AccountSettings', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/settings?tab=account')
   })
 
-  it('opens the create user dialog from the account action query param for admins', async () => {
+  it('opens the create user dialog from the admin action query param for admins', async () => {
     server.use(
       http.get('/api/session', () => HttpResponse.json(adminPrincipal)),
       http.get('/api/tokens', () => HttpResponse.json([])),
@@ -374,11 +377,11 @@ describe('AccountSettings', () => {
         <Settings />
         <LocationProbe />
       </>,
-      { route: '/settings?tab=account&action=create-user' },
+      { route: '/settings?tab=admin&action=create-user' },
     )
 
     expect(await screen.findByRole('dialog', { name: 'Create New User' })).toBeInTheDocument()
-    expect(screen.getByTestId('location')).toHaveTextContent('/settings?tab=account')
+    expect(screen.getByTestId('location')).toHaveTextContent('/settings?tab=admin')
   })
 
   it('shows duplicate user email conflicts inside the new user dialog', async () => {
@@ -392,7 +395,7 @@ describe('AccountSettings', () => {
       ),
     )
 
-    renderWithProviders(<Settings />, { route: '/settings?tab=account' })
+    renderWithProviders(<Settings />, { route: '/settings?tab=admin' })
 
     await user.click(await screen.findByRole('button', { name: 'New user' }))
     const newUserDialog = await screen.findByRole('dialog', { name: 'Create New User' })
@@ -426,7 +429,7 @@ describe('AccountSettings', () => {
       }),
     )
 
-    renderWithProviders(<Settings />, { route: '/settings?tab=account' })
+    renderWithProviders(<Settings />, { route: '/settings?tab=admin' })
 
     await user.click(await screen.findByRole('button', { name: 'New user' }))
     const newUserDialog = await screen.findByRole('dialog', { name: 'Create New User' })
@@ -478,7 +481,7 @@ describe('AccountSettings', () => {
       ),
     )
 
-    renderWithProviders(<Settings />, { route: '/settings?tab=account' })
+    renderWithProviders(<Settings />, { route: '/settings?tab=admin' })
 
     const invitedRow = await screen.findByRole('row', { name: /b@example.com/i })
     await user.click(within(invitedRow).getByRole('button', { name: 'Edit user B' }))

@@ -9,6 +9,7 @@ import (
 type Storer interface {
 	authStore
 	settingsStore
+	scanningStore
 	analyticsStore
 	transactionStore
 	muteStore

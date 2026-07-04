@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/daemon"
+	scanscheduler "github.com/ArionMiles/expensor/backend/internal/daemon/scheduler"
 	"github.com/ArionMiles/expensor/backend/internal/httpapi"
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
@@ -111,7 +112,22 @@ func run() int {
 		diagnostics: instrumentedStore, sinkFactory: sinkFactory, dm: dm, logger: logger,
 	}
 
-	logger.Info("daemon auto-resume disabled; authenticated users can start readers from the app")
+	schedulerScope := observability.NewScope(logger.With("component", "scheduler"), "github.com/ArionMiles/expensor/backend/internal/daemon/scheduler")
+	scanRunner := &scheduledScanRunner{
+		registry: registry, cfg: cfg, systemRules: content.rules, resolver: resolver,
+		st: st, runtimeStore: instrumentedStore, diagnostics: instrumentedStore, sinkFactory: sinkFactory, logger: logger,
+	}
+	scanScheduler := scanscheduler.New(scanscheduler.Config{
+		Store:  instrumentedStore,
+		Runner: scanscheduler.NewInstrumentedRunner(scanRunner, schedulerScope),
+		Logger: logger.With("component", "scheduler"),
+	})
+	go func() {
+		if err := scanScheduler.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("scheduler stopped with error", "error", err)
+		}
+	}()
+	logger.Info("multi-tenant scanning scheduler started")
 
 	syncFn := startCommunitySync(ctx, communitySyncDependencies{
 		config:      cfg.Community,

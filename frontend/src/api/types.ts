@@ -38,9 +38,61 @@ export interface SyncStatus {
   entries_updated: number
 }
 
+export interface CommunitySyncSettings {
+  automatic_sync_enabled: boolean
+}
+
+export interface CommunitySyncSettingsPatch {
+  automatic_sync_enabled?: boolean
+}
+
 export interface SetupStatus {
   required: boolean
   missing: Array<'base_currency' | 'timezone' | 'time_format'>
+}
+
+export type ScanningState =
+  | 'queued'
+  | 'starting'
+  | 'running'
+  | 'backing_off'
+  | 'needs_auth'
+  | 'reader_not_configured'
+  | 'paused'
+  | 'stopped'
+
+export interface ScanningStatus {
+  tenant_id?: string
+  active_reader: string
+  enabled: boolean
+  state: ScanningState
+  reason_code?: string
+  public_message?: string
+  last_started_at?: string
+  last_stopped_at?: string
+  last_failed_at?: string
+  next_retry_at?: string
+  retry_count: number
+  updated_at: string
+}
+
+export interface ScanningSettings {
+  active_reader: string
+  enabled: boolean
+}
+
+export interface ScanningSettingsPatch {
+  active_reader?: string
+  enabled?: boolean
+}
+
+export interface AdminScanningSettings {
+  max_concurrent_scans: number
+  updated_at: string
+}
+
+export interface AdminScanningSettingsPatch {
+  max_concurrent_scans?: number
 }
 
 export interface BootstrapStatus {

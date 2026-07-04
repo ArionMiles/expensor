@@ -122,6 +122,40 @@ type ActiveReaderResponse struct {
 	Reader string `json:"reader" example:"gmail"`
 }
 
+type ScanningSettingsResponse struct {
+	ActiveReader string `json:"active_reader" example:"gmail"`
+	Enabled      bool   `json:"enabled" example:"true"`
+}
+
+type ScanningSettingsPatchRequest struct {
+	ActiveReader *string `json:"active_reader" validate:"omitempty,no_control_chars" example:"gmail"`
+	Enabled      *bool   `json:"enabled"`
+}
+
+type ScanningStatusResponse struct {
+	TenantID      string     `json:"tenant_id,omitempty" example:"11111111-1111-1111-1111-111111111111"`
+	ActiveReader  string     `json:"active_reader" example:"gmail"`
+	Enabled       bool       `json:"enabled" example:"true"`
+	State         string     `json:"state" example:"running"`
+	ReasonCode    string     `json:"reason_code,omitempty" example:"needs_auth_invalid_grant"`
+	PublicMessage string     `json:"public_message,omitempty" example:"Reconnect your reader account to continue scanning."`
+	LastStartedAt *time.Time `json:"last_started_at,omitempty"`
+	LastStoppedAt *time.Time `json:"last_stopped_at,omitempty"`
+	LastFailedAt  *time.Time `json:"last_failed_at,omitempty"`
+	NextRetryAt   *time.Time `json:"next_retry_at,omitempty"`
+	RetryCount    int        `json:"retry_count"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+type AdminScanningSettingsResponse struct {
+	MaxConcurrentScans int       `json:"max_concurrent_scans" example:"4"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
+type AdminScanningSettingsPatchRequest struct {
+	MaxConcurrentScans *int `json:"max_concurrent_scans" validate:"omitempty,min=1,max=64" example:"4"`
+}
+
 // RuleSourceResponse documents a structured rule source.
 type RuleSourceResponse struct {
 	Type  string `json:"type" validate:"required,no_control_chars" example:"Email"`
@@ -437,6 +471,16 @@ type SyncStatusResponse struct {
 	LastSyncedAt   *time.Time `json:"last_synced_at,omitempty" extensions:"x-nullable"`
 	Error          *string    `json:"error,omitempty" extensions:"x-nullable"`
 	EntriesUpdated int64      `json:"entries_updated"`
+}
+
+// CommunitySyncSettingsResponse is the community sync settings payload.
+type CommunitySyncSettingsResponse struct {
+	AutomaticSyncEnabled bool `json:"automatic_sync_enabled" example:"true"`
+}
+
+// CommunitySyncSettingsPatchRequest updates community sync settings.
+type CommunitySyncSettingsPatchRequest struct {
+	AutomaticSyncEnabled *bool `json:"automatic_sync_enabled,omitempty" validate:"omitempty" example:"false"`
 }
 
 // LabelResponse documents a managed label.

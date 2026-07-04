@@ -35,6 +35,7 @@ type Reader struct {
 	lookbackDays        int
 	lastScanAt          *time.Time      // checkpoint: only scan emails after this time on normal runs
 	forceFullScan       bool            // when true, bypass checkpoint and use full lookback window
+	runOnce             bool            // when true, return after the first scan iteration
 	onCheckpoint        func(time.Time) // called after each scan iteration to persist the checkpoint
 	state               *state.Manager
 	diagnosticSink      api.DiagnosticSink
@@ -62,6 +63,8 @@ type Config struct {
 	// ForceFullScan bypasses LastScanAt and fetches the full lookback window.
 	// Used for force-rescan and retroactive rule application.
 	ForceFullScan bool
+	// RunOnce returns after the first scan iteration.
+	RunOnce bool
 	// OnCheckpoint is called with time.Now() after each successful scan iteration.
 	// Use it to persist the checkpoint so the next run starts from here.
 	OnCheckpoint func(time.Time)
@@ -104,6 +107,7 @@ func New(httpClient *http.Client, cfg Config, logger *slog.Logger) (*Reader, err
 		lookbackDays:    lookback,
 		lastScanAt:      cfg.LastScanAt,
 		forceFullScan:   cfg.ForceFullScan,
+		runOnce:         cfg.RunOnce,
 		onCheckpoint:    cfg.OnCheckpoint,
 		state:           cfg.State,
 		diagnosticSink:  cfg.DiagnosticSink,
@@ -145,6 +149,9 @@ func (r *Reader) Read(ctx context.Context, out chan<- *api.TransactionDetails, a
 		iterationErr = errors.Join(iterationErr, ctx.Err())
 	}
 	r.saveCheckpointAfterIteration(iterationErr)
+	if r.runOnce {
+		return iterationErr
+	}
 
 	for {
 		select {

@@ -1,14 +1,17 @@
 import {
   useActiveReader,
+  useAdminScanningSettings,
   useClearReaderCheckpoint,
   usePreferences,
   useReaderCheckpoint,
   useRescan,
+  useSession,
+  useUpdateAdminScanningSettings,
   useUpdatePreferences,
 } from '@/api/queries'
 import type { PreferencesPatch } from '@/api/types'
 import { cn } from '@/lib/utils'
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useDisplay } from '@/contexts/DisplayContext'
 import { formatDate } from '@/lib/utils'
@@ -16,15 +19,16 @@ import { GeneralSettings } from './settings/GeneralSettings'
 import { SyncSettings } from './settings/SyncSettings'
 import { useI18n } from '@/i18n/I18nProvider'
 import type { MessageKey } from '@/i18n/messages'
-import { AccountSettings } from './settings/AccountSettings'
+import { AccountSettings, AdminUsersSection } from './settings/AccountSettings'
 
-type SettingsTab = 'general' | 'daemon' | 'sync' | 'account'
+type SettingsTab = 'general' | 'daemon' | 'sync' | 'account' | 'admin'
 
 const TABS: { id: SettingsTab; labelKey: MessageKey }[] = [
   { id: 'general', labelKey: 'nav.settings.general.subtitle' },
   { id: 'daemon', labelKey: 'nav.settings.daemon.subtitle' },
-  { id: 'sync', labelKey: 'nav.settings.sync.subtitle' },
   { id: 'account', labelKey: 'nav.settings.account.subtitle' },
+  { id: 'sync', labelKey: 'nav.settings.sync.subtitle' },
+  { id: 'admin', labelKey: 'nav.settings.admin.subtitle' },
 ]
 
 function SettingField({
@@ -66,33 +70,57 @@ function DaemonSettings() {
   const { mutate: clearCheckpoint, isPending: clearing } = useClearReaderCheckpoint()
   const { timezone, timeFormat } = useDisplay()
 
-  const [intervalDraft, setIntervalDraft] = useState<string>('')
-  const [lookbackDraft, setLookbackDraft] = useState<string>('')
-  const [scanSaved, setScanSaved] = useState(false)
+  const [intervalDraft, setIntervalDraft] = useState<string | null>(null)
+  const [lookbackDraft, setLookbackDraft] = useState<string | null>(null)
   const [scanError, setScanError] = useState<string | null>(null)
 
   // Sync drafts when server values arrive
-  const intervalVal = intervalDraft !== '' ? intervalDraft : String(scanInterval)
-  const lookbackVal = lookbackDraft !== '' ? lookbackDraft : String(lookbackDays)
+  const intervalVal = intervalDraft ?? String(scanInterval)
+  const lookbackVal = lookbackDraft ?? String(lookbackDays)
 
-  const handleScanSave = () => {
-    setScanSaved(false)
-    setScanError(null)
+  const save = useCallback(
+    (showMessage: boolean) => {
+      if (showMessage) setScanError(null)
+      const interval = parseInt(intervalVal, 10)
+      const lookback = parseInt(lookbackVal, 10)
+      if (isNaN(interval) || interval < 10 || interval > 3600) {
+        if (showMessage) setScanError(t('settings.daemon.scanIntervalError'))
+        return
+      }
+      if (isNaN(lookback) || lookback < 1 || lookback > 3650) {
+        if (showMessage) setScanError(t('settings.daemon.lookbackError'))
+        return
+      }
+      const patch: PreferencesPatch = {}
+      if (interval !== scanInterval) patch.scan_interval = interval
+      if (lookback !== lookbackDays) patch.lookback_days = lookback
+      if (Object.keys(patch).length > 0) updatePreferences(patch)
+    },
+    [intervalVal, lookbackDays, lookbackVal, scanInterval, t, updatePreferences],
+  )
+  const saveRef = useRef(save)
+
+  useEffect(() => {
+    saveRef.current = save
+  }, [save])
+
+  useEffect(() => () => saveRef.current(false), [])
+
+  const handleFieldChange = (setter: (value: string) => void, value: string) => {
+    setter(value)
     const interval = parseInt(intervalVal, 10)
     const lookback = parseInt(lookbackVal, 10)
-    if (isNaN(interval) || interval < 10 || interval > 3600) {
-      setScanError(t('settings.daemon.scanIntervalError'))
-      return
+    if (
+      scanError &&
+      !isNaN(interval) &&
+      interval >= 10 &&
+      interval <= 3600 &&
+      !isNaN(lookback) &&
+      lookback >= 1 &&
+      lookback <= 3650
+    ) {
+      setScanError(null)
     }
-    if (isNaN(lookback) || lookback < 1 || lookback > 3650) {
-      setScanError(t('settings.daemon.lookbackError'))
-      return
-    }
-    const patch: PreferencesPatch = {}
-    if (interval !== scanInterval) patch.scan_interval = interval
-    if (lookback !== lookbackDays) patch.lookback_days = lookback
-    if (Object.keys(patch).length > 0) updatePreferences(patch)
-    setScanSaved(true)
   }
 
   return (
@@ -109,8 +137,7 @@ function DaemonSettings() {
               inputMode="numeric"
               value={intervalVal}
               onChange={(e) => {
-                setIntervalDraft(e.target.value)
-                setScanSaved(false)
+                handleFieldChange(setIntervalDraft, e.target.value)
               }}
               className="w-24 rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
             />
@@ -130,8 +157,7 @@ function DaemonSettings() {
               inputMode="numeric"
               value={lookbackVal}
               onChange={(e) => {
-                setLookbackDraft(e.target.value)
-                setScanSaved(false)
+                handleFieldChange(setLookbackDraft, e.target.value)
               }}
               className="w-24 rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
             />
@@ -141,19 +167,10 @@ function DaemonSettings() {
           </div>
         </SettingField>
 
-        <div className="space-y-2">
-          <button
-            onClick={handleScanSave}
-            className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            {t('common.save')}
-          </button>
-          {scanSaved && <p className="text-xs text-success">{t('settings.daemon.saved')}</p>}
-          {scanError && <p className="text-xs text-destructive">{scanError}</p>}
-        </div>
+        {scanError && <p className="text-xs text-destructive">{scanError}</p>}
       </div>
 
-      {/* Scanning checkpoint */}
+      {/* Checkpoint */}
       <div>
         <h2 className="mb-1 text-sm font-medium text-foreground">
           {t('settings.daemon.checkpointTitle')}
@@ -188,12 +205,17 @@ function DaemonSettings() {
       </div>
 
       {/* Force rescan */}
-      <div>
-        <h2 className="mb-1 text-sm font-medium text-foreground">
-          {t('settings.daemon.forceRescanTitle')}
-        </h2>
-        <p className="mb-4 text-xs text-muted-foreground">{t('settings.daemon.forceRescanHint')}</p>
-        <div className="flex items-center gap-4">
+      <div
+        data-testid="force-rescan-row"
+        className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+      >
+        <div className="min-w-0">
+          <h2 className="mb-1 text-sm font-medium text-foreground">
+            {t('settings.daemon.forceRescanTitle')}
+          </h2>
+          <p className="text-xs text-muted-foreground">{t('settings.daemon.forceRescanHint')}</p>
+        </div>
+        <div className="flex flex-shrink-0 items-center gap-4">
           <button
             onClick={() => {
               resetRescan()
@@ -227,11 +249,76 @@ function DaemonSettings() {
   )
 }
 
+function AdminSettings() {
+  const { t } = useI18n()
+  const { data } = useAdminScanningSettings()
+  const update = useUpdateAdminScanningSettings()
+  const current = data?.max_concurrent_scans ?? 4
+  const [draft, setDraft] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+  const value = draft ?? String(current)
+
+  const save = useCallback(
+    (showMessage: boolean) => {
+      if (showMessage) setMessage(null)
+      const parsed = parseInt(value, 10)
+      if (isNaN(parsed) || parsed < 1 || parsed > 64) {
+        if (showMessage) setMessage(t('settings.admin.scanningConcurrencyError'))
+        return
+      }
+      if (parsed === current) return
+      update.mutate(
+        { max_concurrent_scans: parsed },
+        { onSuccess: () => showMessage && setMessage(t('settings.admin.saved')) },
+      )
+    },
+    [current, t, update, value],
+  )
+  const saveRef = useRef(save)
+
+  useEffect(() => {
+    saveRef.current = save
+  }, [save])
+
+  useEffect(() => () => saveRef.current(false), [])
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h2 className="mb-1 text-sm font-medium text-foreground">
+          {t('settings.admin.scanningTitle')}
+        </h2>
+        <p className="mb-4 text-xs text-muted-foreground">{t('settings.admin.scanningHint')}</p>
+        <div className="flex items-center gap-3">
+          <input
+            type="text"
+            inputMode="numeric"
+            value={value}
+            onChange={(event) => {
+              setDraft(event.target.value)
+              setMessage(null)
+            }}
+            className="w-24 rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          {update.isPending && (
+            <span className="text-xs text-muted-foreground">{t('settings.admin.saving')}</span>
+          )}
+          {message && <span className="text-xs text-muted-foreground">{message}</span>}
+        </div>
+      </div>
+
+      <AdminUsersSection />
+    </div>
+  )
+}
+
 export default function Settings() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { t } = useI18n()
+  const { data: session } = useSession()
+  const tabs = session?.role === 'admin' ? TABS : TABS.filter((item) => item.id !== 'admin')
   const rawTab = searchParams.get('tab')
-  const tab: SettingsTab = TABS.some((t) => t.id === rawTab) ? (rawTab as SettingsTab) : 'general'
+  const tab: SettingsTab = tabs.some((t) => t.id === rawTab) ? (rawTab as SettingsTab) : 'general'
 
   const setTab = (id: SettingsTab) => setSearchParams({ tab: id }, { replace: true })
 
@@ -239,7 +326,7 @@ export default function Settings() {
     <div className="mx-auto w-full max-w-4xl px-6 py-6">
       <h1 className="mb-6 text-lg font-semibold text-foreground">{t('nav.settings')}</h1>
       <div className="mb-6 flex gap-1 border-b border-border">
-        {TABS.map((item) => (
+        {tabs.map((item) => (
           <button
             key={item.id}
             onClick={() => setTab(item.id)}
@@ -258,6 +345,7 @@ export default function Settings() {
       {tab === 'daemon' && <DaemonSettings />}
       {tab === 'sync' && <SyncSettings />}
       {tab === 'account' && <AccountSettings />}
+      {tab === 'admin' && <AdminSettings />}
     </div>
   )
 }

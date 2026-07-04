@@ -28,6 +28,7 @@ type Store struct {
 	readModel *pgReadModelRepository
 	rules     *pgRulesRepository
 	runtime   *pgRuntimeRepository
+	scanning  *pgScanningRepository
 	taxonomy  *pgTaxonomyRepository
 	txns      *pgTransactionsRepository
 }
@@ -100,6 +101,7 @@ func (s *Store) initRepositories() {
 	s.diag = newPGDiagnosticsRepository(deps)
 	s.rules = newPGRulesRepository(deps)
 	s.runtime = newPGRuntimeRepository(deps)
+	s.scanning = newPGScanningRepository(deps)
 	s.readModel = newPGReadModelRepository(deps, s.runtime)
 	s.taxonomy = newPGTaxonomyRepository(deps)
 	s.txns = newPGTransactionsRepository(deps)
@@ -292,6 +294,46 @@ func (s *Store) SetActiveReader(ctx context.Context, tenant Tenant, reader strin
 // GetActiveReader returns the selected reader name, or an empty string when unset.
 func (s *Store) GetActiveReader(ctx context.Context, tenant Tenant) (string, error) {
 	return s.runtime.GetActiveReader(ctx, tenant)
+}
+
+func (s *Store) GetSchedulerConfig(ctx context.Context) (SchedulerConfig, error) {
+	return s.scanning.GetSchedulerConfig(ctx)
+}
+
+func (s *Store) PatchSchedulerConfig(ctx context.Context, patch SchedulerConfigPatch) (SchedulerConfig, error) {
+	return s.scanning.PatchSchedulerConfig(ctx, patch)
+}
+
+func (s *Store) EnsureScanningStateForTenant(ctx context.Context, tenant Tenant) error {
+	return s.scanning.EnsureScanningStateForTenant(ctx, tenant)
+}
+
+func (s *Store) GetScanningState(ctx context.Context, tenant Tenant) (TenantScanningState, error) {
+	return s.scanning.GetScanningState(ctx, tenant)
+}
+
+func (s *Store) ListRunnableScanningStates(ctx context.Context) ([]TenantScanningState, error) {
+	return s.scanning.ListRunnableScanningStates(ctx)
+}
+
+func (s *Store) ListScanningStates(ctx context.Context) ([]TenantScanningState, error) {
+	return s.scanning.ListScanningStates(ctx)
+}
+
+func (s *Store) SetActiveScanningReader(ctx context.Context, tenant Tenant, reader string) error {
+	return s.scanning.SetActiveScanningReader(ctx, tenant, reader)
+}
+
+func (s *Store) ClearActiveScanningReader(ctx context.Context, tenant Tenant) error {
+	return s.scanning.ClearActiveScanningReader(ctx, tenant)
+}
+
+func (s *Store) SetScanningEnabled(ctx context.Context, tenant Tenant, enabled bool) error {
+	return s.scanning.SetScanningEnabled(ctx, tenant, enabled)
+}
+
+func (s *Store) UpdateScanningState(ctx context.Context, tenant Tenant, update ScanningStateUpdate) error {
+	return s.scanning.UpdateScanningState(ctx, tenant, update)
 }
 
 // SetReaderSecret stores OAuth client secret JSON for a tenant reader.
@@ -654,6 +696,16 @@ func (s *Store) GetSyncStatus(ctx context.Context) (SyncStatus, error) {
 // SetSyncStatus stores the community content sync status in app_config.
 func (s *Store) SetSyncStatus(ctx context.Context, status SyncStatus) error {
 	return s.runtime.SetSyncStatus(ctx, status)
+}
+
+// GetCommunitySyncSettings reads process-wide community sync settings from app_config.
+func (s *Store) GetCommunitySyncSettings(ctx context.Context) (CommunitySyncSettings, error) {
+	return s.runtime.GetCommunitySyncSettings(ctx)
+}
+
+// PatchCommunitySyncSettings updates process-wide community sync settings in app_config.
+func (s *Store) PatchCommunitySyncSettings(ctx context.Context, patch CommunitySyncSettingsPatch) (CommunitySyncSettings, error) {
+	return s.runtime.PatchCommunitySyncSettings(ctx, patch)
 }
 
 // GetCommunityURL retrieves the community content URL from app_config.

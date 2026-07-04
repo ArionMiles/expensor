@@ -162,6 +162,80 @@ func TestRuntimeState_ActiveReader(t *testing.T) {
 	}
 }
 
+func TestScanningSchedulerConfigDefault(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+
+	cfg, err := ts.GetSchedulerConfig(context.Background())
+	if err != nil {
+		t.Fatalf("GetSchedulerConfig: %v", err)
+	}
+	if cfg.MaxConcurrentScans != 4 {
+		t.Fatalf("MaxConcurrentScans = %d, want 4", cfg.MaxConcurrentScans)
+	}
+}
+
+func TestScanningStateRoundTrip(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+	tenant := store.Tenant{ID: createRuntimeTestUser(t, ts, "scanning-state@example.com").TenantID}
+
+	state, err := ts.GetScanningState(ctx, tenant)
+	if err != nil {
+		t.Fatalf("GetScanningState initial: %v", err)
+	}
+	if state.State != store.ScanningStateStopped {
+		t.Fatalf("initial state = %q, want stopped", state.State)
+	}
+
+	if err := ts.SetActiveScanningReader(ctx, tenant, "gmail"); err != nil {
+		t.Fatalf("SetActiveScanningReader: %v", err)
+	}
+	startedAt := time.Date(2026, time.July, 4, 12, 0, 0, 0, time.UTC)
+	if err := ts.UpdateScanningState(ctx, tenant, store.ScanningStateUpdate{
+		State:         store.ScanningStateRunning,
+		ReasonCode:    store.ScanningReasonNone,
+		PublicMessage: "",
+		LastStartedAt: &startedAt,
+	}); err != nil {
+		t.Fatalf("UpdateScanningState: %v", err)
+	}
+
+	state, err = ts.GetScanningState(ctx, tenant)
+	if err != nil {
+		t.Fatalf("GetScanningState: %v", err)
+	}
+	if state.ActiveReader != "gmail" || state.State != store.ScanningStateRunning {
+		t.Fatalf("state = %#v, want active gmail running", state)
+	}
+	if state.LastStartedAt == nil || !state.LastStartedAt.Equal(startedAt) {
+		t.Fatalf("LastStartedAt = %v, want %v", state.LastStartedAt, startedAt)
+	}
+}
+
+func TestScanningStateMigratesActiveReaderFromAppConfig(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+	tenant := store.Tenant{ID: createRuntimeTestUser(t, ts, "scanning-migration@example.com").TenantID}
+
+	if err := ts.SetAppConfig(ctx, tenant, "active_reader", "thunderbird"); err != nil {
+		t.Fatalf("SetAppConfig active_reader: %v", err)
+	}
+	if err := ts.EnsureScanningStateForTenant(ctx, tenant); err != nil {
+		t.Fatalf("EnsureScanningStateForTenant: %v", err)
+	}
+
+	state, err := ts.GetScanningState(ctx, tenant)
+	if err != nil {
+		t.Fatalf("GetScanningState: %v", err)
+	}
+	if state.ActiveReader != "thunderbird" || state.State != store.ScanningStateQueued {
+		t.Fatalf("state = %#v, want migrated thunderbird queued", state)
+	}
+}
+
 func TestRuntimeState_BaseCurrencyStartsUnset(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()

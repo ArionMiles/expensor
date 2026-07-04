@@ -5,7 +5,7 @@ test('settings tab persists in the URL and on reload @mocked', async ({ gotoMock
   await gotoMocked('/settings')
 
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
-  await page.getByRole('button', { name: 'Community Sync' }).click()
+  await page.getByRole('button', { name: 'Community' }).click()
 
   await expect.poll(() => searchParam(page.url(), 'tab')).toBe('sync')
   await expect(page.getByRole('heading', { name: 'Sync status' })).toBeVisible()

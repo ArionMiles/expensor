@@ -11,7 +11,7 @@ describe('resolveDocumentTitle', () => {
 
   it('uses page title followed by tab title for tabbed routes', () => {
     expect(resolveDocumentTitle({ pathname: '/settings', search: '?tab=sync' }, t)).toBe(
-      'Settings - Community Sync',
+      'Settings - Community',
     )
     expect(resolveDocumentTitle({ pathname: '/settings', search: '?tab=account' }, t)).toBe(
       'Settings - Account',
