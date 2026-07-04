@@ -69,6 +69,13 @@ func requestTenant(r *http.Request) store.Tenant {
 	return store.Tenant{}
 }
 
+func entryTenant(entry oauthStateEntry, fallback store.Tenant) store.Tenant {
+	if entry.tenant.ID != "" {
+		return entry.tenant
+	}
+	return fallback
+}
+
 // UploadCredentials handles POST /api/readers/{name}/credentials.
 // Accepts a JSON file upload (e.g. Google client_secret.json) and saves it to the runtime store.
 // @Summary Upload reader OAuth credentials
@@ -195,8 +202,9 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tenant := requestTenant(r)
 	h.logger.Debug("reading credentials from store", "reader", name)
-	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(r.Context(), requestTenant(r), name)
+	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(r.Context(), tenant, name)
 	if err != nil {
 		h.logger.Error("failed to load credentials", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to load credentials")
@@ -233,6 +241,7 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 	}
 	h.oauthStates[state] = oauthStateEntry{
 		readerName: name,
+		tenant:     tenant,
 		expiresAt:  time.Now().Add(oauthStateTTL),
 	}
 	h.mu.Unlock()
@@ -322,7 +331,7 @@ func (h *Handlers) AuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
-	if err := h.exchangeAndSaveToken(r.Context(), requestTenant(r), name, code, redirectURL); err != nil {
+	if err := h.exchangeAndSaveToken(r.Context(), entryTenant(entry, requestTenant(r)), name, code, redirectURL); err != nil {
 		h.logger.Error("OAuth token exchange failed", "reader", name, "error", err)
 		if errors.Is(err, errCredentialsMissing) || errors.Is(err, errReaderNotRegistered) {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -416,7 +425,7 @@ func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
-	if err := h.exchangeAndSaveToken(r.Context(), requestTenant(r), name, code, redirectURL); err != nil {
+	if err := h.exchangeAndSaveToken(r.Context(), entryTenant(entry, requestTenant(r)), name, code, redirectURL); err != nil {
 		h.logger.Error("manual OAuth exchange failed", "reader", name, "error", err)
 		if errors.Is(err, errCredentialsMissing) || errors.Is(err, errReaderNotRegistered) {
 			writeError(w, http.StatusInternalServerError, err.Error())

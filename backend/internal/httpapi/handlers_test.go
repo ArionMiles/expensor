@@ -79,6 +79,7 @@ type mockStore struct {
 	activeReader               string
 	readerSecrets              map[string][]byte
 	readerTokens               map[string][]byte
+	tenantScopedReaderRuntime  bool
 	readerConfigs              map[string]json.RawMessage
 	getFacetsErr               error
 	facets                     *store.Facets
@@ -441,29 +442,36 @@ func (m *mockStore) GetActiveReader(_ context.Context, _ store.Tenant) (string, 
 	return m.activeReader, nil
 }
 
-func (m *mockStore) SetReaderSecret(_ context.Context, _ store.Tenant, reader string, secret []byte) error {
+func (m *mockStore) readerRuntimeKey(tenant store.Tenant, reader string) string {
+	if m.tenantScopedReaderRuntime && tenant.ID != "" {
+		return tenant.ID + "/" + reader
+	}
+	return reader
+}
+
+func (m *mockStore) SetReaderSecret(_ context.Context, tenant store.Tenant, reader string, secret []byte) error {
 	if m.readerSecrets == nil {
 		m.readerSecrets = make(map[string][]byte)
 	}
-	m.readerSecrets[reader] = append([]byte(nil), secret...)
+	m.readerSecrets[m.readerRuntimeKey(tenant, reader)] = append([]byte(nil), secret...)
 	return nil
 }
 
-func (m *mockStore) GetReaderSecret(_ context.Context, _ store.Tenant, reader string) (secret []byte, found bool, err error) {
-	secret, ok := m.readerSecrets[reader]
+func (m *mockStore) GetReaderSecret(_ context.Context, tenant store.Tenant, reader string) (secret []byte, found bool, err error) {
+	secret, ok := m.readerSecrets[m.readerRuntimeKey(tenant, reader)]
 	return append([]byte(nil), secret...), ok, nil
 }
 
-func (m *mockStore) SetReaderToken(_ context.Context, _ store.Tenant, reader string, token []byte) error {
+func (m *mockStore) SetReaderToken(_ context.Context, tenant store.Tenant, reader string, token []byte) error {
 	if m.readerTokens == nil {
 		m.readerTokens = make(map[string][]byte)
 	}
-	m.readerTokens[reader] = append([]byte(nil), token...)
+	m.readerTokens[m.readerRuntimeKey(tenant, reader)] = append([]byte(nil), token...)
 	return nil
 }
 
-func (m *mockStore) GetReaderToken(_ context.Context, _ store.Tenant, reader string) (token []byte, found bool, err error) {
-	token, ok := m.readerTokens[reader]
+func (m *mockStore) GetReaderToken(_ context.Context, tenant store.Tenant, reader string) (token []byte, found bool, err error) {
+	token, ok := m.readerTokens[m.readerRuntimeKey(tenant, reader)]
 	return append([]byte(nil), token...), ok, nil
 }
 
@@ -2382,6 +2390,63 @@ func TestAuthCallback_ReturnsClosePageAfterTokenSaved(t *testing.T) {
 	}
 	if !strings.Contains(string(st.readerTokens["gmail"]), "new-refresh") {
 		t.Fatalf("saved token = %s, want refresh token from re-grant", st.readerTokens["gmail"])
+	}
+}
+
+func TestAuthCallback_UsesTenantFromOAuthStartState(t *testing.T) {
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("token endpoint method = %s, want POST", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"access_token":"new-access","refresh_token":"new-refresh","token_type":"Bearer","expires_in":3600}`)
+	}))
+	defer tokenServer.Close()
+
+	secretJSON := fmt.Sprintf(`{
+		"installed": {
+			"client_id": "test-client-id.apps.googleusercontent.com",
+			"client_secret": "test-client-secret",
+			"auth_uri": "https://accounts.google.com/o/oauth2/auth",
+			"token_uri": %q,
+			"redirect_uris": ["http://localhost:8080/api/auth/callback"]
+		}
+	}`, tokenServer.URL)
+	st := &mockStore{
+		readerSecrets:             map[string][]byte{"tenant-a/gmail": []byte(secretJSON)},
+		tenantScopedReaderRuntime: true,
+	}
+	h := newTestHandlers(t, st, &mockDaemon{})
+
+	startCtx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	startReq := httptest.NewRequestWithContext(startCtx, http.MethodPost, "/api/readers/gmail/auth/start", nil)
+	startReq.SetPathValue("name", "gmail")
+	startRR := httptest.NewRecorder()
+	h.AuthStart(startRR, startReq)
+
+	if startRR.Code != http.StatusOK {
+		t.Fatalf("start status = %d body=%s", startRR.Code, startRR.Body.String())
+	}
+	var startResp map[string]string
+	decodeJSON(t, startRR.Body.String(), &startResp)
+	authURL, err := url.Parse(startResp["url"])
+	if err != nil {
+		t.Fatalf("parse auth URL: %v", err)
+	}
+	state := authURL.Query().Get("state")
+	if state == "" {
+		t.Fatalf("auth URL missing state: %s", startResp["url"])
+	}
+
+	callbackReq := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/auth/callback?state="+url.QueryEscape(state)+"&code=4%2F0Acode", nil)
+	callbackRR := httptest.NewRecorder()
+	h.AuthCallback(callbackRR, callbackReq)
+
+	if callbackRR.Code != http.StatusOK {
+		t.Fatalf("callback status = %d body=%s", callbackRR.Code, callbackRR.Body.String())
+	}
+	if !strings.Contains(string(st.readerTokens["tenant-a/gmail"]), "new-refresh") {
+		t.Fatalf("saved tenant token = %s, want refresh token from re-grant", st.readerTokens["tenant-a/gmail"])
 	}
 }
 

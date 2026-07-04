@@ -29,6 +29,7 @@ var (
 // oauthStateEntry holds a pending OAuth state with an expiry time.
 type oauthStateEntry struct {
 	readerName string
+	tenant     store.Tenant
 	expiresAt  time.Time
 }
 
