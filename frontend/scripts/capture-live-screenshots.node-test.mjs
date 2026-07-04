@@ -22,22 +22,43 @@ describe('live screenshot workflow', () => {
     assert.match(script, /context\.request\.post\(`\$\{baseURL\}\/api\/session`/)
   })
 
-  it('captures dashboard screenshots in all-time mode so seed dates do not age out', async () => {
+  it('captures dashboard screenshots in current-month mode and waits for the daemon status', async () => {
     const script = await readFile(
       path.join(rootDir, 'frontend', 'scripts', 'capture-live-screenshots.mjs'),
       'utf-8',
     )
 
-    assert.match(script, /\{ path: '\/\?summary=all_time', name: 'dashboard-light\.png', theme: 'light' \}/)
-    assert.match(script, /\{ path: '\/\?summary=all_time', name: 'dashboard-dark\.png', theme: 'dark' \}/)
-    assert.match(script, /window\.localStorage\.setItem\('expensor\.dashboard\.summaryMode', 'all_time'\)/)
+    assert.match(script, /\{ path: '\/', name: 'dashboard-light\.png', theme: 'light' \}/)
+    assert.match(script, /\{ path: '\/', name: 'dashboard-dark\.png', theme: 'dark' \}/)
+    assert.doesNotMatch(script, /summary=all_time/)
+    assert.doesNotMatch(script, /expensor\.dashboard\.summaryMode/)
+    assert.match(script, /context\.request\.post\(`\$\{baseURL\}\/api\/daemon\/start`/)
+    assert.match(script, /page\.getByText\('daemon running'\)/)
+  })
+
+  it('keeps seeded screenshot transactions in the current month without calendar-month edits', async () => {
+    const seed = await readFile(
+      path.join(rootDir, 'tests', 'component', 'fixtures', 'seed.sql'),
+      'utf-8',
+    )
+
+    assert.match(seed, /date_trunc\('month', NOW\(\) AT TIME ZONE 'Asia\/Kolkata'\)/)
+    assert.doesNotMatch(seed, /make_timestamptz\(\s*2026,\s*5,/)
+    assert.doesNotMatch(seed, /DATE '2025-06-01'/)
+    assert.match(
+      seed,
+      /current_month\.month_start - \(\(\(\(seq - 76\) \/ 15\) \+ 1\) \* INTERVAL '1 month'\)/,
+    )
   })
 
   it('provides review and capture tasks over the same seeded preview stack', async () => {
     const taskfile = await readFile(path.join(rootDir, 'Taskfile.yml'), 'utf-8')
 
     assert.match(taskfile, /screenshots:review:/)
-    assert.match(taskfile, /docker compose -f tests\/component\/docker-compose\.yml run --quiet-pull --rm seed/)
+    assert.match(
+      taskfile,
+      /docker compose -f tests\/component\/docker-compose\.yml run --quiet-pull --rm seed/,
+    )
     assert.match(taskfile, /npm run preview -- --host 127\.0\.0\.1 --port 4173/)
     assert.match(taskfile, /EXPENSOR_SCREENSHOT_BASE_URL=http:\/\/127\.0\.0\.1:4173/)
   })

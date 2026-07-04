@@ -41,7 +41,9 @@ task screenshots:live
 
 This uses the same component seed and preview setup as `screenshots:review`,
 signs in with the component admin fixture, and writes all four screenshot files.
-Dashboard screenshots are captured in all-time mode so the deterministic seed
-data does not need timestamp adjustments as calendar months pass.
+The seeded screenshot transactions are placed in the current month at seed time
+so the dashboard can use its default current-month view without calendar-month
+edits. The capture starts the seeded Thunderbird daemon and waits for the
+`daemon running` status before taking dashboard screenshots.
 
 Keep screenshot data deterministic so screenshots can be regenerated when the UI changes.

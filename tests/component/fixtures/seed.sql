@@ -129,32 +129,41 @@ history_rows AS (
   SELECT seq
   FROM generate_series(76, 240) AS seq
 ),
+current_month AS (
+  SELECT
+    date_trunc('month', NOW() AT TIME ZONE 'Asia/Kolkata') AS month_start,
+    EXTRACT(DAY FROM (
+      date_trunc('month', NOW() AT TIME ZONE 'Asia/Kolkata') + INTERVAL '1 month - 1 day'
+    ))::int AS days_in_month,
+    LEAST(
+      EXTRACT(DAY FROM (
+        date_trunc('month', NOW() AT TIME ZONE 'Asia/Kolkata') + INTERVAL '1 month - 1 day'
+      ))::int,
+      30
+    ) AS display_days
+),
 seed_rows AS (
   SELECT
     seq,
-    make_timestamptz(
-      2026,
-      5,
-      31 - ((seq - 1) % 30),
-      7 + (seq % 15),
-      (seq * 7) % 60,
-      0,
-      'Asia/Kolkata'
-    ) AS spent_at
+    (
+      current_month.month_start
+      + ((current_month.days_in_month - 1 - ((seq - 1) % current_month.display_days)) * INTERVAL '1 day')
+      + ((7 + (seq % 15)) * INTERVAL '1 hour')
+      + (((seq * 7) % 60) * INTERVAL '1 minute')
+    ) AT TIME ZONE 'Asia/Kolkata' AS spent_at
   FROM current_month_rows
+  CROSS JOIN current_month
   UNION ALL
   SELECT
     seq,
-    make_timestamptz(
-      EXTRACT(YEAR FROM (DATE '2025-06-01' + (((seq - 76) / 15) * INTERVAL '1 month')))::int,
-      EXTRACT(MONTH FROM (DATE '2025-06-01' + (((seq - 76) / 15) * INTERVAL '1 month')))::int,
-      ((seq - 76) % 27) + 1,
-      7 + (seq % 15),
-      (seq * 11) % 60,
-      0,
-      'Asia/Kolkata'
-    ) AS spent_at
+    (
+      current_month.month_start - ((((seq - 76) / 15) + 1) * INTERVAL '1 month')
+      + (((seq - 76) % 27) * INTERVAL '1 day')
+      + ((7 + (seq % 15)) * INTERVAL '1 hour')
+      + (((seq * 11) % 60) * INTERVAL '1 minute')
+    ) AT TIME ZONE 'Asia/Kolkata' AS spent_at
   FROM history_rows
+  CROSS JOIN current_month
 ),
 transactions_to_insert AS (
   SELECT
