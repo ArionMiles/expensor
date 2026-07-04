@@ -174,6 +174,11 @@ describe('App auth routing', () => {
     const user = userEvent.setup()
     let rescanRequests = 0
     let clearCheckpointRequests = 0
+    const syncSettingPatches: Array<Record<string, unknown>> = []
+    const statusIndicatorEvents: boolean[] = []
+    window.addEventListener('expensor:scanningStatusBreathingChanged', ((event: CustomEvent) => {
+      statusIndicatorEvents.push(Boolean(event.detail?.enabled))
+    }) as EventListener)
     window.history.pushState({}, '', '/')
     server.use(
       http.get('/api/bootstrap', () => HttpResponse.json({ required: false })),
@@ -191,7 +196,18 @@ describe('App auth routing', () => {
         HttpResponse.json({ required: false, missing: [] }),
       ),
       http.get('/api/config/active-reader', () => HttpResponse.json({ reader: 'gmail' })),
-      http.post('/api/daemon/rescan', async ({ request }) => {
+      http.get('/api/scanning/settings', () =>
+        HttpResponse.json({ active_reader: 'gmail', enabled: true }),
+      ),
+      http.get('/api/config/sync/settings', () =>
+        HttpResponse.json({ automatic_sync_enabled: true }),
+      ),
+      http.patch('/api/config/sync/settings', async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        syncSettingPatches.push(body)
+        return HttpResponse.json(body)
+      }),
+      http.post('/api/scanning/rescans', async ({ request }) => {
         const body = (await request.json()) as { reader?: string }
         if (body.reader === 'gmail') rescanRequests += 1
         return HttpResponse.json({ status: 'rescanning' })
@@ -212,6 +228,12 @@ describe('App auth routing', () => {
     expect(within(palette).getByRole('button', { name: /Create new rule/ })).toBeInTheDocument()
     expect(within(palette).getByRole('button', { name: /Create access token/ })).toBeInTheDocument()
     expect(within(palette).getByRole('button', { name: /Create new user/ })).toBeInTheDocument()
+    expect(
+      within(palette).getByRole('button', { name: /Toggle status indicator/ }),
+    ).toBeInTheDocument()
+    expect(
+      within(palette).getByRole('button', { name: /Toggle automatic community sync/ }),
+    ).toBeInTheDocument()
     expect(within(palette).getByRole('button', { name: /Force rescan/ })).toBeEnabled()
     expect(within(palette).getByRole('button', { name: /Clear checkpoint/ })).toBeEnabled()
 
@@ -227,6 +249,24 @@ describe('App auth routing', () => {
     )
     await user.keyboard('{Enter}')
     await waitFor(() => expect(clearCheckpointRequests).toBe(1))
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    const statusPalette = await screen.findByRole('dialog', { name: 'Command palette' })
+    await user.type(
+      within(statusPalette).getByRole('textbox', { name: 'Search commands' }),
+      'status indicator',
+    )
+    await user.keyboard('{Enter}')
+    expect(statusIndicatorEvents).toEqual([false])
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    const communityPalette = await screen.findByRole('dialog', { name: 'Command palette' })
+    await user.type(
+      within(communityPalette).getByRole('textbox', { name: 'Search commands' }),
+      'automatic community sync',
+    )
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(syncSettingPatches).toEqual([{ automatic_sync_enabled: false }]))
   }, 15_000)
 
   it('hides admin-only command palette actions from regular users', async () => {

@@ -288,6 +288,36 @@ export const handlers = [
     }),
   ),
   http.get('/api/config/active-reader', () => HttpResponse.json({ reader: '' })),
+  http.get('/api/scanning/settings', () => HttpResponse.json({ active_reader: '', enabled: true })),
+  http.patch('/api/scanning/settings', async ({ request }) => {
+    const body = (await request.json()) as { active_reader?: string; enabled?: boolean }
+    return HttpResponse.json({
+      active_reader: body.active_reader ?? '',
+      enabled: body.enabled ?? true,
+    })
+  }),
+  http.get('/api/scanning/status', () =>
+    HttpResponse.json({
+      active_reader: '',
+      enabled: true,
+      state: 'stopped',
+      retry_count: 0,
+      updated_at: new Date(Date.UTC(2026, 0, 1)).toISOString(),
+    }),
+  ),
+  http.get('/api/admin/scanning/settings', () =>
+    HttpResponse.json({
+      max_concurrent_scans: 4,
+      updated_at: new Date(Date.UTC(2026, 0, 1)).toISOString(),
+    }),
+  ),
+  http.patch('/api/admin/scanning/settings', async ({ request }) => {
+    const body = (await request.json()) as { max_concurrent_scans?: number }
+    return HttpResponse.json({
+      max_concurrent_scans: body.max_concurrent_scans ?? 4,
+      updated_at: new Date(Date.UTC(2026, 0, 1)).toISOString(),
+    })
+  }),
   http.get('/api/config/readers/:reader/checkpoint', () =>
     HttpResponse.json({ last_scan_at: null }),
   ),
@@ -303,6 +333,7 @@ export const handlers = [
   ),
   http.delete('/api/config/readers/:reader/checkpoint', () => HttpResponse.json({})),
   http.post('/api/daemon/rescan', () => HttpResponse.json({ status: 'rescanning' })),
+  http.post('/api/scanning/rescans', () => HttpResponse.json({ status: 'rescanning' })),
   http.get('/api/extraction-diagnostics', ({ request }) => {
     const status =
       (new URL(request.url).searchParams.get('status') as ExtractionDiagnosticListStatus | null) ??
@@ -334,6 +365,11 @@ export const handlers = [
   http.get('/api/config/sync/status', () =>
     HttpResponse.json({ last_synced_at: null, error: null, entries_updated: 0 }),
   ),
+  http.get('/api/config/sync/settings', () => HttpResponse.json({ automatic_sync_enabled: true })),
+  http.patch('/api/config/sync/settings', async ({ request }) => {
+    const body = (await request.json()) as { automatic_sync_enabled?: boolean }
+    return HttpResponse.json({ automatic_sync_enabled: body.automatic_sync_enabled ?? true })
+  }),
   http.post('/api/config/sync', () => HttpResponse.json({ status: 'queued' })),
   http.get('/api/config/labels', () =>
     HttpResponse.json([

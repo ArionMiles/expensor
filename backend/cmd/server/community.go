@@ -18,6 +18,7 @@ type communitySyncStore interface {
 	SeedMCCCodes(ctx context.Context, entries []store.MCCEntry) error
 	SeedMerchantCategories(ctx context.Context, entries []store.MerchantCategoryEntry) (int64, error)
 	SetSyncStatus(ctx context.Context, status store.SyncStatus) error
+	GetCommunitySyncSettings(ctx context.Context) (store.CommunitySyncSettings, error)
 }
 
 type communitySyncDependencies struct {
@@ -39,7 +40,7 @@ func startCommunitySync(ctx context.Context, deps communitySyncDependencies) fun
 	go func() {
 		syncCtx, syncCancel := communitySyncContext(ctx, deps.config.SyncTimeout)
 		defer syncCancel()
-		syncCommunityContent(syncCtx, deps.store, deps.config.URL, syncLog)
+		syncCommunityContentIfAutomaticEnabled(syncCtx, deps.store, deps.config.URL, syncLog)
 	}()
 	go func() {
 		ticker := time.NewTicker(deps.config.SyncInterval)
@@ -50,7 +51,7 @@ func startCommunitySync(ctx context.Context, deps communitySyncDependencies) fun
 				return
 			case <-ticker.C:
 				syncCtx, syncCancel := communitySyncContext(ctx, deps.config.SyncTimeout)
-				syncCommunityContent(syncCtx, deps.store, deps.config.URL, syncLog)
+				syncCommunityContentIfAutomaticEnabled(syncCtx, deps.store, deps.config.URL, syncLog)
 				deps.coordinator.refreshResolver(syncCtx)
 				syncCancel()
 			}
@@ -66,6 +67,19 @@ func startCommunitySync(ctx context.Context, deps communitySyncDependencies) fun
 
 func communitySyncContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, timeout)
+}
+
+func syncCommunityContentIfAutomaticEnabled(ctx context.Context, st communitySyncStore, baseURL string, logger *slog.Logger) {
+	settings, err := st.GetCommunitySyncSettings(ctx)
+	if err != nil {
+		logger.Warn("failed to read community sync settings", "error", err)
+		return
+	}
+	if settings.AutomaticSyncEnabled != nil && !*settings.AutomaticSyncEnabled {
+		logger.Info("automatic community sync disabled")
+		return
+	}
+	syncCommunityContent(ctx, st, baseURL, logger)
 }
 
 // syncCommunityContent fetches and persists community-managed taxonomy content.

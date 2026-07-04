@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { KeyRound, LogOut, RefreshCw, RotateCcw, ScrollText, UserPlus } from 'lucide-react'
+import {
+  Activity,
+  KeyRound,
+  LogOut,
+  RefreshCw,
+  RotateCcw,
+  ScrollText,
+  UserPlus,
+} from 'lucide-react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { CommandPalette, type CommandPaletteAction } from './CommandPalette'
 import { DaemonStatusBar } from './DaemonStatusBar'
@@ -7,12 +15,15 @@ import { Sidebar } from './Sidebar'
 import {
   useActiveReader,
   useClearReaderCheckpoint,
+  useCommunitySyncSettings,
   useLogout,
   useRescan,
   useSession,
+  useUpdateCommunitySyncSettings,
 } from '@/api/queries'
 import { DocumentTitle } from '@/lib/documentTitle'
 import { NAVIGATION_TARGETS } from '@/lib/navigation'
+import { toggleScanningStatusBreathing } from '@/lib/scanningStatusIndicator'
 
 function getStoredCollapsed(): boolean {
   try {
@@ -27,6 +38,8 @@ export function AppLayout() {
   const location = useLocation()
   const { data: session } = useSession()
   const { data: activeReader } = useActiveReader()
+  const { data: communitySyncSettings } = useCommunitySyncSettings()
+  const updateCommunitySyncSettings = useUpdateCommunitySyncSettings()
   const logout = useLogout()
   const rescan = useRescan()
   const clearCheckpoint = useClearReaderCheckpoint()
@@ -88,6 +101,21 @@ export function AppLayout() {
         keywords: ['new token', 'access token', 'personal access token'],
       },
       {
+        id: 'toggle-status-indicator',
+        titleKey: 'command.actions.toggleStatusIndicator' as const,
+        descriptionKey: 'command.actions.toggleStatusIndicator.description' as const,
+        icon: Activity,
+        keywords: ['status indicator', 'animation', 'scan status'],
+      },
+      {
+        id: 'toggle-community-sync',
+        titleKey: 'command.actions.toggleCommunitySync' as const,
+        descriptionKey: 'command.actions.toggleCommunitySync.description' as const,
+        icon: RefreshCw,
+        keywords: ['community sync', 'automatic community sync', 'daily sync'],
+        disabled: updateCommunitySyncSettings.isPending,
+      },
+      {
         id: 'force-rescan',
         titleKey: 'settings.daemon.forceRescan' as const,
         descriptionKey: 'command.actions.forceRescan.description' as const,
@@ -126,7 +154,14 @@ export function AppLayout() {
     })
 
     return actions
-  }, [activeReader, clearCheckpoint.isPending, logout.isPending, rescan.isPending, session?.role])
+  }, [
+    activeReader,
+    clearCheckpoint.isPending,
+    logout.isPending,
+    rescan.isPending,
+    session?.role,
+    updateCommunitySyncSettings.isPending,
+  ])
 
   const closePaletteAndNavigate = (path: string) => {
     navigate(path)
@@ -144,7 +179,19 @@ export function AppLayout() {
       return
     }
     if (id === 'create-user') {
-      closePaletteAndNavigate('/settings?tab=account&action=create-user')
+      closePaletteAndNavigate('/settings?tab=admin&action=create-user')
+      return
+    }
+    if (id === 'toggle-status-indicator') {
+      toggleScanningStatusBreathing()
+      setPaletteOpen(false)
+      return
+    }
+    if (id === 'toggle-community-sync') {
+      updateCommunitySyncSettings.mutate({
+        automatic_sync_enabled: !(communitySyncSettings?.automatic_sync_enabled ?? true),
+      })
+      setPaletteOpen(false)
       return
     }
     if (id === 'force-rescan' && reader) {

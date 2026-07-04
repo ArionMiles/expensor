@@ -53,6 +53,7 @@ func (p *Plugin) NewReader(input plugins.ReaderInput) (api.Reader, error) {
 		LookbackDays:   cfg.LookbackDays,
 		LastScanAt:     cfg.LastScanAt,
 		ForceFullScan:  cfg.ForceFullScan,
+		RunOnce:        cfg.RunOnce,
 		OnCheckpoint:   cfg.OnCheckpoint,
 		DiagnosticSink: input.DiagnosticSink,
 	}

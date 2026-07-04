@@ -61,6 +61,7 @@ type App struct {
 	// loaded from environment variables.
 	LastScanAt    *time.Time      `ignored:"true"`
 	ForceFullScan bool            `ignored:"true"`
+	RunOnce       bool            `ignored:"true"`
 	OnCheckpoint  func(time.Time) `ignored:"true"`
 
 	// Thunderbird reader configuration (profile path/mailboxes set via UI wizard).

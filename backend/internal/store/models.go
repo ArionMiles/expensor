@@ -295,6 +295,16 @@ type SyncStatus struct {
 	EntriesUpdated int64      `json:"entries_updated"`
 }
 
+// CommunitySyncSettings controls process-wide community content synchronization.
+type CommunitySyncSettings struct {
+	AutomaticSyncEnabled *bool `json:"automatic_sync_enabled"`
+}
+
+// CommunitySyncSettingsPatch partially updates community sync settings.
+type CommunitySyncSettingsPatch struct {
+	AutomaticSyncEnabled *bool `json:"automatic_sync_enabled"`
+}
+
 // RuleRow is a rule as stored in the database.
 // Source is either "system" (seeded from embedded rules.json) or "user" (created via UI).
 // TransactionSource is the human-readable identifier written to transaction.source (e.g. "Credit Card - HDFC").

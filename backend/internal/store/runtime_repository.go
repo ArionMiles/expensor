@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -183,6 +184,34 @@ func (r *pgRuntimeRepository) SetSyncStatus(ctx context.Context, status SyncStat
 		return fmt.Errorf("marshaling sync status: %w", err)
 	}
 	return r.writeAppConfig(ctx, Tenant{}, "content_sync_status", string(b))
+}
+
+func (r *pgRuntimeRepository) GetCommunitySyncSettings(ctx context.Context) (CommunitySyncSettings, error) {
+	enabled := true
+	value, err := r.readAppConfig(ctx, Tenant{}, "community_auto_sync_enabled")
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return CommunitySyncSettings{AutomaticSyncEnabled: &enabled}, nil
+		}
+		return CommunitySyncSettings{}, err
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return CommunitySyncSettings{}, fmt.Errorf("parsing community auto sync setting: %w", err)
+	}
+	return CommunitySyncSettings{AutomaticSyncEnabled: &parsed}, nil
+}
+
+func (r *pgRuntimeRepository) PatchCommunitySyncSettings(
+	ctx context.Context,
+	patch CommunitySyncSettingsPatch,
+) (CommunitySyncSettings, error) {
+	if patch.AutomaticSyncEnabled != nil {
+		if err := r.writeAppConfig(ctx, Tenant{}, "community_auto_sync_enabled", strconv.FormatBool(*patch.AutomaticSyncEnabled)); err != nil {
+			return CommunitySyncSettings{}, err
+		}
+	}
+	return r.GetCommunitySyncSettings(ctx)
 }
 
 func (r *pgRuntimeRepository) GetCommunityURL(ctx context.Context) (string, error) {

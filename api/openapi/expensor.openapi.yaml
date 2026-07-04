@@ -6,6 +6,22 @@ definitions:
         example: gmail
         type: string
     type: object
+  httpapi.AdminScanningSettingsPatchRequest:
+    properties:
+      max_concurrent_scans:
+        example: 4
+        maximum: 64
+        minimum: 1
+        type: integer
+    type: object
+  httpapi.AdminScanningSettingsResponse:
+    properties:
+      max_concurrent_scans:
+        example: 4
+        type: integer
+      updated_at:
+        type: string
+    type: object
   httpapi.AppliedCountResponse:
     properties:
       applied:
@@ -148,6 +164,18 @@ definitions:
         items:
           $ref: '#/definitions/httpapi.TimeBucketResponse'
         type: array
+    type: object
+  httpapi.CommunitySyncSettingsPatchRequest:
+    properties:
+      automatic_sync_enabled:
+        example: false
+        type: boolean
+    type: object
+  httpapi.CommunitySyncSettingsResponse:
+    properties:
+      automatic_sync_enabled:
+        example: true
+        type: boolean
     type: object
   httpapi.ConfigFieldResponse:
     properties:
@@ -852,6 +880,56 @@ definitions:
     - bank
     - type
     type: object
+  httpapi.ScanningSettingsPatchRequest:
+    properties:
+      active_reader:
+        example: gmail
+        type: string
+      enabled:
+        type: boolean
+    type: object
+  httpapi.ScanningSettingsResponse:
+    properties:
+      active_reader:
+        example: gmail
+        type: string
+      enabled:
+        example: true
+        type: boolean
+    type: object
+  httpapi.ScanningStatusResponse:
+    properties:
+      active_reader:
+        example: gmail
+        type: string
+      enabled:
+        example: true
+        type: boolean
+      last_failed_at:
+        type: string
+      last_started_at:
+        type: string
+      last_stopped_at:
+        type: string
+      next_retry_at:
+        type: string
+      public_message:
+        example: Reconnect your reader account to continue scanning.
+        type: string
+      reason_code:
+        example: needs_auth_invalid_grant
+        type: string
+      retry_count:
+        type: integer
+      state:
+        example: running
+        type: string
+      tenant_id:
+        example: 11111111-1111-1111-1111-111111111111
+        type: string
+      updated_at:
+        type: string
+    type: object
   httpapi.SetupStatusResponse:
     properties:
       missing:
@@ -1396,6 +1474,54 @@ paths:
       summary: Complete account setup
       tags:
       - Auth
+  /admin/scanning/settings:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.AdminScanningSettingsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Get global scanning settings
+      tags:
+      - Admin
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Global scanning settings patch
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.AdminScanningSettingsPatchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.AdminScanningSettingsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Update global scanning settings
+      tags:
+      - Admin
   /admin/users:
     get:
       produces:
@@ -2512,6 +2638,54 @@ paths:
       summary: Trigger community content sync
       tags:
       - Config
+  /config/sync/settings:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.CommunitySyncSettingsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Get community sync settings
+      tags:
+      - Config
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Community sync settings patch
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.CommunitySyncSettingsPatchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.CommunitySyncSettingsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Update community sync settings
+      tags:
+      - Config
   /config/sync/status:
     get:
       produces:
@@ -3609,6 +3783,103 @@ paths:
       summary: Import rules
       tags:
       - Rules
+  /scanning/rescans:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Rescan request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.DaemonReaderRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/httpapi.StatusOnlyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Create a tenant scanning rescan request
+      tags:
+      - Scanning
+  /scanning/settings:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.ScanningSettingsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Get tenant scanning settings
+      tags:
+      - Scanning
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Scanning settings patch
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.ScanningSettingsPatchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.ScanningSettingsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Update tenant scanning settings
+      tags:
+      - Scanning
+  /scanning/status:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.ScanningStatusResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Get tenant scanning status
+      tags:
+      - Scanning
   /session:
     delete:
       responses:

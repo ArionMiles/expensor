@@ -5,6 +5,9 @@ import type {
   BootstrapRequest,
   CompleteAccountSetupRequest,
   BankColor,
+  AdminScanningSettingsPatch,
+  CommunitySyncSettings,
+  CommunitySyncSettingsPatch,
   CreateUserRequest,
   DashboardData,
   ExtractionDiagnosticListStatus,
@@ -15,6 +18,7 @@ import type {
   ProfilePatch,
   RuleDocument,
   RulePayload,
+  ScanningSettingsPatch,
   SyncStatus,
   TransactionFilters,
   TransactionPatch,
@@ -25,8 +29,12 @@ export const queryKeys = {
   session: ['auth', 'session'] as const,
   accessTokens: ['auth', 'tokens'] as const,
   adminUsers: ['auth', 'admin', 'users'] as const,
+  adminScanningSettings: ['auth', 'admin', 'scanning-settings'] as const,
+  communitySyncSettings: ['config', 'sync', 'settings'] as const,
   health: ['health'] as const,
   status: ['status'] as const,
+  scanningStatus: ['scanning', 'status'] as const,
+  scanningSettings: ['scanning', 'settings'] as const,
   chartData: ['stats', 'charts'] as const,
   dashboardData: ['stats', 'dashboard'] as const,
   preferences: ['config', 'preferences'] as const,
@@ -731,7 +739,37 @@ export function useImportRules() {
 
 export function useRescan() {
   return useMutation({
-    mutationFn: (reader: string) => api.daemon.rescan(reader).then((r) => r.data),
+    mutationFn: (reader: string) => api.scanning.rescan(reader).then((r) => r.data),
+  })
+}
+
+export function useScanningStatus() {
+  return useQuery({
+    queryKey: queryKeys.scanningStatus,
+    queryFn: () => api.scanning.status().then((r) => r.data),
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  })
+}
+
+export function useScanningSettings() {
+  return useQuery({
+    queryKey: queryKeys.scanningSettings,
+    queryFn: () => api.scanning.settings().then((r) => r.data),
+    staleTime: 60_000,
+  })
+}
+
+export function useUpdateScanningSettings() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (patch: ScanningSettingsPatch) =>
+      api.scanning.updateSettings(patch).then((r) => r.data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.scanningSettings })
+      void qc.invalidateQueries({ queryKey: queryKeys.scanningStatus })
+      void qc.invalidateQueries({ queryKey: queryKeys.activeReader })
+    },
   })
 }
 
@@ -790,8 +828,25 @@ export function useUpdatePreferences() {
 export function useActiveReader() {
   return useQuery({
     queryKey: queryKeys.activeReader,
-    queryFn: () => api.config.getActiveReader().then((r) => r.data.reader),
+    queryFn: () => api.scanning.settings().then((r) => r.data.active_reader),
     staleTime: 60_000,
+  })
+}
+
+export function useAdminScanningSettings() {
+  return useQuery({
+    queryKey: queryKeys.adminScanningSettings,
+    queryFn: () => api.auth.admin.scanningSettings().then((r) => r.data),
+    staleTime: 60_000,
+  })
+}
+
+export function useUpdateAdminScanningSettings() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (patch: AdminScanningSettingsPatch) =>
+      api.auth.admin.updateScanningSettings(patch).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.adminScanningSettings }),
   })
 }
 
@@ -834,6 +889,25 @@ export function useSyncStatus() {
     queryKey: ['config', 'sync', 'status'] as const,
     queryFn: () => api.sync.status().then((r) => r.data),
     staleTime: 30_000,
+  })
+}
+
+export function useCommunitySyncSettings() {
+  return useQuery<CommunitySyncSettings>({
+    queryKey: queryKeys.communitySyncSettings,
+    queryFn: () => api.sync.settings().then((r) => r.data),
+    staleTime: 30_000,
+  })
+}
+
+export function useUpdateCommunitySyncSettings() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (patch: CommunitySyncSettingsPatch) =>
+      api.sync.updateSettings(patch).then((r) => r.data),
+    onSuccess: (settings) => {
+      qc.setQueryData(queryKeys.communitySyncSettings, settings)
+    },
   })
 }
 

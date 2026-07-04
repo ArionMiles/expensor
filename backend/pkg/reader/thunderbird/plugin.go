@@ -95,6 +95,7 @@ func (p *Plugin) NewReader(input plugins.ReaderInput) (api.Reader, error) {
 		Interval:       time.Duration(cfg.ScanInterval) * time.Second,
 		LastScanAt:     cfg.LastScanAt,
 		ForceFullScan:  cfg.ForceFullScan,
+		RunOnce:        cfg.RunOnce,
 		OnCheckpoint:   cfg.OnCheckpoint,
 		DiagnosticSink: input.DiagnosticSink,
 	}

@@ -77,6 +77,9 @@ type mockStore struct {
 	appConfig                  map[string]string
 	setConfigErr               error
 	activeReader               string
+	schedulerConfig            store.SchedulerConfig
+	scanningState              store.TenantScanningState
+	scanningStates             []store.TenantScanningState
 	readerSecrets              map[string][]byte
 	readerTokens               map[string][]byte
 	tenantScopedReaderRuntime  bool
@@ -116,6 +119,9 @@ type mockStore struct {
 	updateDiagnosticStat       string
 	syncStatus                 store.SyncStatus
 	syncStatusErr              error
+	communitySyncSettings      store.CommunitySyncSettings
+	communitySyncSettingsPatch store.CommunitySyncSettingsPatch
+	communitySyncSettingsErr   error
 	bootstrapRequired          bool
 	createdBootstrapAdmin      store.CreateBootstrapAdminInput
 	createdUser                store.CreateUserInput
@@ -440,6 +446,89 @@ func (m *mockStore) SetActiveReader(_ context.Context, _ store.Tenant, reader st
 
 func (m *mockStore) GetActiveReader(_ context.Context, _ store.Tenant) (string, error) {
 	return m.activeReader, nil
+}
+
+func (m *mockStore) GetSchedulerConfig(context.Context) (store.SchedulerConfig, error) {
+	if m.schedulerConfig.MaxConcurrentScans == 0 {
+		m.schedulerConfig.MaxConcurrentScans = 4
+	}
+	return m.schedulerConfig, nil
+}
+
+func (m *mockStore) PatchSchedulerConfig(_ context.Context, patch store.SchedulerConfigPatch) (store.SchedulerConfig, error) {
+	if patch.MaxConcurrentScans != nil {
+		m.schedulerConfig.MaxConcurrentScans = *patch.MaxConcurrentScans
+	}
+	if m.schedulerConfig.MaxConcurrentScans == 0 {
+		m.schedulerConfig.MaxConcurrentScans = 4
+	}
+	m.schedulerConfig.UpdatedAt = time.Now()
+	return m.schedulerConfig, nil
+}
+
+func (m *mockStore) EnsureScanningStateForTenant(_ context.Context, tenant store.Tenant) error {
+	if m.scanningState.TenantID == "" {
+		m.scanningState = store.TenantScanningState{TenantID: tenant.ID, Enabled: true, State: store.ScanningStateStopped}
+	}
+	return nil
+}
+
+func (m *mockStore) GetScanningState(ctx context.Context, tenant store.Tenant) (store.TenantScanningState, error) {
+	if err := m.EnsureScanningStateForTenant(ctx, tenant); err != nil {
+		return store.TenantScanningState{}, err
+	}
+	return m.scanningState, nil
+}
+
+func (m *mockStore) ListScanningStates(context.Context) ([]store.TenantScanningState, error) {
+	return append([]store.TenantScanningState(nil), m.scanningStates...), nil
+}
+
+func (m *mockStore) SetActiveScanningReader(_ context.Context, tenant store.Tenant, reader string) error {
+	m.scanningState = store.TenantScanningState{TenantID: tenant.ID, ActiveReader: reader, Enabled: true, State: store.ScanningStateQueued}
+	return nil
+}
+
+func (m *mockStore) ClearActiveScanningReader(_ context.Context, tenant store.Tenant) error {
+	m.scanningState = store.TenantScanningState{TenantID: tenant.ID, Enabled: false, State: store.ScanningStateStopped}
+	return nil
+}
+
+func (m *mockStore) SetScanningEnabled(_ context.Context, tenant store.Tenant, enabled bool) error {
+	if m.scanningState.TenantID == "" {
+		m.scanningState.TenantID = tenant.ID
+	}
+	m.scanningState.Enabled = enabled
+	switch {
+	case enabled && m.scanningState.ActiveReader != "":
+		m.scanningState.State = store.ScanningStateQueued
+	case enabled:
+		m.scanningState.State = store.ScanningStateStopped
+	default:
+		m.scanningState.State = store.ScanningStatePaused
+	}
+	return nil
+}
+
+func (m *mockStore) UpdateScanningState(_ context.Context, tenant store.Tenant, update store.ScanningStateUpdate) error {
+	m.scanningState.TenantID = tenant.ID
+	m.scanningState.State = update.State
+	m.scanningState.ReasonCode = update.ReasonCode
+	m.scanningState.PublicMessage = update.PublicMessage
+	if update.LastStartedAt != nil {
+		m.scanningState.LastStartedAt = update.LastStartedAt
+	}
+	if update.LastStoppedAt != nil {
+		m.scanningState.LastStoppedAt = update.LastStoppedAt
+	}
+	if update.LastFailedAt != nil {
+		m.scanningState.LastFailedAt = update.LastFailedAt
+	}
+	m.scanningState.NextRetryAt = update.NextRetryAt
+	if update.RetryCount != nil {
+		m.scanningState.RetryCount = *update.RetryCount
+	}
+	return nil
 }
 
 func (m *mockStore) readerRuntimeKey(tenant store.Tenant, reader string) string {
@@ -4261,6 +4350,74 @@ func (m *mockStore) GetSyncStatus(_ context.Context) (store.SyncStatus, error) {
 		return store.SyncStatus{}, m.syncStatusErr
 	}
 	return m.syncStatus, nil
+}
+
+func (m *mockStore) GetCommunitySyncSettings(_ context.Context) (store.CommunitySyncSettings, error) {
+	if m.communitySyncSettingsErr != nil {
+		return store.CommunitySyncSettings{}, m.communitySyncSettingsErr
+	}
+	if m.communitySyncSettings.AutomaticSyncEnabled == nil {
+		enabled := true
+		m.communitySyncSettings.AutomaticSyncEnabled = &enabled
+	}
+	return m.communitySyncSettings, nil
+}
+
+func (m *mockStore) PatchCommunitySyncSettings(
+	_ context.Context,
+	patch store.CommunitySyncSettingsPatch,
+) (store.CommunitySyncSettings, error) {
+	if m.communitySyncSettingsErr != nil {
+		return store.CommunitySyncSettings{}, m.communitySyncSettingsErr
+	}
+	m.communitySyncSettingsPatch = patch
+	if patch.AutomaticSyncEnabled != nil {
+		m.communitySyncSettings.AutomaticSyncEnabled = patch.AutomaticSyncEnabled
+	}
+	return m.communitySyncSettings, nil
+}
+
+func TestGetCommunitySyncSettingsDefaultsAutomaticSyncEnabled(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/sync/settings", nil)
+	rr := httptest.NewRecorder()
+	h.GetCommunitySyncSettings(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var resp CommunitySyncSettingsResponse
+	decodeJSON(t, rr.Body.String(), &resp)
+	if !resp.AutomaticSyncEnabled {
+		t.Fatalf("automatic_sync_enabled = false, want true")
+	}
+}
+
+func TestPatchCommunitySyncSettingsPersistsAutomaticSyncEnabled(t *testing.T) {
+	ms := &mockStore{}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPatch,
+		"/api/config/sync/settings",
+		strings.NewReader(`{"automatic_sync_enabled":false}`),
+	)
+	rr := httptest.NewRecorder()
+	h.PatchCommunitySyncSettings(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if ms.communitySyncSettingsPatch.AutomaticSyncEnabled == nil || *ms.communitySyncSettingsPatch.AutomaticSyncEnabled {
+		t.Fatalf("stored patch = %#v, want automatic_sync_enabled=false", ms.communitySyncSettingsPatch)
+	}
+	var resp CommunitySyncSettingsResponse
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp.AutomaticSyncEnabled {
+		t.Fatalf("automatic_sync_enabled = true, want false")
+	}
 }
 
 func TestCategorizeMerchant_OK(t *testing.T) {
