@@ -3941,6 +3941,51 @@ func TestAuthExchange_ExpiredState_Returns400(t *testing.T) {
 	}
 }
 
+func TestAuthExchange_RejectsStateFromDifferentTenant(t *testing.T) {
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("token endpoint method = %s, want POST", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"access_token":"new-access","refresh_token":"new-refresh","token_type":"Bearer","expires_in":3600}`)
+	}))
+	defer tokenServer.Close()
+
+	secretJSON := fmt.Sprintf(`{
+		"installed": {
+			"client_id": "test-client-id.apps.googleusercontent.com",
+			"client_secret": "test-client-secret",
+			"auth_uri": "https://accounts.google.com/o/oauth2/auth",
+			"token_uri": %q,
+			"redirect_uris": ["http://localhost:8080/api/auth/callback"]
+		}
+	}`, tokenServer.URL)
+	h := newTestHandlers(t, &mockStore{
+		readerSecrets:             map[string][]byte{"tenant-a/gmail": []byte(secretJSON)},
+		tenantScopedReaderRuntime: true,
+	}, &mockDaemon{})
+
+	state := "reader:gmail:tenant-a"
+	h.mu.Lock()
+	h.oauthStates[state] = oauthStateEntry{
+		readerName: "gmail",
+		tenant:     store.Tenant{ID: "tenant-a"},
+		expiresAt:  time.Now().Add(time.Minute),
+	}
+	h.mu.Unlock()
+
+	body := `{"url":"http://localhost:8080/api/auth/callback?code=4%2F0Acode&state=` + state + `"}`
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-b", TenantID: "tenant-b", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/readers/gmail/auth/exchange", strings.NewReader(body))
+	req.SetPathValue("name", "gmail")
+	rr := httptest.NewRecorder()
+	h.AuthExchange(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for tenant mismatch, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
 func TestAuthExchange_RestartsRunningDaemonAfterTokenSaved(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

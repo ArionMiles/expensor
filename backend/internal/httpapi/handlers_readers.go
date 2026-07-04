@@ -69,11 +69,11 @@ func requestTenant(r *http.Request) store.Tenant {
 	return store.Tenant{}
 }
 
-func entryTenant(entry oauthStateEntry, fallback store.Tenant) store.Tenant {
+func entryTenant(entry oauthStateEntry, fallback store.Tenant) (store.Tenant, bool) {
 	if entry.tenant.ID != "" {
-		return entry.tenant
+		return entry.tenant, fallback.ID == "" || fallback.ID == entry.tenant.ID
 	}
-	return fallback
+	return fallback, true
 }
 
 // UploadCredentials handles POST /api/readers/{name}/credentials.
@@ -331,7 +331,12 @@ func (h *Handlers) AuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
-	if err := h.exchangeAndSaveToken(r.Context(), entryTenant(entry, requestTenant(r)), name, code, redirectURL); err != nil {
+	tenant, tenantOK := entryTenant(entry, requestTenant(r))
+	if !tenantOK {
+		writeError(w, http.StatusBadRequest, "invalid or expired OAuth state")
+		return
+	}
+	if err := h.exchangeAndSaveToken(r.Context(), tenant, name, code, redirectURL); err != nil {
 		h.logger.Error("OAuth token exchange failed", "reader", name, "error", err)
 		if errors.Is(err, errCredentialsMissing) || errors.Is(err, errReaderNotRegistered) {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -425,7 +430,12 @@ func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
-	if err := h.exchangeAndSaveToken(r.Context(), entryTenant(entry, requestTenant(r)), name, code, redirectURL); err != nil {
+	tenant, tenantOK := entryTenant(entry, requestTenant(r))
+	if !tenantOK {
+		writeError(w, http.StatusBadRequest, "invalid or expired OAuth state")
+		return
+	}
+	if err := h.exchangeAndSaveToken(r.Context(), tenant, name, code, redirectURL); err != nil {
 		h.logger.Error("manual OAuth exchange failed", "reader", name, "error", err)
 		if errors.Is(err, errCredentialsMissing) || errors.Is(err, errReaderNotRegistered) {
 			writeError(w, http.StatusInternalServerError, err.Error())
