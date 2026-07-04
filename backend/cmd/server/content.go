@@ -73,9 +73,6 @@ func regexString(re *regexp.Regexp) string {
 
 // loadUserRules compiles tenant user-created rules, skipping invalid persisted regexes.
 func loadUserRules(ctx context.Context, st daemonStore, tenant store.Tenant, logger *slog.Logger) []api.Rule {
-	if st == nil {
-		return nil
-	}
 	rows, err := st.ListRules(ctx, tenant)
 	if err != nil {
 		logger.Warn("failed to load rules from DB, falling back to embedded rules", "error", err)

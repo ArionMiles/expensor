@@ -127,14 +127,12 @@ func (c *daemonCoordinator) launch(req httpapi.DaemonRunRequest, forceRescan boo
 	}
 
 	// OnCheckpoint saves the scan timestamp back to DB after each successful scan.
-	if c.st != nil {
-		runtimeCfg.OnCheckpoint = func(t time.Time) {
-			key := "reader." + req.Reader + ".last_scan_at"
-			if err := c.st.SetAppConfig(c.ctx, req.Tenant, key, t.Format(time.RFC3339)); err != nil {
-				c.logger.Warn("failed to save scan checkpoint", "reader", req.Reader, "error", err)
-			} else {
-				c.logger.Debug("scan checkpoint saved", "reader", req.Reader, "at", t.Format(time.RFC3339))
-			}
+	runtimeCfg.OnCheckpoint = func(t time.Time) {
+		key := "reader." + req.Reader + ".last_scan_at"
+		if err := c.st.SetAppConfig(c.ctx, req.Tenant, key, t.Format(time.RFC3339)); err != nil {
+			c.logger.Warn("failed to save scan checkpoint", "reader", req.Reader, "error", err)
+		} else {
+			c.logger.Debug("scan checkpoint saved", "reader", req.Reader, "at", t.Format(time.RFC3339))
 		}
 	}
 
@@ -156,9 +154,6 @@ func (c *daemonCoordinator) launch(req httpapi.DaemonRunRequest, forceRescan boo
 // loadLastScanAt reads the last scan checkpoint for a reader from app_config.
 // Returns nil if no checkpoint exists (first run).
 func loadLastScanAt(ctx context.Context, st daemonStore, tenant store.Tenant, readerName string, logger *slog.Logger) *time.Time {
-	if st == nil {
-		return nil
-	}
 	key := "reader." + readerName + ".last_scan_at"
 	val, err := st.GetAppConfig(ctx, tenant, key)
 	if err != nil {
@@ -367,17 +362,11 @@ func (c *daemonCoordinator) runDaemon(
 
 // saveActiveReader persists the reader name so startup can resume it.
 func saveActiveReader(ctx context.Context, st daemonStore, tenant store.Tenant, readerName string) error {
-	if st == nil {
-		return nil
-	}
 	return st.SetActiveReader(ctx, tenant, readerName)
 }
 
 // applyScanOverrides applies valid UI-managed scan settings to a config copy.
 func applyScanOverrides(ctx context.Context, cfg config.App, st daemonStore, tenant store.Tenant) config.App {
-	if st == nil {
-		return cfg
-	}
 	if v, err := getAppConfigWithTimeout(ctx, st, tenant, "scan_interval", cfg.Persisted.ReadTimeout); err == nil {
 		if n, convErr := strconv.Atoi(v); convErr == nil && n > 0 {
 			cfg.ScanInterval = n

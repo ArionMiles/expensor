@@ -98,9 +98,6 @@ func run() int {
 
 	dm := &daemonManager{}
 	sinkFactory := func(tenant store.Tenant, appCfg *config.App, sinkLogger *slog.Logger) (daemon.TransactionSink, error) {
-		if appCfg == nil {
-			appCfg = &cfg
-		}
 		return pgStore.NewTransactionIngestor(store.IngestionConfig{
 			Tenant:        tenant,
 			BatchSize:     appCfg.Postgres.BatchSize,
