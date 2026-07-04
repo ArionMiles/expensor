@@ -128,11 +128,6 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 		return fmt.Errorf("creating reader: %w", err)
 	}
 
-	if r.sinkFactory == nil {
-		err := errors.New("transaction sink factory is nil")
-		runErr = err
-		return err
-	}
 	sink, err := r.sinkFactory(runCfg.Tenant, cfg, r.logger.With("component", "transaction_ingestion"))
 	if err != nil {
 		runErr = err

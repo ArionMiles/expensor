@@ -297,12 +297,6 @@ func (c *daemonCoordinator) runDaemon(
 
 	var httpClient *http.Client
 	if len(scopes) > 0 {
-		if c.runtimeStore == nil {
-			err := errors.New("runtime store is nil")
-			c.logger.Error("failed to create OAuth client", "error", err)
-			c.dm.setStopped(err)
-			return
-		}
 		secretJSON, ok, err := c.runtimeStore.GetReaderSecret(ctx, run.tenant, run.readerName)
 		if err != nil {
 			c.logger.Error("failed to load OAuth credentials", "reader", run.readerName, "error", err)

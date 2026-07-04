@@ -609,7 +609,7 @@ func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
 			return
 		}
-		if h.daemon != nil && h.daemon.Status().Running && h.stopFn != nil {
+		if h.daemon.Status().Running && h.stopFn != nil {
 			h.stopFn()
 		}
 	}
