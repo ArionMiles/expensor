@@ -37,7 +37,7 @@ func (h *Handlers) StartDaemon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.logger.Info("daemon start requested", "reader", body.Reader)
-	h.startFn(body.Reader)
+	h.startFn(DaemonRunRequest{Tenant: requestTenant(r), Reader: body.Reader})
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "starting"})
 }
 
@@ -69,7 +69,7 @@ func (h *Handlers) Rescan(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotImplemented, "rescan not configured")
 		return
 	}
-	h.rescanFn(body.Reader)
+	h.rescanFn(DaemonRunRequest{Tenant: requestTenant(r), Reader: body.Reader})
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "rescanning"})
 }
 

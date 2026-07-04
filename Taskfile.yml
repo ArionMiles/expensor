@@ -144,7 +144,9 @@ tasks:
       Intended for local verification and CI.
     dir: frontend
     deps: [frontend:install]
-    cmd: npm run test
+    cmds:
+      - npm run test
+      - npm run test:scripts
 
   test:fe:watch:
     summary: Run frontend tests in watch mode.
@@ -204,16 +206,46 @@ tasks:
     deps: [frontend:install]
     cmd: npm run screenshot:readme
 
+  screenshots:review:
+    summary: Start the seeded screenshot review stack.
+    desc: >-
+      Recreates the component backend with deterministic seed data, builds the
+      frontend, and serves a Vite preview at http://127.0.0.1:4173 for manual
+      review before running the screenshot capture.
+    deps: [frontend:install]
+    cmds:
+      - docker compose -f tests/component/docker-compose.yml down -v --remove-orphans
+      - docker compose -f tests/component/docker-compose.yml up --quiet-pull -d postgres backend
+      - docker compose -f tests/component/docker-compose.yml run --quiet-pull --rm seed
+      - cd frontend && VITE_API_PROXY_TARGET=http://127.0.0.1:18080 npm run build
+      - cd frontend && VITE_API_PROXY_TARGET=http://127.0.0.1:18080 npm run preview -- --host 127.0.0.1 --port 4173
+
   screenshots:live:
     summary: Capture live high-resolution dashboard and transactions screenshots.
     desc: >-
-      Starts from the current local app state and captures rounded, high-DPI
-      dashboard and transactions screenshots in both light and dark themes.
-      Preserves the capture preset used for the README screenshot updates.
-    dir: frontend
+      Recreates the seeded component stack, serves the built frontend through
+      Vite preview, signs in with the component admin fixture, and captures
+      rounded, high-DPI dashboard and transactions screenshots in both light
+      and dark themes.
     deps: [frontend:install]
     cmds:
-      - VITE_API_PROXY_TARGET=http://127.0.0.1:18080 npm run screenshot:live
+      - docker compose -f tests/component/docker-compose.yml down -v --remove-orphans
+      - docker compose -f tests/component/docker-compose.yml up --quiet-pull -d postgres backend
+      - docker compose -f tests/component/docker-compose.yml run --quiet-pull --rm seed
+      - cd frontend && VITE_API_PROXY_TARGET=http://127.0.0.1:18080 npm run build
+      - |
+        cd frontend
+        VITE_API_PROXY_TARGET=http://127.0.0.1:18080 npm run preview -- --host 127.0.0.1 --port 4173 &
+        PREVIEW_PID=$!
+        cleanup() {
+          kill "$PREVIEW_PID" 2>/dev/null || true
+          docker compose -f ../tests/component/docker-compose.yml down -v --remove-orphans
+        }
+        trap cleanup EXIT
+        until curl -sf http://127.0.0.1:4173 >/dev/null; do
+          sleep 0.5
+        done
+        EXPENSOR_SCREENSHOT_BASE_URL=http://127.0.0.1:4173 EXPENSOR_SCREENSHOT_API_URL=http://127.0.0.1:18080 npm run screenshot:live
 
   test:
     summary: Run all backend and frontend unit/component tests.

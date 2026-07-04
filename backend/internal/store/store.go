@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ArionMiles/expensor/backend/internal/auth"
+	"github.com/ArionMiles/expensor/backend/internal/bootstrap"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 )
@@ -111,6 +112,10 @@ func (s *Store) Close() {
 
 func (s *Store) BootstrapRequired(ctx context.Context) (bool, error) {
 	return s.auth.BootstrapRequired(ctx)
+}
+
+func (s *Store) PreviewLegacyClaim(ctx context.Context) (bootstrap.LegacyPreview, error) {
+	return bootstrap.PreviewLegacyClaim(ctx, s.pool)
 }
 
 func (s *Store) CreateBootstrapAdmin(ctx context.Context, input CreateBootstrapAdminInput) (*User, error) {

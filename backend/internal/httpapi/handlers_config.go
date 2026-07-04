@@ -216,7 +216,7 @@ func (h *Handlers) ClearReaderCheckpoint(w http.ResponseWriter, r *http.Request)
 	// immediately starts a full-lookback scan rather than continuing from the
 	// stale in-memory value.
 	if h.daemon.Status().Running && h.restartFn != nil {
-		h.restartFn(name)
+		h.restartFn(DaemonRunRequest{Tenant: requestTenant(r), Reader: name})
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

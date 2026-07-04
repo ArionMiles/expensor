@@ -29,6 +29,9 @@ The fastest way to run Expensor is Docker Compose. It starts Expensor and Postgr
 # Download the Docker Compose file
 curl -LO https://raw.githubusercontent.com/ArionMiles/expensor/refs/heads/main/deploy/docker-compose.yml
 
+# Generate and export the encryption key used for reader credentials and OAuth tokens
+export EXPENSOR_SECRET_KEY="$(openssl rand -base64 32)"
+
 # Start the services
 docker compose up -d
 ```
@@ -41,6 +44,25 @@ This starts:
 - PostgreSQL on the internal Compose network
 - A persistent `postgres_data` volume containing transactions, settings, reader config, OAuth tokens, and processed-message state
 
+### Encryption Secret
+
+Expensor encrypts reader client secrets and OAuth tokens before storing them in PostgreSQL. Set `EXPENSOR_SECRET_KEY` before starting the app and back it up; if it is lost, stored reader credentials cannot be decrypted and readers must be reconnected.
+
+For one-off shell usage:
+
+```bash
+export EXPENSOR_SECRET_KEY="$(openssl rand -base64 32)"
+docker compose up -d
+```
+
+For a persistent Compose setup, create a `.env` file next to `docker-compose.yml`:
+
+```dotenv
+EXPENSOR_SECRET_KEY=base64-encoded-key-here
+```
+
+If you are running from a cloned repository, `task secrets:generate` prints a valid base64-encoded 32-byte key. See [docs/deployment/secrets.md](docs/deployment/secrets.md) for file-based secret configuration and backup guidance.
+
 ### Custom PostgreSQL Password
 
 The Compose file uses a default local password for convenience. To set your own password for a new stack:
@@ -52,6 +74,7 @@ EXPENSOR_POSTGRES_PASSWORD='change-me' docker compose up -d
 You can also create a `.env` file next to `docker-compose.yml`:
 
 ```dotenv
+EXPENSOR_SECRET_KEY=base64-encoded-key-here
 EXPENSOR_POSTGRES_PASSWORD=change-me
 ```
 
@@ -140,6 +163,8 @@ Most setup happens in the web UI. Environment variables are only needed for depl
 | `POSTGRES_PASSWORD` | PostgreSQL password. |
 | `POSTGRES_PORT` | PostgreSQL port. Defaults to `5432`. |
 | `POSTGRES_SSLMODE` | PostgreSQL SSL mode. Defaults to `disable`. |
+| `EXPENSOR_SECRET_KEY` | Base64-encoded 32-byte key used to encrypt reader client secrets and OAuth tokens. Required unless `EXPENSOR_SECRET_KEY_FILE` is set. |
+| `EXPENSOR_SECRET_KEY_FILE` | Path to a file containing the base64-encoded encryption key. Required unless `EXPENSOR_SECRET_KEY` is set. |
 | `LOG_LEVEL` | Minimum log level: `DEBUG`, `INFO`, `WARN`, or `ERROR`. Defaults to `INFO`. |
 | `LOG_JSON` | Set to `true` for structured JSON logs. Defaults to `false`. |
 | `EXPENSOR_OBSERVABILITY_ENABLED` | Enable OpenTelemetry traces and metrics. Defaults to `false`. |
@@ -158,46 +183,9 @@ Tip builds are also published with a pinnable tag: `ghcr.io/arionmiles/expensor:
 
 Latest release: see [Releases](https://github.com/ArionMiles/expensor/releases).
 
-## Repository Structure
+## Contributing
 
-```text
-.
-├── backend/                 # Go API, daemon, plugins, migrations, PostgreSQL store
-├── deploy/                  # Public deployment assets, including Docker Compose
-├── frontend/                # React + Vite + Tailwind web UI
-├── tests/                   # Component, contract, local DB, and integration helpers
-├── docs/                    # Project notes, i18n docs, screenshots, and test docs
-└── Taskfile.yml             # Build, lint, test, and dev automation
-```
-
-## Development
-
-This project uses [Task](https://taskfile.dev) for automation. Prefer `task` targets over direct `go`, `npm`, or `docker compose` commands because they set the expected working directory and environment.
-
-```bash
-task dev               # Start postgres + backend + frontend
-task run               # Backend only
-task run:frontend      # Frontend Vite dev server only
-
-task fmt               # Format Go and frontend code
-task lint              # Lint Go and type-check frontend
-task lint:be:prod      # Strict Go lint used by CI
-task test              # Run backend and frontend tests
-task test:be           # Go unit tests
-task test:fe           # Frontend unit/component tests
-task test:fe:e2e       # Mocked Playwright E2E tests
-
-task build:binary      # Build optimized binary -> bin/expensor
-task build:docker      # Build Docker image locally
-```
-
-PostgreSQL-backed integration tests use Docker. Run them through the relevant `task` targets when changing store, writer, or API behavior.
-
-## Internationalization
-
-Frontend strings that have been extracted for translation live in `frontend/src/i18n/messages.ts`. To add a language, copy the English catalog, translate values without changing keys, then run `task lint:fe` and `task test:fe`.
-
-See [docs/i18n/adding-translations.md](docs/i18n/adding-translations.md) and [docs/i18n/string-extraction.md](docs/i18n/string-extraction.md).
+Repository structure, local development commands, testing guidance, internationalization notes, and contribution workflow live in [CONTRIBUTING.md](.github/CONTRIBUTING.md).
 
 ## Third-Party Notices
 

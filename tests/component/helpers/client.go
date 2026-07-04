@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	componentEmail    = "component-admin@example.com"
+	componentEmail    = "john.smith@example.com"
 	componentPassword = "component admin password"
 )
 
@@ -22,6 +22,14 @@ type Client struct {
 }
 
 func NewClient(t *testing.T) *Client {
+	t.Helper()
+
+	client := NewUnauthenticatedClient(t)
+	client.login(t)
+	return client
+}
+
+func NewUnauthenticatedClient(t *testing.T) *Client {
 	t.Helper()
 
 	baseURL := strings.TrimRight(os.Getenv("COMPONENT_BASE_URL"), "/")
@@ -40,7 +48,6 @@ func NewClient(t *testing.T) *Client {
 			Jar:     jar,
 		},
 	}
-	client.login(t)
 	return client
 }
 

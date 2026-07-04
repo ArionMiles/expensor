@@ -97,11 +97,9 @@ func run() int {
 	var st httpapi.Storer = instrumentedStore
 
 	dm := &daemonManager{}
-	sinkFactory := func(appCfg *config.App, sinkLogger *slog.Logger) (daemon.TransactionSink, error) {
-		if appCfg == nil {
-			appCfg = &cfg
-		}
+	sinkFactory := func(tenant store.Tenant, appCfg *config.App, sinkLogger *slog.Logger) (daemon.TransactionSink, error) {
 		return pgStore.NewTransactionIngestor(store.IngestionConfig{
+			Tenant:        tenant,
 			BatchSize:     appCfg.Postgres.BatchSize,
 			FlushInterval: time.Duration(appCfg.Postgres.FlushInterval) * time.Second,
 		}, sinkLogger), nil
@@ -113,10 +111,7 @@ func run() int {
 		diagnostics: instrumentedStore, sinkFactory: sinkFactory, dm: dm, logger: logger,
 	}
 
-	if savedReader := loadActiveReader(ctx, st, logger); savedReader != "" {
-		logger.Info("resuming daemon from previous session", "reader", savedReader)
-		dc.start(savedReader)
-	}
+	logger.Info("daemon auto-resume disabled; authenticated users can start readers from the app")
 
 	syncFn := startCommunitySync(ctx, communitySyncDependencies{
 		config:      cfg.Community,

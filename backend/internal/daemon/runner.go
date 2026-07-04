@@ -63,8 +63,8 @@ type TransactionSink interface {
 	Write(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error
 }
 
-// TransactionSinkFactory builds the daemon's transaction sink for one run.
-type TransactionSinkFactory func(cfg *config.App, logger *slog.Logger) (TransactionSink, error)
+// TransactionSinkFactory builds the daemon's transaction sink for one tenant-scoped run.
+type TransactionSinkFactory func(tenant store.Tenant, cfg *config.App, logger *slog.Logger) (TransactionSink, error)
 
 // RunConfig holds the configuration for running the daemon.
 type RunConfig struct {
@@ -128,12 +128,7 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 		return fmt.Errorf("creating reader: %w", err)
 	}
 
-	if r.sinkFactory == nil {
-		err := errors.New("transaction sink factory is nil")
-		runErr = err
-		return err
-	}
-	sink, err := r.sinkFactory(cfg, r.logger.With("component", "transaction_ingestion"))
+	sink, err := r.sinkFactory(runCfg.Tenant, cfg, r.logger.With("component", "transaction_ingestion"))
 	if err != nil {
 		runErr = err
 		return fmt.Errorf("creating transaction sink: %w", err)

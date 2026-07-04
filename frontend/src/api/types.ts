@@ -45,6 +45,23 @@ export interface SetupStatus {
 
 export interface BootstrapStatus {
   required: boolean
+  legacy_preview?: LegacyPreview
+}
+
+export interface LegacyPreview {
+  transactions: number
+  app_config: number
+  labels: number
+  categories: number
+  buckets: number
+  rules: number
+  muted_merchants: number
+  merchant_categories: number
+  label_merchants: number
+  extraction_diagnostics: number
+  reader_runtime: number
+  processed_messages: number
+  blocking_reasons: string[]
 }
 
 export type UserRole = 'admin' | 'user'

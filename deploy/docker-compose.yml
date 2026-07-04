@@ -4,10 +4,6 @@
 # Open:   http://localhost:8080
 # Setup:  follow the onboarding wizard to connect Gmail or Thunderbird.
 #
-# Runtime data is stored in PostgreSQL. The application still imports legacy
-# /app/data files at startup when that directory is mounted manually, but new
-# installs do not need an application data volume.
-#
 # Set a custom database password with either:
 #   EXPENSOR_POSTGRES_PASSWORD='change-me' docker compose up -d
 # or a .env file next to this compose file:

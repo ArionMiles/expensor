@@ -100,7 +100,7 @@ func (m *mockRuntimeStore) GetReaderConfig(ctx context.Context, _ store.Tenant, 
 }
 
 func newMockSinkFactory(sink TransactionSink, err error) TransactionSinkFactory {
-	return func(cfg *config.App, logger *slog.Logger) (TransactionSink, error) {
+	return func(_ store.Tenant, _ *config.App, _ *slog.Logger) (TransactionSink, error) {
 		return sink, err
 	}
 }
@@ -275,6 +275,44 @@ func TestRun_SuccessfulRun(t *testing.T) {
 	err := runner.Run(ctx, runCfg)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestRun_PassesTenantToSinkFactory(t *testing.T) {
+	ctx := context.Background()
+	wantTenant := store.Tenant{ID: "tenant-a"}
+	var gotTenant store.Tenant
+
+	reader := &mockReader{
+		readFunc: func(_ context.Context, out chan<- *api.TransactionDetails, _ <-chan string) error {
+			close(out)
+			return nil
+		},
+	}
+	sink := &mockSink{
+		writeFunc: func(_ context.Context, in <-chan *api.TransactionDetails, _ chan<- string) error {
+			for range in {
+			}
+			return nil
+		},
+	}
+
+	registry := plugins.NewRegistry()
+	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: reader}); err != nil {
+		t.Fatalf("RegisterReader: %v", err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	runner := New(registry, func(tenant store.Tenant, _ *config.App, _ *slog.Logger) (TransactionSink, error) {
+		gotTenant = tenant
+		return sink, nil
+	}, &http.Client{}, logger)
+
+	if err := runner.Run(ctx, RunConfig{ReaderName: "test-reader", Tenant: wantTenant, Config: &config.App{}}); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if gotTenant.ID != wantTenant.ID {
+		t.Fatalf("sink factory tenant = %q, want %q", gotTenant.ID, wantTenant.ID)
 	}
 }
 

@@ -1,8 +1,8 @@
 INSERT INTO users (id, email, password_hash, display_name, role, avatar_key) VALUES (
   '00000000-0000-0000-0000-00000000c0de',
-  'component-admin@example.com',
+  'john.smith@example.com',
   '$2a$10$LfS5UEzIPBGqzhsDVmohr.FfBuPQLWlRH9QfNkMZgig0mnFc.BeCC',
-  'Component Admin',
+  'John Smith',
   'admin',
   'default'
 ) ON CONFLICT (id) DO UPDATE SET
@@ -129,32 +129,41 @@ history_rows AS (
   SELECT seq
   FROM generate_series(76, 240) AS seq
 ),
+current_month AS (
+  SELECT
+    date_trunc('month', NOW() AT TIME ZONE 'Asia/Kolkata') AS month_start,
+    EXTRACT(DAY FROM (
+      date_trunc('month', NOW() AT TIME ZONE 'Asia/Kolkata') + INTERVAL '1 month - 1 day'
+    ))::int AS days_in_month,
+    LEAST(
+      EXTRACT(DAY FROM (
+        date_trunc('month', NOW() AT TIME ZONE 'Asia/Kolkata') + INTERVAL '1 month - 1 day'
+      ))::int,
+      30
+    ) AS display_days
+),
 seed_rows AS (
   SELECT
     seq,
-    make_timestamptz(
-      2026,
-      5,
-      31 - ((seq - 1) % 30),
-      7 + (seq % 15),
-      (seq * 7) % 60,
-      0,
-      'Asia/Kolkata'
-    ) AS spent_at
+    (
+      current_month.month_start
+      + ((current_month.days_in_month - 1 - ((seq - 1) % current_month.display_days)) * INTERVAL '1 day')
+      + ((7 + (seq % 15)) * INTERVAL '1 hour')
+      + (((seq * 7) % 60) * INTERVAL '1 minute')
+    ) AT TIME ZONE 'Asia/Kolkata' AS spent_at
   FROM current_month_rows
+  CROSS JOIN current_month
   UNION ALL
   SELECT
     seq,
-    make_timestamptz(
-      EXTRACT(YEAR FROM (DATE '2025-06-01' + (((seq - 76) / 15) * INTERVAL '1 month')))::int,
-      EXTRACT(MONTH FROM (DATE '2025-06-01' + (((seq - 76) / 15) * INTERVAL '1 month')))::int,
-      ((seq - 76) % 27) + 1,
-      7 + (seq % 15),
-      (seq * 11) % 60,
-      0,
-      'Asia/Kolkata'
-    ) AS spent_at
+    (
+      current_month.month_start - ((((seq - 76) / 15) + 1) * INTERVAL '1 month')
+      + (((seq - 76) % 27) * INTERVAL '1 day')
+      + ((7 + (seq % 15)) * INTERVAL '1 hour')
+      + (((seq * 11) % 60) * INTERVAL '1 minute')
+    ) AT TIME ZONE 'Asia/Kolkata' AS spent_at
   FROM history_rows
+  CROSS JOIN current_month
 ),
 transactions_to_insert AS (
   SELECT
@@ -309,6 +318,144 @@ WHERE transaction_id IN (
   WHERE tenant_id = '00000000-0000-0000-0000-00000000c0de'
     AND message_id LIKE 'seed-msg-%'
 )
+ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING;
+
+WITH screenshot_first_page(message_id) AS (
+  VALUES
+    ('seed-msg-31'),
+    ('seed-msg-61'),
+    ('seed-msg-1'),
+    ('seed-msg-32'),
+    ('seed-msg-2'),
+    ('seed-msg-62'),
+    ('seed-msg-33'),
+    ('seed-msg-63'),
+    ('seed-msg-3'),
+    ('seed-msg-34'),
+    ('seed-msg-64'),
+    ('seed-msg-4'),
+    ('seed-msg-5'),
+    ('seed-msg-65'),
+    ('seed-msg-35'),
+    ('seed-msg-66'),
+    ('seed-msg-6'),
+    ('seed-msg-36'),
+    ('seed-msg-7'),
+    ('seed-msg-67')
+)
+DELETE FROM transaction_label_sources
+WHERE transaction_id IN (
+  SELECT transactions.id
+  FROM transactions
+  JOIN screenshot_first_page ON screenshot_first_page.message_id = transactions.message_id
+  WHERE transactions.tenant_id = '00000000-0000-0000-0000-00000000c0de'
+);
+
+WITH screenshot_first_page(message_id) AS (
+  VALUES
+    ('seed-msg-31'),
+    ('seed-msg-61'),
+    ('seed-msg-1'),
+    ('seed-msg-32'),
+    ('seed-msg-2'),
+    ('seed-msg-62'),
+    ('seed-msg-33'),
+    ('seed-msg-63'),
+    ('seed-msg-3'),
+    ('seed-msg-34'),
+    ('seed-msg-64'),
+    ('seed-msg-4'),
+    ('seed-msg-5'),
+    ('seed-msg-65'),
+    ('seed-msg-35'),
+    ('seed-msg-66'),
+    ('seed-msg-6'),
+    ('seed-msg-36'),
+    ('seed-msg-7'),
+    ('seed-msg-67')
+)
+DELETE FROM transaction_labels
+WHERE transaction_id IN (
+  SELECT transactions.id
+  FROM transactions
+  JOIN screenshot_first_page ON screenshot_first_page.message_id = transactions.message_id
+  WHERE transactions.tenant_id = '00000000-0000-0000-0000-00000000c0de'
+);
+
+WITH curated_labels(message_id, label, source_type, merchant_pattern) AS (
+  VALUES
+    ('seed-msg-31', 'Recurring', 'merchant', 'RENTOMOJO'),
+    ('seed-msg-31', 'Shared', 'manual', ''),
+    ('seed-msg-61', 'High Value', 'manual', ''),
+    ('seed-msg-1', 'Online', 'manual', ''),
+    ('seed-msg-1', 'Weekend', 'manual', ''),
+    ('seed-msg-32', 'Reimbursable', 'manual', ''),
+    ('seed-msg-32', 'Weekend', 'manual', ''),
+    ('seed-msg-2', 'Weekend', 'manual', ''),
+    ('seed-msg-62', 'Recurring', 'merchant', 'NPS CONTRIBUTION'),
+    ('seed-msg-33', 'Family', 'manual', ''),
+    ('seed-msg-63', 'Recurring', 'merchant', 'RENTOMOJO'),
+    ('seed-msg-63', 'Shared', 'manual', ''),
+    ('seed-msg-64', 'Reimbursable', 'manual', ''),
+    ('seed-msg-5', 'Online', 'manual', ''),
+    ('seed-msg-65', 'Office', 'manual', ''),
+    ('seed-msg-65', 'Online', 'manual', ''),
+    ('seed-msg-35', 'Online', 'manual', ''),
+    ('seed-msg-35', 'Shared', 'manual', ''),
+    ('seed-msg-66', 'Family', 'manual', ''),
+    ('seed-msg-6', '10min Delivery', 'merchant', 'BLINKIT'),
+    ('seed-msg-7', '10min Delivery', 'merchant', 'SWIGGY INSTAMART'),
+    ('seed-msg-7', 'Shared', 'manual', '')
+),
+resolved AS (
+  SELECT transactions.id AS transaction_id, curated_labels.label
+  FROM curated_labels
+  JOIN transactions ON transactions.message_id = curated_labels.message_id
+  WHERE transactions.tenant_id = '00000000-0000-0000-0000-00000000c0de'
+)
+INSERT INTO transaction_labels (transaction_id, label)
+SELECT transaction_id, label
+FROM resolved
+ON CONFLICT (transaction_id, label) DO NOTHING;
+
+WITH curated_labels(message_id, label, source_type, merchant_pattern) AS (
+  VALUES
+    ('seed-msg-31', 'Recurring', 'merchant', 'RENTOMOJO'),
+    ('seed-msg-31', 'Shared', 'manual', ''),
+    ('seed-msg-61', 'High Value', 'manual', ''),
+    ('seed-msg-1', 'Online', 'manual', ''),
+    ('seed-msg-1', 'Weekend', 'manual', ''),
+    ('seed-msg-32', 'Reimbursable', 'manual', ''),
+    ('seed-msg-32', 'Weekend', 'manual', ''),
+    ('seed-msg-2', 'Weekend', 'manual', ''),
+    ('seed-msg-62', 'Recurring', 'merchant', 'NPS CONTRIBUTION'),
+    ('seed-msg-33', 'Family', 'manual', ''),
+    ('seed-msg-63', 'Recurring', 'merchant', 'RENTOMOJO'),
+    ('seed-msg-63', 'Shared', 'manual', ''),
+    ('seed-msg-64', 'Reimbursable', 'manual', ''),
+    ('seed-msg-5', 'Online', 'manual', ''),
+    ('seed-msg-65', 'Office', 'manual', ''),
+    ('seed-msg-65', 'Online', 'manual', ''),
+    ('seed-msg-35', 'Online', 'manual', ''),
+    ('seed-msg-35', 'Shared', 'manual', ''),
+    ('seed-msg-66', 'Family', 'manual', ''),
+    ('seed-msg-6', '10min Delivery', 'merchant', 'BLINKIT'),
+    ('seed-msg-7', '10min Delivery', 'merchant', 'SWIGGY INSTAMART'),
+    ('seed-msg-7', 'Shared', 'manual', '')
+),
+resolved AS (
+  SELECT
+    transactions.id AS transaction_id,
+    curated_labels.label,
+    curated_labels.source_type,
+    curated_labels.merchant_pattern
+  FROM curated_labels
+  JOIN transactions ON transactions.message_id = curated_labels.message_id
+  WHERE transactions.tenant_id = '00000000-0000-0000-0000-00000000c0de'
+)
+INSERT INTO transaction_label_sources (transaction_id, label, source_type, merchant_pattern)
+SELECT transaction_id, label, source_type, merchant_pattern
+FROM resolved
 ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING;
 
 INSERT INTO labels (tenant_id, name, color) VALUES

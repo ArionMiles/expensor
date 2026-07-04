@@ -69,6 +69,13 @@ func requestTenant(r *http.Request) store.Tenant {
 	return store.Tenant{}
 }
 
+func entryTenant(entry oauthStateEntry, fallback store.Tenant) (store.Tenant, bool) {
+	if entry.tenant.ID != "" {
+		return entry.tenant, fallback.ID == "" || fallback.ID == entry.tenant.ID
+	}
+	return fallback, true
+}
+
 // UploadCredentials handles POST /api/readers/{name}/credentials.
 // Accepts a JSON file upload (e.g. Google client_secret.json) and saves it to the runtime store.
 // @Summary Upload reader OAuth credentials
@@ -195,8 +202,9 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tenant := requestTenant(r)
 	h.logger.Debug("reading credentials from store", "reader", name)
-	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(r.Context(), requestTenant(r), name)
+	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(r.Context(), tenant, name)
 	if err != nil {
 		h.logger.Error("failed to load credentials", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to load credentials")
@@ -233,6 +241,7 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 	}
 	h.oauthStates[state] = oauthStateEntry{
 		readerName: name,
+		tenant:     tenant,
 		expiresAt:  time.Now().Add(oauthStateTTL),
 	}
 	h.mu.Unlock()
@@ -282,13 +291,13 @@ func (h *Handlers) exchangeAndSaveToken(ctx context.Context, tenant store.Tenant
 	if err := h.readerRuntimeStore.SetReaderToken(ctx, tenant, name, tokenJSON); err != nil {
 		return fmt.Errorf("failed to save token: %w", err)
 	}
-	h.restartReaderDaemonAfterAuth(name)
+	h.restartReaderDaemonAfterAuth(tenant, name)
 	return nil
 }
 
-func (h *Handlers) restartReaderDaemonAfterAuth(name string) {
+func (h *Handlers) restartReaderDaemonAfterAuth(tenant store.Tenant, name string) {
 	if h.daemon.Status().Running && h.restartFn != nil {
-		h.restartFn(name)
+		h.restartFn(DaemonRunRequest{Tenant: tenant, Reader: name})
 	}
 }
 
@@ -322,7 +331,12 @@ func (h *Handlers) AuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
-	if err := h.exchangeAndSaveToken(r.Context(), requestTenant(r), name, code, redirectURL); err != nil {
+	tenant, tenantOK := entryTenant(entry, requestTenant(r))
+	if !tenantOK {
+		writeError(w, http.StatusBadRequest, "invalid or expired OAuth state")
+		return
+	}
+	if err := h.exchangeAndSaveToken(r.Context(), tenant, name, code, redirectURL); err != nil {
 		h.logger.Error("OAuth token exchange failed", "reader", name, "error", err)
 		if errors.Is(err, errCredentialsMissing) || errors.Is(err, errReaderNotRegistered) {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -416,7 +430,12 @@ func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
-	if err := h.exchangeAndSaveToken(r.Context(), requestTenant(r), name, code, redirectURL); err != nil {
+	tenant, tenantOK := entryTenant(entry, requestTenant(r))
+	if !tenantOK {
+		writeError(w, http.StatusBadRequest, "invalid or expired OAuth state")
+		return
+	}
+	if err := h.exchangeAndSaveToken(r.Context(), tenant, name, code, redirectURL); err != nil {
 		h.logger.Error("manual OAuth exchange failed", "reader", name, "error", err)
 		if errors.Is(err, errCredentialsMissing) || errors.Is(err, errReaderNotRegistered) {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -590,7 +609,7 @@ func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
 			return
 		}
-		if h.daemon != nil && h.daemon.Status().Running && h.stopFn != nil {
+		if h.daemon.Status().Running && h.stopFn != nil {
 			h.stopFn()
 		}
 	}
@@ -788,7 +807,7 @@ func (h *Handlers) DiscoverProfiles(w http.ResponseWriter, _ *http.Request) {
 		if p == "" {
 			return
 		}
-		if _, err := os.Stat(p); err == nil { //nolint:gosec // path built from well-known OS locations, not user input
+		if _, err := os.Stat(p); err == nil {
 			if _, exists := seen[p]; !exists {
 				seen[p] = struct{}{}
 				paths = append(paths, p)

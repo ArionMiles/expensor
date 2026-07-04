@@ -3,8 +3,15 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
+
+	"github.com/ArionMiles/expensor/backend/internal/httpapi"
+	"github.com/ArionMiles/expensor/backend/internal/plugins"
+	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/config"
 )
 
 func TestDaemonManager_SetRunning(t *testing.T) {
@@ -63,4 +70,53 @@ func TestDaemonManager_SetStopped_NilErrorClearsLastError(t *testing.T) {
 	if s.LastError != "" {
 		t.Errorf("nil error should not populate LastError, got %q", s.LastError)
 	}
+}
+
+func TestDaemonCoordinator_RescanPersistsActiveReader(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	st := &daemonCoordinatorTestStore{}
+	tenant := store.Tenant{ID: "tenant-a"}
+	dc := &daemonCoordinator{
+		ctx:      ctx,
+		registry: plugins.NewRegistry(),
+		cfg: config.App{
+			Persisted: config.Persisted{
+				ReadTimeout: time.Second,
+			},
+		},
+		st:     st,
+		dm:     &daemonManager{},
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	dc.rescan(httpapi.DaemonRunRequest{Tenant: tenant, Reader: "thunderbird"})
+
+	if st.activeReaderTenant != tenant.ID || st.activeReader != "thunderbird" {
+		t.Fatalf("active reader write = tenant %q reader %q, want tenant %q reader thunderbird", st.activeReaderTenant, st.activeReader, tenant.ID)
+	}
+}
+
+type daemonCoordinatorTestStore struct {
+	activeReaderTenant string
+	activeReader       string
+}
+
+func (s *daemonCoordinatorTestStore) GetAppConfig(_ context.Context, _ store.Tenant, _ string) (string, error) {
+	return "", store.ErrNotFound
+}
+
+func (s *daemonCoordinatorTestStore) SetAppConfig(_ context.Context, _ store.Tenant, _, _ string) error {
+	return nil
+}
+
+func (s *daemonCoordinatorTestStore) SetActiveReader(_ context.Context, tenant store.Tenant, reader string) error {
+	s.activeReaderTenant = tenant.ID
+	s.activeReader = reader
+	return nil
+}
+
+func (s *daemonCoordinatorTestStore) ListRules(_ context.Context, _ store.Tenant) ([]store.RuleRow, error) {
+	return nil, nil
 }

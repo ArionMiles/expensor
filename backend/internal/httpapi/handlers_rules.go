@@ -275,7 +275,7 @@ func (h *Handlers) clearActiveReaderCheckpointForNewRule(ctx context.Context, te
 		return
 	}
 	if h.daemon.Status().Running && h.restartFn != nil {
-		h.restartFn(reader)
+		h.restartFn(DaemonRunRequest{Tenant: tenant, Reader: reader})
 	}
 }
 

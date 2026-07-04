@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/ArionMiles/expensor/backend/internal/bootstrap"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
 type authStore interface {
 	BootstrapRequired(ctx context.Context) (bool, error)
+	PreviewLegacyClaim(ctx context.Context) (bootstrap.LegacyPreview, error)
 	CreateBootstrapAdmin(ctx context.Context, input store.CreateBootstrapAdminInput) (*store.User, error)
 	CreateUser(ctx context.Context, input store.CreateUserInput) (*store.User, error)
 	ListUsers(ctx context.Context) ([]store.User, error)
