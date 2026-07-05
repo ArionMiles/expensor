@@ -145,23 +145,6 @@ func ptrInt(v int) *int {
 
 // --- tests ---
 
-func TestRuntimeState_ActiveReader(t *testing.T) {
-	ts := newTestStore(t)
-	defer ts.cleanup()
-	ctx := context.Background()
-
-	if err := ts.SetActiveReader(ctx, store.Tenant{}, "gmail"); err != nil {
-		t.Fatalf("SetActiveReader: %v", err)
-	}
-	got, err := ts.GetActiveReader(ctx, store.Tenant{})
-	if err != nil {
-		t.Fatalf("GetActiveReader: %v", err)
-	}
-	if got != "gmail" {
-		t.Fatalf("active reader = %q", got)
-	}
-}
-
 func TestScanningSchedulerConfigDefault(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
@@ -214,7 +197,7 @@ func TestScanningStateRoundTrip(t *testing.T) {
 	}
 }
 
-func TestScanningStateMigratesActiveReaderFromAppConfig(t *testing.T) {
+func TestEnsureScanningStateIgnoresLegacyActiveReaderAppConfig(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
 	ctx := context.Background()
@@ -231,8 +214,8 @@ func TestScanningStateMigratesActiveReaderFromAppConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetScanningState: %v", err)
 	}
-	if state.ActiveReader != "thunderbird" || state.State != store.ScanningStateQueued {
-		t.Fatalf("state = %#v, want migrated thunderbird queued", state)
+	if state.ActiveReader != "" || state.State != store.ScanningStateStopped {
+		t.Fatalf("state = %#v, want empty stopped state", state)
 	}
 }
 

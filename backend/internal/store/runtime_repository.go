@@ -55,24 +55,6 @@ func (r *pgRuntimeRepository) SetAppConfig(ctx context.Context, tenant Tenant, k
 	return nil
 }
 
-func (r *pgRuntimeRepository) SetActiveReader(ctx context.Context, tenant Tenant, reader string) error {
-	if strings.TrimSpace(reader) == "" {
-		return r.writeAppConfig(ctx, tenant, "active_reader", "")
-	}
-	return r.writeAppConfig(ctx, tenant, "active_reader", reader)
-}
-
-func (r *pgRuntimeRepository) GetActiveReader(ctx context.Context, tenant Tenant) (string, error) {
-	value, err := r.readAppConfig(ctx, tenant, "active_reader")
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", nil
-		}
-		return "", err
-	}
-	return value, nil
-}
-
 func (r *pgRuntimeRepository) SetReaderSecret(ctx context.Context, tenant Tenant, reader string, secret []byte) error {
 	return r.writeReaderEncryptedJSON(ctx, tenant, reader, readerRuntimeClientSecret, secret)
 }

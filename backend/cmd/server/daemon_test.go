@@ -93,14 +93,19 @@ func TestDaemonCoordinator_RescanPersistsActiveReader(t *testing.T) {
 
 	dc.rescan(httpapi.DaemonRunRequest{Tenant: tenant, Reader: "thunderbird"})
 
-	if st.activeReaderTenant != tenant.ID || st.activeReader != "thunderbird" {
-		t.Fatalf("active reader write = tenant %q reader %q, want tenant %q reader thunderbird", st.activeReaderTenant, st.activeReader, tenant.ID)
+	if st.activeScanningReaderTenant != tenant.ID || st.activeScanningReader != "thunderbird" {
+		t.Fatalf(
+			"active scanning reader write = tenant %q reader %q, want tenant %q reader thunderbird",
+			st.activeScanningReaderTenant,
+			st.activeScanningReader,
+			tenant.ID,
+		)
 	}
 }
 
 type daemonCoordinatorTestStore struct {
-	activeReaderTenant string
-	activeReader       string
+	activeScanningReaderTenant string
+	activeScanningReader       string
 }
 
 func (s *daemonCoordinatorTestStore) GetAppConfig(_ context.Context, _ store.Tenant, _ string) (string, error) {
@@ -111,9 +116,9 @@ func (s *daemonCoordinatorTestStore) SetAppConfig(_ context.Context, _ store.Ten
 	return nil
 }
 
-func (s *daemonCoordinatorTestStore) SetActiveReader(_ context.Context, tenant store.Tenant, reader string) error {
-	s.activeReaderTenant = tenant.ID
-	s.activeReader = reader
+func (s *daemonCoordinatorTestStore) SetActiveScanningReader(_ context.Context, tenant store.Tenant, reader string) error {
+	s.activeScanningReaderTenant = tenant.ID
+	s.activeScanningReader = reader
 	return nil
 }
 

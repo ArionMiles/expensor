@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/auth"
-	"github.com/ArionMiles/expensor/backend/internal/bootstrap"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
@@ -62,24 +61,7 @@ type completeAccountSetupRequest struct {
 }
 
 type bootstrapResponse struct {
-	Required      bool                   `json:"required"`
-	LegacyPreview *legacyPreviewResponse `json:"legacy_preview,omitempty"`
-}
-
-type legacyPreviewResponse struct {
-	Transactions          int64    `json:"transactions"`
-	AppConfig             int64    `json:"app_config"`
-	Labels                int64    `json:"labels"`
-	Categories            int64    `json:"categories"`
-	Buckets               int64    `json:"buckets"`
-	Rules                 int64    `json:"rules"`
-	MutedMerchants        int64    `json:"muted_merchants"`
-	MerchantCategories    int64    `json:"merchant_categories"`
-	LabelMerchants        int64    `json:"label_merchants"`
-	ExtractionDiagnostics int64    `json:"extraction_diagnostics"`
-	ReaderRuntime         int64    `json:"reader_runtime"`
-	ProcessedMessages     int64    `json:"processed_messages"`
-	BlockingReasons       []string `json:"blocking_reasons"`
+	Required bool `json:"required"`
 }
 
 type principalResponse struct {
@@ -137,35 +119,7 @@ func (h *Handlers) GetBootstrap(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to check bootstrap status")
 		return
 	}
-	resp := bootstrapResponse{Required: required}
-	if required {
-		preview, previewErr := h.authStore.PreviewLegacyClaim(r.Context())
-		if previewErr != nil {
-			h.logger.Error("legacy bootstrap preview", "error", previewErr)
-			writeError(w, http.StatusInternalServerError, "failed to check legacy data")
-			return
-		}
-		resp.LegacyPreview = legacyPreviewFromBootstrap(preview)
-	}
-	writeJSON(w, http.StatusOK, resp)
-}
-
-func legacyPreviewFromBootstrap(preview bootstrap.LegacyPreview) *legacyPreviewResponse {
-	return &legacyPreviewResponse{
-		Transactions:          preview.Transactions,
-		AppConfig:             preview.AppConfig,
-		Labels:                preview.Labels,
-		Categories:            preview.Categories,
-		Buckets:               preview.Buckets,
-		Rules:                 preview.Rules,
-		MutedMerchants:        preview.MutedMerchants,
-		MerchantCategories:    preview.MerchantCategories,
-		LabelMerchants:        preview.LabelMerchants,
-		ExtractionDiagnostics: preview.ExtractionDiagnostics,
-		ReaderRuntime:         preview.ReaderRuntime,
-		ProcessedMessages:     preview.ProcessedMessages,
-		BlockingReasons:       preview.BlockingReasons,
-	}
+	writeJSON(w, http.StatusOK, bootstrapResponse{Required: required})
 }
 
 // Bootstrap creates the first administrator account.

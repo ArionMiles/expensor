@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/auth"
-	"github.com/ArionMiles/expensor/backend/internal/bootstrap"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
@@ -150,14 +149,9 @@ func TestValidAvatarKeyAllowsCatalogKeys(t *testing.T) {
 	}
 }
 
-func TestGetBootstrapIncludesLegacyPreviewWhenRequired(t *testing.T) {
+func TestGetBootstrapOmitsLegacyPreviewWhenRequired(t *testing.T) {
 	ms := &mockStore{
 		bootstrapRequired: true,
-		legacyPreview: bootstrap.LegacyPreview{
-			Transactions:      2,
-			ReaderRuntime:     1,
-			ProcessedMessages: 3,
-		},
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/bootstrap", nil)
@@ -168,18 +162,15 @@ func TestGetBootstrapIncludesLegacyPreviewWhenRequired(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
 	}
-	var resp struct {
-		Required      bool                    `json:"required"`
-		LegacyPreview bootstrap.LegacyPreview `json:"legacy_preview"`
-	}
+	var resp map[string]any
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !resp.Required {
-		t.Fatal("required = false, want true")
+	if resp["required"] != true {
+		t.Fatalf("required = %v, want true", resp["required"])
 	}
-	if resp.LegacyPreview.Transactions != 2 || resp.LegacyPreview.ReaderRuntime != 1 || resp.LegacyPreview.ProcessedMessages != 3 {
-		t.Fatalf("legacy preview = %#v", resp.LegacyPreview)
+	if _, ok := resp["legacy_preview"]; ok {
+		t.Fatalf("legacy_preview present in response: %s", rec.Body.String())
 	}
 }
 

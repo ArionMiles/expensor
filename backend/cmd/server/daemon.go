@@ -47,7 +47,7 @@ type daemonRuntimeStore interface {
 type daemonStore interface {
 	GetAppConfig(ctx context.Context, tenant store.Tenant, key string) (string, error)
 	SetAppConfig(ctx context.Context, tenant store.Tenant, key, value string) error
-	SetActiveReader(ctx context.Context, tenant store.Tenant, reader string) error
+	SetActiveScanningReader(ctx context.Context, tenant store.Tenant, reader string) error
 	ListRules(ctx context.Context, tenant store.Tenant) ([]store.RuleRow, error)
 }
 
@@ -356,7 +356,7 @@ func (c *daemonCoordinator) runDaemon(
 
 // saveActiveReader persists the reader name so startup can resume it.
 func saveActiveReader(ctx context.Context, st daemonStore, tenant store.Tenant, readerName string) error {
-	return st.SetActiveReader(ctx, tenant, readerName)
+	return st.SetActiveScanningReader(ctx, tenant, readerName)
 }
 
 // applyScanOverrides applies valid UI-managed scan settings to a config copy.

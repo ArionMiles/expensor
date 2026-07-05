@@ -12,7 +12,6 @@ DELETE	/tokens/{id}	programmatic access token missing-id revocation
 POST	/admin/users	admin user creation validation
 POST	/admin/users/{id}/setup-tokens	setup token missing-user state
 GET	/status	daemon status endpoint
-GET	/config/active-reader	active reader config
 GET	/config/banks	bank color mappings
 GET	/config/preferences	application preferences
 PATCH	/config/preferences	update application preferences

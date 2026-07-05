@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/ArionMiles/expensor/backend/internal/bootstrap"
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
@@ -42,15 +41,6 @@ func (s *InstrumentedStore) BootstrapRequired(ctx context.Context) (bool, error)
 	required, err := s.next.BootstrapRequired(ctx)
 	s.recordOperation(ctx, "auth.bootstrap_required", err)
 	return required, err
-}
-
-func (s *InstrumentedStore) PreviewLegacyClaim(ctx context.Context) (bootstrap.LegacyPreview, error) {
-	ctx, span := s.scope.Start(ctx, "store.auth.preview_legacy_claim")
-	defer span.End()
-
-	preview, err := s.next.PreviewLegacyClaim(ctx)
-	s.recordOperation(ctx, "auth.preview_legacy_claim", err)
-	return preview, err
 }
 
 func (s *InstrumentedStore) CreateBootstrapAdmin(ctx context.Context, input CreateBootstrapAdminInput) (*User, error) {
@@ -357,24 +347,6 @@ func (s *InstrumentedStore) MarkMessageProcessed(ctx context.Context, tenant Ten
 	err := s.next.MarkMessageProcessed(ctx, tenant, key, at)
 	s.recordOperation(ctx, "runtime.mark_message_processed", err)
 	return err
-}
-
-func (s *InstrumentedStore) SetActiveReader(ctx context.Context, tenant Tenant, reader string) error {
-	ctx, span := s.scope.Start(ctx, "store.runtime.set_active_reader")
-	defer span.End()
-
-	err := s.next.SetActiveReader(ctx, tenant, reader)
-	s.recordOperation(ctx, "runtime.set_active_reader", err)
-	return err
-}
-
-func (s *InstrumentedStore) GetActiveReader(ctx context.Context, tenant Tenant) (string, error) {
-	ctx, span := s.scope.Start(ctx, "store.runtime.get_active_reader")
-	defer span.End()
-
-	reader, err := s.next.GetActiveReader(ctx, tenant)
-	s.recordOperation(ctx, "runtime.get_active_reader", err)
-	return reader, err
 }
 
 func (s *InstrumentedStore) GetSchedulerConfig(ctx context.Context) (SchedulerConfig, error) {

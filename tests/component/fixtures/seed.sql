@@ -28,9 +28,16 @@ INSERT INTO app_config (tenant_id, key, value) VALUES
   ('00000000-0000-0000-0000-00000000c0de', 'lookback_days', '365'),
   ('00000000-0000-0000-0000-00000000c0de', 'app.timezone', 'Asia/Kolkata'),
   ('00000000-0000-0000-0000-00000000c0de', 'app.time_format', 'HH:mm'),
-  ('00000000-0000-0000-0000-00000000c0de', 'active_reader', 'thunderbird'),
   ('00000000-0000-0000-0000-00000000c0de', 'reader.gmail.last_scan_at', '2026-05-23T06:00:00Z')
 ON CONFLICT (tenant_id, key) WHERE tenant_id IS NOT NULL DO UPDATE SET value = EXCLUDED.value;
+
+INSERT INTO tenant_scanning_state (tenant_id, active_reader, enabled, state)
+VALUES ('00000000-0000-0000-0000-00000000c0de', 'thunderbird', true, 'queued')
+ON CONFLICT (tenant_id) DO UPDATE SET
+  active_reader = EXCLUDED.active_reader,
+  enabled = EXCLUDED.enabled,
+  state = EXCLUDED.state,
+  updated_at = NOW();
 
 INSERT INTO reader_runtime (tenant_id, reader, config) VALUES
   ('00000000-0000-0000-0000-00000000c0de', 'thunderbird', '{"config":{"profilePath":"/workspace/tests/component/fixtures/thunderbird-profile","mailboxes":"Inbox"}}'::jsonb)

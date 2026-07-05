@@ -8,19 +8,19 @@ import (
 	"github.com/ArionMiles/expensor/tests/component/helpers"
 )
 
-func TestHealthVersionAndActiveReader(t *testing.T) {
+func TestHealthVersionAndScanningSettings(t *testing.T) {
 	helpers.WaitForHealthy(t)
 	client := helpers.NewClient(t)
 
 	cases := []struct {
 		name   string
 		path   string
-		assert func(t *testing.T, body map[string]string)
+		assert func(t *testing.T, body map[string]any)
 	}{
 		{
 			name: "health ok",
 			path: "/api/health",
-			assert: func(t *testing.T, body map[string]string) {
+			assert: func(t *testing.T, body map[string]any) {
 				t.Helper()
 				if body["status"] != "ok" {
 					t.Fatalf("unexpected health payload: %#v", body)
@@ -30,7 +30,7 @@ func TestHealthVersionAndActiveReader(t *testing.T) {
 		{
 			name: "version present",
 			path: "/api/version",
-			assert: func(t *testing.T, body map[string]string) {
+			assert: func(t *testing.T, body map[string]any) {
 				t.Helper()
 				if body["version"] == "" {
 					t.Fatalf("expected non-empty version payload, got %#v", body)
@@ -38,11 +38,11 @@ func TestHealthVersionAndActiveReader(t *testing.T) {
 			},
 		},
 		{
-			name: "active reader persisted",
-			path: "/api/config/active-reader",
-			assert: func(t *testing.T, body map[string]string) {
+			name: "active reader persisted in scanning settings",
+			path: "/api/scanning/settings",
+			assert: func(t *testing.T, body map[string]any) {
 				t.Helper()
-				if body["reader"] != "thunderbird" {
+				if body["active_reader"] != "thunderbird" {
 					t.Fatalf("expected thunderbird active reader, got %#v", body)
 				}
 			},
@@ -53,7 +53,7 @@ func TestHealthVersionAndActiveReader(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := client.Get(t, tc.path)
 			helpers.RequireStatus(t, resp, 200)
-			body := helpers.DecodeJSON[map[string]string](t, resp)
+			body := helpers.DecodeJSON[map[string]any](t, resp)
 			tc.assert(t, body)
 		})
 	}

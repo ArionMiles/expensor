@@ -593,26 +593,21 @@ func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	activeReader, err := h.readerRuntimeStore.GetActiveReader(r.Context(), requestTenant(r))
+	tenant := requestTenant(r)
+	state, err := h.scanningStore.GetScanningState(r.Context(), tenant)
 	if err != nil {
-		h.logger.Error("failed to read active reader before disconnect", "reader", name, "error", err)
+		h.logger.Error("failed to read scanning state before disconnect", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
 		return
 	}
-	if err := h.readerRuntimeStore.DeleteReaderRuntime(r.Context(), requestTenant(r), name); err != nil {
+	if err := h.readerRuntimeStore.DeleteReaderRuntime(r.Context(), tenant, name); err != nil {
 		h.logger.Error("failed to disconnect reader", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
 		return
 	}
-	if activeReader == name {
-		tenant := requestTenant(r)
+	if state.ActiveReader == name {
 		if err := h.scanningStore.ClearActiveScanningReader(r.Context(), tenant); err != nil {
 			h.logger.Error("failed to clear active scanning reader", "reader", name, "error", err)
-			writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
-			return
-		}
-		if err := h.readerRuntimeStore.SetActiveReader(r.Context(), tenant, ""); err != nil {
-			h.logger.Error("failed to clear active reader", "reader", name, "error", err)
 			writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
 			return
 		}

@@ -195,7 +195,6 @@ describe('App auth routing', () => {
       http.get('/api/config/setup-status', () =>
         HttpResponse.json({ required: false, missing: [] }),
       ),
-      http.get('/api/config/active-reader', () => HttpResponse.json({ reader: 'gmail' })),
       http.get('/api/scanning/settings', () =>
         HttpResponse.json({ active_reader: 'gmail', enabled: true }),
       ),

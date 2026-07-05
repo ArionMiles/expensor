@@ -117,11 +117,6 @@ type StatusOnlyResponse struct {
 	Status string `json:"status" example:"ok"`
 }
 
-// ActiveReaderResponse is the active reader config payload.
-type ActiveReaderResponse struct {
-	Reader string `json:"reader" example:"gmail"`
-}
-
 type ScanningSettingsResponse struct {
 	ActiveReader string `json:"active_reader" example:"gmail"`
 	Enabled      bool   `json:"enabled" example:"true"`

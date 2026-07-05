@@ -57,7 +57,7 @@ export const queryKeys = {
   categories: ['config', 'categories'] as const,
   buckets: ['config', 'buckets'] as const,
   setupStatus: ['config', 'setup-status'] as const,
-  activeReader: ['config', 'active-reader'] as const,
+  activeReader: ['scanning', 'settings', 'active-reader'] as const,
 }
 
 export function useBootstrapStatus() {
