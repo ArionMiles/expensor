@@ -221,7 +221,7 @@ func (h *Handlers) ClearReaderCheckpoint(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *Handlers) resolveTimezone(ctx context.Context, requested string) string {
+func (h *Handlers) resolveTimezone(ctx context.Context, tenant store.Tenant, requested string) string {
 	const fallback = "UTC"
 
 	if requested != "" {
@@ -229,7 +229,7 @@ func (h *Handlers) resolveTimezone(ctx context.Context, requested string) string
 			return requested
 		}
 	}
-	if configured, err := h.settingsStore.GetAppConfig(ctx, store.Tenant{}, "app.timezone"); err == nil && configured != "" {
+	if configured, err := h.settingsStore.GetAppConfig(ctx, tenant, "app.timezone"); err == nil && configured != "" {
 		if _, err := time.LoadLocation(configured); err == nil {
 			return configured
 		}
