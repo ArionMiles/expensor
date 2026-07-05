@@ -254,6 +254,13 @@ describe('Wizard guide layout', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Continue' }))
 
+    expect(apiMocks.updatePreferences).toHaveBeenCalledWith({
+      base_currency: 'USD',
+      timezone: 'Asia/Calcutta',
+      time_format: 'h:mm a',
+      scan_interval: 60,
+      lookback_days: 180,
+    })
     expect(await screen.findByText('Reader configuration')).toBeInTheDocument()
   })
 

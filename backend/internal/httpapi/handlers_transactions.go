@@ -58,7 +58,7 @@ func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	f := query.listFilter(h.resolveTimezone(r.Context(), query.Timezone))
+	f := query.listFilter(h.resolveTimezone(r.Context(), requestTenant(r), query.Timezone))
 	q := strings.TrimSpace(query.Query)
 
 	var (

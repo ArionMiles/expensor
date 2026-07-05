@@ -75,6 +75,7 @@ type mockStore struct {
 	dashboardData              *store.DashboardData
 	dashboardErr               error
 	appConfig                  map[string]string
+	appConfigByTenant          map[string]map[string]string
 	setConfigErr               error
 	activeReader               string
 	schedulerConfig            store.SchedulerConfig
@@ -417,6 +418,13 @@ func (m *mockStore) GetDashboardData(_ context.Context, _ store.Tenant) (*store.
 
 func (m *mockStore) GetAppConfig(_ context.Context, tenant store.Tenant, key string) (string, error) {
 	m.lastAppConfigTenant = tenant
+	if m.appConfigByTenant != nil {
+		if values, ok := m.appConfigByTenant[tenant.ID]; ok {
+			if v, ok := values[key]; ok {
+				return v, nil
+			}
+		}
+	}
 	if m.appConfig != nil {
 		if v, ok := m.appConfig[key]; ok {
 			return v, nil
@@ -4287,11 +4295,16 @@ func TestListTransactions_MissingTimezoneFallsBackToAppTimezone(t *testing.T) {
 	st := &mockStore{
 		transactions: []store.Transaction{},
 		listResult:   store.TransactionListResult{Total: 0},
-		appConfig:    map[string]string{"app.timezone": "Asia/Kolkata"},
+		appConfigByTenant: map[string]map[string]string{
+			"tenant-a": {"app.timezone": "Asia/Kolkata"},
+		},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
-	rr := get(h.ListTransactions, "/api/transactions?weekday=5&hour_from=9&hour_to=9")
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/transactions?weekday=5&hour_from=9&hour_to=9", nil)
+	rr := httptest.NewRecorder()
+	h.ListTransactions(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())

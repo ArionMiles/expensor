@@ -35,17 +35,32 @@ export function PreferencesStep({ onNext }: { onNext: () => void }) {
   const [currency, setCurrency] = useState('USD')
   const [timezone, setTimezoneDraft] = useState(normalizeTimezone(getBrowserTimezone()))
   const [timeFormat, setTimeFormatDraft] = useState<TimeFormatValue>('h:mm a')
+  const [scanInterval, setScanInterval] = useState('60')
+  const [lookbackDays, setLookbackDays] = useState('180')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   const handleSave = async () => {
-    setSaving(true)
     setError(null)
+    const interval = Number.parseInt(scanInterval, 10)
+    const lookback = Number.parseInt(lookbackDays, 10)
+    if (Number.isNaN(interval) || interval < 10 || interval > 3600) {
+      setError(t('settings.daemon.scanIntervalError'))
+      return
+    }
+    if (Number.isNaN(lookback) || lookback < 1 || lookback > 3650) {
+      setError(t('settings.daemon.lookbackError'))
+      return
+    }
+
+    setSaving(true)
     try {
       await updatePreferences.mutateAsync({
         base_currency: currency,
         timezone,
         time_format: timeFormat,
+        scan_interval: interval,
+        lookback_days: lookback,
       })
       await qc.invalidateQueries({ queryKey: queryKeys.setupStatus })
       onNext()
@@ -89,10 +104,48 @@ export function PreferencesStep({ onNext }: { onNext: () => void }) {
             <TimeFormatSelect value={timeFormat} onChange={setTimeFormatDraft} />
           </PreferenceField>
 
+          <PreferenceField
+            label={t('settings.daemon.scanIntervalLabel')}
+            hint={t('settings.daemon.scanIntervalHint')}
+          >
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={scanInterval}
+                onChange={(event) => setScanInterval(event.currentTarget.value)}
+                className="w-24 rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {t('settings.daemon.scanUnit')}
+              </span>
+            </div>
+          </PreferenceField>
+
+          <PreferenceField
+            label={t('settings.daemon.lookbackLabel')}
+            hint={t('settings.daemon.lookbackHint')}
+          >
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={lookbackDays}
+                onChange={(event) => setLookbackDays(event.currentTarget.value)}
+                className="w-24 rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {t('settings.daemon.lookbackUnit')}
+              </span>
+            </div>
+          </PreferenceField>
+
           <div className="space-y-2">
             <button
               onClick={handleSave}
-              disabled={saving || !currency || !timezone || !timeFormat}
+              disabled={
+                saving || !currency || !timezone || !timeFormat || !scanInterval || !lookbackDays
+              }
               className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {saving ? t('setup.preferences.saving') : t('setup.preferences.continue')}
