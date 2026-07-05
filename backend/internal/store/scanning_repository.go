@@ -118,10 +118,8 @@ func (r *pgScanningRepository) EnsureScanningStateForTenant(ctx context.Context,
 	}
 	_, err = r.pool.Exec(ctx, `
 		INSERT INTO tenant_scanning_state (tenant_id, active_reader, enabled, state)
-		SELECT $1::uuid, COALESCE(ac.value, ''), true,
-		       CASE WHEN COALESCE(ac.value, '') = '' THEN 'stopped' ELSE 'queued' END
+		SELECT $1::uuid, '', true, 'stopped'
 		FROM users u
-		LEFT JOIN app_config ac ON ac.tenant_id = u.id AND ac.key = 'active_reader'
 		WHERE u.id = $1
 		ON CONFLICT (tenant_id) DO NOTHING
 	`, tenantID)

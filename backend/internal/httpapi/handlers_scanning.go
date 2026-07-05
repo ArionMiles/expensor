@@ -63,9 +63,6 @@ func (h *Handlers) PatchScanningSettings(w http.ResponseWriter, r *http.Request)
 			writeError(w, http.StatusInternalServerError, "failed to update scanning settings")
 			return
 		}
-		if err := h.readerRuntimeStore.SetActiveReader(r.Context(), tenant, reader); err != nil {
-			h.logger.Warn("failed to update legacy active reader", "error", err)
-		}
 	}
 	if body.Enabled != nil {
 		if err := h.applyScanningEnabled(r.Context(), tenant, *body.Enabled); err != nil {
@@ -201,9 +198,6 @@ func adminScanningSettingsResponse(cfg store.SchedulerConfig) AdminScanningSetti
 func (h *Handlers) queueReaderScanning(ctx context.Context, tenant store.Tenant, reader string) {
 	if err := h.scanningStore.SetActiveScanningReader(ctx, tenant, reader); err != nil {
 		h.logger.Warn("failed to queue scanning after reader setup", "reader", reader, "error", err)
-	}
-	if err := h.readerRuntimeStore.SetActiveReader(ctx, tenant, reader); err != nil {
-		h.logger.Warn("failed to update legacy active reader after reader setup", "reader", reader, "error", err)
 	}
 }
 

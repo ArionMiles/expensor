@@ -250,7 +250,6 @@ export const api = {
   },
 
   config: {
-    getActiveReader: () => apiClient.get<{ reader: string }>('/config/active-reader'),
     getSetupStatus: () => apiClient.get<SetupStatus>('/config/setup-status'),
     getPreferences: () => apiClient.get<Preferences>('/config/preferences'),
     updatePreferences: (patch: PreferencesPatch) =>

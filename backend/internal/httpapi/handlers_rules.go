@@ -280,7 +280,11 @@ func (h *Handlers) clearActiveReaderCheckpointForNewRule(ctx context.Context, te
 }
 
 func (h *Handlers) readActiveReader(ctx context.Context, tenant store.Tenant) (string, error) {
-	return h.readerRuntimeStore.GetActiveReader(ctx, tenant)
+	state, err := h.scanningStore.GetScanningState(ctx, tenant)
+	if err != nil {
+		return "", err
+	}
+	return state.ActiveReader, nil
 }
 
 // UpdateRule handles PUT /api/rules/{id}.

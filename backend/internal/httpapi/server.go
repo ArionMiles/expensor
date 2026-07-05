@@ -112,7 +112,6 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("PATCH /api/admin/scanning/settings", h.PatchAdminScanningSettings)
 	mux.HandleFunc("POST /api/daemon/start", h.StartDaemon)
 	mux.HandleFunc("POST /api/daemon/rescan", h.Rescan)
-	mux.HandleFunc("GET /api/config/active-reader", h.GetActiveReader)
 	mux.HandleFunc("GET /api/scanning/settings", h.GetScanningSettings)
 	mux.HandleFunc("PATCH /api/scanning/settings", h.PatchScanningSettings)
 	mux.HandleFunc("GET /api/scanning/status", h.GetScanningStatus)

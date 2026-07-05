@@ -22,7 +22,7 @@ func TestDaemonControlRequiresAuthAndPersistsActiveReader(t *testing.T) {
 		path   string
 		body   any
 		want   int
-		assert func(t *testing.T, body map[string]string)
+		assert func(t *testing.T, body map[string]any)
 	}{
 		{
 			name:   "anonymous start rejected",
@@ -43,7 +43,7 @@ func TestDaemonControlRequiresAuthAndPersistsActiveReader(t *testing.T) {
 				"reader": "gmail",
 			},
 			want: http.StatusAccepted,
-			assert: func(t *testing.T, body map[string]string) {
+			assert: func(t *testing.T, body map[string]any) {
 				t.Helper()
 				if body["status"] != "starting" {
 					t.Fatalf("unexpected start response: %#v", body)
@@ -54,11 +54,11 @@ func TestDaemonControlRequiresAuthAndPersistsActiveReader(t *testing.T) {
 			name:   "active reader is tenant persisted",
 			client: authenticated,
 			method: http.MethodGet,
-			path:   "/api/config/active-reader",
+			path:   "/api/scanning/settings",
 			want:   http.StatusOK,
-			assert: func(t *testing.T, body map[string]string) {
+			assert: func(t *testing.T, body map[string]any) {
 				t.Helper()
-				if body["reader"] != "gmail" {
+				if body["active_reader"] != "gmail" {
 					t.Fatalf("expected gmail active reader, got %#v", body)
 				}
 			},
@@ -72,7 +72,7 @@ func TestDaemonControlRequiresAuthAndPersistsActiveReader(t *testing.T) {
 				"reader": "thunderbird",
 			},
 			want: http.StatusAccepted,
-			assert: func(t *testing.T, body map[string]string) {
+			assert: func(t *testing.T, body map[string]any) {
 				t.Helper()
 				if body["status"] != "rescanning" {
 					t.Fatalf("unexpected rescan response: %#v", body)
@@ -93,11 +93,11 @@ func TestDaemonControlRequiresAuthAndPersistsActiveReader(t *testing.T) {
 			name:   "active reader restored",
 			client: authenticated,
 			method: http.MethodGet,
-			path:   "/api/config/active-reader",
+			path:   "/api/scanning/settings",
 			want:   http.StatusOK,
-			assert: func(t *testing.T, body map[string]string) {
+			assert: func(t *testing.T, body map[string]any) {
 				t.Helper()
-				if body["reader"] != "thunderbird" {
+				if body["active_reader"] != "thunderbird" {
 					t.Fatalf("expected restored thunderbird active reader, got %#v", body)
 				}
 			},
@@ -117,7 +117,7 @@ func TestDaemonControlRequiresAuthAndPersistsActiveReader(t *testing.T) {
 				_ = resp.Body.Close()
 				return
 			}
-			body := helpers.DecodeJSON[map[string]string](t, resp)
+			body := helpers.DecodeJSON[map[string]any](t, resp)
 			tc.assert(t, body)
 		})
 	}

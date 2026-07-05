@@ -72,21 +72,3 @@ func (h *Handlers) Rescan(w http.ResponseWriter, r *http.Request) {
 	h.rescanFn(DaemonRunRequest{Tenant: requestTenant(r), Reader: body.Reader})
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "rescanning"})
 }
-
-// GetActiveReader handles GET /api/config/active-reader.
-// Returns the reader name persisted from the last daemon start, or "" if none.
-// @Summary Get the active reader
-// @Tags Config
-// @Produce json
-// @Success 200 {object} ActiveReaderResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /config/active-reader [get]
-func (h *Handlers) GetActiveReader(w http.ResponseWriter, r *http.Request) {
-	reader, err := h.readActiveReader(r.Context(), requestTenant(r))
-	if err != nil {
-		h.logger.Error("failed to read active reader", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to read active reader")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"reader": reader})
-}

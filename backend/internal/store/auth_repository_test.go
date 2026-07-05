@@ -86,45 +86,6 @@ func TestAuthRepositoryBootstrapAndSessionLifecycle(t *testing.T) {
 	}
 }
 
-func TestAuthRepositoryBootstrapClaimsLegacyRows(t *testing.T) {
-	ts := newTestStore(t)
-	defer ts.cleanup()
-	ctx := context.Background()
-	seedAuthRepositoryLegacyRows(ctx, t, ts)
-
-	preview, err := ts.PreviewLegacyClaim(ctx)
-	if err != nil {
-		t.Fatalf("PreviewLegacyClaim() error = %v", err)
-	}
-	if preview.Transactions != 1 || preview.ReaderRuntime != 1 || preview.ProcessedMessages != 1 {
-		t.Fatalf("preview = %#v", preview)
-	}
-
-	admin, err := ts.CreateBootstrapAdmin(ctx, store.CreateBootstrapAdminInput{
-		Email:        "admin@example.com",
-		DisplayName:  "Admin",
-		PasswordHash: "$2a$10$abcdefghijklmnopqrstuu6Z6RMcYbqVvB6KZlSmLfHLj6y8s3zme",
-		AvatarKey:    "default",
-	})
-	if err != nil {
-		t.Fatalf("CreateBootstrapAdmin() error = %v", err)
-	}
-
-	for table, query := range map[string]string{
-		"transactions":       `SELECT COUNT(*) FROM transactions WHERE tenant_id = $1`,
-		"reader_runtime":     `SELECT COUNT(*) FROM reader_runtime WHERE tenant_id = $1`,
-		"processed_messages": `SELECT COUNT(*) FROM processed_messages WHERE tenant_id = $1`,
-	} {
-		var count int
-		if err := ts.PoolForTest().QueryRow(ctx, query, admin.TenantID).Scan(&count); err != nil {
-			t.Fatalf("count claimed %s: %v", table, err)
-		}
-		if count != 1 {
-			t.Fatalf("claimed %s rows = %d, want 1", table, count)
-		}
-	}
-}
-
 func TestAuthRepositoryStoresOnlyTokenHashes(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()
@@ -454,24 +415,5 @@ func TestAuthRepositoryCompletesAccountSetupOnce(t *testing.T) {
 	})
 	if !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("second CompleteAccountSetup() error = %v, want ErrNotFound", err)
-	}
-}
-
-func seedAuthRepositoryLegacyRows(ctx context.Context, t *testing.T, ts *testStore) {
-	t.Helper()
-	if _, err := ts.PoolForTest().Exec(ctx, `
-		INSERT INTO transactions (message_id, amount, currency, timestamp, merchant_info, category, bucket, source, source_type, source_label, bank)
-		VALUES ('legacy-bootstrap-message', 42.50, 'INR', NOW(), 'Legacy Merchant', 'Food', 'Needs', 'gmail', 'credit_card', 'Legacy Card', 'Legacy Bank')
-	`); err != nil {
-		t.Fatalf("seed transaction: %v", err)
-	}
-	if _, err := ts.PoolForTest().Exec(ctx, `
-		INSERT INTO reader_runtime (reader, client_secret, oauth_token, config)
-		VALUES ('gmail', '{"installed":{}}'::jsonb, '{"access_token":"legacy"}'::jsonb, '{"mailboxes":"Inbox"}'::jsonb)
-	`); err != nil {
-		t.Fatalf("seed reader runtime: %v", err)
-	}
-	if _, err := ts.PoolForTest().Exec(ctx, `INSERT INTO processed_messages (message_key) VALUES ('legacy-bootstrap-message-key')`); err != nil {
-		t.Fatalf("seed processed message: %v", err)
 	}
 }

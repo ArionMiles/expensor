@@ -20,7 +20,6 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/ArionMiles/expensor/backend/internal/auth"
-	"github.com/ArionMiles/expensor/backend/internal/bootstrap"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
@@ -77,13 +76,11 @@ type mockStore struct {
 	appConfig                  map[string]string
 	appConfigByTenant          map[string]map[string]string
 	setConfigErr               error
-	activeReader               string
 	schedulerConfig            store.SchedulerConfig
 	scanningState              store.TenantScanningState
 	scanningStates             []store.TenantScanningState
 	readerSecrets              map[string][]byte
 	readerTokens               map[string][]byte
-	tenantScopedReaderRuntime  bool
 	readerConfigs              map[string]json.RawMessage
 	getFacetsErr               error
 	facets                     *store.Facets
@@ -153,16 +150,10 @@ type mockStore struct {
 	completedSetupAvatarKey    string
 	completedSetupUser         *store.User
 	lastAppConfigTenant        store.Tenant
-	legacyPreview              bootstrap.LegacyPreview
-	legacyPreviewErr           error
 }
 
 func (m *mockStore) BootstrapRequired(_ context.Context) (bool, error) {
 	return m.bootstrapRequired, nil
-}
-
-func (m *mockStore) PreviewLegacyClaim(_ context.Context) (bootstrap.LegacyPreview, error) {
-	return m.legacyPreview, m.legacyPreviewErr
 }
 
 func (m *mockStore) CreateBootstrapAdmin(_ context.Context, input store.CreateBootstrapAdminInput) (*store.User, error) {
@@ -441,19 +432,7 @@ func (m *mockStore) SetAppConfig(_ context.Context, _ store.Tenant, key, value s
 		m.appConfig = make(map[string]string)
 	}
 	m.appConfig[key] = value
-	if key == "active_reader" {
-		m.activeReader = value
-	}
 	return nil
-}
-
-func (m *mockStore) SetActiveReader(_ context.Context, _ store.Tenant, reader string) error {
-	m.activeReader = reader
-	return nil
-}
-
-func (m *mockStore) GetActiveReader(_ context.Context, _ store.Tenant) (string, error) {
-	return m.activeReader, nil
 }
 
 func (m *mockStore) GetSchedulerConfig(context.Context) (store.SchedulerConfig, error) {
@@ -540,10 +519,10 @@ func (m *mockStore) UpdateScanningState(_ context.Context, tenant store.Tenant, 
 }
 
 func (m *mockStore) readerRuntimeKey(tenant store.Tenant, reader string) string {
-	if m.tenantScopedReaderRuntime && tenant.ID != "" {
-		return tenant.ID + "/" + reader
+	if tenant.ID == "" {
+		panic("tenant id is required for reader runtime mock")
 	}
-	return reader
+	return tenant.ID + "/" + reader
 }
 
 func (m *mockStore) SetReaderSecret(_ context.Context, tenant store.Tenant, reader string, secret []byte) error {
@@ -572,28 +551,29 @@ func (m *mockStore) GetReaderToken(_ context.Context, tenant store.Tenant, reade
 	return append([]byte(nil), token...), ok, nil
 }
 
-func (m *mockStore) DeleteReaderToken(_ context.Context, _ store.Tenant, reader string) error {
-	delete(m.readerTokens, reader)
+func (m *mockStore) DeleteReaderToken(_ context.Context, tenant store.Tenant, reader string) error {
+	delete(m.readerTokens, m.readerRuntimeKey(tenant, reader))
 	return nil
 }
 
-func (m *mockStore) SetReaderConfig(_ context.Context, _ store.Tenant, reader string, readerConfig json.RawMessage) error {
+func (m *mockStore) SetReaderConfig(_ context.Context, tenant store.Tenant, reader string, readerConfig json.RawMessage) error {
 	if m.readerConfigs == nil {
 		m.readerConfigs = make(map[string]json.RawMessage)
 	}
-	m.readerConfigs[reader] = append(json.RawMessage(nil), readerConfig...)
+	m.readerConfigs[m.readerRuntimeKey(tenant, reader)] = append(json.RawMessage(nil), readerConfig...)
 	return nil
 }
 
-func (m *mockStore) GetReaderConfig(_ context.Context, _ store.Tenant, reader string) (json.RawMessage, bool, error) {
-	cfg, ok := m.readerConfigs[reader]
+func (m *mockStore) GetReaderConfig(_ context.Context, tenant store.Tenant, reader string) (json.RawMessage, bool, error) {
+	cfg, ok := m.readerConfigs[m.readerRuntimeKey(tenant, reader)]
 	return append(json.RawMessage(nil), cfg...), ok, nil
 }
 
-func (m *mockStore) DeleteReaderRuntime(_ context.Context, _ store.Tenant, reader string) error {
-	delete(m.readerSecrets, reader)
-	delete(m.readerTokens, reader)
-	delete(m.readerConfigs, reader)
+func (m *mockStore) DeleteReaderRuntime(_ context.Context, tenant store.Tenant, reader string) error {
+	key := m.readerRuntimeKey(tenant, reader)
+	delete(m.readerSecrets, key)
+	delete(m.readerTokens, key)
+	delete(m.readerConfigs, key)
 	return nil
 }
 
@@ -1098,7 +1078,8 @@ func TestListReaders_NormalizesNilConfigSchema(t *testing.T) {
 
 func TestCredentialsStatus_Missing(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/gmail/credentials/status", nil)
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/gmail/credentials/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.CredentialsStatus(rr, req)
@@ -1115,11 +1096,12 @@ func TestCredentialsStatus_Missing(t *testing.T) {
 
 func TestCredentialsStatus_Present(t *testing.T) {
 	ms := &mockStore{
-		readerSecrets: map[string][]byte{"gmail": []byte(`{"installed":{}}`)},
+		readerSecrets: map[string][]byte{"tenant-a/gmail": []byte(`{"installed":{}}`)},
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/gmail/credentials/status", nil)
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/gmail/credentials/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.CredentialsStatus(rr, req)
@@ -1146,7 +1128,8 @@ func TestCredentialsStatus_UnknownReader(t *testing.T) {
 func TestUploadCredentials_SavesToStore(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/readers/gmail/credentials", strings.NewReader(`{"installed":{}}`))
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/readers/gmail/credentials", strings.NewReader(`{"installed":{}}`))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 
@@ -1160,8 +1143,8 @@ func TestUploadCredentials_SavesToStore(t *testing.T) {
 	if resp["path"] != "db://reader_runtime/gmail/client_secret" {
 		t.Fatalf("path = %q", resp["path"])
 	}
-	if string(ms.readerSecrets["gmail"]) != `{"installed":{}}` {
-		t.Fatalf("secret was not persisted to store: %s", ms.readerSecrets["gmail"])
+	if string(ms.readerSecrets["tenant-a/gmail"]) != `{"installed":{}}` {
+		t.Fatalf("secret was not persisted to store: %s", ms.readerSecrets["tenant-a/gmail"])
 	}
 }
 
@@ -1176,7 +1159,7 @@ func TestAuthStart_UsesMetadataScopes(t *testing.T) {
 			"redirect_uris": ["http://localhost:8080/api/auth/callback"]
 		}
 	}`
-	st := &mockStore{readerSecrets: map[string][]byte{"scoped": []byte(secretJSON)}}
+	st := &mockStore{readerSecrets: map[string][]byte{"tenant-a/scoped": []byte(secretJSON)}}
 	h := newTestHandlers(t, st, &mockDaemon{})
 	registry := plugins.NewRegistry()
 	if err := registry.RegisterReader(&testReaderPlugin{
@@ -1189,7 +1172,8 @@ func TestAuthStart_UsesMetadataScopes(t *testing.T) {
 	}
 	h.registry = registry
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/readers/scoped/auth/start", nil)
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/readers/scoped/auth/start", nil)
 	req.SetPathValue("name", "scoped")
 	rr := httptest.NewRecorder()
 
@@ -1213,7 +1197,8 @@ func TestAuthStart_UsesMetadataScopes(t *testing.T) {
 
 func TestAuthStatus_NoToken(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/gmail/auth/status", nil)
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/gmail/auth/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.AuthStatus(rr, req)
@@ -1248,11 +1233,12 @@ func TestAuthStatus_ConfigReader(t *testing.T) {
 func TestAuthStatus_UsesStoreToken(t *testing.T) {
 	ms := &mockStore{
 		readerTokens: map[string][]byte{
-			"gmail": []byte(`{"access_token":"a","token_type":"Bearer","expiry":"2999-01-01T00:00:00Z"}`),
+			"tenant-a/gmail": []byte(`{"access_token":"a","token_type":"Bearer","expiry":"2999-01-01T00:00:00Z"}`),
 		},
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/gmail/auth/status", nil)
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/gmail/auth/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 
@@ -1303,13 +1289,13 @@ func TestAuthStatus_RefreshesExpiredAccessTokenWithRefreshToken(t *testing.T) {
 		}
 	}`, "https://oauth.test/token")
 	ms := &mockStore{
-		readerSecrets: map[string][]byte{"gmail": []byte(secretJSON)},
+		readerSecrets: map[string][]byte{"tenant-a/gmail": []byte(secretJSON)},
 		readerTokens: map[string][]byte{
-			"gmail": []byte(`{"access_token":"old-access","refresh_token":"old-refresh","token_type":"Bearer","expiry":"2000-01-01T00:00:00Z"}`),
+			"tenant-a/gmail": []byte(`{"access_token":"old-access","refresh_token":"old-refresh","token_type":"Bearer","expiry":"2000-01-01T00:00:00Z"}`),
 		},
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, tokenClient)
+	ctx := auth.WithPrincipal(context.WithValue(context.Background(), oauth2.HTTPClient, tokenClient), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/gmail/auth/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
@@ -1327,22 +1313,23 @@ func TestAuthStatus_RefreshesExpiredAccessTokenWithRefreshToken(t *testing.T) {
 	if resp["auth_state"] != "connected" {
 		t.Fatalf("expected auth_state=connected, got %v", resp)
 	}
-	if !strings.Contains(string(ms.readerTokens["gmail"]), "new-access") {
-		t.Fatalf("saved token = %s, want refreshed access token", ms.readerTokens["gmail"])
+	if !strings.Contains(string(ms.readerTokens["tenant-a/gmail"]), "new-access") {
+		t.Fatalf("saved token = %s, want refreshed access token", ms.readerTokens["tenant-a/gmail"])
 	}
-	if !strings.Contains(string(ms.readerTokens["gmail"]), "old-refresh") {
-		t.Fatalf("saved token = %s, want refresh token preserved", ms.readerTokens["gmail"])
+	if !strings.Contains(string(ms.readerTokens["tenant-a/gmail"]), "old-refresh") {
+		t.Fatalf("saved token = %s, want refresh token preserved", ms.readerTokens["tenant-a/gmail"])
 	}
 }
 
 func TestAuthStatus_ExpiredAccessTokenWithoutRefreshTokenRequiresAuth(t *testing.T) {
 	ms := &mockStore{
 		readerTokens: map[string][]byte{
-			"gmail": []byte(`{"access_token":"old-access","token_type":"Bearer","expiry":"2000-01-01T00:00:00Z"}`),
+			"tenant-a/gmail": []byte(`{"access_token":"old-access","token_type":"Bearer","expiry":"2000-01-01T00:00:00Z"}`),
 		},
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/gmail/auth/status", nil)
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/gmail/auth/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 
@@ -1381,13 +1368,13 @@ func TestAuthStatus_InvalidRefreshTokenRequiresAuth(t *testing.T) {
 		}
 	}`, "https://oauth.test/token")
 	ms := &mockStore{
-		readerSecrets: map[string][]byte{"gmail": []byte(secretJSON)},
+		readerSecrets: map[string][]byte{"tenant-a/gmail": []byte(secretJSON)},
 		readerTokens: map[string][]byte{
-			"gmail": []byte(`{"access_token":"old-access","refresh_token":"old-refresh","token_type":"Bearer","expiry":"2000-01-01T00:00:00Z"}`),
+			"tenant-a/gmail": []byte(`{"access_token":"old-access","refresh_token":"old-refresh","token_type":"Bearer","expiry":"2000-01-01T00:00:00Z"}`),
 		},
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, tokenClient)
+	ctx := auth.WithPrincipal(context.WithValue(context.Background(), oauth2.HTTPClient, tokenClient), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/gmail/auth/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
@@ -1411,7 +1398,8 @@ func TestAuthStatus_InvalidRefreshTokenRequiresAuth(t *testing.T) {
 
 func TestReaderStatus_Thunderbird_NotConfigured(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/thunderbird/status", nil)
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/thunderbird/status", nil)
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
 	h.ReaderStatus(rr, req)
@@ -1429,12 +1417,13 @@ func TestReaderStatus_Thunderbird_NotConfigured(t *testing.T) {
 func TestReaderStatus_Thunderbird_Configured(t *testing.T) {
 	ms := &mockStore{
 		readerConfigs: map[string]json.RawMessage{
-			"thunderbird": json.RawMessage(`{"profilePath":"/tmp/tb"}`),
+			"tenant-a/thunderbird": json.RawMessage(`{"profilePath":"/tmp/tb"}`),
 		},
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/thunderbird/status", nil)
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/thunderbird/status", nil)
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
 	h.ReaderStatus(rr, req)
@@ -1449,8 +1438,9 @@ func TestReaderStatus_Thunderbird_Configured(t *testing.T) {
 func TestSaveReaderConfig_SavesToStore(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
 	req := httptest.NewRequestWithContext(
-		context.Background(),
+		ctx,
 		http.MethodPut,
 		"/api/readers/thunderbird/config",
 		strings.NewReader(`{"config":{"mailboxes":"Inbox"}}`),
@@ -1463,19 +1453,20 @@ func TestSaveReaderConfig_SavesToStore(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
 	}
-	if !bytes.Contains(ms.readerConfigs["thunderbird"], []byte("Inbox")) {
-		t.Fatalf("config not persisted: %s", ms.readerConfigs["thunderbird"])
+	if !bytes.Contains(ms.readerConfigs["tenant-a/thunderbird"], []byte("Inbox")) {
+		t.Fatalf("config not persisted: %s", ms.readerConfigs["tenant-a/thunderbird"])
 	}
 }
 
 func TestGetReaderConfig_LoadsFromStore(t *testing.T) {
 	ms := &mockStore{
 		readerConfigs: map[string]json.RawMessage{
-			"thunderbird": json.RawMessage(`{"config":{"mailboxes":"Inbox"}}`),
+			"tenant-a/thunderbird": json.RawMessage(`{"config":{"mailboxes":"Inbox"}}`),
 		},
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/thunderbird/config", nil)
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/thunderbird/config", nil)
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
 
@@ -1490,9 +1481,10 @@ func TestGetReaderConfig_LoadsFromStore(t *testing.T) {
 }
 
 func TestRevokeToken_DeletesStoreToken(t *testing.T) {
-	ms := &mockStore{readerTokens: map[string][]byte{"gmail": []byte(`{"access_token":"a"}`)}}
+	ms := &mockStore{readerTokens: map[string][]byte{"tenant-a/gmail": []byte(`{"access_token":"a"}`)}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/readers/gmail/auth/token", nil)
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/api/readers/gmail/auth/token", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 
@@ -1501,21 +1493,22 @@ func TestRevokeToken_DeletesStoreToken(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
 	}
-	if _, ok := ms.readerTokens["gmail"]; ok {
+	if _, ok := ms.readerTokens["tenant-a/gmail"]; ok {
 		t.Fatal("token was not deleted from store")
 	}
 }
 
 func TestDisconnectReader_StopsDaemonWhenActiveReaderIsRemoved(t *testing.T) {
 	ms := &mockStore{
-		activeReader:  "gmail",
-		readerSecrets: map[string][]byte{"gmail": []byte(`{"installed":{}}`)},
-		readerTokens:  map[string][]byte{"gmail": []byte(`{"access_token":"a"}`)},
+		scanningState: store.TenantScanningState{TenantID: "tenant-a", ActiveReader: "gmail", Enabled: true, State: store.ScanningStateRunning},
+		readerSecrets: map[string][]byte{"tenant-a/gmail": []byte(`{"installed":{}}`)},
+		readerTokens:  map[string][]byte{"tenant-a/gmail": []byte(`{"access_token":"a"}`)},
 	}
 	var stopCalls int
 	h := newTestHandlers(t, ms, &mockDaemon{status: DaemonStatus{Running: true}})
 	h.stopFn = func() { stopCalls++ }
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/readers/gmail", nil)
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/api/readers/gmail", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 
@@ -1527,22 +1520,23 @@ func TestDisconnectReader_StopsDaemonWhenActiveReaderIsRemoved(t *testing.T) {
 	if stopCalls != 1 {
 		t.Fatalf("stop calls = %d, want 1", stopCalls)
 	}
-	if ms.activeReader != "" {
-		t.Fatalf("active reader = %q, want cleared", ms.activeReader)
+	if ms.scanningState.ActiveReader != "" {
+		t.Fatalf("active scanning reader = %q, want cleared", ms.scanningState.ActiveReader)
 	}
 }
 
 func TestDisconnectReader_DoesNotStopDaemonWhenInactiveReaderIsRemoved(t *testing.T) {
 	ms := &mockStore{
-		activeReader:  "gmail",
-		readerConfigs: map[string]json.RawMessage{"thunderbird": json.RawMessage(`{"mailbox":"Inbox"}`)},
-		readerSecrets: map[string][]byte{"gmail": []byte(`{"installed":{}}`)},
-		readerTokens:  map[string][]byte{"gmail": []byte(`{"access_token":"a"}`)},
+		scanningState: store.TenantScanningState{TenantID: "tenant-a", ActiveReader: "gmail", Enabled: true, State: store.ScanningStateRunning},
+		readerConfigs: map[string]json.RawMessage{"tenant-a/thunderbird": json.RawMessage(`{"mailbox":"Inbox"}`)},
+		readerSecrets: map[string][]byte{"tenant-a/gmail": []byte(`{"installed":{}}`)},
+		readerTokens:  map[string][]byte{"tenant-a/gmail": []byte(`{"access_token":"a"}`)},
 	}
 	var stopCalls int
 	h := newTestHandlers(t, ms, &mockDaemon{status: DaemonStatus{Running: true}})
 	h.stopFn = func() { stopCalls++ }
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/readers/thunderbird", nil)
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/api/readers/thunderbird", nil)
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
 
@@ -1554,8 +1548,8 @@ func TestDisconnectReader_DoesNotStopDaemonWhenInactiveReaderIsRemoved(t *testin
 	if stopCalls != 0 {
 		t.Fatalf("stop calls = %d, want 0", stopCalls)
 	}
-	if ms.activeReader != "gmail" {
-		t.Fatalf("active reader = %q, want gmail", ms.activeReader)
+	if ms.scanningState.ActiveReader != "gmail" {
+		t.Fatalf("active scanning reader = %q, want gmail", ms.scanningState.ActiveReader)
 	}
 }
 
@@ -2454,13 +2448,14 @@ func TestAuthCallback_ReturnsClosePageAfterTokenSaved(t *testing.T) {
 			"redirect_uris": ["http://localhost:8080/api/auth/callback"]
 		}
 	}`, tokenServer.URL)
-	st := &mockStore{readerSecrets: map[string][]byte{"gmail": []byte(secretJSON)}}
+	st := &mockStore{readerSecrets: map[string][]byte{"tenant-a/gmail": []byte(secretJSON)}}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	state := "reader:gmail:validtoken"
 	h.mu.Lock()
 	h.oauthStates[state] = oauthStateEntry{
 		readerName: "gmail",
+		tenant:     store.Tenant{ID: "tenant-a"},
 		expiresAt:  time.Now().Add(time.Minute),
 	}
 	h.mu.Unlock()
@@ -2485,8 +2480,8 @@ func TestAuthCallback_ReturnsClosePageAfterTokenSaved(t *testing.T) {
 	if !strings.Contains(body, "http://localhost:5173/setup?auth=success&amp;reader=gmail") {
 		t.Fatalf("body should include escaped fallback setup link, got: %s", body)
 	}
-	if !strings.Contains(string(st.readerTokens["gmail"]), "new-refresh") {
-		t.Fatalf("saved token = %s, want refresh token from re-grant", st.readerTokens["gmail"])
+	if !strings.Contains(string(st.readerTokens["tenant-a/gmail"]), "new-refresh") {
+		t.Fatalf("saved token = %s, want refresh token from re-grant", st.readerTokens["tenant-a/gmail"])
 	}
 }
 
@@ -2510,8 +2505,7 @@ func TestAuthCallback_UsesTenantFromOAuthStartState(t *testing.T) {
 		}
 	}`, tokenServer.URL)
 	st := &mockStore{
-		readerSecrets:             map[string][]byte{"tenant-a/gmail": []byte(secretJSON)},
-		tenantScopedReaderRuntime: true,
+		readerSecrets: map[string][]byte{"tenant-a/gmail": []byte(secretJSON)},
 	}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
@@ -3472,15 +3466,16 @@ func TestCreateRule_DuplicateNameReturns409(t *testing.T) {
 
 func TestCreateRule_ClearsActiveReaderCheckpoint(t *testing.T) {
 	ms := &mockStore{
-		activeReader: "gmail",
-		appConfig:    map[string]string{"reader.gmail.last_scan_at": "2026-04-27T00:00:00Z"},
+		scanningState: store.TenantScanningState{TenantID: "tenant-a", ActiveReader: "gmail", Enabled: true, State: store.ScanningStateRunning},
+		appConfig:     map[string]string{"reader.gmail.last_scan_at": "2026-04-27T00:00:00Z"},
 	}
 	dm := &mockDaemon{}
 	h := newTestHandlers(t, ms, dm)
 	var restarted DaemonRunRequest
 	h.restartFn = func(req DaemonRunRequest) { restarted = req }
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(validRuleBody))
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/rules", strings.NewReader(validRuleBody))
 	rr := httptest.NewRecorder()
 
 	h.CreateRule(rr, req)
@@ -3498,8 +3493,8 @@ func TestCreateRule_ClearsActiveReaderCheckpoint(t *testing.T) {
 
 func TestCreateRule_RestartsRunningDaemonAfterCheckpointClear(t *testing.T) {
 	ms := &mockStore{
-		activeReader: "gmail",
-		appConfig:    map[string]string{"reader.gmail.last_scan_at": "2026-04-27T00:00:00Z"},
+		scanningState: store.TenantScanningState{TenantID: "tenant-a", ActiveReader: "gmail", Enabled: true, State: store.ScanningStateRunning},
+		appConfig:     map[string]string{"reader.gmail.last_scan_at": "2026-04-27T00:00:00Z"},
 	}
 	dm := &mockDaemon{status: DaemonStatus{Running: true}}
 	h := newTestHandlers(t, ms, dm)
@@ -4058,8 +4053,7 @@ func TestAuthExchange_RejectsStateFromDifferentTenant(t *testing.T) {
 		}
 	}`, tokenServer.URL)
 	h := newTestHandlers(t, &mockStore{
-		readerSecrets:             map[string][]byte{"tenant-a/gmail": []byte(secretJSON)},
-		tenantScopedReaderRuntime: true,
+		readerSecrets: map[string][]byte{"tenant-a/gmail": []byte(secretJSON)},
 	}, &mockDaemon{})
 
 	state := "reader:gmail:tenant-a"
@@ -4102,7 +4096,7 @@ func TestAuthExchange_RestartsRunningDaemonAfterTokenSaved(t *testing.T) {
 			"redirect_uris": ["http://localhost:8080/api/auth/callback"]
 		}
 	}`, tokenServer.URL)
-	st := &mockStore{readerSecrets: map[string][]byte{"gmail": []byte(secretJSON)}}
+	st := &mockStore{readerSecrets: map[string][]byte{"tenant-a/gmail": []byte(secretJSON)}}
 	dm := &mockDaemon{status: DaemonStatus{Running: true}}
 	h := newTestHandlers(t, st, dm)
 	var restarted DaemonRunRequest
@@ -4112,6 +4106,7 @@ func TestAuthExchange_RestartsRunningDaemonAfterTokenSaved(t *testing.T) {
 	h.mu.Lock()
 	h.oauthStates[state] = oauthStateEntry{
 		readerName: "gmail",
+		tenant:     store.Tenant{ID: "tenant-a"},
 		expiresAt:  time.Now().Add(time.Minute),
 	}
 	h.mu.Unlock()
@@ -4132,8 +4127,8 @@ func TestAuthExchange_RestartsRunningDaemonAfterTokenSaved(t *testing.T) {
 	if restarted.Tenant.ID != "tenant-a" {
 		t.Fatalf("restartFn tenant = %q, want tenant-a", restarted.Tenant.ID)
 	}
-	if !strings.Contains(string(st.readerTokens["gmail"]), "new-refresh") {
-		t.Fatalf("saved token = %s, want refresh token from re-grant", st.readerTokens["gmail"])
+	if !strings.Contains(string(st.readerTokens["tenant-a/gmail"]), "new-refresh") {
+		t.Fatalf("saved token = %s, want refresh token from re-grant", st.readerTokens["tenant-a/gmail"])
 	}
 }
 

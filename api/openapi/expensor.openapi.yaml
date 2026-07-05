@@ -1,11 +1,5 @@
 basePath: /api
 definitions:
-  httpapi.ActiveReaderResponse:
-    properties:
-      reader:
-        example: gmail
-        type: string
-    type: object
   httpapi.AdminScanningSettingsPatchRequest:
     properties:
       max_concurrent_scans:
@@ -1231,8 +1225,6 @@ definitions:
     type: object
   httpapi.bootstrapResponse:
     properties:
-      legacy_preview:
-        $ref: '#/definitions/httpapi.legacyPreviewResponse'
       required:
         type: boolean
     type: object
@@ -1281,37 +1273,6 @@ definitions:
         type: string
     required:
     - email
-    type: object
-  httpapi.legacyPreviewResponse:
-    properties:
-      app_config:
-        type: integer
-      blocking_reasons:
-        items:
-          type: string
-        type: array
-      buckets:
-        type: integer
-      categories:
-        type: integer
-      extraction_diagnostics:
-        type: integer
-      label_merchants:
-        type: integer
-      labels:
-        type: integer
-      merchant_categories:
-        type: integer
-      muted_merchants:
-        type: integer
-      processed_messages:
-        type: integer
-      reader_runtime:
-        type: integer
-      rules:
-        type: integer
-      transactions:
-        type: integer
     type: object
   httpapi.loginRequest:
     properties:
@@ -1793,22 +1754,6 @@ paths:
       summary: Create the first administrator account
       tags:
       - Auth
-  /config/active-reader:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/httpapi.ActiveReaderResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/httpapi.ErrorResponse'
-      summary: Get the active reader
-      tags:
-      - Config
   /config/banks:
     get:
       produces:

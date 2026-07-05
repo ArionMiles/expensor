@@ -8,8 +8,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/ArionMiles/expensor/backend/internal/bootstrap"
 )
 
 type pgAuthRepository struct {
@@ -55,10 +53,6 @@ func (r *pgAuthRepository) CreateBootstrapAdmin(ctx context.Context, input Creat
 	if err != nil {
 		return nil, err
 	}
-	if err := bootstrap.ClaimLegacyDataTx(ctx, tx, user.TenantID); err != nil {
-		return nil, fmt.Errorf("claiming legacy data for bootstrap admin: %w", err)
-	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("committing bootstrap admin transaction: %w", err)
 	}

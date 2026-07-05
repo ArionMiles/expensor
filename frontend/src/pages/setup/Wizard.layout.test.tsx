@@ -55,7 +55,7 @@ vi.mock('@/api/queries', () => ({
   queryKeys: {
     readerAuthStatus: (name: string) => ['readers', name, 'auth', 'status'],
     readerStatus: (name: string) => ['readers', name, 'status'],
-    activeReader: ['config', 'active-reader'],
+    activeReader: ['scanning', 'settings', 'active-reader'],
     setupStatus: ['config', 'setup-status'],
     status: ['status'],
   },

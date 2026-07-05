@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ArionMiles/expensor/backend/internal/auth"
-	"github.com/ArionMiles/expensor/backend/internal/bootstrap"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 )
@@ -114,10 +113,6 @@ func (s *Store) Close() {
 
 func (s *Store) BootstrapRequired(ctx context.Context) (bool, error) {
 	return s.auth.BootstrapRequired(ctx)
-}
-
-func (s *Store) PreviewLegacyClaim(ctx context.Context) (bootstrap.LegacyPreview, error) {
-	return bootstrap.PreviewLegacyClaim(ctx, s.pool)
 }
 
 func (s *Store) CreateBootstrapAdmin(ctx context.Context, input CreateBootstrapAdminInput) (*User, error) {
@@ -284,16 +279,6 @@ func (s *Store) GetAppConfig(ctx context.Context, tenant Tenant, key string) (st
 // SetAppConfig upserts a configuration value.
 func (s *Store) SetAppConfig(ctx context.Context, tenant Tenant, key, value string) error {
 	return s.runtime.SetAppConfig(ctx, tenant, key, value)
-}
-
-// SetActiveReader stores the selected reader name.
-func (s *Store) SetActiveReader(ctx context.Context, tenant Tenant, reader string) error {
-	return s.runtime.SetActiveReader(ctx, tenant, reader)
-}
-
-// GetActiveReader returns the selected reader name, or an empty string when unset.
-func (s *Store) GetActiveReader(ctx context.Context, tenant Tenant) (string, error) {
-	return s.runtime.GetActiveReader(ctx, tenant)
 }
 
 func (s *Store) GetSchedulerConfig(ctx context.Context) (SchedulerConfig, error) {

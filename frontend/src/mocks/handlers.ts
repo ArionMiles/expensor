@@ -287,7 +287,6 @@ export const handlers = [
       time_format: 'HH:mm',
     }),
   ),
-  http.get('/api/config/active-reader', () => HttpResponse.json({ reader: '' })),
   http.get('/api/scanning/settings', () => HttpResponse.json({ active_reader: '', enabled: true })),
   http.patch('/api/scanning/settings', async ({ request }) => {
     const body = (await request.json()) as { active_reader?: string; enabled?: boolean }
