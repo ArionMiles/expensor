@@ -13,7 +13,7 @@ func TestSealOpenBindsAssociatedData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSecretBox() error = %v", err)
 	}
-	associated := auth.SecretAssociatedData{TenantID: "tenant-a", Reader: "gmail", Kind: "oauth_token"}
+	associated := auth.SecretAssociatedData{TenantID: "tenant-a", Scope: "reader", Name: "gmail", Kind: "oauth_token"}
 	ciphertext, err := box.Seal([]byte(`{"access_token":"secret"}`), associated)
 	if err != nil {
 		t.Fatalf("Seal() error = %v", err)
@@ -21,7 +21,7 @@ func TestSealOpenBindsAssociatedData(t *testing.T) {
 	if bytes.Contains(ciphertext, []byte("access_token")) {
 		t.Fatal("ciphertext contains plaintext")
 	}
-	if _, err := box.Open(ciphertext, auth.SecretAssociatedData{TenantID: "tenant-b", Reader: "gmail", Kind: "oauth_token"}); err == nil {
+	if _, err := box.Open(ciphertext, auth.SecretAssociatedData{TenantID: "tenant-b", Scope: "reader", Name: "gmail", Kind: "oauth_token"}); err == nil {
 		t.Fatal("Open() succeeded with wrong tenant associated data")
 	}
 }

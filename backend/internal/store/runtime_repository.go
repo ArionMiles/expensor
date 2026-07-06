@@ -309,7 +309,8 @@ func (r *pgRuntimeRepository) writeReaderEncryptedJSON(ctx context.Context, tena
 	}
 	ciphertext, err := r.secretBox.Seal(value, auth.SecretAssociatedData{
 		TenantID: strings.TrimSpace(tenant.ID),
-		Reader:   reader,
+		Scope:    "reader",
+		Name:     reader,
 		Kind:     column,
 	})
 	if err != nil {
@@ -346,7 +347,8 @@ func (r *pgRuntimeRepository) readReaderEncryptedJSON(ctx context.Context, tenan
 	}
 	plaintext, err := r.secretBox.Open(ciphertext, auth.SecretAssociatedData{
 		TenantID: strings.TrimSpace(tenant.ID),
-		Reader:   reader,
+		Scope:    "reader",
+		Name:     reader,
 		Kind:     column,
 	})
 	if err != nil {
