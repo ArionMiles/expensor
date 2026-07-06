@@ -14,6 +14,7 @@ type authStore interface {
 	CreateUser(ctx context.Context, input store.CreateUserInput) (*store.User, error)
 	ListUsers(ctx context.Context) ([]store.User, error)
 	UpdateUser(ctx context.Context, id string, input store.UpdateUserInput) (*store.User, error)
+	UpdateUserPassword(ctx context.Context, id string, input store.UpdateUserPasswordInput) error
 	DeleteUser(ctx context.Context, id string) error
 	FindUserByEmail(ctx context.Context, email string) (*store.User, error)
 	FindUserByID(ctx context.Context, id string) (*store.User, error)

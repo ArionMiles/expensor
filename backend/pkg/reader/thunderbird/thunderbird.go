@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/mail"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -235,6 +236,123 @@ func (r *Reader) scanAllMailboxes(ctx context.Context, out chan<- *api.Transacti
 
 	r.logger.Info("mailbox scan complete")
 	return nil
+}
+
+var _ api.EmailSearcher = (*Reader)(nil)
+
+// Search returns Thunderbird messages whose subject contains the requested text.
+func (r *Reader) Search(ctx context.Context, query api.EmailSearchQuery) ([]api.EmailSearchResult, error) {
+	limit := query.Limit
+	if limit <= 0 {
+		return []api.EmailSearchResult{}, nil
+	}
+	subject := strings.ToLower(strings.TrimSpace(query.SubjectQuery))
+	if subject == "" {
+		return []api.EmailSearchResult{}, nil
+	}
+
+	out := make([]api.EmailSearchResult, 0, limit)
+	for mailboxName, mailboxPath := range r.mailboxPaths {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+		input := thunderbirdMessageSearchInput{
+			mailboxName:     mailboxName,
+			mailboxPath:     mailboxPath,
+			subjectContains: subject,
+			limit:           limit,
+			out:             &out,
+		}
+		if err := r.searchMailbox(ctx, input); err != nil {
+			return nil, err
+		}
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+type thunderbirdMessageSearchInput struct {
+	mailboxName     string
+	mailboxPath     string
+	subjectContains string
+	limit           int
+	out             *[]api.EmailSearchResult
+}
+
+func (r *Reader) searchMailbox(ctx context.Context, input thunderbirdMessageSearchInput) error {
+	file, err := os.Open(input.mailboxPath)
+	if err != nil {
+		return fmt.Errorf("opening mailbox %q: %w", input.mailboxName, err)
+	}
+	defer file.Close()
+
+	mboxReader := mbox.NewReader(file)
+	for len(*input.out) < input.limit {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		msgReader, err := mboxReader.NextMessage()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("reading mailbox %q: %w", input.mailboxName, err)
+		}
+
+		msg, err := mail.ReadMessage(msgReader)
+		if err != nil {
+			r.logger.Warn("error parsing message during subject search", "mailbox", input.mailboxName, "error", err)
+			continue
+		}
+		subject := decodeRFC2047(msg.Header.Get("Subject"))
+		if !strings.Contains(strings.ToLower(subject), input.subjectContains) {
+			continue
+		}
+		sample, err := thunderbirdMessageSample(msg, input.mailboxPath, subject)
+		if err != nil {
+			r.logger.Warn("error extracting message sample during subject search", "mailbox", input.mailboxName, "error", err)
+			continue
+		}
+		*input.out = append(*input.out, sample)
+	}
+	return nil
+}
+
+func thunderbirdMessageSample(msg *mail.Message, mailboxPath, subject string) (api.EmailSearchResult, error) {
+	dateStr := msg.Header.Get("Date")
+	messageID := msg.Header.Get("Message-Id")
+	body, err := ExtractBody(msg)
+	if err != nil {
+		return api.EmailSearchResult{}, fmt.Errorf("extracting body: %w", err)
+	}
+	body = strings.TrimRight(body, "\r\n")
+	var receivedAt *time.Time
+	if parsed, err := mail.ParseDate(dateStr); err == nil {
+		receivedAt = &parsed
+	}
+	sender := decodeRFC2047(msg.Header.Get("From"))
+	return api.EmailSearchResult{
+		ID:          state.GenerateKey(mailboxPath, messageID, dateStr),
+		SenderEmail: headerEmailAddress(sender),
+		Subject:     subject,
+		Body:        body,
+		ReceivedAt:  receivedAt,
+	}, nil
+}
+
+func headerEmailAddress(value string) string {
+	address, err := mail.ParseAddress(value)
+	if err != nil {
+		return ""
+	}
+	return address.Address
 }
 
 // scanMailbox scans a single mailbox for transactions.

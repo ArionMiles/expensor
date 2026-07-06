@@ -34,11 +34,11 @@ type scheduledScanRunner struct {
 }
 
 func (r *scheduledScanRunner) Run(ctx context.Context, tenant store.Tenant, readerName string) error {
-	plugin, err := r.registry.GetReader(readerName)
+	provider, err := r.registry.GetProvider(readerName)
 	if err != nil {
 		return scanscheduler.NewReaderNotConfiguredFailure(err)
 	}
-	if err := r.ensureReaderReady(ctx, tenant, plugin); err != nil {
+	if err := r.ensureReaderReady(ctx, tenant, provider); err != nil {
 		return err
 	}
 
@@ -75,8 +75,8 @@ func (r *scheduledScanRunner) Run(ctx context.Context, tenant store.Tenant, read
 	return err
 }
 
-func (r *scheduledScanRunner) ensureReaderReady(ctx context.Context, tenant store.Tenant, plugin plugins.ReaderPlugin) error {
-	meta := plugin.Metadata()
+func (r *scheduledScanRunner) ensureReaderReady(ctx context.Context, tenant store.Tenant, provider plugins.Provider) error {
+	meta := provider.Metadata
 	if meta.Auth.Type != plugins.AuthTypeConfig || len(meta.ConfigSchema) == 0 {
 		return nil
 	}

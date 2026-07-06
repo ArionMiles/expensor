@@ -20,6 +20,7 @@ import {
   useRevokeAccessToken,
   useSession,
   useUpdateAdminUser,
+  useUpdatePassword,
   useUpdateProfile,
 } from '@/api/queries'
 import type { AccessToken, AccountUser, AvatarKey, UserRole } from '@/api/types'
@@ -35,18 +36,22 @@ function TextField({
   value,
   type = 'text',
   inputMode,
+  autoComplete,
   disabled = false,
   message,
   tone,
+  onBlur,
   onChange,
 }: {
   label: string
   value: string
   type?: string
   inputMode?: InputHTMLAttributes<HTMLInputElement>['inputMode']
+  autoComplete?: InputHTMLAttributes<HTMLInputElement>['autoComplete']
   disabled?: boolean
   message?: string
   tone?: 'warning' | 'destructive'
+  onBlur?: () => void
   onChange: (value: string) => void
 }) {
   const id = useId()
@@ -66,9 +71,11 @@ function TextField({
         value={value}
         disabled={disabled}
         inputMode={inputMode}
+        autoComplete={autoComplete}
         aria-invalid={tone === 'warning' || tone === 'destructive'}
         aria-describedby={message ? messageId : undefined}
         onChange={(event) => onChange(event.currentTarget.value)}
+        onBlur={onBlur}
         className={cn(
           'w-full rounded-md border bg-input px-3 py-2 text-sm text-foreground outline-none transition-colors focus:ring-1 disabled:opacity-70',
           tone === 'warning' && 'border-warning focus:border-warning focus:ring-warning/40',
@@ -316,6 +323,7 @@ export function AccountSettings() {
   const { timezone, timeFormat } = useDisplay()
   const { data: session } = useSession()
   const updateProfile = useUpdateProfile()
+  const updatePassword = useUpdatePassword()
   const { data: tokens = [] } = useAccessTokens()
   const createToken = useCreateAccessToken()
   const revokeToken = useRevokeAccessToken()
@@ -328,9 +336,19 @@ export function AccountSettings() {
   const [tokenCopied, setTokenCopied] = useState(false)
   const tokenCopiedTimerRef = useRef<number | null>(null)
   const [revokeCandidate, setRevokeCandidate] = useState<AccessToken | null>(null)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordError, setPasswordError] = useState('')
 
   const formatAccountDate = (value?: string | null) =>
     value ? formatDate(value, true, timezone, timeFormat) : t('account.never')
+
+  const updatePasswordDraft = (setter: (value: string) => void) => (value: string) => {
+    setPasswordError('')
+    updatePassword.reset()
+    setter(value)
+  }
 
   useEffect(() => {
     if (!session) return
@@ -340,18 +358,14 @@ export function AccountSettings() {
     profileUserID.current = session.user_id
   }, [session])
 
-  useEffect(() => {
-    if (!session || profileUserID.current !== session.user_id) return undefined
-    const nextDisplayName = displayName.trim()
-    if (nextDisplayName.length === 0) return undefined
-    if (nextDisplayName === session.display_name && avatarKey === session.avatar_key)
-      return undefined
-
-    const timer = window.setTimeout(() => {
-      updateProfile.mutate({ display_name: nextDisplayName, avatar_key: avatarKey })
-    }, 500)
-    return () => window.clearTimeout(timer)
-  }, [avatarKey, displayName, session?.avatar_key, session?.display_name, session?.user_id])
+  const commitProfile = (next?: { displayName?: string; avatarKey?: AvatarKey }) => {
+    if (!session || profileUserID.current !== session.user_id) return
+    const nextDisplayName = (next?.displayName ?? displayName).trim()
+    const nextAvatarKey = next?.avatarKey ?? avatarKey
+    if (nextDisplayName.length === 0) return
+    if (nextDisplayName === session.display_name && nextAvatarKey === session.avatar_key) return
+    updateProfile.mutate({ display_name: nextDisplayName, avatar_key: nextAvatarKey })
+  }
 
   useEffect(
     () => () => {
@@ -370,6 +384,31 @@ export function AccountSettings() {
         setTokenCopied(false)
       },
     })
+  }
+
+  const submitPassword = (event: FormEvent) => {
+    event.preventDefault()
+    setPasswordError('')
+    updatePassword.reset()
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError(t('account.password.mismatch'))
+      return
+    }
+
+    updatePassword.mutate(
+      {
+        current_password: currentPassword,
+        new_password: newPassword,
+      },
+      {
+        onSuccess: () => {
+          setCurrentPassword('')
+          setNewPassword('')
+          setConfirmPassword('')
+        },
+      },
+    )
   }
 
   const openCreateToken = () => {
@@ -429,7 +468,11 @@ export function AccountSettings() {
             <TextField
               label={t('account.displayName')}
               value={displayName}
-              onChange={setDisplayName}
+              onBlur={() => commitProfile()}
+              onChange={(value) => {
+                updateProfile.reset()
+                setDisplayName(value)
+              }}
             />
             <div className="min-h-5">
               {updateProfile.isPending && (
@@ -442,9 +485,75 @@ export function AccountSettings() {
             </div>
           </div>
           <div className="flex justify-center lg:justify-end">
-            <AvatarPicker value={avatarKey} onChange={setAvatarKey} />
+            <AvatarPicker
+              value={avatarKey}
+              onChange={(nextAvatarKey) => {
+                updateProfile.reset()
+                setAvatarKey(nextAvatarKey)
+                commitProfile({ avatarKey: nextAvatarKey })
+              }}
+            />
           </div>
         </div>
+      </Section>
+
+      <Section title={t('account.password.title')}>
+        <form onSubmit={submitPassword} className="w-full max-w-md space-y-4">
+          <TextField
+            label={t('account.password.current')}
+            type="password"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={updatePasswordDraft(setCurrentPassword)}
+          />
+          <TextField
+            label={t('account.password.new')}
+            type="password"
+            autoComplete="new-password"
+            value={newPassword}
+            message={
+              newPassword.length > 0 && newPassword.length < 12
+                ? t('auth.validation.passwordLength')
+                : undefined
+            }
+            tone={newPassword.length > 0 && newPassword.length < 12 ? 'warning' : undefined}
+            onChange={updatePasswordDraft(setNewPassword)}
+          />
+          <TextField
+            label={t('account.password.confirm')}
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            message={passwordError || undefined}
+            tone={passwordError ? 'destructive' : undefined}
+            onChange={updatePasswordDraft(setConfirmPassword)}
+          />
+          <div className="min-h-5">
+            {updatePassword.isPending && (
+              <span className="text-xs text-muted-foreground">
+                {t('account.password.updating')}
+              </span>
+            )}
+            {updatePassword.isSuccess && !updatePassword.isPending && (
+              <span className="text-xs text-success">{t('account.password.updated')}</span>
+            )}
+            <ErrorText error={updatePassword.error} />
+          </div>
+          <button
+            type="submit"
+            disabled={
+              updatePassword.isPending ||
+              currentPassword.length === 0 ||
+              newPassword.length < 12 ||
+              confirmPassword.length === 0
+            }
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {updatePassword.isPending
+              ? t('account.password.updating')
+              : t('account.password.update')}
+          </button>
+        </form>
       </Section>
 
       <Section

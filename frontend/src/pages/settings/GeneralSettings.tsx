@@ -1,4 +1,5 @@
 import { usePreferences, useUpdatePreferences, useVersion } from '@/api/queries'
+import type { PreferencesPatch } from '@/api/types'
 import { TIME_FORMATS, type TimeFormatValue } from '@/contexts/DisplayContext'
 import { FloatingDropdown, comboboxOptionClass, useComboboxNavigation } from '@/components/Combobox'
 import { getBrowserTimezone, getTimezoneOptions, normalizeTimezone } from '@/lib/timezone'
@@ -482,40 +483,70 @@ export function GeneralSettings() {
     setTimeFormatDraft(preferences.time_format as TimeFormatValue)
   }, [preferences])
 
-  const save = useCallback(() => {
-    if (!preferences) return
-    const patch = {
-      ...(currency !== preferences.base_currency ? { base_currency: currency } : {}),
-      ...(timezone !== normalizeTimezone(preferences.timezone) ? { timezone } : {}),
-      ...(timeFormat !== preferences.time_format ? { time_format: timeFormat } : {}),
-    }
-    if (Object.keys(patch).length > 0) updatePreferences.mutate(patch)
-  }, [currency, preferences, timeFormat, timezone, updatePreferences])
-  const saveRef = useRef(save)
+  const savePreferences = useCallback(
+    (next: PreferencesPatch) => {
+      if (!preferences) return
 
-  useEffect(() => {
-    saveRef.current = save
-  }, [save])
+      const patch: PreferencesPatch = {}
+      if (next.base_currency !== undefined && next.base_currency !== preferences.base_currency) {
+        patch.base_currency = next.base_currency
+      }
+      if (
+        next.timezone !== undefined &&
+        normalizeTimezone(next.timezone) !== normalizeTimezone(preferences.timezone)
+      ) {
+        patch.timezone = normalizeTimezone(next.timezone)
+      }
+      if (next.time_format !== undefined && next.time_format !== preferences.time_format) {
+        patch.time_format = next.time_format
+      }
+      if (Object.keys(patch).length > 0) updatePreferences.mutate(patch)
+    },
+    [preferences, updatePreferences],
+  )
 
-  useEffect(() => () => saveRef.current(), [])
+  const handleCurrencyChange = useCallback(
+    (next: string) => {
+      setCurrency(next)
+      savePreferences({ base_currency: next })
+    },
+    [savePreferences],
+  )
+
+  const handleTimezoneChange = useCallback(
+    (next: string) => {
+      const normalized = normalizeTimezone(next)
+      setTimezoneDraft(normalized)
+      savePreferences({ timezone: normalized })
+    },
+    [savePreferences],
+  )
+
+  const handleTimeFormatChange = useCallback(
+    (next: TimeFormatValue) => {
+      setTimeFormatDraft(next)
+      savePreferences({ time_format: next })
+    },
+    [savePreferences],
+  )
 
   if (isLoading) return <p className="text-xs text-muted-foreground">Loading...</p>
 
   return (
     <div className="space-y-6">
       <SettingField label="Base currency" hint="Used for aggregate totals on the Dashboard.">
-        <CurrencyCombobox value={currency} onChange={setCurrency} />
+        <CurrencyCombobox value={currency} onChange={handleCurrencyChange} />
       </SettingField>
 
       <SettingField
         label="Timezone"
         hint="Used for date display and hour-of-day filtering across the app."
       >
-        <TimezoneCombobox value={timezone} onChange={setTimezoneDraft} />
+        <TimezoneCombobox value={timezone} onChange={handleTimezoneChange} />
       </SettingField>
 
       <SettingField label="Time format" hint="Controls how times are displayed throughout the app.">
-        <TimeFormatSelect value={timeFormat} onChange={setTimeFormatDraft} />
+        <TimeFormatSelect value={timeFormat} onChange={handleTimeFormatChange} />
       </SettingField>
 
       <StatusIndicatorSection />

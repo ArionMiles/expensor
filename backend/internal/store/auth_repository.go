@@ -129,6 +129,22 @@ func (r *pgAuthRepository) UpdateUser(ctx context.Context, id string, input Upda
 	return user, nil
 }
 
+func (r *pgAuthRepository) UpdateUserPassword(ctx context.Context, id string, input UpdateUserPasswordInput) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE users
+		SET password_hash = $2,
+		    updated_at = NOW()
+		WHERE id = $1
+	`, id, input.PasswordHash)
+	if err != nil {
+		return fmt.Errorf("updating user password: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *pgAuthRepository) DeleteUser(ctx context.Context, id string) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
 	if err != nil {

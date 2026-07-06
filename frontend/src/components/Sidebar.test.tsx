@@ -160,6 +160,16 @@ describe('Sidebar', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/settings?tab=account')
   })
 
+  it('keeps collapsed account navigation as a single avatar target', () => {
+    renderWithProviders(<Sidebar collapsed={true} onToggle={() => undefined} />)
+
+    expect(screen.getByRole('link', { name: /Admin admin@example\.com/i })).toHaveAttribute(
+      'href',
+      '/settings?tab=account',
+    )
+    expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument()
+  })
+
   it('navigates to login after signing out', async () => {
     const user = userEvent.setup()
     const mutate = vi.fn((_variables, options?: { onSuccess?: () => void }) => {

@@ -7,6 +7,9 @@ const t = (key: MessageKey) => messages.en[key]
 describe('resolveDocumentTitle', () => {
   it('uses the page title for regular routes without the app name suffix', () => {
     expect(resolveDocumentTitle({ pathname: '/transactions', search: '' }, t)).toBe('Transactions')
+    expect(resolveDocumentTitle({ pathname: '/rules/new/search', search: '' }, t)).toBe(
+      'Create rule from emails',
+    )
   })
 
   it('uses page title followed by tab title for tabbed routes', () => {

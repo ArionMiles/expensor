@@ -117,6 +117,43 @@ func createTestMbox(t *testing.T, path string, messages []string) {
 	}
 }
 
+func TestSearchMessages_ReturnsSubjectMatches(t *testing.T) {
+	tmpDir := t.TempDir()
+	mboxPath := filepath.Join(tmpDir, "Inbox")
+	createTestMbox(t, mboxPath, []string{
+		"Message-Id: <match@example.com>\nDate: Mon, 01 Jun 2026 10:30:00 +0000\nFrom: Bank Alerts <alerts@example.com>\nSubject: Card spend approved\nContent-Type: text/plain; charset=utf-8\n\nINR 42.00 at Coffee",
+		"Message-Id: <other@example.com>\nDate: Mon, 01 Jun 2026 11:30:00 +0000\nFrom: Other <other@example.com>\nSubject: Account statement\nContent-Type: text/plain; charset=utf-8\n\nNo spend here",
+	})
+	reader := &Reader{
+		mailboxPaths: map[string]string{"Inbox": mboxPath},
+		logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	messages, err := reader.Search(context.Background(), api.EmailSearchQuery{
+		SubjectQuery: "spend",
+		Limit:        10,
+	})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("messages len = %d, want 1", len(messages))
+	}
+	got := messages[0]
+	if got.ID == "" {
+		t.Fatal("message ID is empty")
+	}
+	if got.SenderEmail != "alerts@example.com" {
+		t.Fatalf("sender_email = %q, want alerts@example.com", got.SenderEmail)
+	}
+	if got.Subject != "Card spend approved" || got.Body != "INR 42.00 at Coffee" {
+		t.Fatalf("unexpected sample: %#v", got)
+	}
+	if got.ReceivedAt == nil || got.ReceivedAt.UTC().Format(time.RFC3339) != "2026-06-01T10:30:00Z" {
+		t.Fatalf("received_at = %v, want 2026-06-01T10:30:00Z", got.ReceivedAt)
+	}
+}
+
 func TestNew(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -100,6 +100,7 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("DELETE /api/session", h.Logout)
 	mux.HandleFunc("GET /api/profile", h.GetProfile)
 	mux.HandleFunc("PATCH /api/profile", h.UpdateProfile)
+	mux.HandleFunc("PATCH /api/profile/password", h.UpdatePassword)
 	mux.HandleFunc("GET /api/tokens", h.ListAccessTokens)
 	mux.HandleFunc("POST /api/tokens", h.CreateAccessToken)
 	mux.HandleFunc("DELETE /api/tokens/{id}", h.RevokeAccessToken)
@@ -117,36 +118,37 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("GET /api/scanning/status", h.GetScanningStatus)
 	mux.HandleFunc("POST /api/scanning/rescans", h.CreateScanningRescan)
 
-	// Plugin listing
-	mux.HandleFunc("GET /api/plugins/readers", h.ListReaders)
+	// Provider listing
+	mux.HandleFunc("GET /api/providers", h.ListProviders)
 
-	// Thunderbird profile/mailbox discovery (must precede wildcard /api/readers/{name}/... routes)
-	mux.HandleFunc("GET /api/readers/thunderbird/discover/profiles", h.DiscoverProfiles)
-	mux.HandleFunc("GET /api/readers/thunderbird/discover/mailboxes", h.DiscoverMailboxes)
+	// Thunderbird profile/mailbox discovery (must precede wildcard /api/providers/{name}/... routes)
+	mux.HandleFunc("GET /api/providers/thunderbird/discover/profiles", h.DiscoverProfiles)
+	mux.HandleFunc("GET /api/providers/thunderbird/discover/mailboxes", h.DiscoverMailboxes)
 
-	// Reader setup guide (must precede wildcard /api/readers/{name}/... routes)
-	mux.HandleFunc("GET /api/readers/{name}/guide", h.GetReaderGuide)
+	// Provider setup guide (must precede wildcard /api/providers/{name}/... routes)
+	mux.HandleFunc("GET /api/providers/{name}/guide", h.GetProviderGuide)
 
-	// Reader credentials (OAuth readers that need client_secret.json upload)
-	mux.HandleFunc("POST /api/readers/{name}/credentials", h.UploadCredentials)
-	mux.HandleFunc("GET /api/readers/{name}/credentials/status", h.CredentialsStatus)
+	// Provider credentials (OAuth providers that need client_secret.json upload)
+	mux.HandleFunc("POST /api/providers/{name}/credentials", h.UploadCredentials)
+	mux.HandleFunc("GET /api/providers/{name}/credentials/status", h.CredentialsStatus)
 
 	// OAuth flow
-	mux.HandleFunc("POST /api/readers/{name}/auth/start", h.AuthStart)
-	mux.HandleFunc("GET /api/auth/callback", h.AuthCallback)                 // shared redirect URI
-	mux.HandleFunc("POST /api/readers/{name}/auth/exchange", h.AuthExchange) // manual paste flow for homeservers
-	mux.HandleFunc("GET /api/readers/{name}/auth/status", h.AuthStatus)
-	mux.HandleFunc("DELETE /api/readers/{name}/auth/token", h.RevokeToken)
+	mux.HandleFunc("POST /api/providers/{name}/auth/start", h.AuthStart)
+	mux.HandleFunc("GET /api/auth/callback", h.AuthCallback)                   // shared redirect URI
+	mux.HandleFunc("POST /api/providers/{name}/auth/exchange", h.AuthExchange) // manual paste flow for homeservers
+	mux.HandleFunc("GET /api/providers/{name}/auth/status", h.AuthStatus)
+	mux.HandleFunc("DELETE /api/providers/{name}/auth/token", h.RevokeToken)
 
-	// Reader config (config-only readers like Thunderbird, plus optional settings for OAuth readers)
-	mux.HandleFunc("GET /api/readers/{name}/config", h.GetReaderConfig)
-	mux.HandleFunc("PUT /api/readers/{name}/config", h.SaveReaderConfig)
+	// Provider config (config-only providers like Thunderbird, plus optional settings for OAuth providers)
+	mux.HandleFunc("GET /api/providers/{name}/config", h.GetReaderConfig)
+	mux.HandleFunc("PUT /api/providers/{name}/config", h.SaveReaderConfig)
 
-	// Reader overall readiness
-	mux.HandleFunc("GET /api/readers/{name}/status", h.ReaderStatus)
+	// Provider overall readiness
+	mux.HandleFunc("GET /api/providers/{name}/status", h.ReaderStatus)
+	mux.HandleFunc("GET /api/providers/{name}/messages", h.SearchProviderMessages)
 
-	// Full reader disconnect (removes all credentials/token/config files)
-	mux.HandleFunc("DELETE /api/readers/{name}", h.DisconnectReader)
+	// Full provider disconnect (removes all credentials/token/config files)
+	mux.HandleFunc("DELETE /api/providers/{name}", h.DisconnectReader)
 
 	// Chart data
 	mux.HandleFunc("GET /api/stats/dashboard", h.GetDashboardData)
@@ -163,8 +165,8 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("PATCH /api/config/sync/settings", h.PatchCommunitySyncSettings)
 	mux.HandleFunc("GET /api/config/preferences", h.GetPreferences)
 	mux.HandleFunc("PATCH /api/config/preferences", h.PatchPreferences)
-	mux.HandleFunc("GET /api/config/readers/{name}/checkpoint", h.GetReaderCheckpoint)
-	mux.HandleFunc("DELETE /api/config/readers/{name}/checkpoint", h.ClearReaderCheckpoint)
+	mux.HandleFunc("GET /api/config/providers/{name}/checkpoint", h.GetReaderCheckpoint)
+	mux.HandleFunc("DELETE /api/config/providers/{name}/checkpoint", h.ClearReaderCheckpoint)
 
 	// Labels taxonomy
 	mux.HandleFunc("GET /api/config/labels/export", h.ExportLabels)       // must precede /{name}

@@ -131,6 +131,10 @@ func (s *Store) UpdateUser(ctx context.Context, id string, input UpdateUserInput
 	return s.auth.UpdateUser(ctx, id, input)
 }
 
+func (s *Store) UpdateUserPassword(ctx context.Context, id string, input UpdateUserPasswordInput) error {
+	return s.auth.UpdateUserPassword(ctx, id, input)
+}
+
 func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	return s.auth.DeleteUser(ctx, id)
 }

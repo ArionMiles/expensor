@@ -35,6 +35,11 @@ type mailboxDiscoveryQuery struct {
 	Profile string `form:"profile" validate:"required,no_control_chars"`
 }
 
+type providerMessagesQuery struct {
+	Subject string `form:"subject" validate:"required,no_control_chars"`
+	Limit   int    `form:"limit" validate:"omitempty,min=1,max=50"`
+}
+
 type monthlyBreakdownQuery struct {
 	Dimension string `form:"dimension" validate:"omitempty,oneof=labels categories buckets"`
 }
@@ -224,7 +229,7 @@ type RuleImportResponse struct {
 	Imported int `json:"imported" example:"1"`
 }
 
-// ConfigFieldResponse documents reader plugin configuration field metadata.
+// ConfigFieldResponse documents provider configuration field metadata.
 type ConfigFieldResponse struct {
 	Name      string `json:"name" example:"profilePath"`
 	Label     string `json:"label" example:"Profile path"`
@@ -234,13 +239,27 @@ type ConfigFieldResponse struct {
 	DependsOn string `json:"depends_on,omitempty" example:"profilePath"`
 }
 
-// ReaderInfoResponse documents reader plugin metadata.
-type ReaderInfoResponse struct {
+// ProviderInfoResponse documents provider metadata.
+type ProviderInfoResponse struct {
 	Name                      string                `json:"name" example:"thunderbird"`
 	Description               string                `json:"description" example:"Read transaction emails from Thunderbird"`
 	AuthType                  string                `json:"auth_type" example:"config"`
 	RequiresCredentialsUpload bool                  `json:"requires_credentials_upload"`
 	ConfigSchema              []ConfigFieldResponse `json:"config_schema"`
+}
+
+// ProviderSearchResultResponse documents a provider email search result for rule authoring.
+type ProviderSearchResultResponse struct {
+	ID          string     `json:"id" example:"1879f6d32a7f3c11"`
+	SenderEmail string     `json:"sender_email" example:"alerts@example.com"`
+	Subject     string     `json:"subject" example:"Card spend approved"`
+	Body        string     `json:"body" example:"INR 42.00 at Coffee"`
+	ReceivedAt  *time.Time `json:"received_at,omitempty"`
+}
+
+// ProviderSearchResponse documents provider message search results.
+type ProviderSearchResponse struct {
+	Results []ProviderSearchResultResponse `json:"results"`
 }
 
 // UploadCredentialsResponse documents a stored reader credentials location.
@@ -277,30 +296,30 @@ type AuthStatusResponse struct {
 	Expiry        *time.Time `json:"expiry,omitempty" extensions:"x-nullable"`
 }
 
-// ReaderDisconnectResponse documents a reader disconnect result.
-type ReaderDisconnectResponse struct {
+// ProviderDisconnectResponse documents a provider disconnect result.
+type ProviderDisconnectResponse struct {
 	Status       string   `json:"status" example:"disconnected"`
 	FilesRemoved []string `json:"files_removed"`
 }
 
-// ReaderTokenRevokeResponse documents an OAuth token revoke result.
-type ReaderTokenRevokeResponse struct {
+// ProviderTokenRevokeResponse documents an OAuth token revoke result.
+type ProviderTokenRevokeResponse struct {
 	Status string `json:"status" example:"revoked"`
 }
 
-// ReaderConfigRequest documents arbitrary persisted reader configuration JSON.
-type ReaderConfigRequest map[string]any
+// ProviderConfigRequest documents arbitrary persisted provider configuration JSON.
+type ProviderConfigRequest map[string]any
 
-// ReaderConfigResponse documents arbitrary persisted reader configuration JSON.
-type ReaderConfigResponse map[string]any
+// ProviderConfigResponse documents arbitrary persisted provider configuration JSON.
+type ProviderConfigResponse map[string]any
 
-// ReaderConfigSaveResponse documents a reader config save result.
-type ReaderConfigSaveResponse struct {
+// ProviderConfigSaveResponse documents a provider config save result.
+type ProviderConfigSaveResponse struct {
 	Status string `json:"status" example:"saved"`
 }
 
-// ReaderStatusResponse documents a reader readiness status payload.
-type ReaderStatusResponse struct {
+// ProviderStatusResponse documents a provider readiness status payload.
+type ProviderStatusResponse struct {
 	CredentialsUploaded bool   `json:"credentials_uploaded"`
 	Authenticated       bool   `json:"authenticated"`
 	ConfigPresent       bool   `json:"config_present"`
@@ -319,8 +338,8 @@ type ThunderbirdMailboxesResponse struct {
 	Mailboxes []string `json:"mailboxes"`
 }
 
-// ReaderGuideResponse documents a reader setup guide payload.
-type ReaderGuideResponse struct {
+// ProviderGuideResponse documents a reader setup guide payload.
+type ProviderGuideResponse struct {
 	Sections []GuideSectionResponse `json:"sections"`
 	Notes    []GuideNoteResponse    `json:"notes,omitempty"`
 }
@@ -456,8 +475,8 @@ type SetupStatusResponse struct {
 	Missing  []string `json:"missing" example:"base_currency,timezone,time_format"`
 }
 
-// ReaderCheckpointResponse is the reader checkpoint payload.
-type ReaderCheckpointResponse struct {
+// ProviderCheckpointResponse is the reader checkpoint payload.
+type ProviderCheckpointResponse struct {
 	LastScanAt *string `json:"last_scan_at" example:"2026-04-14T09:00:00Z" extensions:"x-nullable"`
 }
 

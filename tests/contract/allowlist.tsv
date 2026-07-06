@@ -6,6 +6,7 @@ POST	/session	login rejection state
 GET	/session	current bearer principal
 DELETE	/session	session deletion without cookie	coverage
 GET	/profile	current bearer profile
+PATCH	/profile/password	update current user password
 POST	/account-setup	setup token rejection state
 POST	/tokens	programmatic access token creation
 DELETE	/tokens/{id}	programmatic access token missing-id revocation
@@ -19,7 +20,7 @@ GET	/config/buckets	bucket taxonomy
 GET	/config/categories	category taxonomy
 GET	/config/labels	label taxonomy
 GET	/config/labels/mappings	label merchant mappings
-GET	/config/readers/{name}/checkpoint	reader checkpoint config
+GET	/config/providers/{name}/checkpoint	provider checkpoint config
 GET	/config/setup-status	first-run setup status
 GET	/config/sync/status	config sync status
 GET	/transactions	transaction listing
@@ -28,8 +29,8 @@ GET	/transactions/{id}	transaction detail
 PATCH	/transactions/{id}	update transaction
 POST	/transactions/{id}/labels	add transaction labels
 DELETE	/transactions/{id}/labels/{label}	remove transaction label
-GET	/plugins/readers	reader plugin metadata
-GET	/readers/{name}/guide	reader setup guide
+GET	/providers	provider metadata
+GET	/providers/{name}/guide	provider setup guide
 GET	/rules	rule listing
 POST	/rules	create rule
 GET	/rules/export	rule export document
@@ -62,7 +63,7 @@ PUT	/config/categories/{name}/merchant-mappings/{pattern}	category merchant mapp
 DELETE	/config/categories/{name}/merchant-mappings/{pattern}	category merchant mapping removal
 PUT	/config/buckets/{name}/merchant-mappings/{pattern}	bucket merchant mapping
 DELETE	/config/buckets/{name}/merchant-mappings/{pattern}	bucket merchant mapping removal
-DELETE	/config/readers/{name}/checkpoint	clear reader checkpoint
+DELETE	/config/providers/{name}/checkpoint	clear provider checkpoint
 DELETE	/config/labels/{name}/merchant-mappings/{pattern}	label merchant mapping removal
 GET	/extraction-diagnostics	extraction diagnostic listing
 GET	/extraction-diagnostics/{id}	seeded extraction diagnostic detail

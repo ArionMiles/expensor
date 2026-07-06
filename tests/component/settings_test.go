@@ -42,17 +42,17 @@ func TestSettingsRoundTripAndCheckpointClear(t *testing.T) {
 	}
 
 	t.Run("checkpoint exists then clears", func(t *testing.T) {
-		checkpoint := client.Get(t, "/api/config/readers/gmail/checkpoint")
+		checkpoint := client.Get(t, "/api/config/providers/gmail/checkpoint")
 		helpers.RequireStatus(t, checkpoint, http.StatusOK)
 		checkpointBody := helpers.DecodeJSON[map[string]any](t, checkpoint)
 		if checkpointBody["last_scan_at"] == nil {
 			t.Fatalf("expected seeded checkpoint, got %#v", checkpointBody)
 		}
 
-		clearCheckpoint := client.JSON(t, http.MethodDelete, "/api/config/readers/gmail/checkpoint", nil)
+		clearCheckpoint := client.JSON(t, http.MethodDelete, "/api/config/providers/gmail/checkpoint", nil)
 		helpers.RequireStatus(t, clearCheckpoint, http.StatusNoContent)
 
-		checkpointAfter := client.Get(t, "/api/config/readers/gmail/checkpoint")
+		checkpointAfter := client.Get(t, "/api/config/providers/gmail/checkpoint")
 		helpers.RequireStatus(t, checkpointAfter, http.StatusOK)
 		checkpointAfterBody := helpers.DecodeJSON[map[string]any](t, checkpointAfter)
 		if checkpointAfterBody["last_scan_at"] != nil {

@@ -14,7 +14,11 @@ import { AnnualCalendarHeatmap } from '@/components/AnnualCalendarHeatmap'
 import { HeatmapLegend } from '@/components/HeatmapLegend'
 import { WeekdayHourHeatmap } from '@/components/WeekdayHourHeatmap'
 import { formatCompactNumber, formatCurrency, formatDateShort, formatRelative } from '@/lib/utils'
-import { formatMonthForLocale, formatNumberForLocale } from '@/i18n/format'
+import {
+  formatMonthForLocale,
+  formatMonthYearForLocale,
+  formatNumberForLocale,
+} from '@/i18n/format'
 import { useI18n } from '@/i18n/I18nProvider'
 
 // ─── Chart palette ───────────────────────────────────────────────────────────
@@ -1688,6 +1692,12 @@ function smoothPath(pts: { x: number; y: number }[]): string {
   return d
 }
 
+function formatBreakdownTooltipMonth(period: string, locale: string) {
+  const [year, month] = period.split('-').map(Number)
+  if (!year || !month) return period
+  return formatMonthYearForLocale(new Date(year, month - 1, 1), locale)
+}
+
 export function BreakdownTimeline({
   data,
   currency,
@@ -1700,6 +1710,7 @@ export function BreakdownTimeline({
   onModeChange: (mode: SpendBreakdownMode) => void
 }) {
   const { months, series } = data
+  const { locale } = useI18n()
   const [hoveredMonth, setHoveredMonth] = useState<number | null>(null)
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
   const [selectedLabels, setSelectedLabels] = useState<string[]>([])
@@ -1945,7 +1956,7 @@ export function BreakdownTimeline({
                 style={{ left: tooltipPos.x, top: tooltipPos.y - 8 }}
               >
                 <p className="mb-1.5 text-[10px] font-medium text-muted-foreground">
-                  {months[hoveredMonth].replace('-', ' ')}
+                  {formatBreakdownTooltipMonth(months[hoveredMonth], locale)}
                 </p>
                 {tooltipSeries.length > 0 ? (
                   tooltipSeries.map((s) => {

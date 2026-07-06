@@ -31,6 +31,7 @@ import type {
   LoginRequest,
   MonthlyBreakdownData,
   MutedMerchantWithCount,
+  PasswordPatch,
   PluginInfo,
   Preferences,
   PreferencesPatch,
@@ -38,6 +39,7 @@ import type {
   ProfilePatch,
   ReaderConfig,
   ReaderGuide,
+  ReaderMessageSearchResponse,
   ReaderStatus,
   Rule,
   RuleDocument,
@@ -129,6 +131,7 @@ export const api = {
     session: () => apiClient.get<Principal>('/session'),
     logout: () => apiClient.delete('/session'),
     updateProfile: (patch: ProfilePatch) => apiClient.patch<Principal>('/profile', patch),
+    updatePassword: (patch: PasswordPatch) => apiClient.patch('/profile/password', patch),
     accountSetup: (token: string) =>
       apiClient.get<AccountSetupMetadata>(`/account-setup?token=${encodeURIComponent(token)}`),
     completeAccountSetup: (body: CompleteAccountSetupRequest) =>
@@ -198,50 +201,55 @@ export const api = {
   },
 
   plugins: {
-    readers: () => apiClient.get<PluginInfo[]>('/plugins/readers'),
+    readers: () => apiClient.get<PluginInfo[]>('/providers'),
   },
 
   readers: {
     credentials: {
       upload: async (readerName: string, file: File) => {
         const text = await file.text()
-        return apiClient.post(`/readers/${readerName}/credentials`, text, {
+        return apiClient.post(`/providers/${readerName}/credentials`, text, {
           headers: { 'Content-Type': 'application/json' },
         })
       },
       status: (readerName: string) =>
-        apiClient.get<CredentialsStatus>(`/readers/${readerName}/credentials/status`),
+        apiClient.get<CredentialsStatus>(`/providers/${readerName}/credentials/status`),
     },
 
     auth: {
       start: (readerName: string) =>
-        apiClient.post<AuthStartResponse>(`/readers/${readerName}/auth/start`),
+        apiClient.post<AuthStartResponse>(`/providers/${readerName}/auth/start`),
       exchange: (readerName: string, callbackUrl: string) =>
-        apiClient.post(`/readers/${readerName}/auth/exchange`, { url: callbackUrl }),
+        apiClient.post(`/providers/${readerName}/auth/exchange`, { url: callbackUrl }),
       status: (readerName: string) =>
-        apiClient.get<AuthStatus>(`/readers/${readerName}/auth/status`),
-      revoke: (readerName: string) => apiClient.delete(`/readers/${readerName}/auth/token`),
+        apiClient.get<AuthStatus>(`/providers/${readerName}/auth/status`),
+      revoke: (readerName: string) => apiClient.delete(`/providers/${readerName}/auth/token`),
     },
 
     config: {
-      get: (readerName: string) => apiClient.get<ReaderConfig>(`/readers/${readerName}/config`),
+      get: (readerName: string) => apiClient.get<ReaderConfig>(`/providers/${readerName}/config`),
       save: (readerName: string, config: Record<string, string>) =>
-        apiClient.put(`/readers/${readerName}/config`, { config }),
+        apiClient.put(`/providers/${readerName}/config`, { config }),
     },
 
-    status: (readerName: string) => apiClient.get<ReaderStatus>(`/readers/${readerName}/status`),
+    status: (readerName: string) => apiClient.get<ReaderStatus>(`/providers/${readerName}/status`),
 
-    disconnect: (readerName: string) => apiClient.delete(`/readers/${readerName}`),
+    disconnect: (readerName: string) => apiClient.delete(`/providers/${readerName}`),
 
-    guide: (name: string) => apiClient.get<ReaderGuide>(`/readers/${name}/guide`),
+    guide: (name: string) => apiClient.get<ReaderGuide>(`/providers/${name}/guide`),
+
+    searchMessages: (readerName: string, subject: string, limit = 10) =>
+      apiClient.get<ReaderMessageSearchResponse>(
+        `/providers/${readerName}/messages?subject=${encodeURIComponent(subject)}&limit=${limit}`,
+      ),
   },
 
   thunderbird: {
     discoverProfiles: () =>
-      apiClient.get<{ profiles: string[] }>('/readers/thunderbird/discover/profiles'),
+      apiClient.get<{ profiles: string[] }>('/providers/thunderbird/discover/profiles'),
     discoverMailboxes: (profile: string) =>
       apiClient.get<{ mailboxes: string[] }>(
-        `/readers/thunderbird/discover/mailboxes?profile=${encodeURIComponent(profile)}`,
+        `/providers/thunderbird/discover/mailboxes?profile=${encodeURIComponent(profile)}`,
       ),
   },
 
@@ -255,8 +263,8 @@ export const api = {
     updatePreferences: (patch: PreferencesPatch) =>
       apiClient.patch<Preferences>('/config/preferences', patch),
     getCheckpoint: (reader: string) =>
-      apiClient.get<{ last_scan_at: string | null }>(`/config/readers/${reader}/checkpoint`),
-    clearCheckpoint: (reader: string) => apiClient.delete(`/config/readers/${reader}/checkpoint`),
+      apiClient.get<{ last_scan_at: string | null }>(`/config/providers/${reader}/checkpoint`),
+    clearCheckpoint: (reader: string) => apiClient.delete(`/config/providers/${reader}/checkpoint`),
 
     labels: {
       list: () => apiClient.get<Label[]>('/config/labels'),

@@ -19,6 +19,7 @@ const TITLE_ROUTES: Record<string, TitleRoute> = {
   '/transactions': { titleKey: 'nav.transactions' },
   '/setup': { titleKey: 'nav.setup' },
   '/rules': { titleKey: 'nav.rules' },
+  '/rules/new/search': { titleKey: 'rules.emailSearch.title' },
   '/diagnostics': { titleKey: 'nav.diagnostics' },
   '/expense-groups': {
     titleKey: 'nav.expenseGroups',
@@ -59,6 +60,7 @@ const TITLE_ROUTES: Record<string, TitleRoute> = {
 }
 
 function titleRouteForPath(pathname: string): TitleRoute | undefined {
+  if (pathname === '/rules/new/search') return TITLE_ROUTES['/rules/new/search']
   if (pathname === '/rules/new' || pathname.startsWith('/rules/')) return TITLE_ROUTES['/rules']
   return TITLE_ROUTES[pathname]
 }

@@ -14,6 +14,9 @@ const Wizard = lazy(() => import('@/pages/setup/Wizard').then((m) => ({ default:
 const Settings = lazy(() => import('@/pages/Settings'))
 const Rules = lazy(() => import('@/pages/Rules'))
 const RuleForm = lazy(() => import('@/pages/rules/RuleForm').then((m) => ({ default: m.RuleForm })))
+const RuleEmailSearch = lazy(() =>
+  import('@/pages/rules/RuleEmailSearch').then((m) => ({ default: m.RuleEmailSearch })),
+)
 const Diagnostics = lazy(() => import('@/pages/Diagnostics'))
 const ExpenseGroupsPage = lazy(() => import('@/pages/ExpenseGroupsPage'))
 const IgnoredPage = lazy(() => import('@/pages/IgnoredPage'))
@@ -154,6 +157,16 @@ export function App() {
                         <FirstRunGate>
                           <PageSuspense>
                             <Rules />
+                          </PageSuspense>
+                        </FirstRunGate>
+                      }
+                    />
+                    <Route
+                      path="/rules/new/search"
+                      element={
+                        <FirstRunGate>
+                          <PageSuspense>
+                            <RuleEmailSearch />
                           </PageSuspense>
                         </FirstRunGate>
                       }

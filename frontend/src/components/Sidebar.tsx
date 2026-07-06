@@ -266,57 +266,68 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           </span>
         </a>
 
-        <NavLink
-          to="/settings?tab=account"
-          aria-label={
-            session
-              ? `${session.display_name} ${session.email}`
-              : t('nav.settings.account.subtitle')
-          }
-          className={({ isActive }) =>
-            cn(navItemCls(collapsed, isActive), !collapsed && 'border border-border/50')
-          }
-          {...(collapsed && session
-            ? tipHandlers(
-                `${session.display_name} · ${t(session.role === 'admin' ? 'account.role.admin' : 'account.role.user')}`,
-              )
-            : {})}
-        >
-          <span
-            data-testid="sidebar-user-avatar"
-            className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full [&_svg]:h-full [&_svg]:w-full"
-            aria-hidden="true"
-            dangerouslySetInnerHTML={{ __html: avatarByKey[avatarKey] }}
-          />
-          <div
-            className={cn(
-              'min-w-0 transition-opacity duration-200',
-              collapsed ? 'w-0 overflow-hidden opacity-0' : 'opacity-100',
-            )}
+        {collapsed ? (
+          <NavLink
+            to="/settings?tab=account"
+            aria-label={
+              session
+                ? `${session.display_name} ${session.email}`
+                : t('nav.settings.account.subtitle')
+            }
+            className={({ isActive }) => navItemCls(collapsed, isActive)}
+            {...(session
+              ? tipHandlers(
+                  `${session.display_name} · ${t(session.role === 'admin' ? 'account.role.admin' : 'account.role.user')}`,
+                )
+              : {})}
           >
-            <p className="truncate text-xs font-medium text-foreground">
-              {session?.display_name ?? t('account.title')}
-            </p>
-            <p className="truncate text-[10px] text-muted-foreground">{session?.email}</p>
+            <span
+              data-testid="sidebar-user-avatar"
+              className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full [&_svg]:h-full [&_svg]:w-full"
+              aria-hidden="true"
+              dangerouslySetInnerHTML={{ __html: avatarByKey[avatarKey] }}
+            />
+          </NavLink>
+        ) : (
+          <div className="group relative flex items-center gap-3 overflow-hidden rounded-lg border border-border/50 px-3 py-2 transition-colors hover:bg-accent hover:text-accent-foreground">
+            <NavLink
+              to="/settings?tab=account"
+              aria-label={
+                session
+                  ? `${session.display_name} ${session.email}`
+                  : t('nav.settings.account.subtitle')
+              }
+              className={({ isActive }) =>
+                cn(
+                  'absolute inset-0 rounded-lg focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                  isActive && 'bg-accent',
+                )
+              }
+            />
+            <span
+              data-testid="sidebar-user-avatar"
+              className="pointer-events-none relative z-10 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full [&_svg]:h-full [&_svg]:w-full"
+              aria-hidden="true"
+              dangerouslySetInnerHTML={{ __html: avatarByKey[avatarKey] }}
+            />
+            <div className="pointer-events-none relative z-10 min-w-0 flex-1">
+              <p className="truncate text-xs font-medium text-foreground">
+                {session?.display_name ?? t('account.title')}
+              </p>
+              <p className="truncate text-[10px] text-muted-foreground">{session?.email}</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={logout.isPending}
+              {...tipHandlers(t('sidebar.signOut'))}
+              aria-label={t('sidebar.signOut')}
+              className="relative z-20 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <LogOut size={15} aria-hidden="true" />
+            </button>
           </div>
-        </NavLink>
-        <button
-          type="button"
-          onClick={handleLogout}
-          disabled={logout.isPending}
-          {...(collapsed ? tipHandlers(t('sidebar.signOut')) : {})}
-          className={navItemCls(collapsed)}
-        >
-          <LogOut size={16} className="flex-shrink-0" />
-          <span
-            className={cn(
-              'whitespace-nowrap transition-opacity duration-200',
-              collapsed ? 'w-0 overflow-hidden opacity-0' : 'opacity-100',
-            )}
-          >
-            {t('sidebar.signOut')}
-          </span>
-        </button>
+        )}
       </div>
 
       {tip}

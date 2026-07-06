@@ -145,6 +145,11 @@ export interface ProfilePatch {
   avatar_key?: AvatarKey
 }
 
+export interface PasswordPatch {
+  current_password: string
+  new_password: string
+}
+
 export interface AccessToken {
   id: string
   name: string
@@ -326,6 +331,18 @@ export type RulePayload = Pick<
   | 'currency_regex'
   | 'source'
 >
+
+export interface ReaderMessageSample {
+  id: string
+  sender_email: string
+  subject: string
+  body: string
+  received_at?: string
+}
+
+export interface ReaderMessageSearchResponse {
+  results: ReaderMessageSample[]
+}
 
 export type ExtractionDiagnosticStatus = 'open' | 'resolved' | 'ignored'
 export type ExtractionDiagnosticListStatus = ExtractionDiagnosticStatus | 'all'

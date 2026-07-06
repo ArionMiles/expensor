@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { X } from 'lucide-react'
 import {
   useActiveReader,
   useCreateRule,
@@ -11,6 +12,7 @@ import {
 } from '@/api/queries'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { useI18n } from '@/i18n/I18nProvider'
+import { loadRuleEmailSearchDraft } from './emailSearchDraft'
 import {
   HintDot,
   RULE_CONTRIBUTION_GUIDE_URL,
@@ -40,6 +42,7 @@ export function RuleForm() {
   const navigate = useNavigate()
   const isCreate = !id
   const diagnosticID = searchParams.get('diagnostic')
+  const draftID = searchParams.get('draft')
 
   const { data: rules = [], isLoading: rulesLoading } = useRules()
   const rule = id ? rules.find((candidate) => candidate.id === id) : null
@@ -60,6 +63,7 @@ export function RuleForm() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  const [draftApplied, setDraftApplied] = useState(false)
 
   const { mutate: createRule, isPending: creating } = useCreateRule()
   const { mutate: updateRule, isPending: updating } = useUpdateRule()
@@ -107,6 +111,40 @@ export function RuleForm() {
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diagnostic?.id, isCreate])
+
+  useEffect(() => {
+    if (!isCreate || diagnosticID || !draftID || draftApplied) return
+
+    const draft = loadRuleEmailSearchDraft(draftID)
+    if (!draft || draft.messages.length === 0) {
+      setDraftApplied(true)
+      return
+    }
+
+    const nextSamples = draft.messages.map((message, index) => ({
+      name: t('rules.editor.sampleDefaultName', { index: index + 1 }),
+      sender: message.sender_email,
+      subject: message.subject,
+      body: message.body,
+      expected: {
+        amount: '',
+        merchant: '',
+        currency: '',
+      },
+    }))
+    const senders = uniqueSorted(draft.messages.map((message) => message.sender_email))
+    const subjects = uniqueSorted(draft.messages.map((message) => message.subject))
+    setSamples(nextSamples)
+    setActiveSample(0)
+    updateForm({
+      subjectContains:
+        subjects.length === 1 ? subjects[0] : draft.subjectQuery || form.subjectContains,
+      senders,
+      senderDraft: '',
+    })
+    setDraftApplied(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diagnosticID, draftApplied, draftID, isCreate, t])
 
   const updateForm = (patch: Partial<FormState>) => setForm((current) => ({ ...current, ...patch }))
 
@@ -482,9 +520,9 @@ ${sample.body.replace(/\r\n/g, '\n')}`
                     type="button"
                     onClick={() => removeSender(sender)}
                     aria-label={t('rules.editor.removeSender', { sender })}
-                    className="text-sm leading-none text-muted-foreground hover:text-foreground"
+                    className="text-muted-foreground transition-colors hover:text-foreground"
                   >
-                    x
+                    <X aria-hidden="true" size={14} />
                   </button>
                 </span>
               ))}
@@ -640,9 +678,9 @@ ${sample.body.replace(/\r\n/g, '\n')}`
                         event.stopPropagation()
                         deleteSampleAt(index)
                       }}
-                      className="pr-3 text-sm leading-none text-muted-foreground hover:text-destructive"
+                      className="pr-3 text-muted-foreground transition-colors hover:text-destructive"
                     >
-                      x
+                      <X aria-hidden="true" size={14} />
                     </button>
                   </span>
                 ))}

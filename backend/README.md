@@ -35,28 +35,30 @@ backend/
 
 ## Plugin System
 
-Readers are registered at startup via the plugin registry. Adding a new source requires implementing the reader interface and registering the plugin. PostgreSQL ingestion is owned by `internal/store`.
+Email providers are registered at startup via the plugin registry. Adding a new provider requires implementing the required capabilities and registering the provider. PostgreSQL ingestion is owned by `internal/store`.
 
-### Reader Plugins
+### Providers
 
 ```go
-type ReaderPlugin interface {
-    Metadata() ReaderMetadata
-    NewReader(input ReaderInput) (api.Reader, error)
+type Provider struct {
+    Metadata ProviderMetadata
+
+    NewReader func(ProviderInput) (api.Reader, error)
+    NewEmailSearcher func(ProviderInput) (api.EmailSearcher, error)
 }
 ```
 
-**Registered readers:** `gmail`, `thunderbird`
+**Registered providers:** `gmail`, `thunderbird`
 
 ## Adding a New Plugin
 
-### New Reader
+### New Provider
 
 1. Implement the reader in `backend/pkg/reader/{name}/`
-2. Add the plugin metadata and constructor adapter in `backend/pkg/reader/{name}/plugin.go`
-3. Register in `backend/cmd/server/main.go`:
+2. Add the provider metadata and constructor adapters in `backend/pkg/reader/{name}/plugin.go`
+3. Register in `backend/cmd/server/bootstrap.go`:
    ```go
-   registry.RegisterReader(&newreader.Plugin{})
+   registry.RegisterProvider(newreader.Provider(guideData))
    ```
 4. Add any required config fields to `backend/pkg/config/config.go`
 

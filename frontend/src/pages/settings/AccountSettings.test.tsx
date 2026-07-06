@@ -48,6 +48,103 @@ describe('AccountSettings', () => {
     expect(screen.queryByRole('heading', { name: 'Users' })).not.toBeInTheDocument()
   })
 
+  it('updates the current user password from account settings', async () => {
+    const user = userEvent.setup()
+    const passwordUpdates: Array<{ current_password?: string; new_password?: string }> = []
+    server.use(
+      http.get('/api/session', () => HttpResponse.json(adminPrincipal)),
+      http.get('/api/tokens', () => HttpResponse.json([])),
+      http.patch('/api/profile/password', async ({ request }) => {
+        const body = (await request.json()) as {
+          current_password?: string
+          new_password?: string
+        }
+        passwordUpdates.push(body)
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+
+    renderWithProviders(<Settings />, { route: '/settings?tab=account' })
+
+    expect(await screen.findByRole('heading', { name: 'Password' })).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Current password'), 'old password value')
+    await user.type(screen.getByLabelText('New password'), 'new password value')
+    await user.type(screen.getByLabelText('Confirm new password'), 'new password value')
+    await user.click(screen.getByRole('button', { name: 'Update password' }))
+
+    await waitFor(() =>
+      expect(passwordUpdates).toEqual([
+        {
+          current_password: 'old password value',
+          new_password: 'new password value',
+        },
+      ]),
+    )
+    expect(await screen.findByText('Password updated.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Current password')).toHaveValue('')
+    expect(screen.getByLabelText('New password')).toHaveValue('')
+    expect(screen.getByLabelText('Confirm new password')).toHaveValue('')
+  })
+
+  it('validates password confirmation locally before updating password', async () => {
+    const user = userEvent.setup()
+    let passwordUpdateRequests = 0
+    server.use(
+      http.get('/api/session', () => HttpResponse.json(adminPrincipal)),
+      http.get('/api/tokens', () => HttpResponse.json([])),
+      http.patch('/api/profile/password', () => {
+        passwordUpdateRequests += 1
+        return HttpResponse.json({ error: 'current password is incorrect' }, { status: 401 })
+      }),
+    )
+
+    renderWithProviders(<Settings />, { route: '/settings?tab=account' })
+
+    await user.type(await screen.findByLabelText('Current password'), 'old password value')
+    await user.type(screen.getByLabelText('New password'), 'new password value')
+    await user.type(screen.getByLabelText('Confirm new password'), 'different value')
+    await user.click(screen.getByRole('button', { name: 'Update password' }))
+
+    expect(screen.getByText('New passwords do not match.')).toBeInTheDocument()
+    expect(passwordUpdateRequests).toBe(0)
+  })
+
+  it('saves display name changes only after the field loses focus', async () => {
+    const user = userEvent.setup()
+    const updatedProfiles: Array<{ display_name?: string; avatar_key?: string }> = []
+    server.use(
+      http.get('/api/session', () => HttpResponse.json(adminPrincipal)),
+      http.get('/api/tokens', () => HttpResponse.json([])),
+      http.patch('/api/profile', async ({ request }) => {
+        const body = (await request.json()) as { display_name?: string; avatar_key?: string }
+        updatedProfiles.push(body)
+        return HttpResponse.json({
+          ...adminPrincipal,
+          display_name: body.display_name,
+          avatar_key: body.avatar_key,
+        })
+      }),
+    )
+
+    renderWithProviders(<Settings />, { route: '/settings?tab=account' })
+
+    const displayName = await screen.findByLabelText('Display name')
+    await user.clear(displayName)
+    await user.type(displayName, 'Admin Updated')
+    expect(updatedProfiles).toEqual([])
+
+    await user.tab()
+
+    await waitFor(() =>
+      expect(updatedProfiles).toEqual([
+        {
+          display_name: 'Admin Updated',
+          avatar_key: 'default',
+        },
+      ]),
+    )
+  })
+
   it('updates profile details, creates access tokens, and manages users from the admin tab', async () => {
     const user = userEvent.setup()
     const writeText = vi.spyOn(window.navigator.clipboard, 'writeText').mockResolvedValue(undefined)

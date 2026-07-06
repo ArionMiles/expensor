@@ -61,6 +61,11 @@ type UpdateUserInput struct {
 	Disabled    *bool
 }
 
+// UpdateUserPasswordInput updates an account password hash.
+type UpdateUserPasswordInput struct {
+	PasswordHash string
+}
+
 // CompleteAccountSetupInput completes an invited user's profile and password setup.
 type CompleteAccountSetupInput struct {
 	TokenHash    string

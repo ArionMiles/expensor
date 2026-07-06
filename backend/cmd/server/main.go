@@ -49,7 +49,7 @@ func run() int {
 		return 1
 	}
 	logger.Info("plugins registered",
-		"readers", len(registry.ListReaders()),
+		"providers", len(registry.ListProviders()),
 	)
 
 	if err := waitForPostgres(cfg.Postgres, logger); err != nil {

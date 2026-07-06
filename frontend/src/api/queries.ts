@@ -14,6 +14,7 @@ import type {
   ExtractionDiagnosticStatus,
   LoginRequest,
   MonthlyBreakdownData,
+  PasswordPatch,
   PreferencesPatch,
   ProfilePatch,
   RuleDocument,
@@ -141,6 +142,12 @@ export function useUpdateProfile() {
     onSuccess: (principal) => {
       qc.setQueryData(queryKeys.session, principal)
     },
+  })
+}
+
+export function useUpdatePassword() {
+  return useMutation({
+    mutationFn: (patch: PasswordPatch) => api.auth.updatePassword(patch),
   })
 }
 
@@ -702,6 +709,20 @@ export function useDeleteRule() {
   return useMutation({
     mutationFn: (id: string) => api.rules.delete(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['rules'] }),
+  })
+}
+
+export function useSearchReaderMessages() {
+  return useMutation({
+    mutationFn: ({
+      reader,
+      subject,
+      limit = 10,
+    }: {
+      reader: string
+      subject: string
+      limit?: number
+    }) => api.readers.searchMessages(reader, subject, limit).then((r) => r.data),
   })
 }
 

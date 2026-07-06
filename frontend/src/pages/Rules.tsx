@@ -178,6 +178,88 @@ function SenderEmailCell({ senders }: { senders: string[] }) {
   )
 }
 
+function NewRuleMenu() {
+  const { t } = useI18n()
+  const navigate = useNavigate()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [open, setOpen] = useState(false)
+  const options = [
+    {
+      label: t('rules.newRuleFromEmails'),
+      description: t('rules.newRuleFromEmailsDescription'),
+      path: '/rules/new/search',
+    },
+    {
+      label: t('rules.newRuleManual'),
+      description: t('rules.newRuleManualDescription'),
+      path: '/rules/new',
+    },
+  ]
+  const navigation = useComboboxNavigation({
+    open,
+    optionCount: options.length,
+    onOpenChange: setOpen,
+    onSelectIndex: (index) => {
+      const selected = options[index]
+      if (!selected) return
+      setOpen(false)
+      navigate(selected.path)
+    },
+  })
+
+  return (
+    <div ref={containerRef} className="inline-flex">
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => {
+          navigation.resetHighlight()
+          setOpen((current) => !current)
+        }}
+        {...navigation.getComboboxProps({
+          'aria-label': t('rules.newRule'),
+          listboxVisible: open,
+        })}
+        className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+      >
+        {t('rules.newRule')}
+      </button>
+      <ComboboxListbox
+        open={open}
+        anchorRef={buttonRef}
+        containerRef={containerRef}
+        listboxId={navigation.listboxId}
+        label={t('rules.newRuleOptions')}
+        onOpenChange={setOpen}
+        className="min-w-64 rounded-lg p-1 text-card-foreground shadow-xl"
+        minWidth={256}
+      >
+        {options.map((option, index) => (
+          <li
+            key={option.path}
+            {...navigation.getOptionProps(index, {
+              selected: false,
+              onMouseDown: () => {
+                setOpen(false)
+                navigate(option.path)
+              },
+            })}
+            className={comboboxOptionClass(
+              index === navigation.highlightedIndex,
+              false,
+              'rounded-md px-3 py-2',
+            )}
+          >
+            <span className="block text-sm font-semibold text-foreground">{option.label}</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">{option.description}</span>
+          </li>
+        ))}
+      </ComboboxListbox>
+    </div>
+  )
+}
+
 export default function Rules() {
   const { t } = useI18n()
   const navigate = useNavigate()
@@ -390,12 +472,7 @@ export default function Rules() {
             className="hidden"
             onChange={handleFileChange}
           />
-          <Link
-            to="/rules/new"
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-          >
-            {t('rules.newRule')}
-          </Link>
+          <NewRuleMenu />
         </div>
       </div>
 
