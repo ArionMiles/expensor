@@ -14,6 +14,9 @@ func TestRedactTextMasksCommonSensitiveValues(t *testing.T) {
 	if strings.Contains(got, "4111 1111 1111 1111") {
 		t.Fatalf("card number was not redacted: %q", got)
 	}
+	if !strings.Contains(got, "[REDACTED]") {
+		t.Fatalf("redacted text = %q, want [REDACTED]", got)
+	}
 }
 
 func TestEnforceResultLimitsRejectsOversizedPayload(t *testing.T) {

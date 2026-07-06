@@ -25,7 +25,7 @@ var (
 	banksInput []byte
 	//go:embed content/readers/gmail/guide.json content/readers/thunderbird/guide.json
 	readersFS embed.FS
-	//go:embed content/llm/prompts
+	//go:embed content/llm/prompts/.gitkeep
 	llmPromptsFS embed.FS
 )
 

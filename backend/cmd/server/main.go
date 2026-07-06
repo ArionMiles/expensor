@@ -111,7 +111,7 @@ func run() int {
 		Runtime:  instrumentedStore,
 		Prompts:  promptCatalog,
 	})
-	logger.Info("llm foundation initialized", "providers", len(llmRegistry.ListProviders()), "prompts", llmRouter.PromptCatalog().Len())
+	logger.Info("LLM router initialized", "providers", len(llmRegistry.ListProviders()), "prompts", llmRouter.PromptCatalog().Len())
 
 	dm := &daemonManager{}
 	sinkFactory := func(tenant store.Tenant, appCfg *config.App, sinkLogger *slog.Logger) (daemon.TransactionSink, error) {

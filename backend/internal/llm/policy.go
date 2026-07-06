@@ -24,15 +24,12 @@ type RedactionPolicy struct {
 
 // DefaultRedactionPolicy returns the baseline privacy policy shared by workflows.
 func DefaultRedactionPolicy() RedactionPolicy {
-	return RedactionPolicy{Replacement: "[redacted]"}
+	return RedactionPolicy{Replacement: "[REDACTED]"}
 }
 
 // RedactText masks common high-risk values before a prompt is assembled.
 func RedactText(input string, policy RedactionPolicy) string {
 	replacement := policy.Replacement
-	if replacement == "" {
-		replacement = "[redacted]"
-	}
 	out := emailPattern.ReplaceAllString(input, replacement)
 	return cardPattern.ReplaceAllStringFunc(out, func(candidate string) string {
 		digits := 0
