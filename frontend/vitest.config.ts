@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const avatarContentDir = path.resolve(__dirname, '../content/avatars')
+const avatarContentDir = path.resolve(__dirname, './content/avatars')
 
 export default defineConfig({
   plugins: [react()],

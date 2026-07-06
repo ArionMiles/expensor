@@ -511,6 +511,73 @@ func (s *InstrumentedStore) GetReaderConfig(ctx context.Context, tenant Tenant, 
 	return config, found, err
 }
 
+func (s *InstrumentedStore) SetLLMProviderConfig(ctx context.Context, tenant Tenant, provider string, config json.RawMessage) error {
+	ctx, span := s.scope.Start(ctx, "store.runtime.set_llm_provider_config")
+	defer span.End()
+
+	err := s.next.SetLLMProviderConfig(ctx, tenant, provider, config)
+	s.recordOperation(ctx, "runtime.set_llm_provider_config", err)
+	return err
+}
+
+func (s *InstrumentedStore) GetLLMProviderConfig(ctx context.Context, tenant Tenant, provider string) (json.RawMessage, bool, error) {
+	ctx, span := s.scope.Start(ctx, "store.runtime.get_llm_provider_config")
+	defer span.End()
+
+	config, found, err := s.next.GetLLMProviderConfig(ctx, tenant, provider)
+	s.recordOperation(ctx, "runtime.get_llm_provider_config", err)
+	return config, found, err
+}
+
+func (s *InstrumentedStore) SetLLMProviderCredentials(ctx context.Context, tenant Tenant, provider string, credentials []byte) error {
+	ctx, span := s.scope.Start(ctx, "store.runtime.set_llm_provider_credentials")
+	defer span.End()
+
+	err := s.next.SetLLMProviderCredentials(ctx, tenant, provider, credentials)
+	s.recordOperation(ctx, "runtime.set_llm_provider_credentials", err)
+	return err
+}
+
+func (s *InstrumentedStore) GetLLMProviderCredentials(
+	ctx context.Context,
+	tenant Tenant,
+	provider string,
+) (credentials []byte, found bool, err error) {
+	ctx, span := s.scope.Start(ctx, "store.runtime.get_llm_provider_credentials")
+	defer span.End()
+
+	credentials, found, err = s.next.GetLLMProviderCredentials(ctx, tenant, provider)
+	s.recordOperation(ctx, "runtime.get_llm_provider_credentials", err)
+	return credentials, found, err
+}
+
+func (s *InstrumentedStore) SetActiveLLMProvider(ctx context.Context, tenant Tenant, provider string) error {
+	ctx, span := s.scope.Start(ctx, "store.runtime.set_active_llm_provider")
+	defer span.End()
+
+	err := s.next.SetActiveLLMProvider(ctx, tenant, provider)
+	s.recordOperation(ctx, "runtime.set_active_llm_provider", err)
+	return err
+}
+
+func (s *InstrumentedStore) ClearActiveLLMProvider(ctx context.Context, tenant Tenant) error {
+	ctx, span := s.scope.Start(ctx, "store.runtime.clear_active_llm_provider")
+	defer span.End()
+
+	err := s.next.ClearActiveLLMProvider(ctx, tenant)
+	s.recordOperation(ctx, "runtime.clear_active_llm_provider", err)
+	return err
+}
+
+func (s *InstrumentedStore) GetActiveLLMProviderRuntime(ctx context.Context, tenant Tenant) (LLMProviderRuntime, bool, error) {
+	ctx, span := s.scope.Start(ctx, "store.runtime.get_active_llm_provider")
+	defer span.End()
+
+	runtime, found, err := s.next.GetActiveLLMProviderRuntime(ctx, tenant)
+	s.recordOperation(ctx, "runtime.get_active_llm_provider", err)
+	return runtime, found, err
+}
+
 func (s *InstrumentedStore) DeleteReaderRuntime(ctx context.Context, tenant Tenant, reader string) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.delete_reader_runtime")
 	defer span.End()

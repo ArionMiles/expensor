@@ -360,6 +360,41 @@ func (s *Store) GetReaderConfig(ctx context.Context, tenant Tenant, reader strin
 	return s.runtime.GetReaderConfig(ctx, tenant, reader)
 }
 
+// SetLLMProviderConfig stores tenant LLM provider-specific configuration JSON.
+func (s *Store) SetLLMProviderConfig(ctx context.Context, tenant Tenant, provider string, providerConfig json.RawMessage) error {
+	return s.runtime.SetLLMProviderConfig(ctx, tenant, provider, providerConfig)
+}
+
+// GetLLMProviderConfig returns tenant LLM provider-specific configuration JSON.
+func (s *Store) GetLLMProviderConfig(ctx context.Context, tenant Tenant, provider string) (json.RawMessage, bool, error) {
+	return s.runtime.GetLLMProviderConfig(ctx, tenant, provider)
+}
+
+// SetLLMProviderCredentials stores encrypted tenant LLM provider credentials.
+func (s *Store) SetLLMProviderCredentials(ctx context.Context, tenant Tenant, provider string, credentials []byte) error {
+	return s.runtime.SetLLMProviderCredentials(ctx, tenant, provider, credentials)
+}
+
+// GetLLMProviderCredentials returns decrypted tenant LLM provider credentials.
+func (s *Store) GetLLMProviderCredentials(ctx context.Context, tenant Tenant, provider string) (credentials []byte, found bool, err error) {
+	return s.runtime.GetLLMProviderCredentials(ctx, tenant, provider)
+}
+
+// SetActiveLLMProvider marks one LLM provider active for a tenant.
+func (s *Store) SetActiveLLMProvider(ctx context.Context, tenant Tenant, provider string) error {
+	return s.runtime.SetActiveLLMProvider(ctx, tenant, provider)
+}
+
+// ClearActiveLLMProvider clears the active LLM provider for a tenant.
+func (s *Store) ClearActiveLLMProvider(ctx context.Context, tenant Tenant) error {
+	return s.runtime.ClearActiveLLMProvider(ctx, tenant)
+}
+
+// GetActiveLLMProviderRuntime returns the active tenant LLM provider runtime state.
+func (s *Store) GetActiveLLMProviderRuntime(ctx context.Context, tenant Tenant) (LLMProviderRuntime, bool, error) {
+	return s.runtime.GetActiveLLMProviderRuntime(ctx, tenant)
+}
+
 // DeleteReaderRuntime removes all runtime data for a tenant reader.
 func (s *Store) DeleteReaderRuntime(ctx context.Context, tenant Tenant, reader string) error {
 	return s.runtime.DeleteReaderRuntime(ctx, tenant, reader)

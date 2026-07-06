@@ -11,7 +11,8 @@ backend/
 │   │   ├── main.go
 │   │   └── content/         # Embedded config files
 │   │       ├── rules.json   # Transaction extraction rules
-│   │       └── labels.json  # Merchant categorization labels
+│   │       ├── mcc.json     # MCC category seed data
+│   │       └── llm/         # Backend-owned LLM prompt catalog
 │   └── auth/                # Standalone OAuth flow binary
 │       └── main.go
 ├── internal/

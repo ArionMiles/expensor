@@ -339,6 +339,64 @@ func TestReaderRuntimeEncryptsTokenPerTenant(t *testing.T) {
 	}
 }
 
+func TestLLMProviderRuntimeStoresTenantConfigCredentialsAndActiveProvider(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+	ctx := context.Background()
+
+	tenantA := store.Tenant{ID: createRuntimeTestUser(t, ts, "llm-runtime-a@example.com").TenantID}
+	tenantB := store.Tenant{ID: createRuntimeTestUser(t, ts, "llm-runtime-b@example.com").TenantID}
+
+	cfg := json.RawMessage(`{"model":"test-model","temperature":0}`)
+	if err := ts.SetLLMProviderConfig(ctx, tenantA, "test-provider", cfg); err != nil {
+		t.Fatalf("SetLLMProviderConfig() error = %v", err)
+	}
+	gotCfg, found, err := ts.GetLLMProviderConfig(ctx, tenantA, "test-provider")
+	if err != nil || !found {
+		t.Fatalf("GetLLMProviderConfig() found=%v err=%v", found, err)
+	}
+	assertJSONBytesEqual(t, gotCfg, cfg)
+
+	credentials := []byte(`{"api_key":"secret-value"}`)
+	if err := ts.SetLLMProviderCredentials(ctx, tenantA, "test-provider", credentials); err != nil {
+		t.Fatalf("SetLLMProviderCredentials() error = %v", err)
+	}
+	gotCredentials, found, err := ts.GetLLMProviderCredentials(ctx, tenantA, "test-provider")
+	if err != nil || !found {
+		t.Fatalf("GetLLMProviderCredentials() found=%v err=%v", found, err)
+	}
+	assertJSONBytesEqual(t, gotCredentials, credentials)
+
+	var ciphertext []byte
+	if err := ts.PoolForTest().QueryRow(ctx, `
+		SELECT credentials_ciphertext
+		FROM llm_provider_runtime
+		WHERE tenant_id = $1 AND provider = $2
+	`, tenantA.ID, "test-provider").Scan(&ciphertext); err != nil {
+		t.Fatalf("read ciphertext: %v", err)
+	}
+	if bytes.Contains(ciphertext, []byte("secret-value")) {
+		t.Fatal("ciphertext contains plaintext credential")
+	}
+
+	if err := ts.SetActiveLLMProvider(ctx, tenantA, "test-provider"); err != nil {
+		t.Fatalf("SetActiveLLMProvider() error = %v", err)
+	}
+	runtime, found, err := ts.GetActiveLLMProviderRuntime(ctx, tenantA)
+	if err != nil || !found {
+		t.Fatalf("GetActiveLLMProviderRuntime() found=%v err=%v", found, err)
+	}
+	if runtime.Provider != "test-provider" || !runtime.HasCredentials {
+		t.Fatalf("runtime = %#v, want active test-provider with credentials", runtime)
+	}
+	assertJSONBytesEqual(t, runtime.Config, cfg)
+	assertJSONBytesEqual(t, runtime.Credentials, credentials)
+
+	if _, found, err := ts.GetActiveLLMProviderRuntime(ctx, tenantB); err != nil || found {
+		t.Fatalf("tenant B active runtime found=%v err=%v, want not found", found, err)
+	}
+}
+
 func TestProcessedMessagesAreTenantScoped(t *testing.T) {
 	ts := newTestStore(t)
 	defer ts.cleanup()

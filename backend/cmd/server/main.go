@@ -13,6 +13,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/daemon"
 	scanscheduler "github.com/ArionMiles/expensor/backend/internal/daemon/scheduler"
 	"github.com/ArionMiles/expensor/backend/internal/httpapi"
+	"github.com/ArionMiles/expensor/backend/internal/llm"
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
@@ -64,6 +65,13 @@ func run() int {
 	}
 	logger.Info("loaded embedded content", "rules", len(content.rules), "mcc_codes", len(content.mccEntries), "merchant_categories", len(content.catEntries))
 
+	promptCatalog, err := llm.LoadPromptCatalog(llmPromptsFS, "content/llm/prompts")
+	if err != nil {
+		logger.Error("failed to load llm prompt catalog", "error", err)
+		return 1
+	}
+	logger.Info("loaded llm prompt catalog", "prompts", promptCatalog.Len())
+
 	ctx, cancel := context.WithCancel(context.Background())
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -96,6 +104,14 @@ func run() int {
 	storeScope := observability.NewScope(storeLogger, "github.com/ArionMiles/expensor/backend/internal/store")
 	instrumentedStore := store.NewInstrumentedStore(pgStore, storeScope, storeLogger)
 	var st httpapi.Storer = instrumentedStore
+
+	llmRegistry := llm.NewRegistry()
+	llmRouter := llm.NewRouter(llm.RouterConfig{
+		Registry: llmRegistry,
+		Runtime:  instrumentedStore,
+		Prompts:  promptCatalog,
+	})
+	logger.Info("LLM router initialized", "providers", len(llmRegistry.ListProviders()), "prompts", llmRouter.PromptCatalog().Len())
 
 	dm := &daemonManager{}
 	sinkFactory := func(tenant store.Tenant, appCfg *config.App, sinkLogger *slog.Logger) (daemon.TransactionSink, error) {
