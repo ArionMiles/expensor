@@ -45,7 +45,7 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.Postgres.ConnectTimeout != 30*time.Second || cfg.Postgres.RetryInterval != 2*time.Second {
 		t.Fatalf("postgres timing defaults: %#v", cfg.Postgres)
 	}
-	if cfg.Community.URL != "https://raw.githubusercontent.com/ArionMiles/expensor/main/content" ||
+	if cfg.Community.URL != "https://raw.githubusercontent.com/ArionMiles/expensor/main/backend/cmd/server/content" ||
 		cfg.Community.SyncInterval != 24*time.Hour || cfg.Community.SyncTimeout != 2*time.Minute {
 		t.Fatalf("community defaults: %#v", cfg.Community)
 	}

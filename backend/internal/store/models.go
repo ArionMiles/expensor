@@ -277,7 +277,7 @@ type Bucket struct {
 	IsDefault   bool   `json:"is_default"`
 }
 
-// MCCEntry represents a single MCC code record from content/mcc.json.
+// MCCEntry represents a single MCC code record from backend content/mcc.json.
 type MCCEntry struct {
 	Code        string `json:"code"`
 	Description string `json:"description"`
@@ -285,7 +285,7 @@ type MCCEntry struct {
 	Bucket      string `json:"bucket"`
 }
 
-// MerchantCategoryEntry represents a single fragment mapping from content/categories.json.
+// MerchantCategoryEntry represents a single fragment mapping from backend content/categories.json.
 type MerchantCategoryEntry struct {
 	Fragment string  `json:"fragment"`
 	MCC      *string `json:"mcc,omitempty"`
@@ -308,6 +308,17 @@ type CommunitySyncSettings struct {
 // CommunitySyncSettingsPatch partially updates community sync settings.
 type CommunitySyncSettingsPatch struct {
 	AutomaticSyncEnabled *bool `json:"automatic_sync_enabled"`
+}
+
+// LLMProviderRuntime is tenant-scoped runtime state for an LLM provider.
+type LLMProviderRuntime struct {
+	Provider       string
+	Config         []byte
+	Credentials    []byte
+	HasCredentials bool
+	Active         bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 // RuleRow is a rule as stored in the database.

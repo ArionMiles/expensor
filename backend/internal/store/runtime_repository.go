@@ -19,6 +19,7 @@ const (
 	readerRuntimeClientSecret = "client_secret"
 	readerRuntimeOAuthToken   = "oauth_token"
 	readerRuntimeConfig       = "config"
+	llmProviderCredentials    = "credentials"
 )
 
 type pgRuntimeRepository struct {
@@ -93,6 +94,94 @@ func (r *pgRuntimeRepository) SetReaderConfig(ctx context.Context, tenant Tenant
 func (r *pgRuntimeRepository) GetReaderConfig(ctx context.Context, tenant Tenant, reader string) (json.RawMessage, bool, error) {
 	value, ok, err := r.readReaderConfigJSON(ctx, tenant, reader)
 	return json.RawMessage(value), ok, err
+}
+
+func (r *pgRuntimeRepository) SetLLMProviderConfig(ctx context.Context, tenant Tenant, provider string, config json.RawMessage) error {
+	return r.writeLLMProviderConfigJSON(ctx, tenant, provider, config)
+}
+
+func (r *pgRuntimeRepository) GetLLMProviderConfig(ctx context.Context, tenant Tenant, provider string) (json.RawMessage, bool, error) {
+	value, ok, err := r.readLLMProviderConfigJSON(ctx, tenant, provider)
+	return json.RawMessage(value), ok, err
+}
+
+func (r *pgRuntimeRepository) SetLLMProviderCredentials(ctx context.Context, tenant Tenant, provider string, credentials []byte) error {
+	return r.writeLLMProviderEncryptedJSON(ctx, tenant, provider, credentials)
+}
+
+func (r *pgRuntimeRepository) GetLLMProviderCredentials(ctx context.Context, tenant Tenant, provider string) (credentials []byte, found bool, err error) {
+	return r.readLLMProviderEncryptedJSON(ctx, tenant, provider)
+}
+
+func (r *pgRuntimeRepository) SetActiveLLMProvider(ctx context.Context, tenant Tenant, provider string) error {
+	if strings.TrimSpace(provider) == "" {
+		return errors.New("llm provider cannot be blank")
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("starting llm provider activation transaction: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE llm_provider_runtime SET active = false, updated_at = NOW() WHERE tenant_id IS NOT DISTINCT FROM $1 AND active = true`,
+		tenantIDParam(tenant),
+	); err != nil {
+		return fmt.Errorf("clearing active llm provider: %w", err)
+	}
+	query := llmProviderRuntimeUpsertActiveTenantQuery
+	if strings.TrimSpace(tenant.ID) == "" {
+		query = llmProviderRuntimeUpsertActiveLegacyQuery
+	}
+	if _, err := tx.Exec(ctx, query, tenantIDParam(tenant), provider); err != nil {
+		return fmt.Errorf("setting active llm provider %q: %w", provider, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("committing llm provider activation: %w", err)
+	}
+	return nil
+}
+
+func (r *pgRuntimeRepository) ClearActiveLLMProvider(ctx context.Context, tenant Tenant) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE llm_provider_runtime SET active = false, updated_at = NOW() WHERE tenant_id IS NOT DISTINCT FROM $1 AND active = true`,
+		tenantIDParam(tenant),
+	)
+	if err != nil {
+		return fmt.Errorf("clearing active llm provider: %w", err)
+	}
+	return nil
+}
+
+func (r *pgRuntimeRepository) GetActiveLLMProviderRuntime(ctx context.Context, tenant Tenant) (LLMProviderRuntime, bool, error) {
+	var runtime LLMProviderRuntime
+	var credentialsCiphertext []byte
+	err := r.pool.QueryRow(ctx, `
+		SELECT provider, COALESCE(config, '{}'::jsonb), COALESCE(credentials_ciphertext, '\x'::bytea),
+		       credentials_ciphertext IS NOT NULL, active, created_at, updated_at
+		FROM llm_provider_runtime
+		WHERE tenant_id IS NOT DISTINCT FROM $1 AND active = true
+	`, tenantIDParam(tenant)).Scan(
+		&runtime.Provider, &runtime.Config, &credentialsCiphertext, &runtime.HasCredentials,
+		&runtime.Active, &runtime.CreatedAt, &runtime.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return LLMProviderRuntime{}, false, nil
+		}
+		return LLMProviderRuntime{}, false, fmt.Errorf("getting active llm provider: %w", err)
+	}
+	if runtime.HasCredentials {
+		if r.secretBox == nil {
+			return LLMProviderRuntime{}, false, errors.New("store secret box is not initialized")
+		}
+		credentials, err := r.secretBox.Open(credentialsCiphertext, llmProviderAssociatedData(tenant, runtime.Provider))
+		if err != nil {
+			return LLMProviderRuntime{}, false, fmt.Errorf("decrypting llm provider %q credentials: %w", runtime.Provider, err)
+		}
+		runtime.Credentials = credentials
+	}
+	return runtime, true, nil
 }
 
 func (r *pgRuntimeRepository) DeleteReaderRuntime(ctx context.Context, tenant Tenant, reader string) error {
@@ -302,6 +391,101 @@ func (r *pgRuntimeRepository) readReaderConfigJSON(ctx context.Context, tenant T
 	return value, true, nil
 }
 
+func (r *pgRuntimeRepository) writeLLMProviderConfigJSON(ctx context.Context, tenant Tenant, provider string, value []byte) error {
+	if strings.TrimSpace(provider) == "" {
+		return errors.New("llm provider cannot be blank")
+	}
+	if !json.Valid(value) {
+		return fmt.Errorf("config for llm provider %q must be valid JSON", provider)
+	}
+	query := llmProviderRuntimeSetConfigTenantQuery
+	if strings.TrimSpace(tenant.ID) == "" {
+		query = llmProviderRuntimeSetConfigLegacyQuery
+	}
+	if _, err := r.pool.Exec(ctx, query, tenantIDParam(tenant), provider, value); err != nil {
+		return fmt.Errorf("setting config for llm provider %q: %w", provider, err)
+	}
+	return nil
+}
+
+func (r *pgRuntimeRepository) readLLMProviderConfigJSON(ctx context.Context, tenant Tenant, provider string) ([]byte, bool, error) {
+	var value []byte
+	if strings.TrimSpace(provider) == "" {
+		return nil, false, errors.New("llm provider cannot be blank")
+	}
+	err := r.pool.QueryRow(ctx, `
+		SELECT config
+		FROM llm_provider_runtime
+		WHERE tenant_id IS NOT DISTINCT FROM $1 AND provider = $2 AND config IS NOT NULL
+	`, tenantIDParam(tenant), provider).Scan(&value)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("getting config for llm provider %q: %w", provider, err)
+	}
+	return value, true, nil
+}
+
+func (r *pgRuntimeRepository) writeLLMProviderEncryptedJSON(ctx context.Context, tenant Tenant, provider string, value []byte) error {
+	if strings.TrimSpace(provider) == "" {
+		return errors.New("llm provider cannot be blank")
+	}
+	if !json.Valid(value) {
+		return fmt.Errorf("%s for llm provider %q must be valid JSON", llmProviderCredentials, provider)
+	}
+	if r.secretBox == nil {
+		return errors.New("store secret box is not initialized")
+	}
+	ciphertext, err := r.secretBox.Seal(value, llmProviderAssociatedData(tenant, provider))
+	if err != nil {
+		return fmt.Errorf("encrypting llm provider %q credentials: %w", provider, err)
+	}
+	query := llmProviderRuntimeSetCredentialsTenantQuery
+	if strings.TrimSpace(tenant.ID) == "" {
+		query = llmProviderRuntimeSetCredentialsLegacyQuery
+	}
+	if _, err := r.pool.Exec(ctx, query, tenantIDParam(tenant), provider, ciphertext); err != nil {
+		return fmt.Errorf("setting credentials for llm provider %q: %w", provider, err)
+	}
+	return nil
+}
+
+func (r *pgRuntimeRepository) readLLMProviderEncryptedJSON(ctx context.Context, tenant Tenant, provider string) ([]byte, bool, error) {
+	var ciphertext []byte
+	if strings.TrimSpace(provider) == "" {
+		return nil, false, errors.New("llm provider cannot be blank")
+	}
+	if r.secretBox == nil {
+		return nil, false, errors.New("store secret box is not initialized")
+	}
+	err := r.pool.QueryRow(ctx, `
+		SELECT credentials_ciphertext
+		FROM llm_provider_runtime
+		WHERE tenant_id IS NOT DISTINCT FROM $1 AND provider = $2 AND credentials_ciphertext IS NOT NULL
+	`, tenantIDParam(tenant), provider).Scan(&ciphertext)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("getting credentials for llm provider %q: %w", provider, err)
+	}
+	plaintext, err := r.secretBox.Open(ciphertext, llmProviderAssociatedData(tenant, provider))
+	if err != nil {
+		return nil, false, fmt.Errorf("decrypting llm provider %q credentials: %w", provider, err)
+	}
+	return plaintext, true, nil
+}
+
+func llmProviderAssociatedData(tenant Tenant, provider string) auth.SecretAssociatedData {
+	return auth.SecretAssociatedData{
+		TenantID: strings.TrimSpace(tenant.ID),
+		Scope:    "llm_provider",
+		Name:     provider,
+		Kind:     llmProviderCredentials,
+	}
+}
+
 func (r *pgRuntimeRepository) readAppConfig(ctx context.Context, tenant Tenant, key string) (string, error) {
 	var value string
 	err := r.pool.QueryRow(ctx,
@@ -411,4 +595,46 @@ const runtimeSetReaderConfigLegacyQuery = `
 	VALUES ($1, $2, $3)
 	ON CONFLICT (reader) WHERE tenant_id IS NULL
 	DO UPDATE SET config = EXCLUDED.config, updated_at = NOW()
+`
+
+const llmProviderRuntimeSetConfigTenantQuery = `
+	INSERT INTO llm_provider_runtime (tenant_id, provider, config)
+	VALUES ($1, $2, $3)
+	ON CONFLICT (tenant_id, provider) WHERE tenant_id IS NOT NULL
+	DO UPDATE SET config = EXCLUDED.config, updated_at = NOW()
+`
+
+const llmProviderRuntimeSetConfigLegacyQuery = `
+	INSERT INTO llm_provider_runtime (tenant_id, provider, config)
+	VALUES ($1, $2, $3)
+	ON CONFLICT (provider) WHERE tenant_id IS NULL
+	DO UPDATE SET config = EXCLUDED.config, updated_at = NOW()
+`
+
+const llmProviderRuntimeSetCredentialsTenantQuery = `
+	INSERT INTO llm_provider_runtime (tenant_id, provider, credentials_ciphertext)
+	VALUES ($1, $2, $3)
+	ON CONFLICT (tenant_id, provider) WHERE tenant_id IS NOT NULL
+	DO UPDATE SET credentials_ciphertext = EXCLUDED.credentials_ciphertext, updated_at = NOW()
+`
+
+const llmProviderRuntimeSetCredentialsLegacyQuery = `
+	INSERT INTO llm_provider_runtime (tenant_id, provider, credentials_ciphertext)
+	VALUES ($1, $2, $3)
+	ON CONFLICT (provider) WHERE tenant_id IS NULL
+	DO UPDATE SET credentials_ciphertext = EXCLUDED.credentials_ciphertext, updated_at = NOW()
+`
+
+const llmProviderRuntimeUpsertActiveTenantQuery = `
+	INSERT INTO llm_provider_runtime (tenant_id, provider, active)
+	VALUES ($1, $2, true)
+	ON CONFLICT (tenant_id, provider) WHERE tenant_id IS NOT NULL
+	DO UPDATE SET active = true, updated_at = NOW()
+`
+
+const llmProviderRuntimeUpsertActiveLegacyQuery = `
+	INSERT INTO llm_provider_runtime (tenant_id, provider, active)
+	VALUES ($1, $2, true)
+	ON CONFLICT (provider) WHERE tenant_id IS NULL
+	DO UPDATE SET active = true, updated_at = NOW()
 `

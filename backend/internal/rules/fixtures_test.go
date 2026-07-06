@@ -14,7 +14,7 @@ import (
 var fixedFixtureTime = time.Date(2026, time.April, 12, 10, 30, 0, 0, time.UTC)
 
 func TestRuleEmailFixtures(t *testing.T) {
-	doc := loadRulesDocument(t, "../../../content/rules.json")
+	doc := loadRulesDocument(t, "../../cmd/server/content/rules.json")
 	fixtures := loadFixtures(t, "../../../tests/data/rule-emails")
 	if len(fixtures) == 0 {
 		t.Fatal("expected at least one rule email fixture")
@@ -43,7 +43,7 @@ func TestRuleEmailFixtures(t *testing.T) {
 }
 
 func TestRuleEmailFixturesCoverBundledRules(t *testing.T) {
-	doc := loadRulesDocument(t, "../../../content/rules.json")
+	doc := loadRulesDocument(t, "../../cmd/server/content/rules.json")
 	fixtures := loadFixtures(t, "../../../tests/data/rule-emails")
 	coveredRules := make(map[string]bool, len(fixtures))
 	for _, fixture := range fixtures {

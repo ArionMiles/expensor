@@ -12,11 +12,14 @@ import (
 // SecretKeySize is the required key length for AES-256-GCM.
 const SecretKeySize = 32
 
-// SecretAssociatedData binds ciphertext to a tenant, reader, and credential kind.
+// SecretAssociatedData binds ciphertext to a tenant, subject, and credential kind.
 type SecretAssociatedData struct {
 	TenantID string
-	Reader   string
-	Kind     string
+	// Reader is retained for existing reader-runtime ciphertext associated data.
+	Reader string
+	Scope  string
+	Name   string
+	Kind   string
 }
 
 // SecretBox seals and opens reader secrets using authenticated encryption.
@@ -73,5 +76,8 @@ func (b *SecretBox) Open(ciphertext []byte, associated SecretAssociatedData) ([]
 }
 
 func (a SecretAssociatedData) bytes() []byte {
+	if a.Scope != "" || a.Name != "" {
+		return []byte(a.TenantID + "\x00" + a.Scope + "\x00" + a.Name + "\x00" + a.Kind)
+	}
 	return []byte(a.TenantID + "\x00" + a.Reader + "\x00" + a.Kind)
 }

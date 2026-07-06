@@ -5,7 +5,7 @@ import { defineConfig } from 'vite'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:8080'
-const avatarContentDir = path.resolve(__dirname, '../content/avatars')
+const avatarContentDir = path.resolve(__dirname, './content/avatars')
 
 export default defineConfig({
   plugins: [react()],

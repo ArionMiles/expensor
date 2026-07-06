@@ -11,9 +11,8 @@ Be respectful and constructive in issues, pull requests, and discussions.
 ```text
 .
 ├── backend/                 # Go API, daemon, reader plugins, migrations, PostgreSQL store
-├── content/                 # Bundled rule and asset source data
 ├── deploy/                  # Public deployment assets, including Docker Compose
-├── frontend/                # React + Vite + Tailwind web UI
+├── frontend/                # React + Vite + Tailwind web UI and frontend-owned content
 ├── tests/                   # Component, contract, local DB, and integration helpers
 ├── docs/                    # Project notes, deployment docs, i18n docs, screenshots, and test docs
 └── Taskfile.yml             # Build, lint, test, and dev automation
@@ -171,11 +170,11 @@ Use the Rule editor to create or fix extraction rules. It gives you a live workb
 6. Click **Save Rule** and choose **Export & Continue** when the contribution prompt appears.
 7. Fork the repository, create a branch, add the exported files as described below, and submit a pull request.
 
-`content/rules.json` is the source of truth for contributed bundled rules. The repository currently also contains `backend/cmd/server/content/rules.json` because the Go binary embeds files from that package path; keep that mirror in sync until `content/` is the only definitive rule location.
+`backend/cmd/server/content/rules.json` is the source of truth for contributed bundled rules. Backend-owned content lives under `backend/cmd/server/content/`; frontend-owned assets live under `frontend/content/`.
 
 The export downloads one contribution zip file containing:
 
-- `<rule-name>.rule.json`: copy its rule entry into the `rules` array in `content/rules.json`. If it includes a new source type or bank, copy that value into the matching `presets.source_types` or `presets.banks` list too.
+- `<rule-name>.rule.json`: copy its rule entry into the `rules` array in `backend/cmd/server/content/rules.json`. If it includes a new source type or bank, copy that value into the matching `presets.source_types` or `presets.banks` list too.
 - One `<bank>_<source-type>_<case>.rule.fixture` file per populated workbench sample: copy these files into `tests/data/rule-emails`.
 
 Rule email fixtures are self-contained `.rule.fixture` files with YAML front matter and the raw email body below the closing `---`. They must not duplicate regexes from `rules.json`. The test runner automatically discovers fixtures under `tests/data/rule-emails`, loads the named rule from the real rules document, and asserts sender/subject matching plus amount, merchant, and currency extraction.
