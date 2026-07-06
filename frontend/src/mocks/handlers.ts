@@ -317,6 +317,11 @@ export const handlers = [
       updated_at: new Date(Date.UTC(2026, 0, 1)).toISOString(),
     })
   }),
+  http.get('/api/admin/logging/settings', () => HttpResponse.json({ level: 'info' })),
+  http.patch('/api/admin/logging/settings', async ({ request }) => {
+    const body = (await request.json()) as { level?: string }
+    return HttpResponse.json({ level: body.level ?? 'info' })
+  }),
   http.get('/api/config/providers/:reader/checkpoint', () =>
     HttpResponse.json({ last_scan_at: null }),
   ),

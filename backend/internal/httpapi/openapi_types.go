@@ -156,6 +156,14 @@ type AdminScanningSettingsPatchRequest struct {
 	MaxConcurrentScans *int `json:"max_concurrent_scans" validate:"omitempty,min=1,max=64" example:"4"`
 }
 
+type AdminLoggingSettingsResponse struct {
+	Level string `json:"level" example:"info" enums:"debug,info,warn,error"`
+}
+
+type AdminLoggingSettingsPatchRequest struct {
+	Level string `json:"level" validate:"required,oneof=debug info warn error" example:"debug" enums:"debug,info,warn,error"`
+}
+
 // RuleSourceResponse documents a structured rule source.
 type RuleSourceResponse struct {
 	Type  string `json:"type" validate:"required,no_control_chars" example:"Email"`

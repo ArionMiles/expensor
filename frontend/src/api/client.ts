@@ -4,6 +4,8 @@ import type {
   AccountSetupMetadata,
   AnnualHeatmapData,
   AccountUser,
+  AdminLoggingSettings,
+  AdminLoggingSettingsPatch,
   AdminScanningSettings,
   AdminScanningSettingsPatch,
   AdminUserPatch,
@@ -152,6 +154,9 @@ export const api = {
       scanningSettings: () => apiClient.get<AdminScanningSettings>('/admin/scanning/settings'),
       updateScanningSettings: (patch: AdminScanningSettingsPatch) =>
         apiClient.patch<AdminScanningSettings>('/admin/scanning/settings', patch),
+      loggingSettings: () => apiClient.get<AdminLoggingSettings>('/admin/logging/settings'),
+      updateLoggingSettings: (patch: AdminLoggingSettingsPatch) =>
+        apiClient.patch<AdminLoggingSettings>('/admin/logging/settings', patch),
     },
   },
 

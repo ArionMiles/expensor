@@ -79,6 +79,7 @@ type Handlers struct {
 	syncFn             func()                 // called by POST /api/config/sync; may be nil
 	banksData          []byte
 	logger             *slog.Logger
+	logLevel           *slog.LevelVar
 	validate           *validator.Validate
 	queryDecoder       *form.Decoder
 
@@ -105,6 +106,7 @@ type HandlersConfig struct {
 	SyncFn             func()
 	BanksData          []byte
 	Logger             *slog.Logger
+	LogLevel           *slog.LevelVar
 }
 
 // NewHandlers creates a Handlers instance.
@@ -118,6 +120,10 @@ func NewHandlers(cfg HandlersConfig) *Handlers {
 	}
 	if cfg.LookbackDays <= 0 {
 		cfg.LookbackDays = 180
+	}
+	if cfg.LogLevel == nil {
+		cfg.LogLevel = new(slog.LevelVar)
+		cfg.LogLevel.Set(slog.LevelInfo)
 	}
 	return &Handlers{
 		registry:           cfg.Registry,
@@ -146,6 +152,7 @@ func NewHandlers(cfg HandlersConfig) *Handlers {
 		syncFn:             cfg.SyncFn,
 		banksData:          cfg.BanksData,
 		logger:             cfg.Logger,
+		logLevel:           cfg.LogLevel,
 		validate:           newRequestValidator(),
 		queryDecoder:       newQueryDecoder(),
 		oauthStates:        make(map[string]oauthStateEntry),

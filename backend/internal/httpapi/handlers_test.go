@@ -896,6 +896,8 @@ func newTestHandlers(t *testing.T, st Storer, dm DaemonStatusProvider, banksData
 	if len(banksData) > 0 {
 		banks = banksData[0]
 	}
+	var logLevel slog.LevelVar
+	logLevel.Set(slog.LevelInfo)
 	return NewHandlers(HandlersConfig{
 		Registry:     registry,
 		Store:        st,
@@ -907,6 +909,7 @@ func newTestHandlers(t *testing.T, st Storer, dm DaemonStatusProvider, banksData
 		LookbackDays: 180,
 		BanksData:    banks,
 		Logger:       slog.Default(),
+		LogLevel:     &logLevel,
 	})
 }
 

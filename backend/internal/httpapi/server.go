@@ -111,6 +111,8 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("POST /api/admin/users/{id}/setup-tokens", h.CreateSetupToken)
 	mux.HandleFunc("GET /api/admin/scanning/settings", h.GetAdminScanningSettings)
 	mux.HandleFunc("PATCH /api/admin/scanning/settings", h.PatchAdminScanningSettings)
+	mux.HandleFunc("GET /api/admin/logging/settings", h.GetAdminLoggingSettings)
+	mux.HandleFunc("PATCH /api/admin/logging/settings", h.PatchAdminLoggingSettings)
 	mux.HandleFunc("POST /api/daemon/start", h.StartDaemon)
 	mux.HandleFunc("POST /api/daemon/rescan", h.Rescan)
 	mux.HandleFunc("GET /api/scanning/settings", h.GetScanningSettings)

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"strings"
 
 	"go.opentelemetry.io/otel"
@@ -33,60 +32,68 @@ const (
 // Shutdown releases observability resources.
 type Shutdown func(context.Context) error
 
+// SetupResult contains initialized observability runtime dependencies.
+type SetupResult struct {
+	Shutdown Shutdown
+	Logger   *slog.Logger
+	LogLevel *slog.LevelVar
+}
+
 // Setup initializes logging and telemetry providers.
-func Setup(ctx context.Context, cfg config.Observability) (Shutdown, *slog.Logger, error) {
-	logger := setupLogger(cfg)
+func Setup(ctx context.Context, cfg config.Observability) (SetupResult, error) {
+	logLevel := new(slog.LevelVar)
+	logLevel.Set(cfg.LogLevel)
+	logger := setupLogger(cfg, logLevel)
 	slog.SetDefault(logger)
 
 	exporter := Exporter(strings.ToLower(strings.TrimSpace(cfg.Exporter)))
 	if !cfg.Enabled || exporter == ExporterNone {
-		return noopShutdown, logger, nil
+		return SetupResult{Shutdown: noopShutdown, Logger: logger, LogLevel: logLevel}, nil
 	}
 	if exporter != ExporterOTLP {
-		return nil, nil, fmt.Errorf("unsupported observability exporter %q", cfg.Exporter)
+		return SetupResult{}, fmt.Errorf("unsupported observability exporter %q", cfg.Exporter)
 	}
 
 	res, err := newResource(cfg)
 	if err != nil {
-		return nil, nil, err
+		return SetupResult{}, err
 	}
 
 	tp, err := newTracerProvider(ctx, cfg, res)
 	if err != nil {
-		return nil, nil, err
+		return SetupResult{}, err
 	}
 	otel.SetTracerProvider(tp)
 
 	mp, err := newMeterProvider(ctx, cfg, res)
 	if err != nil {
-		return nil, nil, err
+		return SetupResult{}, err
 	}
 	otel.SetMeterProvider(mp)
 
 	shutdowns := []Shutdown{tp.Shutdown, mp.Shutdown}
 
-	return func(ctx context.Context) error {
-		var joined error
-		for _, shutdown := range shutdowns {
-			joined = errors.Join(joined, shutdown(ctx))
-		}
-		return joined
-	}, logger, nil
+	return SetupResult{
+		Shutdown: func(ctx context.Context) error {
+			var joined error
+			for _, shutdown := range shutdowns {
+				joined = errors.Join(joined, shutdown(ctx))
+			}
+			return joined
+		},
+		Logger:   logger,
+		LogLevel: logLevel,
+	}, nil
 }
 
-func setupLogger(cfg config.Observability) *slog.Logger {
-	output := cfg.Output
-	if output == nil {
-		output = os.Stderr
-	}
-
+func setupLogger(cfg config.Observability, logLevel *slog.LevelVar) *slog.Logger {
 	opts := &slog.HandlerOptions{
-		Level: cfg.LogLevel,
+		Level: logLevel,
 	}
 	if cfg.LogJSON {
-		return slog.New(slog.NewJSONHandler(output, opts))
+		return slog.New(slog.NewJSONHandler(cfg.Output, opts))
 	}
-	return slog.New(slog.NewTextHandler(output, opts))
+	return slog.New(slog.NewTextHandler(cfg.Output, opts))
 }
 
 func discardLogger() *slog.Logger {

@@ -212,6 +212,36 @@ describe('Settings', () => {
     await waitFor(() => expect(patches).toEqual([{ max_concurrent_scans: 6 }]))
   })
 
+  it('saves admin log level when a dropdown value is selected', async () => {
+    const user = userEvent.setup()
+    const patches: Array<Record<string, unknown>> = []
+    server.use(
+      http.get('/api/admin/logging/settings', () => HttpResponse.json({ level: 'info' })),
+      http.patch('/api/admin/logging/settings', async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        patches.push(body)
+        return HttpResponse.json(body)
+      }),
+    )
+
+    renderSettings('/settings?tab=admin')
+
+    const loggingHeading = await screen.findByRole('heading', { name: 'Log level' })
+    const usersHeading = await screen.findByRole('heading', { name: 'Users' })
+    expect(
+      Boolean(
+        loggingHeading.compareDocumentPosition(usersHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('combobox', { name: 'Log level Info' }))
+    await user.click(await screen.findByRole('option', { name: /Debug/ }))
+
+    await waitFor(() => expect(patches).toEqual([{ level: 'debug' }]))
+    expect(screen.queryByText('Saved.')).not.toBeInTheDocument()
+  })
+
   it('toggles automatic community sync from the community tab', async () => {
     const user = userEvent.setup()
     const patches: Array<Record<string, unknown>> = []
