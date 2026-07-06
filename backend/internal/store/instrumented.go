@@ -79,6 +79,15 @@ func (s *InstrumentedStore) UpdateUser(ctx context.Context, id string, input Upd
 	return user, err
 }
 
+func (s *InstrumentedStore) UpdateUserPassword(ctx context.Context, id string, input UpdateUserPasswordInput) error {
+	ctx, span := s.scope.Start(ctx, "store.auth.update_user_password")
+	defer span.End()
+
+	err := s.next.UpdateUserPassword(ctx, id, input)
+	s.recordOperation(ctx, "auth.update_user_password", err)
+	return err
+}
+
 func (s *InstrumentedStore) DeleteUser(ctx context.Context, id string) error {
 	ctx, span := s.scope.Start(ctx, "store.auth.delete_user")
 	defer span.End()

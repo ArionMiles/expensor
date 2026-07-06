@@ -61,7 +61,7 @@ func TestPlugin_NewReader_NilHTTPClient(t *testing.T) {
 		ScanInterval: 60,
 	}
 
-	_, err := p.NewReader(plugins.ReaderInput{
+	_, err := p.NewReader(plugins.ProviderInput{
 		AppConfig: cfg,
 		Logger:    testLogger(),
 	})

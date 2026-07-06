@@ -1,4 +1,4 @@
-// Package plugins provides a plugin registry for transaction readers.
+// Package plugins provides a provider registry for email-backed integrations.
 package plugins
 
 import (
@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"reflect"
 	"strings"
 
 	"github.com/ArionMiles/expensor/backend/internal/state"
@@ -14,13 +13,13 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 )
 
-// AuthType describes how a reader plugin authenticates.
+// AuthType describes how a provider authenticates.
 type AuthType string
 
 const (
-	// AuthTypeOAuth indicates the reader uses an OAuth2 flow (e.g. Gmail, ProtonMail).
+	// AuthTypeOAuth indicates the provider uses an OAuth2 flow (e.g. Gmail, ProtonMail).
 	AuthTypeOAuth AuthType = "oauth"
-	// AuthTypeConfig indicates the reader only requires local configuration (e.g. Thunderbird).
+	// AuthTypeConfig indicates the provider only requires local configuration (e.g. Thunderbird).
 	AuthTypeConfig AuthType = "config"
 )
 
@@ -34,15 +33,15 @@ type ConfigField struct {
 	DependsOn string `json:"depends_on,omitempty"`
 }
 
-// AuthSpec describes how a reader plugin authenticates.
+// AuthSpec describes how a provider authenticates.
 type AuthSpec struct {
 	Type                      AuthType `json:"type"`
 	RequiredScopes            []string `json:"required_scopes"`
 	RequiresCredentialsUpload bool     `json:"requires_credentials_upload"`
 }
 
-// ReaderMetadata describes a reader plugin for catalog display and selection.
-type ReaderMetadata struct {
+// ProviderMetadata describes a provider for catalog display and selection.
+type ProviderMetadata struct {
 	Name         string          `json:"name"`
 	Description  string          `json:"description"`
 	Auth         AuthSpec        `json:"auth"`
@@ -50,8 +49,8 @@ type ReaderMetadata struct {
 	SetupGuide   json.RawMessage `json:"setup_guide,omitempty"`
 }
 
-// ReaderInput contains dependencies required to create a reader instance.
-type ReaderInput struct {
+// ProviderInput contains dependencies required to create provider capabilities.
+type ProviderInput struct {
 	HTTPClient     *http.Client
 	AppConfig      *config.App
 	ReaderConfig   json.RawMessage
@@ -62,8 +61,8 @@ type ReaderInput struct {
 	Logger         *slog.Logger
 }
 
-// ReaderGuide is the structured setup guide for a reader plugin.
-type ReaderGuide struct {
+// ProviderGuide is the structured setup guide for a provider.
+type ProviderGuide struct {
 	Sections []GuideSection `json:"sections"`
 	Notes    []GuideNote    `json:"notes,omitempty"`
 }
@@ -94,72 +93,75 @@ type GuideNote struct {
 	Text string `json:"text"`
 }
 
-// ReaderPlugin defines the interface for transaction reader plugins.
-type ReaderPlugin interface {
-	Metadata() ReaderMetadata
-	NewReader(input ReaderInput) (api.Reader, error)
+// Provider defines an email provider and the capabilities it can construct.
+type Provider struct {
+	Metadata ProviderMetadata
+
+	NewReader        func(ProviderInput) (api.Reader, error)
+	NewEmailSearcher func(ProviderInput) (api.EmailSearcher, error)
 }
 
-// Registry manages available reader plugins.
+// Registry manages available providers.
 type Registry struct {
-	readers map[string]ReaderPlugin
+	providers map[string]Provider
 }
 
-// NewRegistry creates a new plugin registry.
+// NewRegistry creates a new provider registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		readers: make(map[string]ReaderPlugin),
+		providers: make(map[string]Provider),
 	}
 }
 
-// RegisterReader registers a reader plugin.
-func (r *Registry) RegisterReader(plugin ReaderPlugin) error {
-	if isNilPlugin(plugin) {
-		return fmt.Errorf("reader plugin is nil")
-	}
-
-	metadata := plugin.Metadata()
-	name := metadata.Name
+// RegisterProvider registers a provider.
+func (r *Registry) RegisterProvider(provider Provider) error {
+	name := provider.Metadata.Name
 	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("reader plugin name is required")
+		return fmt.Errorf("provider name is required")
 	}
-	if len(metadata.SetupGuide) > 0 && !json.Valid(metadata.SetupGuide) {
-		return fmt.Errorf("reader plugin %q setup guide must be valid JSON", name)
+	if provider.NewReader == nil {
+		return fmt.Errorf("provider %q reader factory is required", name)
 	}
-	if _, exists := r.readers[name]; exists {
-		return fmt.Errorf("reader plugin %q already registered", name)
+	if provider.NewEmailSearcher == nil {
+		return fmt.Errorf("provider %q email searcher factory is required", name)
 	}
-	r.readers[name] = plugin
+	if len(provider.Metadata.SetupGuide) > 0 && !json.Valid(provider.Metadata.SetupGuide) {
+		return fmt.Errorf("provider %q setup guide must be valid JSON", name)
+	}
+	if _, exists := r.providers[name]; exists {
+		return fmt.Errorf("provider %q already registered", name)
+	}
+	r.providers[name] = provider
 	return nil
 }
 
-// GetReader returns a reader plugin by name.
-func (r *Registry) GetReader(name string) (ReaderPlugin, error) {
-	plugin, exists := r.readers[name]
+// GetProvider returns a provider by name.
+func (r *Registry) GetProvider(name string) (Provider, error) {
+	provider, exists := r.providers[name]
 	if !exists {
-		return nil, fmt.Errorf("reader plugin %q not found", name)
+		return Provider{}, fmt.Errorf("provider %q not found", name)
 	}
-	return plugin, nil
+	return provider, nil
 }
 
-// ListReaders returns all registered reader plugins.
-func (r *Registry) ListReaders() []ReaderPlugin {
-	plugins := make([]ReaderPlugin, 0, len(r.readers))
-	for _, plugin := range r.readers {
-		plugins = append(plugins, plugin)
+// ListProviders returns all registered providers.
+func (r *Registry) ListProviders() []Provider {
+	providers := make([]Provider, 0, len(r.providers))
+	for _, provider := range r.providers {
+		providers = append(providers, provider)
 	}
-	return plugins
+	return providers
 }
 
-// GetAllScopes returns all OAuth scopes required by the given reader.
-func (r *Registry) GetAllScopes(readerName string) ([]string, error) {
-	reader, err := r.GetReader(readerName)
+// GetAllScopes returns all OAuth scopes required by the given provider.
+func (r *Registry) GetAllScopes(providerName string) ([]string, error) {
+	provider, err := r.GetProvider(providerName)
 	if err != nil {
 		return nil, err
 	}
 
 	scopeSet := make(map[string]struct{})
-	for _, scope := range reader.Metadata().Auth.RequiredScopes {
+	for _, scope := range provider.Metadata.Auth.RequiredScopes {
 		scopeSet[scope] = struct{}{}
 	}
 
@@ -169,18 +171,4 @@ func (r *Registry) GetAllScopes(readerName string) ([]string, error) {
 	}
 
 	return scopes, nil
-}
-
-func isNilPlugin(plugin any) bool {
-	if plugin == nil {
-		return true
-	}
-
-	value := reflect.ValueOf(plugin)
-	switch value.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return value.IsNil()
-	default:
-		return false
-	}
 }

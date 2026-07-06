@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DisplayProvider } from '@/contexts/DisplayContext'
 import { I18nProvider } from '@/i18n/I18nProvider'
 import { createTestQueryClient } from '@/test/render'
+import { saveRuleEmailSearchDraft } from './emailSearchDraft'
 import { RuleForm } from './RuleForm'
 
 const queryMocks = vi.hoisted(() => ({
@@ -105,6 +106,7 @@ describe('RuleForm diagnostics', () => {
     queryMocks.createRule.mockReset()
     queryMocks.updateRule.mockReset()
     queryMocks.rescan.mockReset()
+    sessionStorage.clear()
   })
 
   it('loads diagnostic email body into the first test sample', async () => {
@@ -144,6 +146,42 @@ describe('RuleForm diagnostics', () => {
 
     expect(screen.getByText('alerts@hdfcbank.net')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove alerts@hdfcbank.net' })).toBeInTheDocument()
+  })
+
+  it('loads selected email search results into a new rule workbench', async () => {
+    const user = userEvent.setup()
+    const draftID = saveRuleEmailSearchDraft({
+      subjectQuery: 'Card spend',
+      messages: [
+        {
+          id: 'message-1',
+          sender_email: 'alerts@example.com',
+          subject: 'Card spend approved',
+          body: 'INR 42.00 at Coffee',
+        },
+        {
+          id: 'message-2',
+          sender_email: 'alerts-alt@example.com',
+          subject: 'Card spend approved',
+          body: 'INR 99.00 at Books',
+        },
+      ],
+    })
+
+    renderRuleForm(`/rules/new?draft=${draftID}`, '/rules/new')
+
+    expect(screen.getByLabelText('Subject contains')).toHaveValue('Card spend approved')
+    expect(screen.getByRole('button', { name: 'Remove alerts@example.com' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Remove alerts-alt@example.com' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Sample 1' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Sample 2' })).toBeInTheDocument()
+    expect(screen.getByDisplayValue('INR 42.00 at Coffee')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Sample 2' }))
+
+    expect(screen.getByDisplayValue('INR 99.00 at Books')).toBeInTheDocument()
   })
 
   it('shows extract labels and expected sample assertions', async () => {

@@ -25,3 +25,7 @@ export function formatNumberForLocale(value: number, locale: string) {
 export function formatMonthForLocale(value: Date, locale: string) {
   return new Intl.DateTimeFormat(locale, { month: 'short' }).format(value)
 }
+
+export function formatMonthYearForLocale(value: Date, locale: string) {
+  return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(value)
+}

@@ -317,10 +317,10 @@ export const handlers = [
       updated_at: new Date(Date.UTC(2026, 0, 1)).toISOString(),
     })
   }),
-  http.get('/api/config/readers/:reader/checkpoint', () =>
+  http.get('/api/config/providers/:reader/checkpoint', () =>
     HttpResponse.json({ last_scan_at: null }),
   ),
-  http.get('/api/readers/:reader/status', () =>
+  http.get('/api/providers/:reader/status', () =>
     HttpResponse.json({
       credentials_uploaded: true,
       authenticated: true,
@@ -330,7 +330,7 @@ export const handlers = [
       ready: true,
     }),
   ),
-  http.delete('/api/config/readers/:reader/checkpoint', () => HttpResponse.json({})),
+  http.delete('/api/config/providers/:reader/checkpoint', () => HttpResponse.json({})),
   http.post('/api/daemon/rescan', () => HttpResponse.json({ status: 'rescanning' })),
   http.post('/api/scanning/rescans', () => HttpResponse.json({ status: 'rescanning' })),
   http.get('/api/extraction-diagnostics', ({ request }) => {

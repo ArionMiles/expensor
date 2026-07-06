@@ -31,7 +31,7 @@ func (h *Handlers) StartDaemon(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, err := h.registry.GetReader(body.Reader); err != nil {
+	if _, err := h.registry.GetProvider(body.Reader); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("reader %q not found", body.Reader))
 		return
 	}
@@ -60,7 +60,7 @@ func (h *Handlers) Rescan(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, err := h.registry.GetReader(body.Reader); err != nil {
+	if _, err := h.registry.GetProvider(body.Reader); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("reader %q not found", body.Reader))
 		return
 	}

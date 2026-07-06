@@ -192,6 +192,73 @@ func TestDoWithAuthRetryRetriesAuthErrorsOnce(t *testing.T) {
 	}
 }
 
+func TestSearchMessages_ReturnsSubjectMatches(t *testing.T) {
+	var listQuery string
+	body := b64("INR 42.00 at Coffee")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/gmail/v1/users/me/messages":
+			listQuery = r.URL.Query().Get("q")
+			if r.URL.Query().Get("maxResults") != "5" {
+				t.Fatalf("maxResults = %q, want 5", r.URL.Query().Get("maxResults"))
+			}
+			if _, err := w.Write([]byte(`{"messages":[{"id":"msg-1"}]}`)); err != nil {
+				t.Fatalf("write list response: %v", err)
+			}
+		case "/gmail/v1/users/me/messages/msg-1":
+			if _, err := fmt.Fprintf(w, `{
+				"id": "msg-1",
+				"snippet": "INR 42.00 at Coffee",
+				"internalDate": "1780309800000",
+				"payload": {
+					"headers": [
+						{"name": "Subject", "value": "Card spend approved"},
+						{"name": "From", "value": "Bank Alerts <alerts@example.com>"}
+					],
+					"body": {"data": %q}
+				}
+			}`, body); err != nil {
+				t.Fatalf("write get response: %v", err)
+			}
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	svc, err := gmail.NewService(
+		context.Background(),
+		option.WithHTTPClient(server.Client()),
+		option.WithEndpoint(server.URL+"/"),
+	)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	reader := &Reader{client: svc, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+
+	messages, err := reader.Search(context.Background(), api.EmailSearchQuery{
+		SubjectQuery: "spend",
+		Limit:        5,
+	})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if listQuery != `subject:"spend"` {
+		t.Fatalf("query = %q, want subject search", listQuery)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("messages len = %d, want 1", len(messages))
+	}
+	got := messages[0]
+	if got.ID != "msg-1" || got.SenderEmail != "alerts@example.com" || got.Body != "INR 42.00 at Coffee" {
+		t.Fatalf("unexpected message: %#v", got)
+	}
+	if got.ReceivedAt == nil || got.ReceivedAt.UTC().Format(time.RFC3339) != "2026-06-01T10:30:00Z" {
+		t.Fatalf("received_at = %v, want 2026-06-01T10:30:00Z", got.ReceivedAt)
+	}
+}
+
 func TestProcessMessage_RetriesGetAuthErrorOnce(t *testing.T) {
 	var getCalls int
 	body := b64("Paid Rs.12.34 at Test Merchant on card")

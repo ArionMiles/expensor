@@ -11,7 +11,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 )
 
-// Plugin implements the ReaderPlugin interface for Gmail.
+// Plugin builds Gmail provider capabilities.
 type Plugin struct {
 	guideData []byte
 }
@@ -20,9 +20,19 @@ type Plugin struct {
 // the centralized content/readers/gmail/guide.json via go:embed.
 func (p *Plugin) SetGuideData(data []byte) { p.guideData = data }
 
-// Metadata returns catalog metadata for the Gmail reader plugin.
-func (p *Plugin) Metadata() plugins.ReaderMetadata {
-	return plugins.ReaderMetadata{
+// Provider returns the Gmail provider registration.
+func Provider(guideData []byte) plugins.Provider {
+	plugin := &Plugin{guideData: guideData}
+	return plugins.Provider{
+		Metadata:         plugin.Metadata(),
+		NewReader:        plugin.NewReader,
+		NewEmailSearcher: plugin.NewEmailSearcher,
+	}
+}
+
+// Metadata returns catalog metadata for the Gmail provider.
+func (p *Plugin) Metadata() plugins.ProviderMetadata {
+	return plugins.ProviderMetadata{
 		Name:        "gmail",
 		Description: "Read expense transactions from Gmail messages",
 		Auth: plugins.AuthSpec{
@@ -36,7 +46,16 @@ func (p *Plugin) Metadata() plugins.ReaderMetadata {
 }
 
 // NewReader creates a new Gmail reader instance.
-func (p *Plugin) NewReader(input plugins.ReaderInput) (api.Reader, error) {
+func (p *Plugin) NewReader(input plugins.ProviderInput) (api.Reader, error) {
+	return p.buildReader(input)
+}
+
+// NewEmailSearcher creates a new Gmail email searcher instance.
+func (p *Plugin) NewEmailSearcher(input plugins.ProviderInput) (api.EmailSearcher, error) {
+	return p.buildReader(input)
+}
+
+func (p *Plugin) buildReader(input plugins.ProviderInput) (*Reader, error) {
 	cfg := input.AppConfig
 	if cfg == nil {
 		cfg = &config.App{}

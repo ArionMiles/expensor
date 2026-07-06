@@ -96,7 +96,7 @@ describe('Settings', () => {
     expect(screen.getByTestId('manual-sync-row')).toHaveClass('sm:flex-row')
   })
 
-  it('auto-saves general preferences when leaving the general tab', async () => {
+  it('saves general preferences when a dropdown value is selected', async () => {
     const user = userEvent.setup()
     const patches: Array<Record<string, unknown>> = []
     server.use(
@@ -129,12 +129,11 @@ describe('Settings', () => {
 
     await user.click(screen.getByRole('combobox', { name: /Base currency INR/ }))
     await user.click(await screen.findByRole('option', { name: /USD/ }))
-    await user.click(screen.getByRole('button', { name: 'Scanning' }))
 
     await waitFor(() => expect(patches).toEqual([{ base_currency: 'USD' }]))
   })
 
-  it('auto-saves scanning preferences when leaving the scanning tab', async () => {
+  it('saves scanning preferences when the edited field loses focus', async () => {
     const user = userEvent.setup()
     const patches: Array<Record<string, unknown>> = []
     server.use(
@@ -168,12 +167,14 @@ describe('Settings', () => {
     const scanInterval = await screen.findByDisplayValue('60')
     await user.clear(scanInterval)
     await user.type(scanInterval, '120')
-    await user.click(screen.getByRole('button', { name: 'General' }))
+    expect(patches).toEqual([])
+
+    await user.tab()
 
     await waitFor(() => expect(patches).toEqual([{ scan_interval: 120 }]))
   })
 
-  it('auto-saves admin scanning capacity when leaving the admin tab', async () => {
+  it('saves admin scanning capacity when the edited field loses focus', async () => {
     const user = userEvent.setup()
     const patches: Array<Record<string, unknown>> = []
     server.use(
@@ -204,8 +205,9 @@ describe('Settings', () => {
     await user.clear(input)
     await user.type(input, '6')
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+    expect(patches).toEqual([])
 
-    await user.click(screen.getByRole('button', { name: 'Account' }))
+    await user.tab()
 
     await waitFor(() => expect(patches).toEqual([{ max_concurrent_scans: 6 }]))
   })

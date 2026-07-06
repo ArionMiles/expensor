@@ -20,13 +20,15 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/oauth"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/config"
 	"github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
 )
 
-// --- plugin listing ---
+// --- provider listing ---
 
-// ReaderInfo is the API representation of a reader plugin.
-type ReaderInfo struct {
+// ProviderInfo is the API representation of an email provider.
+type ProviderInfo struct {
 	Name                      string                `json:"name"`
 	Description               string                `json:"description"`
 	AuthType                  plugins.AuthType      `json:"auth_type"`
@@ -34,22 +36,22 @@ type ReaderInfo struct {
 	ConfigSchema              []plugins.ConfigField `json:"config_schema"`
 }
 
-// ListReaders handles GET /api/plugins/readers.
-// @Summary List reader plugins
-// @Tags Readers
+// ListProviders handles GET /api/providers.
+// @Summary List providers
+// @Tags Providers
 // @Produce json
-// @Success 200 {array} ReaderInfoResponse
-// @Router /plugins/readers [get]
-func (h *Handlers) ListReaders(w http.ResponseWriter, _ *http.Request) {
-	rps := h.registry.ListReaders()
-	infos := make([]ReaderInfo, 0, len(rps))
+// @Success 200 {array} ProviderInfoResponse
+// @Router /providers [get]
+func (h *Handlers) ListProviders(w http.ResponseWriter, _ *http.Request) {
+	rps := h.registry.ListProviders()
+	infos := make([]ProviderInfo, 0, len(rps))
 	for _, p := range rps {
-		meta := p.Metadata()
+		meta := p.Metadata
 		configSchema := meta.ConfigSchema
 		if configSchema == nil {
 			configSchema = []plugins.ConfigField{}
 		}
-		infos = append(infos, ReaderInfo{
+		infos = append(infos, ProviderInfo{
 			Name:                      meta.Name,
 			Description:               meta.Description,
 			AuthType:                  meta.Auth.Type,
@@ -60,7 +62,112 @@ func (h *Handlers) ListReaders(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, infos)
 }
 
-// --- reader credentials upload ---
+const defaultProviderMessageSearchLimit = 10
+
+// SearchProviderMessages handles GET /api/providers/{name}/messages.
+// @Summary Search provider messages for rule samples
+// @Tags Providers
+// @Produce json
+// @Param name path string true "Provider name" example(gmail)
+// @Param subject query string true "Subject substring"
+// @Param limit query int false "Maximum messages to return" minimum(1) maximum(50)
+// @Success 200 {object} ProviderSearchResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 412 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /providers/{name}/messages [get]
+func (h *Handlers) SearchProviderMessages(w http.ResponseWriter, r *http.Request) {
+	query, ok := decodeAndValidateQuery[providerMessagesQuery](h, w, r)
+	if !ok {
+		return
+	}
+	if query.Limit == 0 {
+		query.Limit = defaultProviderMessageSearchLimit
+	}
+
+	name := r.PathValue("name")
+	searcher, err := h.newEmailSearcher(r.Context(), requestTenant(r), name)
+	if err != nil {
+		switch {
+		case errors.Is(err, errReaderNotRegistered):
+			writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
+		case errors.Is(err, errCredentialsMissing), errors.Is(err, oauth.ErrTokenMissing):
+			writeError(w, http.StatusPreconditionFailed, "provider is not authenticated")
+		default:
+			h.logger.Error("create provider for message search", "provider", name, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to prepare provider search")
+		}
+		return
+	}
+
+	results, err := searcher.Search(r.Context(), api.EmailSearchQuery{
+		SubjectQuery: query.Subject,
+		Limit:        query.Limit,
+	})
+	if err != nil {
+		h.logger.Error("search provider messages", "provider", name, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to search provider messages")
+		return
+	}
+	writeJSON(w, http.StatusOK, ProviderSearchResponse{Results: providerSearchResultsToHTTP(results)})
+}
+
+func (h *Handlers) newEmailSearcher(ctx context.Context, tenant store.Tenant, name string) (api.EmailSearcher, error) {
+	provider, err := h.registry.GetProvider(name)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errReaderNotRegistered, err)
+	}
+
+	var httpClient *http.Client
+	meta := provider.Metadata
+	if meta.Auth.Type == plugins.AuthTypeOAuth {
+		secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(ctx, tenant, name)
+		if err != nil {
+			return nil, fmt.Errorf("loading credentials for provider %q: %w", name, err)
+		}
+		if !ok {
+			return nil, errCredentialsMissing
+		}
+		httpClient, err = oauth.NewFromJSONAndStore(ctx, oauth.StoreClientInput{
+			SecretJSON: secretJSON,
+			Store:      h.readerRuntimeStore,
+			Tenant:     tenant,
+			Reader:     name,
+			Scopes:     meta.Auth.RequiredScopes,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	readerConfig, _, err := h.readerRuntimeStore.GetReaderConfig(ctx, tenant, name)
+	if err != nil {
+		return nil, fmt.Errorf("loading provider config for %q: %w", name, err)
+	}
+	return provider.NewEmailSearcher(plugins.ProviderInput{
+		HTTPClient:   httpClient,
+		AppConfig:    &config.App{ScanInterval: h.scanInterval, LookbackDays: h.lookbackDays},
+		ReaderConfig: readerConfig,
+		Logger:       h.logger,
+	})
+}
+
+func providerSearchResultsToHTTP(results []api.EmailSearchResult) []ProviderSearchResultResponse {
+	out := make([]ProviderSearchResultResponse, 0, len(results))
+	for _, result := range results {
+		out = append(out, ProviderSearchResultResponse{
+			ID:          result.ID,
+			SenderEmail: result.SenderEmail,
+			Subject:     result.Subject,
+			Body:        result.Body,
+			ReceivedAt:  result.ReceivedAt,
+		})
+	}
+	return out
+}
+
+// --- provider credentials upload ---
 
 func requestTenant(r *http.Request) store.Tenant {
 	if principal, ok := auth.PrincipalFromContext(r.Context()); ok {
@@ -76,13 +183,13 @@ func entryTenant(entry oauthStateEntry, fallback store.Tenant) (store.Tenant, bo
 	return fallback, true
 }
 
-// UploadCredentials handles POST /api/readers/{name}/credentials.
+// UploadCredentials handles POST /api/providers/{name}/credentials.
 // Accepts a JSON file upload (e.g. Google client_secret.json) and saves it to the runtime store.
 // @Summary Upload reader OAuth credentials
-// @Tags Readers
+// @Tags Providers
 // @Accept json
 // @Produce json
-// @Param name path string true "Reader name" example(gmail)
+// @Param name path string true "Provider name" example(gmail)
 // @Param request body object true "OAuth client credentials JSON"
 // @Success 200 {object} UploadCredentialsResponse
 // @Failure 400 {object} ErrorResponse
@@ -91,16 +198,16 @@ func entryTenant(entry oauthStateEntry, fallback store.Tenant) (store.Tenant, bo
 // @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /readers/{name}/credentials [post]
+// @Router /providers/{name}/credentials [post]
 func (h *Handlers) UploadCredentials(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	plugin, err := h.registry.GetReader(name)
+	provider, err := h.registry.GetProvider(name)
 	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
+		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
 		return
 	}
-	if !plugin.Metadata().Auth.RequiresCredentialsUpload {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("reader %q does not require credentials upload", name))
+	if !provider.Metadata.Auth.RequiresCredentialsUpload {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("provider %q does not require credentials upload", name))
 		return
 	}
 
@@ -138,19 +245,19 @@ func (h *Handlers) UploadCredentials(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"path": fmt.Sprintf("db://reader_runtime/%s/client_secret", name)})
 }
 
-// CredentialsStatus handles GET /api/readers/{name}/credentials/status.
-// @Summary Get reader credentials status
-// @Tags Readers
+// CredentialsStatus handles GET /api/providers/{name}/credentials/status.
+// @Summary Get provider credentials status
+// @Tags Providers
 // @Produce json
-// @Param name path string true "Reader name" example(gmail)
+// @Param name path string true "Provider name" example(gmail)
 // @Success 200 {object} CredentialsStatusResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /readers/{name}/credentials/status [get]
+// @Router /providers/{name}/credentials/status [get]
 func (h *Handlers) CredentialsStatus(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	if _, err := h.registry.GetReader(name); err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
+	if _, err := h.registry.GetProvider(name); err != nil {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
 		return
 	}
 
@@ -177,28 +284,28 @@ type oauthTokenState struct {
 	expiry        *time.Time
 }
 
-// AuthStart handles POST /api/readers/{name}/auth/start.
+// AuthStart handles POST /api/providers/{name}/auth/start.
 // Returns a Google OAuth consent URL for the given reader.
 // @Summary Start reader OAuth authorization
-// @Tags Readers
+// @Tags Providers
 // @Produce json
-// @Param name path string true "Reader name" example(gmail)
+// @Param name path string true "Provider name" example(gmail)
 // @Success 200 {object} AuthStartResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 412 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /readers/{name}/auth/start [post]
+// @Router /providers/{name}/auth/start [post]
 func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	plugin, err := h.registry.GetReader(name)
+	provider, err := h.registry.GetProvider(name)
 	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
+		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
 		return
 	}
-	if plugin.Metadata().Auth.Type != plugins.AuthTypeOAuth {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("reader %q does not use OAuth", name))
+	if provider.Metadata.Auth.Type != plugins.AuthTypeOAuth {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("provider %q does not use OAuth", name))
 		return
 	}
 
@@ -216,7 +323,7 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
-	scopes := plugin.Metadata().Auth.RequiredScopes
+	scopes := provider.Metadata.Auth.RequiredScopes
 	h.logger.Debug("building OAuth config", "reader", name, "redirect_url", redirectURL, "scopes", scopes)
 	oauthCfg, err := oauth.GetOAuthConfig(secretJSON, redirectURL, scopes...)
 	if err != nil {
@@ -261,7 +368,7 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 // authorization code for a token, and persists it to the runtime store. The
 // redirectURL must match the one used when building the authorization URL.
 func (h *Handlers) exchangeAndSaveToken(ctx context.Context, tenant store.Tenant, name, code, redirectURL string) error {
-	plugin, err := h.registry.GetReader(name)
+	provider, err := h.registry.GetProvider(name)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errReaderNotRegistered, err)
 	}
@@ -274,7 +381,7 @@ func (h *Handlers) exchangeAndSaveToken(ctx context.Context, tenant store.Tenant
 		return errCredentialsMissing
 	}
 
-	oauthCfg, err := oauth.GetOAuthConfig(secretJSON, redirectURL, plugin.Metadata().Auth.RequiredScopes...)
+	oauthCfg, err := oauth.GetOAuthConfig(secretJSON, redirectURL, provider.Metadata.Auth.RequiredScopes...)
 	if err != nil {
 		return fmt.Errorf("failed to parse credentials: %w", err)
 	}
@@ -305,7 +412,7 @@ func (h *Handlers) restartReaderDaemonAfterAuth(tenant store.Tenant, name string
 // AuthCallback handles GET /api/auth/callback.
 // This is the shared OAuth redirect target for all readers.
 // @Summary Handle reader OAuth callback
-// @Tags Readers
+// @Tags Providers
 // @Produce html
 // @Param state query string true "OAuth state"
 // @Param code query string true "OAuth authorization code"
@@ -377,21 +484,21 @@ func (h *Handlers) writeOAuthClosePage(w http.ResponseWriter, name string) {
 </html>`, html.EscapeString(setupURL))
 }
 
-// AuthExchange handles POST /api/readers/{name}/auth/exchange.
+// AuthExchange handles POST /api/providers/{name}/auth/exchange.
 // Accepts the full redirect URL (containing code and state params) pasted by
 // the user when the automatic redirect is unreachable (e.g. homeserver without
 // a public domain). Validates state, exchanges the code, and saves the token.
 // @Summary Exchange a pasted reader OAuth callback URL
-// @Tags Readers
+// @Tags Providers
 // @Accept json
 // @Produce json
-// @Param name path string true "Reader name" example(gmail)
+// @Param name path string true "Provider name" example(gmail)
 // @Param request body AuthExchangeRequest true "OAuth callback URL payload"
 // @Success 200 {object} AuthExchangeResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 422 {object} ValidationErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /readers/{name}/auth/exchange [post]
+// @Router /providers/{name}/auth/exchange [post]
 func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 
@@ -450,23 +557,23 @@ func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "authorized"})
 }
 
-// AuthStatus handles GET /api/readers/{name}/auth/status.
-// @Summary Get reader auth status
-// @Tags Readers
+// AuthStatus handles GET /api/providers/{name}/auth/status.
+// @Summary Get provider auth status
+// @Tags Providers
 // @Produce json
-// @Param name path string true "Reader name" example(gmail)
+// @Param name path string true "Provider name" example(gmail)
 // @Success 200 {object} AuthStatusResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /readers/{name}/auth/status [get]
+// @Router /providers/{name}/auth/status [get]
 func (h *Handlers) AuthStatus(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	plugin, err := h.registry.GetReader(name)
+	provider, err := h.registry.GetProvider(name)
 	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
+		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
 		return
 	}
-	if plugin.Metadata().Auth.Type != plugins.AuthTypeOAuth {
+	if provider.Metadata.Auth.Type != plugins.AuthTypeOAuth {
 		// Config-only readers are always "authenticated" once configured.
 		writeJSON(w, http.StatusOK, map[string]any{
 			"authenticated": true,
@@ -490,7 +597,7 @@ func (h *Handlers) AuthStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenState, err := h.resolveOAuthTokenState(r.Context(), requestTenant(r), name, plugin.Metadata().Auth.RequiredScopes, tokenJSON)
+	tokenState, err := h.resolveOAuthTokenState(r.Context(), requestTenant(r), name, provider.Metadata.Auth.RequiredScopes, tokenJSON)
 	if err != nil {
 		h.logger.Error("failed to resolve OAuth token state", "reader", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to resolve OAuth token state")
@@ -560,7 +667,7 @@ func isInvalidOAuthGrant(err error) bool {
 	return errors.As(err, &retrieveErr) && retrieveErr.ErrorCode == "invalid_grant"
 }
 
-func (h *Handlers) resolveReaderAuthStatus(ctx context.Context, tenant store.Tenant, name string, meta plugins.ReaderMetadata) (bool, string) {
+func (h *Handlers) resolveReaderAuthStatus(ctx context.Context, tenant store.Tenant, name string, meta plugins.ProviderMetadata) (bool, string) {
 	if meta.Auth.Type != plugins.AuthTypeOAuth {
 		return true, authStateConnected
 	}
@@ -575,21 +682,21 @@ func (h *Handlers) resolveReaderAuthStatus(ctx context.Context, tenant store.Ten
 	return tokenState.authenticated, tokenState.authState
 }
 
-// DisconnectReader handles DELETE /api/readers/{name}.
+// DisconnectReader handles DELETE /api/providers/{name}.
 // Removes all stored credentials, token, and config files for the reader.
 // @Summary Disconnect a reader
-// @Tags Readers
+// @Tags Providers
 // @Produce json
-// @Param name path string true "Reader name" Enums(thunderbird,gmail) example(thunderbird)
-// @Success 200 {object} ReaderDisconnectResponse
+// @Param name path string true "Provider name" Enums(thunderbird,gmail) example(thunderbird)
+// @Success 200 {object} ProviderDisconnectResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /readers/{name} [delete]
+// @Router /providers/{name} [delete]
 func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	if _, err := h.registry.GetReader(name); err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
+	if _, err := h.registry.GetProvider(name); err != nil {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
 		return
 	}
 
@@ -616,24 +723,24 @@ func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.logger.Info("reader disconnected", "reader", name)
+	h.logger.Info("provider disconnected", "reader", name)
 	writeJSON(w, http.StatusOK, map[string]any{"status": "disconnected", "files_removed": []string{}})
 }
 
-// RevokeToken handles DELETE /api/readers/{name}/auth/token.
+// RevokeToken handles DELETE /api/providers/{name}/auth/token.
 // @Summary Revoke a reader OAuth token
-// @Tags Readers
+// @Tags Providers
 // @Produce json
-// @Param name path string true "Reader name" example(gmail)
-// @Success 200 {object} ReaderTokenRevokeResponse
+// @Param name path string true "Provider name" example(gmail)
+// @Success 200 {object} ProviderTokenRevokeResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /readers/{name}/auth/token [delete]
+// @Router /providers/{name}/auth/token [delete]
 func (h *Handlers) RevokeToken(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	if _, err := h.registry.GetReader(name); err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
+	if _, err := h.registry.GetProvider(name); err != nil {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
 		return
 	}
 
@@ -667,21 +774,21 @@ func (h *Handlers) RevokeToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
 
-// --- reader config (for config-only readers like Thunderbird) ---
+// --- provider config (for config-only readers like Thunderbird) ---
 
-// GetReaderConfig handles GET /api/readers/{name}/config.
+// GetReaderConfig handles GET /api/providers/{name}/config.
 // @Summary Get reader runtime config
-// @Tags Readers
+// @Tags Providers
 // @Produce json
-// @Param name path string true "Reader name" example(thunderbird)
-// @Success 200 {object} ReaderConfigResponse
+// @Param name path string true "Provider name" example(thunderbird)
+// @Success 200 {object} ProviderConfigResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /readers/{name}/config [get]
+// @Router /providers/{name}/config [get]
 func (h *Handlers) GetReaderConfig(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	if _, err := h.registry.GetReader(name); err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
+	if _, err := h.registry.GetProvider(name); err != nil {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
 		return
 	}
 
@@ -698,27 +805,27 @@ func (h *Handlers) GetReaderConfig(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	//nolint:gosec // reader config is stored JSON returned with application/json content type
+	//nolint:gosec // provider config is stored JSON returned with application/json content type
 	_, _ = w.Write(data)
 }
 
-// SaveReaderConfig handles PUT /api/readers/{name}/config.
+// SaveReaderConfig handles PUT /api/providers/{name}/config.
 // @Summary Save reader runtime config
-// @Tags Readers
+// @Tags Providers
 // @Accept json
 // @Produce json
-// @Param name path string true "Reader name" example(thunderbird)
-// @Param request body ReaderConfigRequest true "Reader config JSON"
-// @Success 200 {object} ReaderConfigSaveResponse
+// @Param name path string true "Provider name" example(thunderbird)
+// @Param request body ProviderConfigRequest true "Provider config JSON"
+// @Success 200 {object} ProviderConfigSaveResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /readers/{name}/config [put]
+// @Router /providers/{name}/config [put]
 func (h *Handlers) SaveReaderConfig(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	if _, err := h.registry.GetReader(name); err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
+	if _, err := h.registry.GetProvider(name); err != nil {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
 		return
 	}
 
@@ -743,24 +850,24 @@ func (h *Handlers) SaveReaderConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.queueReaderScanning(r.Context(), requestTenant(r), name)
-	h.logger.Info("reader config saved", "reader", name)
+	h.logger.Info("provider config saved", "reader", name)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
-// ReaderStatus handles GET /api/readers/{name}/status.
+// ReaderStatus handles GET /api/providers/{name}/status.
 // Returns overall readiness: credentials present, auth valid, config present.
-// @Summary Get reader readiness status
-// @Tags Readers
+// @Summary Get provider readiness status
+// @Tags Providers
 // @Produce json
-// @Param name path string true "Reader name" example(thunderbird)
-// @Success 200 {object} ReaderStatusResponse
+// @Param name path string true "Provider name" example(thunderbird)
+// @Success 200 {object} ProviderStatusResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /readers/{name}/status [get]
+// @Router /providers/{name}/status [get]
 func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	plugin, err := h.registry.GetReader(name)
+	provider, err := h.registry.GetProvider(name)
 	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
+		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
 		return
 	}
 
@@ -773,7 +880,7 @@ func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 		Ready               bool             `json:"ready"`
 	}
 
-	meta := plugin.Metadata()
+	meta := provider.Metadata
 	st := readerStatus{AuthType: meta.Auth.Type}
 
 	if meta.Auth.RequiresCredentialsUpload {
@@ -795,8 +902,8 @@ func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 	} else {
 		_, ok, err := h.readerRuntimeStore.GetReaderConfig(r.Context(), requestTenant(r), name)
 		if err != nil {
-			h.logger.Error("failed to load reader config status", "reader", name, "error", err)
-			writeError(w, http.StatusInternalServerError, "failed to load reader config status")
+			h.logger.Error("failed to load provider config status", "reader", name, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to load provider config status")
 			return
 		}
 		st.ConfigPresent = ok
@@ -806,14 +913,14 @@ func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, st)
 }
 
-// DiscoverProfiles handles GET /api/readers/thunderbird/discover/profiles.
+// DiscoverProfiles handles GET /api/providers/thunderbird/discover/profiles.
 // Returns discovered Thunderbird profile directories from platform paths,
 // the Docker mount /thunderbird-profile, and THUNDERBIRD_DATA_DIR env var.
 // @Summary Discover Thunderbird profiles
-// @Tags Readers
+// @Tags Providers
 // @Produce json
 // @Success 200 {object} ThunderbirdProfilesResponse
-// @Router /readers/thunderbird/discover/profiles [get]
+// @Router /providers/thunderbird/discover/profiles [get]
 func (h *Handlers) DiscoverProfiles(w http.ResponseWriter, _ *http.Request) {
 	var paths []string
 	seen := make(map[string]struct{})
@@ -844,17 +951,17 @@ func (h *Handlers) DiscoverProfiles(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string][]string{"profiles": paths})
 }
 
-// DiscoverMailboxes handles GET /api/readers/thunderbird/discover/mailboxes?profile=<path>.
+// DiscoverMailboxes handles GET /api/providers/thunderbird/discover/mailboxes?profile=<path>.
 // Returns available MBOX mailbox names within the given Thunderbird profile directory.
 // @Summary Discover Thunderbird mailboxes
-// @Tags Readers
+// @Tags Providers
 // @Produce json
 // @Param profile query string true "Thunderbird profile path"
 // @Success 200 {object} ThunderbirdMailboxesResponse
 // @Failure 422 {object} ValidationErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /readers/thunderbird/discover/mailboxes [get]
+// @Router /providers/thunderbird/discover/mailboxes [get]
 func (h *Handlers) DiscoverMailboxes(w http.ResponseWriter, r *http.Request) {
 	query, ok := decodeAndValidateQuery[mailboxDiscoveryQuery](h, w, r)
 	if !ok {
@@ -877,31 +984,31 @@ func (h *Handlers) DiscoverMailboxes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string][]string{"mailboxes": mailboxes})
 }
 
-// GetReaderGuide handles GET /api/readers/{name}/guide.
-// Returns the structured setup guide for a reader when metadata includes one.
-// @Summary Get reader setup guide
-// @Tags Readers
+// GetProviderGuide handles GET /api/providers/{name}/guide.
+// Returns the structured setup guide for a provider when metadata includes one.
+// @Summary Get provider setup guide
+// @Tags Providers
 // @Produce json
-// @Param name path string true "Reader name" example(thunderbird)
-// @Success 200 {object} ReaderGuideResponse
+// @Param name path string true "Provider name" example(thunderbird)
+// @Success 200 {object} ProviderGuideResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /readers/{name}/guide [get]
-func (h *Handlers) GetReaderGuide(w http.ResponseWriter, r *http.Request) {
+// @Router /providers/{name}/guide [get]
+func (h *Handlers) GetProviderGuide(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	plugin, err := h.registry.GetReader(name)
+	provider, err := h.registry.GetProvider(name)
 	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("reader %q not found", name))
+		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
 		return
 	}
-	guideData := plugin.Metadata().SetupGuide
+	guideData := provider.Metadata.SetupGuide
 	if len(guideData) == 0 {
-		writeError(w, http.StatusNotFound, "no setup guide available for this reader")
+		writeError(w, http.StatusNotFound, "no setup guide available for this provider")
 		return
 	}
-	var guide plugins.ReaderGuide
+	var guide plugins.ProviderGuide
 	if err := json.Unmarshal(guideData, &guide); err != nil {
-		h.logger.Error("parsing reader guide", "reader", name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to parse reader guide")
+		h.logger.Error("parsing provider guide", "reader", name, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to parse provider guide")
 		return
 	}
 	writeJSON(w, http.StatusOK, guide)

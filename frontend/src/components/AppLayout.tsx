@@ -5,6 +5,7 @@ import {
   LogOut,
   RefreshCw,
   RotateCcw,
+  Search,
   ScrollText,
   UserPlus,
 } from 'lucide-react'
@@ -94,6 +95,13 @@ export function AppLayout() {
         keywords: ['new rule', 'rule'],
       },
       {
+        id: 'create-rule-from-emails',
+        titleKey: 'command.actions.createRuleFromEmails' as const,
+        descriptionKey: 'command.actions.createRuleFromEmails.description' as const,
+        icon: Search,
+        keywords: ['email rule', 'rule from emails', 'search emails'],
+      },
+      {
         id: 'create-token',
         titleKey: 'command.actions.createToken' as const,
         descriptionKey: 'command.actions.createToken.description' as const,
@@ -172,6 +180,10 @@ export function AppLayout() {
     const reader = activeReader ?? ''
     if (id === 'create-rule') {
       closePaletteAndNavigate('/rules/new')
+      return
+    }
+    if (id === 'create-rule-from-emails') {
+      closePaletteAndNavigate('/rules/new/search')
       return
     }
     if (id === 'create-token') {

@@ -128,6 +128,8 @@ type mockStore struct {
 	updatedUserID              string
 	updatedUser                store.UpdateUserInput
 	updatedUserResult          *store.User
+	updatedPasswordUserID      string
+	updatedPasswordHash        string
 	deletedUserID              string
 	usersByEmail               map[string]*store.User
 	usersByID                  map[string]*store.User
@@ -208,6 +210,18 @@ func (m *mockStore) UpdateUser(_ context.Context, id string, input store.UpdateU
 		Role:        store.UserRoleUser,
 		AvatarKey:   "default",
 	}, nil
+}
+
+func (m *mockStore) UpdateUserPassword(_ context.Context, id string, input store.UpdateUserPasswordInput) error {
+	m.updatedPasswordUserID = id
+	m.updatedPasswordHash = input.PasswordHash
+	if m.usersByID != nil {
+		if user, ok := m.usersByID[id]; ok {
+			user.PasswordHash = input.PasswordHash
+			return nil
+		}
+	}
+	return nil
 }
 
 func (m *mockStore) DeleteUser(_ context.Context, id string) error {
@@ -874,10 +888,10 @@ func (m *mockStore) UpdateExtractionDiagnosticStatus(
 func newTestHandlers(t *testing.T, st Storer, dm DaemonStatusProvider, banksData ...[]byte) *Handlers {
 	t.Helper()
 	registry := plugins.NewRegistry()
-	_ = registry.RegisterReader(&testReaderPlugin{name: "gmail", authType: plugins.AuthTypeOAuth, requiresCreds: true})
-	_ = registry.RegisterReader(&testReaderPlugin{name: "thunderbird", authType: plugins.AuthTypeConfig, requiresCreds: false, schema: []plugins.ConfigField{
+	_ = registry.RegisterProvider((&testProvider{name: "gmail", authType: plugins.AuthTypeOAuth, requiresCreds: true}).provider())
+	_ = registry.RegisterProvider((&testProvider{name: "thunderbird", authType: plugins.AuthTypeConfig, requiresCreds: false, schema: []plugins.ConfigField{
 		{Key: "profilePath", Label: "Profile Directory", Type: "path", Required: true},
-	}})
+	}}).provider())
 	var banks []byte
 	if len(banksData) > 0 {
 		banks = banksData[0]
@@ -898,7 +912,7 @@ func newTestHandlers(t *testing.T, st Storer, dm DaemonStatusProvider, banksData
 
 // --- minimal plugin stubs ---
 
-type testReaderPlugin struct {
+type testProvider struct {
 	name              string
 	authType          plugins.AuthType
 	requiresCreds     bool
@@ -906,14 +920,17 @@ type testReaderPlugin struct {
 	schema            []plugins.ConfigField
 	preserveNilSchema bool
 	guide             json.RawMessage
+	reader            api.Reader
+	newReaderErr      error
+	input             plugins.ProviderInput
 }
 
-func (p *testReaderPlugin) Metadata() plugins.ReaderMetadata {
+func (p *testProvider) Metadata() plugins.ProviderMetadata {
 	schema := p.schema
 	if schema == nil && !p.preserveNilSchema {
 		schema = []plugins.ConfigField{}
 	}
-	return plugins.ReaderMetadata{
+	return plugins.ProviderMetadata{
 		Name:        p.name,
 		Description: p.name + " reader",
 		Auth: plugins.AuthSpec{
@@ -926,8 +943,50 @@ func (p *testReaderPlugin) Metadata() plugins.ReaderMetadata {
 	}
 }
 
-func (p *testReaderPlugin) NewReader(_ plugins.ReaderInput) (api.Reader, error) {
+func (p *testProvider) NewReader(input plugins.ProviderInput) (api.Reader, error) {
+	p.input = input
+	if p.newReaderErr != nil {
+		return nil, p.newReaderErr
+	}
+	if p.reader != nil {
+		return p.reader, nil
+	}
 	return nil, errors.New("not implemented in test stub")
+}
+
+func (p *testProvider) NewEmailSearcher(input plugins.ProviderInput) (api.EmailSearcher, error) {
+	reader, err := p.NewReader(input)
+	if err != nil {
+		return nil, err
+	}
+	searcher, ok := reader.(api.EmailSearcher)
+	if !ok {
+		return nil, errors.New("not implemented in test stub")
+	}
+	return searcher, nil
+}
+
+func (p *testProvider) provider() plugins.Provider {
+	return plugins.Provider{
+		Metadata:         p.Metadata(),
+		NewReader:        p.NewReader,
+		NewEmailSearcher: p.NewEmailSearcher,
+	}
+}
+
+type testSearchReader struct {
+	query  api.EmailSearchQuery
+	result []api.EmailSearchResult
+	err    error
+}
+
+func (r *testSearchReader) Read(context.Context, chan<- *api.TransactionDetails, <-chan string) error {
+	return nil
+}
+
+func (r *testSearchReader) Search(_ context.Context, query api.EmailSearchQuery) ([]api.EmailSearchResult, error) {
+	r.query = query
+	return r.result, r.err
 }
 
 func get(h http.HandlerFunc, target string) *httptest.ResponseRecorder {
@@ -1017,20 +1076,20 @@ func TestStatus_StatsError(t *testing.T) {
 
 // --- plugin listing ---
 
-func TestListReaders(t *testing.T) {
+func TestListProviders(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	rr := get(h.ListReaders, "/api/plugins/readers")
+	rr := get(h.ListProviders, "/api/providers")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	var readers []ReaderInfo
+	var readers []ProviderInfo
 	decodeJSON(t, rr.Body.String(), &readers)
 	if len(readers) != 2 {
 		t.Fatalf("expected 2 readers, got %d", len(readers))
 	}
 	// Verify gmail metadata.
-	var gmail ReaderInfo
+	var gmail ProviderInfo
 	for _, r := range readers {
 		if r.Name == "gmail" {
 			gmail = r
@@ -1047,21 +1106,21 @@ func TestListReaders(t *testing.T) {
 func TestListReaders_NormalizesNilConfigSchema(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	registry := plugins.NewRegistry()
-	if err := registry.RegisterReader(&testReaderPlugin{
+	if err := registry.RegisterProvider((&testProvider{
 		name:              "nil-schema",
 		authType:          plugins.AuthTypeConfig,
 		preserveNilSchema: true,
-	}); err != nil {
-		t.Fatalf("RegisterReader() error = %v", err)
+	}).provider()); err != nil {
+		t.Fatalf("RegisterProvider() error = %v", err)
 	}
 	h.registry = registry
 
-	rr := get(h.ListReaders, "/api/plugins/readers")
+	rr := get(h.ListProviders, "/api/providers")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	var readers []ReaderInfo
+	var readers []ProviderInfo
 	decodeJSON(t, rr.Body.String(), &readers)
 	if len(readers) != 1 {
 		t.Fatalf("expected 1 reader, got %d", len(readers))
@@ -1079,7 +1138,7 @@ func TestListReaders_NormalizesNilConfigSchema(t *testing.T) {
 func TestCredentialsStatus_Missing(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
-	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/gmail/credentials/status", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/providers/gmail/credentials/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.CredentialsStatus(rr, req)
@@ -1101,7 +1160,7 @@ func TestCredentialsStatus_Present(t *testing.T) {
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
-	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/gmail/credentials/status", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/providers/gmail/credentials/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.CredentialsStatus(rr, req)
@@ -1115,7 +1174,7 @@ func TestCredentialsStatus_Present(t *testing.T) {
 
 func TestCredentialsStatus_UnknownReader(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/noexist/credentials/status", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/providers/noexist/credentials/status", nil)
 	req.SetPathValue("name", "noexist")
 	rr := httptest.NewRecorder()
 	h.CredentialsStatus(rr, req)
@@ -1129,7 +1188,7 @@ func TestUploadCredentials_SavesToStore(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
-	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/readers/gmail/credentials", strings.NewReader(`{"installed":{}}`))
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/providers/gmail/credentials", strings.NewReader(`{"installed":{}}`))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 
@@ -1162,18 +1221,18 @@ func TestAuthStart_UsesMetadataScopes(t *testing.T) {
 	st := &mockStore{readerSecrets: map[string][]byte{"tenant-a/scoped": []byte(secretJSON)}}
 	h := newTestHandlers(t, st, &mockDaemon{})
 	registry := plugins.NewRegistry()
-	if err := registry.RegisterReader(&testReaderPlugin{
+	if err := registry.RegisterProvider((&testProvider{
 		name:          "scoped",
 		authType:      plugins.AuthTypeOAuth,
 		requiresCreds: true,
 		scopes:        []string{expectedScope},
-	}); err != nil {
-		t.Fatalf("RegisterReader() error = %v", err)
+	}).provider()); err != nil {
+		t.Fatalf("RegisterProvider() error = %v", err)
 	}
 	h.registry = registry
 
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
-	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/readers/scoped/auth/start", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/providers/scoped/auth/start", nil)
 	req.SetPathValue("name", "scoped")
 	rr := httptest.NewRecorder()
 
@@ -1198,7 +1257,7 @@ func TestAuthStart_UsesMetadataScopes(t *testing.T) {
 func TestAuthStatus_NoToken(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
-	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/gmail/auth/status", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/providers/gmail/auth/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.AuthStatus(rr, req)
@@ -1215,7 +1274,7 @@ func TestAuthStatus_NoToken(t *testing.T) {
 
 func TestAuthStatus_ConfigReader(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/thunderbird/auth/status", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/providers/thunderbird/auth/status", nil)
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
 	h.AuthStatus(rr, req)
@@ -1238,7 +1297,7 @@ func TestAuthStatus_UsesStoreToken(t *testing.T) {
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
-	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/gmail/auth/status", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/providers/gmail/auth/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 
@@ -1296,7 +1355,7 @@ func TestAuthStatus_RefreshesExpiredAccessTokenWithRefreshToken(t *testing.T) {
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	ctx := auth.WithPrincipal(context.WithValue(context.Background(), oauth2.HTTPClient, tokenClient), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
-	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/gmail/auth/status", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/providers/gmail/auth/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 
@@ -1329,7 +1388,7 @@ func TestAuthStatus_ExpiredAccessTokenWithoutRefreshTokenRequiresAuth(t *testing
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
-	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/gmail/auth/status", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/providers/gmail/auth/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 
@@ -1375,7 +1434,7 @@ func TestAuthStatus_InvalidRefreshTokenRequiresAuth(t *testing.T) {
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	ctx := auth.WithPrincipal(context.WithValue(context.Background(), oauth2.HTTPClient, tokenClient), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
-	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/gmail/auth/status", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/providers/gmail/auth/status", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 
@@ -1399,7 +1458,7 @@ func TestAuthStatus_InvalidRefreshTokenRequiresAuth(t *testing.T) {
 func TestReaderStatus_Thunderbird_NotConfigured(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
-	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/thunderbird/status", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/providers/thunderbird/status", nil)
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
 	h.ReaderStatus(rr, req)
@@ -1423,7 +1482,7 @@ func TestReaderStatus_Thunderbird_Configured(t *testing.T) {
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
-	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/thunderbird/status", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/providers/thunderbird/status", nil)
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
 	h.ReaderStatus(rr, req)
@@ -1435,6 +1494,72 @@ func TestReaderStatus_Thunderbird_Configured(t *testing.T) {
 	}
 }
 
+func TestSearchReaderMessages_ReturnsSamples(t *testing.T) {
+	receivedAt := time.Date(2026, 6, 1, 10, 30, 0, 0, time.UTC)
+	reader := &testSearchReader{result: []api.EmailSearchResult{
+		{
+			ID:          "message-1",
+			SenderEmail: "alerts@example.com",
+			Subject:     "Card spend approved",
+			Body:        "INR 42.00 at Coffee",
+			ReceivedAt:  &receivedAt,
+		},
+	}}
+	provider := &testProvider{
+		name:     "sample",
+		authType: plugins.AuthTypeConfig,
+		reader:   reader,
+	}
+	registry := plugins.NewRegistry()
+	if err := registry.RegisterProvider(provider.provider()); err != nil {
+		t.Fatalf("RegisterProvider() error = %v", err)
+	}
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	h.registry = registry
+
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/providers/sample/messages?subject=spend&limit=3", nil)
+	req.SetPathValue("name", "sample")
+	rr := httptest.NewRecorder()
+	h.SearchProviderMessages(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	if reader.query.SubjectQuery != "spend" {
+		t.Fatalf("subject search = %q, want spend", reader.query.SubjectQuery)
+	}
+	if reader.query.Limit != 3 {
+		t.Fatalf("limit = %d, want 3", reader.query.Limit)
+	}
+	var resp struct {
+		Results []ProviderSearchResultResponse `json:"results"`
+	}
+	decodeJSON(t, rr.Body.String(), &resp)
+	if len(resp.Results) != 1 {
+		t.Fatalf("results len = %d, want 1", len(resp.Results))
+	}
+	if resp.Results[0].SenderEmail != "alerts@example.com" || resp.Results[0].Body != "INR 42.00 at Coffee" {
+		t.Fatalf("unexpected message response: %#v", resp.Results[0])
+	}
+	if resp.Results[0].ReceivedAt == nil || !resp.Results[0].ReceivedAt.Equal(receivedAt) {
+		t.Fatalf("received_at = %v, want %v", resp.Results[0].ReceivedAt, receivedAt)
+	}
+}
+
+func TestSearchReaderMessages_MissingSubjectReturns422(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/providers/gmail/messages", nil)
+	req.SetPathValue("name", "gmail")
+	rr := httptest.NewRecorder()
+
+	h.SearchProviderMessages(rr, req)
+
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestSaveReaderConfig_SavesToStore(t *testing.T) {
 	ms := &mockStore{}
 	h := newTestHandlers(t, ms, &mockDaemon{})
@@ -1442,7 +1567,7 @@ func TestSaveReaderConfig_SavesToStore(t *testing.T) {
 	req := httptest.NewRequestWithContext(
 		ctx,
 		http.MethodPut,
-		"/api/readers/thunderbird/config",
+		"/api/providers/thunderbird/config",
 		strings.NewReader(`{"config":{"mailboxes":"Inbox"}}`),
 	)
 	req.SetPathValue("name", "thunderbird")
@@ -1466,7 +1591,7 @@ func TestGetReaderConfig_LoadsFromStore(t *testing.T) {
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
-	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/readers/thunderbird/config", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/providers/thunderbird/config", nil)
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
 
@@ -1484,7 +1609,7 @@ func TestRevokeToken_DeletesStoreToken(t *testing.T) {
 	ms := &mockStore{readerTokens: map[string][]byte{"tenant-a/gmail": []byte(`{"access_token":"a"}`)}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
-	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/api/readers/gmail/auth/token", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/api/providers/gmail/auth/token", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 
@@ -1508,7 +1633,7 @@ func TestDisconnectReader_StopsDaemonWhenActiveReaderIsRemoved(t *testing.T) {
 	h := newTestHandlers(t, ms, &mockDaemon{status: DaemonStatus{Running: true}})
 	h.stopFn = func() { stopCalls++ }
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
-	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/api/readers/gmail", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/api/providers/gmail", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 
@@ -1536,7 +1661,7 @@ func TestDisconnectReader_DoesNotStopDaemonWhenInactiveReaderIsRemoved(t *testin
 	h := newTestHandlers(t, ms, &mockDaemon{status: DaemonStatus{Running: true}})
 	h.stopFn = func() { stopCalls++ }
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
-	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/api/readers/thunderbird", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/api/providers/thunderbird", nil)
 	req.SetPathValue("name", "thunderbird")
 	rr := httptest.NewRecorder()
 
@@ -2510,7 +2635,7 @@ func TestAuthCallback_UsesTenantFromOAuthStartState(t *testing.T) {
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	startCtx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
-	startReq := httptest.NewRequestWithContext(startCtx, http.MethodPost, "/api/readers/gmail/auth/start", nil)
+	startReq := httptest.NewRequestWithContext(startCtx, http.MethodPost, "/api/providers/gmail/auth/start", nil)
 	startReq.SetPathValue("name", "gmail")
 	startRR := httptest.NewRecorder()
 	h.AuthStart(startRR, startReq)
@@ -3190,7 +3315,7 @@ func TestGetReaderCheckpoint_EmptyValueReturnsNull(t *testing.T) {
 	ms := &mockStore{appConfig: map[string]string{"reader.gmail.last_scan_at": ""}}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/readers/gmail/checkpoint", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/providers/gmail/checkpoint", nil)
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.GetReaderCheckpoint(rr, req)
@@ -3776,7 +3901,7 @@ func TestImportRules_InvalidRegex_Returns422(t *testing.T) {
 
 func TestDiscoverProfiles_Returns200WithProfilesKey(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/thunderbird/discover/profiles", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/providers/thunderbird/discover/profiles", nil)
 	rr := httptest.NewRecorder()
 	h.DiscoverProfiles(rr, req)
 
@@ -3792,7 +3917,7 @@ func TestDiscoverProfiles_Returns200WithProfilesKey(t *testing.T) {
 
 func TestDiscoverMailboxes_MissingParam_Returns400(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/thunderbird/discover/mailboxes", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/providers/thunderbird/discover/mailboxes", nil)
 	rr := httptest.NewRecorder()
 	h.DiscoverMailboxes(rr, req)
 
@@ -3803,7 +3928,7 @@ func TestDiscoverMailboxes_NonexistentProfile_Returns404(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	req := httptest.NewRequestWithContext(
 		context.Background(), http.MethodGet,
-		"/api/readers/thunderbird/discover/mailboxes?profile=/nonexistent/thunderbird/profile",
+		"/api/providers/thunderbird/discover/mailboxes?profile=/nonexistent/thunderbird/profile",
 		nil,
 	)
 	rr := httptest.NewRecorder()
@@ -3814,39 +3939,39 @@ func TestDiscoverMailboxes_NonexistentProfile_Returns404(t *testing.T) {
 	}
 }
 
-func TestGetReaderGuide_NoGuide_Returns404(t *testing.T) {
+func TestGetProviderGuide_NoGuide_Returns404(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	registry := plugins.NewRegistry()
-	if err := registry.RegisterReader(&testReaderPlugin{name: "noguide", authType: plugins.AuthTypeConfig}); err != nil {
-		t.Fatalf("RegisterReader() error = %v", err)
+	if err := registry.RegisterProvider((&testProvider{name: "noguide", authType: plugins.AuthTypeConfig}).provider()); err != nil {
+		t.Fatalf("RegisterProvider() error = %v", err)
 	}
 	h.registry = registry
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/noguide/guide", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/providers/noguide/guide", nil)
 	req.SetPathValue("name", "noguide")
 	rr := httptest.NewRecorder()
 
-	h.GetReaderGuide(rr, req)
+	h.GetProviderGuide(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
 
-func TestGetReaderGuide_ReturnsMetadataGuide(t *testing.T) {
+func TestGetProviderGuide_ReturnsMetadataGuide(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	registry := plugins.NewRegistry()
 	guide := json.RawMessage(`{"sections":[{"title":"Setup","steps":[{"text":"Do the setup"}]}]}`)
-	if err := registry.RegisterReader(&testReaderPlugin{name: "guided", authType: plugins.AuthTypeConfig, guide: guide}); err != nil {
-		t.Fatalf("RegisterReader() error = %v", err)
+	if err := registry.RegisterProvider((&testProvider{name: "guided", authType: plugins.AuthTypeConfig, guide: guide}).provider()); err != nil {
+		t.Fatalf("RegisterProvider() error = %v", err)
 	}
 	h.registry = registry
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/readers/guided/guide", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/providers/guided/guide", nil)
 	req.SetPathValue("name", "guided")
 	rr := httptest.NewRecorder()
 
-	h.GetReaderGuide(rr, req)
+	h.GetProviderGuide(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
@@ -3954,7 +4079,7 @@ func TestRescan_DaemonNotRunning_Returns202Rescanning(t *testing.T) {
 
 func TestAuthExchange_MissingURL_Returns400(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/readers/gmail/auth/exchange", strings.NewReader(`{}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/providers/gmail/auth/exchange", strings.NewReader(`{}`))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.AuthExchange(rr, req)
@@ -3964,7 +4089,7 @@ func TestAuthExchange_MissingURL_Returns400(t *testing.T) {
 
 func TestAuthExchange_MalformedURL_Returns400(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/readers/gmail/auth/exchange", strings.NewReader(`{"url":":::not-a-url"}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/providers/gmail/auth/exchange", strings.NewReader(`{"url":":::not-a-url"}`))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.AuthExchange(rr, req)
@@ -3975,7 +4100,7 @@ func TestAuthExchange_MalformedURL_Returns400(t *testing.T) {
 func TestAuthExchange_MissingCode_Returns400(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	body := `{"url":"http://localhost:8080/api/auth/callback?state=somestate"}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/readers/gmail/auth/exchange", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/providers/gmail/auth/exchange", strings.NewReader(body))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.AuthExchange(rr, req)
@@ -3988,7 +4113,7 @@ func TestAuthExchange_MissingCode_Returns400(t *testing.T) {
 func TestAuthExchange_MissingState_Returns400(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	body := `{"url":"http://localhost:8080/api/auth/callback?code=4%2F0Acode"}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/readers/gmail/auth/exchange", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/providers/gmail/auth/exchange", strings.NewReader(body))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.AuthExchange(rr, req)
@@ -4001,7 +4126,7 @@ func TestAuthExchange_MissingState_Returns400(t *testing.T) {
 func TestAuthExchange_UnknownState_Returns400(t *testing.T) {
 	h := newTestHandlers(t, nil, &mockDaemon{})
 	body := `{"url":"http://localhost:8080/api/auth/callback?code=4%2F0Acode&state=doesnotexist"}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/readers/gmail/auth/exchange", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/providers/gmail/auth/exchange", strings.NewReader(body))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.AuthExchange(rr, req)
@@ -4023,7 +4148,7 @@ func TestAuthExchange_ExpiredState_Returns400(t *testing.T) {
 	h.mu.Unlock()
 
 	body := `{"url":"http://localhost:8080/api/auth/callback?code=4%2F0Acode&state=` + expiredState + `"}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/readers/gmail/auth/exchange", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/providers/gmail/auth/exchange", strings.NewReader(body))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.AuthExchange(rr, req)
@@ -4067,7 +4192,7 @@ func TestAuthExchange_RejectsStateFromDifferentTenant(t *testing.T) {
 
 	body := `{"url":"http://localhost:8080/api/auth/callback?code=4%2F0Acode&state=` + state + `"}`
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-b", TenantID: "tenant-b", Role: auth.RoleUser})
-	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/readers/gmail/auth/exchange", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/providers/gmail/auth/exchange", strings.NewReader(body))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.AuthExchange(rr, req)
@@ -4113,7 +4238,7 @@ func TestAuthExchange_RestartsRunningDaemonAfterTokenSaved(t *testing.T) {
 
 	body := `{"url":"http://localhost:8080/api/auth/callback?code=4%2F0Acode&state=` + state + `"}`
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
-	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/readers/gmail/auth/exchange", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/providers/gmail/auth/exchange", strings.NewReader(body))
 	req.SetPathValue("name", "gmail")
 	rr := httptest.NewRecorder()
 	h.AuthExchange(rr, req)

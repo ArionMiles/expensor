@@ -41,6 +41,11 @@ type updateProfileRequest struct {
 	AvatarKey   *string `json:"avatar_key" validate:"omitempty,no_control_chars" example:"wallet" enums:"default,ledger,wallet"`
 }
 
+type updatePasswordRequest struct {
+	CurrentPassword string `json:"current_password" validate:"required" example:"component admin password"`
+	NewPassword     string `json:"new_password" validate:"required,min=12" example:"correct horse battery staple"`
+}
+
 type createUserRequest struct {
 	Email string `json:"email" validate:"required,email" example:"contract-user@example.com"`
 	Role  string `json:"role" validate:"omitempty,oneof=admin user" example:"user"`
@@ -284,6 +289,48 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, principalFromUser(user))
+}
+
+// UpdatePassword updates the current authenticated user's password.
+// @Summary Update the current user password
+// @Tags Auth
+// @Accept json
+// @Param request body updatePasswordRequest true "Password update"
+// @Success 204
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /profile/password [patch]
+func (h *Handlers) UpdatePassword(w http.ResponseWriter, r *http.Request) {
+	user, ok := h.currentUser(w, r)
+	if !ok {
+		return
+	}
+	body, ok := decodeAndValidateJSON[updatePasswordRequest](h, w, r)
+	if !ok {
+		return
+	}
+	if auth.VerifyPassword(user.PasswordHash, body.CurrentPassword) != nil {
+		writeError(w, http.StatusUnauthorized, "current password is incorrect")
+		return
+	}
+	passwordHash, err := auth.HashPassword(body.NewPassword)
+	if err != nil {
+		h.logger.Error("hash updated password", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to update password")
+		return
+	}
+	if err := h.authStore.UpdateUserPassword(r.Context(), user.ID, store.UpdateUserPasswordInput{PasswordHash: passwordHash}); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		h.logger.Error("update password", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to update password")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // CreateAccessToken creates a programmatic access token.

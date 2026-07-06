@@ -10,7 +10,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 )
 
-// Plugin implements the ReaderPlugin interface for Thunderbird.
+// Plugin builds Thunderbird provider capabilities.
 type Plugin struct {
 	guideData []byte
 }
@@ -19,9 +19,19 @@ type Plugin struct {
 // the centralized content/readers/thunderbird/guide.json via go:embed.
 func (p *Plugin) SetGuideData(data []byte) { p.guideData = data }
 
-// Metadata returns catalog metadata for the Thunderbird reader plugin.
-func (p *Plugin) Metadata() plugins.ReaderMetadata {
-	return plugins.ReaderMetadata{
+// Provider returns the Thunderbird provider registration.
+func Provider(guideData []byte) plugins.Provider {
+	plugin := &Plugin{guideData: guideData}
+	return plugins.Provider{
+		Metadata:         plugin.Metadata(),
+		NewReader:        plugin.NewReader,
+		NewEmailSearcher: plugin.NewEmailSearcher,
+	}
+}
+
+// Metadata returns catalog metadata for the Thunderbird provider.
+func (p *Plugin) Metadata() plugins.ProviderMetadata {
+	return plugins.ProviderMetadata{
 		Name:        "thunderbird",
 		Description: "Read expense transactions from Thunderbird mailbox files (MBOX format)",
 		Auth: plugins.AuthSpec{
@@ -74,7 +84,16 @@ func (p *Plugin) ApplyConfig(cfg *config.App, raw map[string]any) {
 }
 
 // NewReader creates a new Thunderbird reader instance.
-func (p *Plugin) NewReader(input plugins.ReaderInput) (api.Reader, error) {
+func (p *Plugin) NewReader(input plugins.ProviderInput) (api.Reader, error) {
+	return p.buildReader(input)
+}
+
+// NewEmailSearcher creates a new Thunderbird email searcher instance.
+func (p *Plugin) NewEmailSearcher(input plugins.ProviderInput) (api.EmailSearcher, error) {
+	return p.buildReader(input)
+}
+
+func (p *Plugin) buildReader(input plugins.ProviderInput) (*Reader, error) {
 	cfg := config.App{}
 	if input.AppConfig != nil {
 		cfg = *input.AppConfig

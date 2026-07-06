@@ -11,7 +11,7 @@ import {
 } from '@/api/queries'
 import type { PreferencesPatch } from '@/api/types'
 import { cn } from '@/lib/utils'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useDisplay } from '@/contexts/DisplayContext'
 import { formatDate } from '@/lib/utils'
@@ -78,33 +78,23 @@ function DaemonSettings() {
   const intervalVal = intervalDraft ?? String(scanInterval)
   const lookbackVal = lookbackDraft ?? String(lookbackDays)
 
-  const save = useCallback(
-    (showMessage: boolean) => {
-      if (showMessage) setScanError(null)
-      const interval = parseInt(intervalVal, 10)
-      const lookback = parseInt(lookbackVal, 10)
-      if (isNaN(interval) || interval < 10 || interval > 3600) {
-        if (showMessage) setScanError(t('settings.daemon.scanIntervalError'))
-        return
-      }
-      if (isNaN(lookback) || lookback < 1 || lookback > 3650) {
-        if (showMessage) setScanError(t('settings.daemon.lookbackError'))
-        return
-      }
-      const patch: PreferencesPatch = {}
-      if (interval !== scanInterval) patch.scan_interval = interval
-      if (lookback !== lookbackDays) patch.lookback_days = lookback
-      if (Object.keys(patch).length > 0) updatePreferences(patch)
-    },
-    [intervalVal, lookbackDays, lookbackVal, scanInterval, t, updatePreferences],
-  )
-  const saveRef = useRef(save)
-
-  useEffect(() => {
-    saveRef.current = save
-  }, [save])
-
-  useEffect(() => () => saveRef.current(false), [])
+  const save = useCallback(() => {
+    setScanError(null)
+    const interval = parseInt(intervalVal, 10)
+    const lookback = parseInt(lookbackVal, 10)
+    if (isNaN(interval) || interval < 10 || interval > 3600) {
+      setScanError(t('settings.daemon.scanIntervalError'))
+      return
+    }
+    if (isNaN(lookback) || lookback < 1 || lookback > 3650) {
+      setScanError(t('settings.daemon.lookbackError'))
+      return
+    }
+    const patch: PreferencesPatch = {}
+    if (interval !== scanInterval) patch.scan_interval = interval
+    if (lookback !== lookbackDays) patch.lookback_days = lookback
+    if (Object.keys(patch).length > 0) updatePreferences(patch)
+  }, [intervalVal, lookbackDays, lookbackVal, scanInterval, t, updatePreferences])
 
   const handleFieldChange = (setter: (value: string) => void, value: string) => {
     setter(value)
@@ -139,6 +129,7 @@ function DaemonSettings() {
               onChange={(e) => {
                 handleFieldChange(setIntervalDraft, e.target.value)
               }}
+              onBlur={save}
               className="w-24 rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
             />
             <span className="shrink-0 text-xs text-muted-foreground">
@@ -159,6 +150,7 @@ function DaemonSettings() {
               onChange={(e) => {
                 handleFieldChange(setLookbackDraft, e.target.value)
               }}
+              onBlur={save}
               className="w-24 rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
             />
             <span className="shrink-0 text-xs text-muted-foreground">
@@ -258,29 +250,19 @@ function AdminSettings() {
   const [message, setMessage] = useState<string | null>(null)
   const value = draft ?? String(current)
 
-  const save = useCallback(
-    (showMessage: boolean) => {
-      if (showMessage) setMessage(null)
-      const parsed = parseInt(value, 10)
-      if (isNaN(parsed) || parsed < 1 || parsed > 64) {
-        if (showMessage) setMessage(t('settings.admin.scanningConcurrencyError'))
-        return
-      }
-      if (parsed === current) return
-      update.mutate(
-        { max_concurrent_scans: parsed },
-        { onSuccess: () => showMessage && setMessage(t('settings.admin.saved')) },
-      )
-    },
-    [current, t, update, value],
-  )
-  const saveRef = useRef(save)
-
-  useEffect(() => {
-    saveRef.current = save
-  }, [save])
-
-  useEffect(() => () => saveRef.current(false), [])
+  const save = useCallback(() => {
+    setMessage(null)
+    const parsed = parseInt(value, 10)
+    if (isNaN(parsed) || parsed < 1 || parsed > 64) {
+      setMessage(t('settings.admin.scanningConcurrencyError'))
+      return
+    }
+    if (parsed === current) return
+    update.mutate(
+      { max_concurrent_scans: parsed },
+      { onSuccess: () => setMessage(t('settings.admin.saved')) },
+    )
+  }, [current, t, update, value])
 
   return (
     <div className="space-y-8">
@@ -298,6 +280,7 @@ function AdminSettings() {
               setDraft(event.target.value)
               setMessage(null)
             }}
+            onBlur={save}
             className="w-24 rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
           />
           {update.isPending && (

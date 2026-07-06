@@ -298,7 +298,7 @@ export function Transactions() {
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-base leading-none text-muted-foreground hover:text-foreground"
                 aria-label="Clear search"
               >
-                ×
+                <X aria-hidden="true" size={14} />
               </button>
             )}
           </div>

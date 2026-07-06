@@ -391,6 +391,87 @@ func (r *Reader) listMessagesPage(ctx context.Context, query, pageToken string) 
 	return resp, err
 }
 
+var _ api.EmailSearcher = (*Reader)(nil)
+
+// Search returns Gmail messages whose subject contains the requested text.
+func (r *Reader) Search(ctx context.Context, query api.EmailSearchQuery) ([]api.EmailSearchResult, error) {
+	limit := query.Limit
+	if limit <= 0 {
+		return []api.EmailSearchResult{}, nil
+	}
+	subject := strings.TrimSpace(query.SubjectQuery)
+	if subject == "" {
+		return []api.EmailSearchResult{}, nil
+	}
+
+	var resp *gmail.ListMessagesResponse
+	err := doWithAuthRetry(func() error {
+		var callErr error
+		resp, callErr = r.client.Users.Messages.List("me").
+			Q(fmt.Sprintf("subject:%q", subject)).
+			MaxResults(int64(limit)).
+			Context(ctx).
+			Do()
+		return callErr
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing messages for subject search: %w", err)
+	}
+	if resp == nil {
+		return []api.EmailSearchResult{}, nil
+	}
+
+	out := make([]api.EmailSearchResult, 0, len(resp.Messages))
+	for _, item := range resp.Messages {
+		if len(out) >= limit {
+			break
+		}
+		message, err := r.getMessage(ctx, item.Id)
+		if err != nil {
+			return nil, err
+		}
+		sample := gmailMessageSample(message)
+		if sample.Body == "" {
+			continue
+		}
+		out = append(out, sample)
+	}
+	return out, nil
+}
+
+func (r *Reader) getMessage(ctx context.Context, msgID string) (*gmail.Message, error) {
+	var msg *gmail.Message
+	err := doWithAuthRetry(func() error {
+		var callErr error
+		msg, callErr = r.client.Users.Messages.Get("me", msgID).Context(ctx).Do()
+		return callErr
+	})
+	if err != nil {
+		return nil, fmt.Errorf("getting message: %w", err)
+	}
+	return msg, nil
+}
+
+func gmailMessageSample(msg *gmail.Message) api.EmailSearchResult {
+	if msg == nil {
+		return api.EmailSearchResult{}
+	}
+	headers := gmailMessageHeaders(msg)
+	var receivedAt *time.Time
+	if msg.InternalDate > 0 {
+		received := time.Unix(msg.InternalDate/1000, 0)
+		receivedAt = &received
+	}
+	sender := headers["from"]
+	return api.EmailSearchResult{
+		ID:          msg.Id,
+		SenderEmail: senderEmail(sender),
+		Subject:     headers["subject"],
+		Body:        extractBody(msg),
+		ReceivedAt:  receivedAt,
+	}
+}
+
 func handleListMessagesError(ctx context.Context, logger *slog.Logger, ruleName string, err error) error {
 	if ctx.Err() != nil {
 		logger.Info("context canceled, stopping rule processing", "rule", ruleName)
@@ -440,15 +521,10 @@ func (r *Reader) processMessage(ctx context.Context, msgID string, rule api.Rule
 	ctx, span := r.observabilityScope().Start(ctx, "gmail.messages.get")
 	defer span.End()
 
-	var msg *gmail.Message
-	err := doWithAuthRetry(func() error {
-		var callErr error
-		msg, callErr = r.client.Users.Messages.Get("me", msgID).Context(ctx).Do()
-		return callErr
-	})
+	msg, err := r.getMessage(ctx, msgID)
 	if err != nil {
 		r.observabilityScope().RecordOperation(ctx, observability.Operation{Namespace: "gmail", Name: "messages.get", Err: err})
-		return fmt.Errorf("getting message: %w", err)
+		return err
 	}
 
 	headers := gmailMessageHeaders(msg)
@@ -664,6 +740,9 @@ func isNetworkError(err error) bool {
 }
 
 func extractBody(msg *gmail.Message) string {
+	if msg.Payload == nil {
+		return ""
+	}
 	// Try to find HTML body in parts
 	for _, part := range msg.Payload.Parts {
 		if part.MimeType == "text/html" {

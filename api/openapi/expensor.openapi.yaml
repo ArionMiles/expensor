@@ -620,26 +620,26 @@ definitions:
         example: Asia/Kolkata
         type: string
     type: object
-  httpapi.ReaderCheckpointResponse:
+  httpapi.ProviderCheckpointResponse:
     properties:
       last_scan_at:
         example: "2026-04-14T09:00:00Z"
         type: string
         x-nullable: true
     type: object
-  httpapi.ReaderConfigRequest:
+  httpapi.ProviderConfigRequest:
     additionalProperties: {}
     type: object
-  httpapi.ReaderConfigResponse:
+  httpapi.ProviderConfigResponse:
     additionalProperties: {}
     type: object
-  httpapi.ReaderConfigSaveResponse:
+  httpapi.ProviderConfigSaveResponse:
     properties:
       status:
         example: saved
         type: string
     type: object
-  httpapi.ReaderDisconnectResponse:
+  httpapi.ProviderDisconnectResponse:
     properties:
       files_removed:
         items:
@@ -649,7 +649,7 @@ definitions:
         example: disconnected
         type: string
     type: object
-  httpapi.ReaderGuideResponse:
+  httpapi.ProviderGuideResponse:
     properties:
       notes:
         items:
@@ -660,7 +660,7 @@ definitions:
           $ref: '#/definitions/httpapi.GuideSectionResponse'
         type: array
     type: object
-  httpapi.ReaderInfoResponse:
+  httpapi.ProviderInfoResponse:
     properties:
       auth_type:
         example: config
@@ -678,7 +678,31 @@ definitions:
       requires_credentials_upload:
         type: boolean
     type: object
-  httpapi.ReaderStatusResponse:
+  httpapi.ProviderSearchResponse:
+    properties:
+      results:
+        items:
+          $ref: '#/definitions/httpapi.ProviderSearchResultResponse'
+        type: array
+    type: object
+  httpapi.ProviderSearchResultResponse:
+    properties:
+      body:
+        example: INR 42.00 at Coffee
+        type: string
+      id:
+        example: 1879f6d32a7f3c11
+        type: string
+      received_at:
+        type: string
+      sender_email:
+        example: alerts@example.com
+        type: string
+      subject:
+        example: Card spend approved
+        type: string
+    type: object
+  httpapi.ProviderStatusResponse:
     properties:
       auth_state:
         example: connected
@@ -695,7 +719,7 @@ definitions:
       ready:
         type: boolean
     type: object
-  httpapi.ReaderTokenRevokeResponse:
+  httpapi.ProviderTokenRevokeResponse:
     properties:
       status:
         example: revoked
@@ -1308,6 +1332,19 @@ definitions:
       token:
         type: string
     type: object
+  httpapi.updatePasswordRequest:
+    properties:
+      current_password:
+        example: component admin password
+        type: string
+      new_password:
+        example: correct horse battery staple
+        minLength: 12
+        type: string
+    required:
+    - current_password
+    - new_password
+    type: object
   httpapi.updateProfileRequest:
     properties:
       avatar_key:
@@ -1701,7 +1738,7 @@ paths:
             $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Handle reader OAuth callback
       tags:
-      - Readers
+      - Providers
   /bootstrap:
     get:
       produces:
@@ -2498,7 +2535,7 @@ paths:
       summary: Update application preferences
       tags:
       - Config
-  /config/readers/{name}/checkpoint:
+  /config/providers/{name}/checkpoint:
     delete:
       parameters:
       - description: Reader name
@@ -2541,7 +2578,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/httpapi.ReaderCheckpointResponse'
+            $ref: '#/definitions/httpapi.ProviderCheckpointResponse'
         "503":
           description: Service Unavailable
           schema:
@@ -3041,20 +3078,6 @@ paths:
       summary: Update a muted merchant reason
       tags:
       - Transactions
-  /plugins/readers:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/httpapi.ReaderInfoResponse'
-            type: array
-      summary: List reader plugins
-      tags:
-      - Readers
   /profile:
     get:
       produces:
@@ -3111,10 +3134,57 @@ paths:
       summary: Update the current user profile
       tags:
       - Auth
-  /readers/{name}:
+  /profile/password:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Password update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.updatePasswordRequest'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Update the current user password
+      tags:
+      - Auth
+  /providers:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/httpapi.ProviderInfoResponse'
+            type: array
+      summary: List providers
+      tags:
+      - Providers
+  /providers/{name}:
     delete:
       parameters:
-      - description: Reader name
+      - description: Provider name
         enum:
         - thunderbird
         - gmail
@@ -3129,7 +3199,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/httpapi.ReaderDisconnectResponse'
+            $ref: '#/definitions/httpapi.ProviderDisconnectResponse'
         "404":
           description: Not Found
           schema:
@@ -3144,13 +3214,13 @@ paths:
             $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Disconnect a reader
       tags:
-      - Readers
-  /readers/{name}/auth/exchange:
+      - Providers
+  /providers/{name}/auth/exchange:
     post:
       consumes:
       - application/json
       parameters:
-      - description: Reader name
+      - description: Provider name
         example: gmail
         in: path
         name: name
@@ -3183,11 +3253,11 @@ paths:
             $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Exchange a pasted reader OAuth callback URL
       tags:
-      - Readers
-  /readers/{name}/auth/start:
+      - Providers
+  /providers/{name}/auth/start:
     post:
       parameters:
-      - description: Reader name
+      - description: Provider name
         example: gmail
         in: path
         name: name
@@ -3222,11 +3292,11 @@ paths:
             $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Start reader OAuth authorization
       tags:
-      - Readers
-  /readers/{name}/auth/status:
+      - Providers
+  /providers/{name}/auth/status:
     get:
       parameters:
-      - description: Reader name
+      - description: Provider name
         example: gmail
         in: path
         name: name
@@ -3247,13 +3317,13 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
-      summary: Get reader auth status
+      summary: Get provider auth status
       tags:
-      - Readers
-  /readers/{name}/auth/token:
+      - Providers
+  /providers/{name}/auth/token:
     delete:
       parameters:
-      - description: Reader name
+      - description: Provider name
         example: gmail
         in: path
         name: name
@@ -3265,7 +3335,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/httpapi.ReaderTokenRevokeResponse'
+            $ref: '#/definitions/httpapi.ProviderTokenRevokeResponse'
         "404":
           description: Not Found
           schema:
@@ -3280,11 +3350,11 @@ paths:
             $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Revoke a reader OAuth token
       tags:
-      - Readers
-  /readers/{name}/config:
+      - Providers
+  /providers/{name}/config:
     get:
       parameters:
-      - description: Reader name
+      - description: Provider name
         example: thunderbird
         in: path
         name: name
@@ -3296,7 +3366,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/httpapi.ReaderConfigResponse'
+            $ref: '#/definitions/httpapi.ProviderConfigResponse'
         "404":
           description: Not Found
           schema:
@@ -3307,30 +3377,30 @@ paths:
             $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Get reader runtime config
       tags:
-      - Readers
+      - Providers
     put:
       consumes:
       - application/json
       parameters:
-      - description: Reader name
+      - description: Provider name
         example: thunderbird
         in: path
         name: name
         required: true
         type: string
-      - description: Reader config JSON
+      - description: Provider config JSON
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/httpapi.ReaderConfigRequest'
+          $ref: '#/definitions/httpapi.ProviderConfigRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/httpapi.ReaderConfigSaveResponse'
+            $ref: '#/definitions/httpapi.ProviderConfigSaveResponse'
         "400":
           description: Bad Request
           schema:
@@ -3349,13 +3419,13 @@ paths:
             $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Save reader runtime config
       tags:
-      - Readers
-  /readers/{name}/credentials:
+      - Providers
+  /providers/{name}/credentials:
     post:
       consumes:
       - application/json
       parameters:
-      - description: Reader name
+      - description: Provider name
         example: gmail
         in: path
         name: name
@@ -3400,11 +3470,11 @@ paths:
             $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Upload reader OAuth credentials
       tags:
-      - Readers
-  /readers/{name}/credentials/status:
+      - Providers
+  /providers/{name}/credentials/status:
     get:
       parameters:
-      - description: Reader name
+      - description: Provider name
         example: gmail
         in: path
         name: name
@@ -3425,13 +3495,13 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
-      summary: Get reader credentials status
+      summary: Get provider credentials status
       tags:
-      - Readers
-  /readers/{name}/guide:
+      - Providers
+  /providers/{name}/guide:
     get:
       parameters:
-      - description: Reader name
+      - description: Provider name
         example: thunderbird
         in: path
         name: name
@@ -3443,18 +3513,64 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/httpapi.ReaderGuideResponse'
+            $ref: '#/definitions/httpapi.ProviderGuideResponse'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
-      summary: Get reader setup guide
+      summary: Get provider setup guide
       tags:
-      - Readers
-  /readers/{name}/status:
+      - Providers
+  /providers/{name}/messages:
     get:
       parameters:
-      - description: Reader name
+      - description: Provider name
+        example: gmail
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Subject substring
+        in: query
+        name: subject
+        required: true
+        type: string
+      - description: Maximum messages to return
+        in: query
+        maximum: 50
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.ProviderSearchResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "412":
+          description: Precondition Failed
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Search provider messages for rule samples
+      tags:
+      - Providers
+  /providers/{name}/status:
+    get:
+      parameters:
+      - description: Provider name
         example: thunderbird
         in: path
         name: name
@@ -3466,15 +3582,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/httpapi.ReaderStatusResponse'
+            $ref: '#/definitions/httpapi.ProviderStatusResponse'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
-      summary: Get reader readiness status
+      summary: Get provider readiness status
       tags:
-      - Readers
-  /readers/thunderbird/discover/mailboxes:
+      - Providers
+  /providers/thunderbird/discover/mailboxes:
     get:
       parameters:
       - description: Thunderbird profile path
@@ -3503,8 +3619,8 @@ paths:
             $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Discover Thunderbird mailboxes
       tags:
-      - Readers
-  /readers/thunderbird/discover/profiles:
+      - Providers
+  /providers/thunderbird/discover/profiles:
     get:
       produces:
       - application/json
@@ -3515,7 +3631,7 @@ paths:
             $ref: '#/definitions/httpapi.ThunderbirdProfilesResponse'
       summary: Discover Thunderbird profiles
       tags:
-      - Readers
+      - Providers
   /rules:
     get:
       consumes:

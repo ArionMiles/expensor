@@ -211,7 +211,7 @@ describe('App auth routing', () => {
         if (body.reader === 'gmail') rescanRequests += 1
         return HttpResponse.json({ status: 'rescanning' })
       }),
-      http.delete('/api/config/readers/:reader/checkpoint', ({ params }) => {
+      http.delete('/api/config/providers/:reader/checkpoint', ({ params }) => {
         if (params.reader === 'gmail') clearCheckpointRequests += 1
         return new HttpResponse(null, { status: 204 })
       }),
@@ -225,6 +225,9 @@ describe('App auth routing', () => {
     expect(within(palette).getByText('Actions')).toBeInTheDocument()
     expect(within(palette).getByText('Navigation')).toBeInTheDocument()
     expect(within(palette).getByRole('button', { name: /Create new rule/ })).toBeInTheDocument()
+    expect(
+      within(palette).getByRole('button', { name: /Create rule from emails/ }),
+    ).toBeInTheDocument()
     expect(within(palette).getByRole('button', { name: /Create access token/ })).toBeInTheDocument()
     expect(within(palette).getByRole('button', { name: /Create new user/ })).toBeInTheDocument()
     expect(

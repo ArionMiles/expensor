@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
@@ -76,7 +76,32 @@ function renderSummarySection(
   )
 }
 
+function renderBreakdownTimeline(
+  data: Parameters<typeof BreakdownTimeline>[0]['data'],
+  mode: Parameters<typeof BreakdownTimeline>[0]['mode'] = 'categories',
+) {
+  return render(
+    <I18nProvider>
+      <BreakdownTimeline data={data} currency="INR" mode={mode} onModeChange={() => undefined} />
+    </I18nProvider>,
+  )
+}
+
 describe('BreakdownTimeline', () => {
+  it('shows full month and year in the hover tooltip', async () => {
+    const { container } = renderBreakdownTimeline({
+      labels: ['Food'],
+      months: ['2026-03', '2026-04'],
+      series: [{ label: 'Food', data: [100, 200] }],
+    })
+
+    const hoverBands = container.querySelectorAll('rect[fill="transparent"]')
+    fireEvent.mouseEnter(hoverBands[0], { clientX: 100, clientY: 100 })
+
+    expect(await screen.findByText('March 2026')).toBeInTheDocument()
+    expect(screen.queryByText('2026 03')).not.toBeInTheDocument()
+  })
+
   it('rerenders from populated data to empty data without changing hook order', () => {
     const populated = {
       labels: ['Groceries'],
@@ -89,36 +114,24 @@ describe('BreakdownTimeline', () => {
       series: [],
     }
 
-    const { rerender } = render(
-      <BreakdownTimeline
-        data={populated}
-        currency="INR"
-        mode="labels"
-        onModeChange={() => undefined}
-      />,
-    )
+    const { rerender } = renderBreakdownTimeline(populated, 'labels')
 
     rerender(
-      <BreakdownTimeline
-        data={empty}
-        currency="INR"
-        mode="labels"
-        onModeChange={() => undefined}
-      />,
+      <I18nProvider>
+        <BreakdownTimeline
+          data={empty}
+          currency="INR"
+          mode="labels"
+          onModeChange={() => undefined}
+        />
+      </I18nProvider>,
     )
 
     expect(screen.getByText('No data')).toBeInTheDocument()
   })
 
   it('orders breakdown toggles as Categories, Buckets, Labels', () => {
-    render(
-      <BreakdownTimeline
-        data={{ labels: [], months: [], series: [] }}
-        currency="INR"
-        mode="categories"
-        onModeChange={() => undefined}
-      />,
-    )
+    renderBreakdownTimeline({ labels: [], months: [], series: [] })
 
     const buttons = screen.getAllByRole('button').map((button) => button.textContent)
     expect(buttons).toEqual(['Categories', 'Buckets', 'Labels'])

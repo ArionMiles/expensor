@@ -175,15 +175,15 @@ func (h *Handlers) GetSetupStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetReaderCheckpoint handles GET /api/config/readers/{name}/checkpoint.
+// GetReaderCheckpoint handles GET /api/config/providers/{name}/checkpoint.
 // Returns the last scan timestamp for the reader (or null if no checkpoint exists).
 // @Summary Get a reader checkpoint
 // @Tags Config
 // @Produce json
 // @Param name path string true "Reader name" Enums(thunderbird,gmail) example(thunderbird)
-// @Success 200 {object} ReaderCheckpointResponse
+// @Success 200 {object} ProviderCheckpointResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /config/readers/{name}/checkpoint [get]
+// @Router /config/providers/{name}/checkpoint [get]
 func (h *Handlers) GetReaderCheckpoint(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	val, err := h.settingsStore.GetAppConfig(r.Context(), requestTenant(r), "reader."+name+".last_scan_at")
@@ -194,7 +194,7 @@ func (h *Handlers) GetReaderCheckpoint(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"last_scan_at": val})
 }
 
-// ClearReaderCheckpoint handles DELETE /api/config/readers/{name}/checkpoint.
+// ClearReaderCheckpoint handles DELETE /api/config/providers/{name}/checkpoint.
 // Clears the checkpoint so the next scan processes the full lookback window.
 // If the daemon is currently running, it is restarted so it picks up the
 // now-absent checkpoint immediately rather than waiting for the next interval.
@@ -204,7 +204,7 @@ func (h *Handlers) GetReaderCheckpoint(w http.ResponseWriter, r *http.Request) {
 // @Success 204 "No Content"
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
-// @Router /config/readers/{name}/checkpoint [delete]
+// @Router /config/providers/{name}/checkpoint [delete]
 func (h *Handlers) ClearReaderCheckpoint(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := h.settingsStore.SetAppConfig(r.Context(), requestTenant(r), "reader."+name+".last_scan_at", ""); err != nil {

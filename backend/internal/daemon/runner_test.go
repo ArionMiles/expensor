@@ -39,6 +39,10 @@ func (m *mockReader) Read(ctx context.Context, out chan<- *api.TransactionDetail
 	return nil
 }
 
+func (m *mockReader) Search(context.Context, api.EmailSearchQuery) ([]api.EmailSearchResult, error) {
+	return nil, nil
+}
+
 // mockSink implements TransactionSink for testing.
 type mockSink struct {
 	writeFunc func(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error
@@ -62,16 +66,15 @@ func (m *mockSink) Close() error {
 	return nil
 }
 
-// mockReaderPlugin implements plugins.ReaderPlugin for testing.
-type mockReaderPlugin struct {
+type mockProvider struct {
 	name        string
 	reader      api.Reader
 	createError error
-	input       plugins.ReaderInput
+	input       plugins.ProviderInput
 }
 
-func (m *mockReaderPlugin) Metadata() plugins.ReaderMetadata {
-	return plugins.ReaderMetadata{
+func (m *mockProvider) metadata() plugins.ProviderMetadata {
+	return plugins.ProviderMetadata{
 		Name:        m.name,
 		Description: "mock reader",
 		Auth: plugins.AuthSpec{
@@ -81,12 +84,32 @@ func (m *mockReaderPlugin) Metadata() plugins.ReaderMetadata {
 	}
 }
 
-func (m *mockReaderPlugin) NewReader(input plugins.ReaderInput) (api.Reader, error) {
+func (m *mockProvider) NewReader(input plugins.ProviderInput) (api.Reader, error) {
 	m.input = input
 	if m.createError != nil {
 		return nil, m.createError
 	}
 	return m.reader, nil
+}
+
+func (m *mockProvider) NewEmailSearcher(input plugins.ProviderInput) (api.EmailSearcher, error) {
+	reader, err := m.NewReader(input)
+	if err != nil {
+		return nil, err
+	}
+	searcher, ok := reader.(api.EmailSearcher)
+	if !ok {
+		return nil, errors.New("not implemented in test stub")
+	}
+	return searcher, nil
+}
+
+func (m *mockProvider) provider() plugins.Provider {
+	return plugins.Provider{
+		Metadata:         m.metadata(),
+		NewReader:        m.NewReader,
+		NewEmailSearcher: m.NewEmailSearcher,
+	}
 }
 
 type mockRuntimeStore struct {
@@ -159,8 +182,8 @@ func TestRunCreatesDaemonLifecycleSpan(t *testing.T) {
 	})
 
 	registry := plugins.NewRegistry()
-	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: &mockReader{}}); err != nil {
-		t.Fatalf("RegisterReader() error = %v", err)
+	if err := registry.RegisterProvider((&mockProvider{name: "test-reader", reader: &mockReader{}}).provider()); err != nil {
+		t.Fatalf("RegisterProvider() error = %v", err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	scope := observability.NewScope(logger, "test/daemon")
@@ -241,8 +264,8 @@ func TestRun_SuccessfulRun(t *testing.T) {
 	}
 
 	registry := plugins.NewRegistry()
-	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: reader}); err != nil {
-		t.Fatalf("RegisterReader: %v", err)
+	if err := registry.RegisterProvider((&mockProvider{name: "test-reader", reader: reader}).provider()); err != nil {
+		t.Fatalf("RegisterProvider: %v", err)
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -298,8 +321,8 @@ func TestRun_PassesTenantToSinkFactory(t *testing.T) {
 	}
 
 	registry := plugins.NewRegistry()
-	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: reader}); err != nil {
-		t.Fatalf("RegisterReader: %v", err)
+	if err := registry.RegisterProvider((&mockProvider{name: "test-reader", reader: reader}).provider()); err != nil {
+		t.Fatalf("RegisterProvider: %v", err)
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -336,8 +359,8 @@ func TestRun_ReaderError(t *testing.T) {
 	}
 
 	registry := plugins.NewRegistry()
-	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: reader}); err != nil {
-		t.Fatalf("RegisterReader: %v", err)
+	if err := registry.RegisterProvider((&mockProvider{name: "test-reader", reader: reader}).provider()); err != nil {
+		t.Fatalf("RegisterProvider: %v", err)
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -379,8 +402,8 @@ func TestRun_SinkError(t *testing.T) {
 	}
 
 	registry := plugins.NewRegistry()
-	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: reader}); err != nil {
-		t.Fatalf("RegisterReader: %v", err)
+	if err := registry.RegisterProvider((&mockProvider{name: "test-reader", reader: reader}).provider()); err != nil {
+		t.Fatalf("RegisterProvider: %v", err)
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -410,10 +433,10 @@ func TestRun_PassesPersistedReaderConfigToPlugin(t *testing.T) {
 		},
 	}
 	sink := &mockSink{}
-	readerPlugin := &mockReaderPlugin{name: "test-reader", reader: reader}
+	readerProvider := &mockProvider{name: "test-reader", reader: reader}
 	registry := plugins.NewRegistry()
-	if err := registry.RegisterReader(readerPlugin); err != nil {
-		t.Fatalf("RegisterReader() error = %v", err)
+	if err := registry.RegisterProvider(readerProvider.provider()); err != nil {
+		t.Fatalf("RegisterProvider() error = %v", err)
 	}
 
 	runtimeStore := &mockRuntimeStore{
@@ -432,8 +455,8 @@ func TestRun_PassesPersistedReaderConfigToPlugin(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	if string(readerPlugin.input.ReaderConfig) != string(runtimeStore.readerConfig) {
-		t.Fatalf("ReaderConfig = %s, want %s", readerPlugin.input.ReaderConfig, runtimeStore.readerConfig)
+	if string(readerProvider.input.ReaderConfig) != string(runtimeStore.readerConfig) {
+		t.Fatalf("ReaderConfig = %s, want %s", readerProvider.input.ReaderConfig, runtimeStore.readerConfig)
 	}
 }
 
@@ -466,8 +489,8 @@ func TestRun_ContextCancellation(t *testing.T) {
 	}
 
 	registry := plugins.NewRegistry()
-	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: reader}); err != nil {
-		t.Fatalf("RegisterReader: %v", err)
+	if err := registry.RegisterProvider((&mockProvider{name: "test-reader", reader: reader}).provider()); err != nil {
+		t.Fatalf("RegisterProvider: %v", err)
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -507,11 +530,11 @@ func TestRun_ContextCancellation(t *testing.T) {
 
 func TestRun_NewReaderError(t *testing.T) {
 	registry := plugins.NewRegistry()
-	if err := registry.RegisterReader(&mockReaderPlugin{
+	if err := registry.RegisterProvider((&mockProvider{
 		name:        "test-reader",
 		createError: errors.New("failed to create reader"),
-	}); err != nil {
-		t.Fatalf("RegisterReader: %v", err)
+	}).provider()); err != nil {
+		t.Fatalf("RegisterProvider: %v", err)
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -547,8 +570,8 @@ func TestRun_NewSinkError(t *testing.T) {
 	}
 
 	registry := plugins.NewRegistry()
-	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: reader}); err != nil {
-		t.Fatalf("RegisterReader: %v", err)
+	if err := registry.RegisterProvider((&mockProvider{name: "test-reader", reader: reader}).provider()); err != nil {
+		t.Fatalf("RegisterProvider: %v", err)
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -617,8 +640,8 @@ func TestRunnerSinkErrorDeadlock(t *testing.T) {
 	}
 
 	registry := plugins.NewRegistry()
-	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: reader}); err != nil {
-		t.Fatalf("RegisterReader: %v", err)
+	if err := registry.RegisterProvider((&mockProvider{name: "test-reader", reader: reader}).provider()); err != nil {
+		t.Fatalf("RegisterProvider: %v", err)
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -679,8 +702,8 @@ func TestRun_SinkResourceCleanup(t *testing.T) {
 	}
 
 	registry := plugins.NewRegistry()
-	if err := registry.RegisterReader(&mockReaderPlugin{name: "test-reader", reader: reader}); err != nil {
-		t.Fatalf("RegisterReader: %v", err)
+	if err := registry.RegisterProvider((&mockProvider{name: "test-reader", reader: reader}).provider()); err != nil {
+		t.Fatalf("RegisterProvider: %v", err)
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))

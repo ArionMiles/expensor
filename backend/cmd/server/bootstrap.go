@@ -71,25 +71,24 @@ func waitForPostgres(pgCfg config.Postgres, logger *slog.Logger) error {
 	}
 }
 
-// registerPlugins assembles the application's concrete reader catalog.
+// registerPlugins assembles the application's concrete provider catalog.
 func registerPlugins(registry *plugins.Registry, fs embed.FS, logger *slog.Logger) error {
-	gmailPlugin := &gmail.Plugin{}
-	tbPlugin := &thunderbird.Plugin{}
-
+	var gmailGuide []byte
 	if data, err := fs.ReadFile("content/readers/gmail/guide.json"); err == nil {
-		gmailPlugin.SetGuideData(data)
+		gmailGuide = data
 	} else {
 		logger.Warn("could not load gmail guide", "error", err)
 	}
+	var thunderbirdGuide []byte
 	if data, err := fs.ReadFile("content/readers/thunderbird/guide.json"); err == nil {
-		tbPlugin.SetGuideData(data)
+		thunderbirdGuide = data
 	} else {
 		logger.Warn("could not load thunderbird guide", "error", err)
 	}
 
-	for _, p := range []plugins.ReaderPlugin{gmailPlugin, tbPlugin} {
-		if err := registry.RegisterReader(p); err != nil {
-			return fmt.Errorf("registering reader %s: %w", p.Metadata().Name, err)
+	for _, provider := range []plugins.Provider{gmail.Provider(gmailGuide), thunderbird.Provider(thunderbirdGuide)} {
+		if err := registry.RegisterProvider(provider); err != nil {
+			return fmt.Errorf("registering provider %s: %w", provider.Metadata.Name, err)
 		}
 	}
 	return nil

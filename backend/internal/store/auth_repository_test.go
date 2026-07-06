@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ArionMiles/expensor/backend/internal/auth"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
@@ -340,6 +341,24 @@ func TestAuthRepositoryListsAndUpdatesUsers(t *testing.T) {
 	}
 	if updated.DisabledAt != nil {
 		t.Fatalf("updated user remains disabled: %#v", updated)
+	}
+
+	nextHash, err := auth.HashPassword("correct horse battery staple")
+	if err != nil {
+		t.Fatalf("HashPassword() error = %v", err)
+	}
+	if err := ts.UpdateUserPassword(ctx, user.ID, store.UpdateUserPasswordInput{PasswordHash: nextHash}); err != nil {
+		t.Fatalf("UpdateUserPassword() error = %v", err)
+	}
+	updated, err = ts.FindUserByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("FindUserByID(after password update) error = %v", err)
+	}
+	if err := auth.VerifyPassword(updated.PasswordHash, "correct horse battery staple"); err != nil {
+		t.Fatalf("updated password hash did not verify: %v", err)
+	}
+	if err := ts.UpdateUserPassword(ctx, "00000000-0000-0000-0000-000000000000", store.UpdateUserPasswordInput{PasswordHash: nextHash}); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("UpdateUserPassword(missing) error = %v, want ErrNotFound", err)
 	}
 
 	users, err := ts.ListUsers(ctx)

@@ -77,7 +77,7 @@ func TestPlugin_NewReader(t *testing.T) {
 	plugin := &Plugin{}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	reader, err := plugin.NewReader(plugins.ReaderInput{
+	reader, err := plugin.NewReader(plugins.ProviderInput{
 		AppConfig: cfg,
 		Rules:     rules,
 		Logger:    logger,
@@ -107,7 +107,7 @@ func TestPlugin_NewReader_MissingMailbox(t *testing.T) {
 	plugin := &Plugin{}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	_, err := plugin.NewReader(plugins.ReaderInput{
+	_, err := plugin.NewReader(plugins.ProviderInput{
 		AppConfig: cfg,
 		Rules:     []api.Rule{},
 		Logger:    logger,
@@ -143,7 +143,7 @@ func TestPlugin_NewReader_DefaultInterval(t *testing.T) {
 	plugin := &Plugin{}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	reader, err := plugin.NewReader(plugins.ReaderInput{
+	reader, err := plugin.NewReader(plugins.ProviderInput{
 		AppConfig: cfg,
 		Rules:     []api.Rule{},
 		Logger:    logger,
@@ -170,7 +170,7 @@ func TestPlugin_NewReader_UsesPersistedReaderConfig(t *testing.T) {
 	}
 
 	plugin := &Plugin{}
-	reader, err := plugin.NewReader(plugins.ReaderInput{
+	reader, err := plugin.NewReader(plugins.ProviderInput{
 		AppConfig:    &config.App{},
 		ReaderConfig: []byte(`{"config":{"profilePath":"` + tmpDir + `","mailboxes":"Inbox,Sent"}}`),
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),

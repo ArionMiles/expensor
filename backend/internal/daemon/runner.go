@@ -68,7 +68,7 @@ type TransactionSinkFactory func(tenant store.Tenant, cfg *config.App, logger *s
 
 // RunConfig holds the configuration for running the daemon.
 type RunConfig struct {
-	// ReaderName is the plugin name of the reader to use (e.g. "gmail").
+	// ReaderName is the provider name of the reader to use (e.g. "gmail").
 	// Set by the web UI via POST /api/daemon/start.
 	ReaderName     string
 	Tenant         store.Tenant
@@ -108,12 +108,12 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 		"reader", runCfg.ReaderName,
 	)
 
-	readerPlugin, err := r.registry.GetReader(runCfg.ReaderName)
+	provider, err := r.registry.GetProvider(runCfg.ReaderName)
 	if err != nil {
 		runErr = err
 		return fmt.Errorf("creating reader: %w", err)
 	}
-	reader, err := readerPlugin.NewReader(plugins.ReaderInput{
+	reader, err := provider.NewReader(plugins.ProviderInput{
 		HTTPClient:     r.httpClient,
 		AppConfig:      cfg,
 		ReaderConfig:   r.loadReaderConfig(ctx, runCfg.Tenant, runCfg.ReaderName, runCfg.RuntimeStore),
@@ -121,7 +121,7 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 		Resolver:       runCfg.Resolver,
 		StateManager:   runCfg.StateManager,
 		DiagnosticSink: runCfg.DiagnosticSink,
-		Logger:         r.logger.With("component", "reader", "plugin", runCfg.ReaderName),
+		Logger:         r.logger.With("component", "reader", "provider", runCfg.ReaderName),
 	})
 	if err != nil {
 		runErr = err

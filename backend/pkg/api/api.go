@@ -70,6 +70,29 @@ type Reader interface {
 	Read(ctx context.Context, out chan<- *TransactionDetails, ackChan <-chan string) error
 }
 
+// EmailSearcher searches emails for rule authoring samples.
+type EmailSearcher interface {
+	Search(ctx context.Context, query EmailSearchQuery) ([]EmailSearchResult, error)
+}
+
+// EmailSearchQuery describes an email search request.
+type EmailSearchQuery struct {
+	// SubjectQuery is a case-insensitive subject substring to search for.
+	SubjectQuery string
+	// Limit is validated by the caller. HTTP allows 1..50 and defaults omitted values to 10.
+	Limit int
+}
+
+// EmailSearchResult is a full email search result suitable for rule authoring.
+type EmailSearchResult struct {
+	// ID is provider-local and only meaningful within the provider that returned it.
+	ID          string
+	SenderEmail string
+	Subject     string
+	Body        string
+	ReceivedAt  *time.Time
+}
+
 // Rule defines an email matching rule for transaction extraction.
 // Rules are reader-agnostic: each reader uses the fields appropriate to its context.
 type Rule struct {

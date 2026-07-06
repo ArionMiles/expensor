@@ -343,6 +343,120 @@ func TestUpdateProfileRejectsUnknownAvatarKey(t *testing.T) {
 	}
 }
 
+func TestUpdatePasswordVerifiesCurrentPasswordAndStoresHash(t *testing.T) {
+	currentHash, err := auth.HashPassword("current password")
+	if err != nil {
+		t.Fatalf("HashPassword(current) error = %v", err)
+	}
+	ms := &mockStore{
+		usersByID: map[string]*store.User{
+			"user-a": {
+				ID:           "user-a",
+				TenantID:     "tenant-a",
+				Email:        "a@example.com",
+				DisplayName:  "A",
+				PasswordHash: currentHash,
+				Role:         store.UserRoleUser,
+				AvatarKey:    "default",
+			},
+		},
+	}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(
+		ctx,
+		http.MethodPatch,
+		"/api/profile/password",
+		strings.NewReader(`{"current_password":"current password","new_password":"correct horse battery staple"}`),
+	)
+	rec := httptest.NewRecorder()
+
+	h.UpdatePassword(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204; body = %s", rec.Code, rec.Body.String())
+	}
+	if ms.updatedPasswordUserID != "user-a" {
+		t.Fatalf("updated password user id = %q, want user-a", ms.updatedPasswordUserID)
+	}
+	if ms.updatedPasswordHash == "" || strings.Contains(ms.updatedPasswordHash, "correct horse") {
+		t.Fatalf("password hash was not persisted safely: %q", ms.updatedPasswordHash)
+	}
+	if err := auth.VerifyPassword(ms.updatedPasswordHash, "correct horse battery staple"); err != nil {
+		t.Fatalf("updated password hash did not verify: %v", err)
+	}
+}
+
+func TestUpdatePasswordRejectsWrongCurrentPassword(t *testing.T) {
+	currentHash, err := auth.HashPassword("current password")
+	if err != nil {
+		t.Fatalf("HashPassword(current) error = %v", err)
+	}
+	ms := &mockStore{
+		usersByID: map[string]*store.User{
+			"user-a": {
+				ID:           "user-a",
+				TenantID:     "tenant-a",
+				Email:        "a@example.com",
+				DisplayName:  "A",
+				PasswordHash: currentHash,
+				Role:         store.UserRoleUser,
+				AvatarKey:    "default",
+			},
+		},
+	}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(
+		ctx,
+		http.MethodPatch,
+		"/api/profile/password",
+		strings.NewReader(`{"current_password":"wrong password","new_password":"correct horse battery staple"}`),
+	)
+	rec := httptest.NewRecorder()
+
+	h.UpdatePassword(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401; body = %s", rec.Code, rec.Body.String())
+	}
+	if ms.updatedPasswordUserID != "" {
+		t.Fatalf("updated password user id = %q, want no store write", ms.updatedPasswordUserID)
+	}
+}
+
+func TestUpdatePasswordRejectsShortNewPassword(t *testing.T) {
+	ms := &mockStore{
+		usersByID: map[string]*store.User{
+			"user-a": {
+				ID:           "user-a",
+				TenantID:     "tenant-a",
+				Email:        "a@example.com",
+				DisplayName:  "A",
+				PasswordHash: "hash",
+				Role:         store.UserRoleUser,
+				AvatarKey:    "default",
+			},
+		},
+	}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(
+		ctx,
+		http.MethodPatch,
+		"/api/profile/password",
+		strings.NewReader(`{"current_password":"current password","new_password":"short"}`),
+	)
+	rec := httptest.NewRecorder()
+
+	h.UpdatePassword(rec, req)
+
+	assertValidationError(t, rec, "new_password", "body", "must be at least 12")
+	if ms.updatedPasswordUserID != "" {
+		t.Fatalf("updated password user id = %q, want no store write", ms.updatedPasswordUserID)
+	}
+}
+
 func TestCreateUserRequiresAdminRole(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})

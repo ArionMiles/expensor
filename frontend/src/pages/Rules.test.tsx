@@ -92,6 +92,26 @@ describe('Rules', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/rules/rule-1')
   })
 
+  it('offers manual and email-based new rule entry points', async () => {
+    const user = userEvent.setup()
+
+    renderWithProviders(
+      <>
+        <Rules />
+        <LocationProbe />
+      </>,
+      { route: '/rules' },
+    )
+
+    await user.click(screen.getByRole('combobox', { name: '+ New rule' }))
+    expect(screen.getByRole('option', { name: /Create from emails/ })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /Create manually/ })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('option', { name: /Create from emails/ }))
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/rules/new/search')
+  })
+
   it('opens the rule editor when clicking non-interactive row cells', async () => {
     const user = userEvent.setup()
 
@@ -174,7 +194,7 @@ describe('Rules', () => {
     const actions = screen.getByLabelText('Rule actions')
     expect(within(actions).getByRole('button', { name: 'Export' })).toBeInTheDocument()
     expect(within(actions).getByRole('button', { name: 'Import' })).toBeInTheDocument()
-    expect(within(actions).getByRole('link', { name: '+ New rule' })).toBeInTheDocument()
+    expect(within(actions).getByRole('combobox', { name: '+ New rule' })).toBeInTheDocument()
   })
 
   it('uses an opaque card surface for filter dropdowns', async () => {
