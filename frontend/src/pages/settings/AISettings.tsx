@@ -228,6 +228,7 @@ export function AISettings() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [confirmDisconnect, setConfirmDisconnect] = useState(false)
+  const [activeAction, setActiveAction] = useState<'save' | 'test' | null>(null)
   const baseURLRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -260,24 +261,30 @@ export function AISettings() {
   const handleSave = async () => {
     setError('')
     setMessage('')
+    setActiveAction('save')
     try {
       await saveInputs()
       await activate.mutateAsync(OPENAI_PROVIDER)
       setMessage(t('settings.ai.saved'))
     } catch (err) {
       setError(err instanceof Error ? err.message : t('settings.ai.saveFailed'))
+    } finally {
+      setActiveAction(null)
     }
   }
 
   const handleHealthcheck = async () => {
     setError('')
     setMessage('')
+    setActiveAction('test')
     try {
       await saveInputs()
       const result = await healthcheck.mutateAsync(OPENAI_PROVIDER)
       setMessage(result.message || t('settings.ai.healthcheckPassed'))
     } catch (err) {
       setError(err instanceof Error ? err.message : t('settings.ai.healthcheckFailed'))
+    } finally {
+      setActiveAction(null)
     }
   }
 
@@ -344,8 +351,8 @@ export function AISettings() {
       </div>
 
       <div className="grid max-w-3xl gap-5">
-        <label className="block text-sm text-muted-foreground">
-          {t('settings.ai.baseUrl')}
+        <div>
+          <span className="block text-sm text-muted-foreground">{t('settings.ai.baseUrl')}</span>
           <div className="mt-1 flex items-center rounded-md border border-border bg-input focus-within:border-primary focus-within:ring-1 focus-within:ring-ring">
             {baseURLEditing ? (
               <input
@@ -376,7 +383,7 @@ export function AISettings() {
               <Pencil size={14} aria-hidden="true" />
             </button>
           </div>
-        </label>
+        </div>
 
         <label className="block text-sm text-muted-foreground">
           {t('settings.ai.apiKey')}
@@ -414,7 +421,7 @@ export function AISettings() {
           disabled={busy || requiresAPIKey}
           className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {busy ? t('settings.ai.working') : t('common.save')}
+          {activeAction === 'save' ? t('settings.ai.saving') : t('common.save')}
         </button>
         <button
           type="button"
@@ -422,7 +429,7 @@ export function AISettings() {
           disabled={busy || requiresAPIKey}
           className="rounded-md border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {t('settings.ai.test')}
+          {activeAction === 'test' ? t('settings.ai.testing') : t('settings.ai.test')}
         </button>
       </div>
 

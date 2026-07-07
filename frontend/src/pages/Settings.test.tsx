@@ -34,12 +34,14 @@ function mockOpenAISettings({
   ready = false,
   model = 'gpt-5.4-mini',
   baseUrl = 'https://api.openai.com/v1',
+  healthcheckDelayMs = 0,
   requests,
 }: {
   credentialsStored?: boolean
   ready?: boolean
   model?: string
   baseUrl?: string
+  healthcheckDelayMs?: number
   requests?: Array<{ path: string; body?: unknown }>
 } = {}) {
   server.use(
@@ -91,8 +93,11 @@ function mockOpenAISettings({
       requests?.push({ path: '/api/llm/providers/openai/credentials', body })
       return HttpResponse.json({})
     }),
-    http.post('/api/llm/providers/openai/healthcheck', () => {
+    http.post('/api/llm/providers/openai/healthcheck', async () => {
       requests?.push({ path: '/api/llm/providers/openai/healthcheck' })
+      if (healthcheckDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, healthcheckDelayMs))
+      }
       return HttpResponse.json({ status: 'ok', message: 'OpenAI connection is healthy.' })
     }),
     http.post('/api/llm/providers/openai/activate', () => {
@@ -401,6 +406,9 @@ describe('Settings', () => {
     )
     expect(screen.queryByDisplayValue('https://api.openai.com/v1')).not.toBeInTheDocument()
 
+    await user.click(screen.getByText('https://api.openai.com/v1'))
+    expect(screen.queryByDisplayValue('https://api.openai.com/v1')).not.toBeInTheDocument()
+
     await user.click(screen.getByRole('button', { name: 'Edit base URL' }))
     expect(screen.getByDisplayValue('https://api.openai.com/v1')).toBeInTheDocument()
 
@@ -425,6 +433,22 @@ describe('Settings', () => {
         { path: '/api/llm/providers/openai/healthcheck' },
       ]),
     )
+    expect(await screen.findByText('OpenAI connection is healthy.')).toBeInTheDocument()
+  })
+
+  it('keeps the save label stable while testing the OpenAI connection', async () => {
+    const user = userEvent.setup()
+    mockOpenAISettings({ healthcheckDelayMs: 50 })
+
+    renderSettings('/settings?tab=ai')
+
+    expect(await screen.findByRole('heading', { name: 'OpenAI' })).toBeInTheDocument()
+    await user.type(screen.getByLabelText('API key'), 'sk-test')
+    await user.click(screen.getByRole('button', { name: 'Test' }))
+
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Testing...' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Working...' })).not.toBeInTheDocument()
     expect(await screen.findByText('OpenAI connection is healthy.')).toBeInTheDocument()
   })
 
