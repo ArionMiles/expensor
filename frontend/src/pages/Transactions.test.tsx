@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { useLocation } from 'react-router-dom'
@@ -334,7 +334,7 @@ describe('Transactions', () => {
     expect(container).not.toContainElement(tooltip)
   })
 
-  it('explains ignored transactions in the ignore confirmation modal', async () => {
+  it('uses transaction ignore as the primary action in the ignore confirmation modal', async () => {
     const user = userEvent.setup()
 
     renderTransactions('/transactions')
@@ -342,12 +342,25 @@ describe('Transactions', () => {
     const ignoreButtons = await screen.findAllByRole('button', { name: 'Ignore' })
     await user.click(ignoreButtons[0])
 
-    expect(screen.getByRole('heading', { name: 'Ignore transaction' })).toBeInTheDocument()
+    const heading = screen.getByRole('heading', { name: 'Ignore transaction' })
+    const modalPanel = heading.parentElement!
+
+    expect(heading).toBeInTheDocument()
     expect(
       screen.getByText('Ignored transactions are excluded from totals and dashboard charts.'),
     ).toBeInTheDocument()
     expect(screen.getByText('Merchant: Corner Coffee')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Ignore merchant' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Ignore this transaction' })).toBeInTheDocument()
+
+    const ignoreThisTransaction = within(modalPanel).getByRole('button', {
+      name: 'Ignore this transaction',
+    })
+    const ignoreMerchant = within(modalPanel).getByRole('button', { name: 'Ignore merchant' })
+    expect(
+      within(modalPanel)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['Ignore this transaction', 'Ignore merchant', 'Cancel'])
+    expect(ignoreThisTransaction).toHaveClass('bg-primary')
+    expect(ignoreMerchant).toHaveClass('border')
   })
 })

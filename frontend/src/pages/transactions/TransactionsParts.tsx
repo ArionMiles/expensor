@@ -431,19 +431,19 @@ function IgnoreButton({ tx }: { tx: Transaction }) {
           onReasonChange={setReason}
           onCancel={() => setShowModal(false)}
           actions={[
+            {
+              label: t('transactions.ignore.thisTransaction'),
+              variant: 'primary' as const,
+              onClick: handleJustThis,
+            },
             ...(tx.merchant_info
               ? [
                   {
                     label: t('transactions.ignore.merchantAction'),
-                    variant: 'primary' as const,
                     onClick: handleIgnoreMerchant,
                   },
                 ]
               : []),
-            {
-              label: t('transactions.ignore.thisTransaction'),
-              onClick: handleJustThis,
-            },
           ]}
         />
       )}

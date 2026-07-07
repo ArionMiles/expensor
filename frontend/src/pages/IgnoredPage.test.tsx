@@ -119,4 +119,54 @@ describe('IgnoredPage', () => {
     expect(cells[3]).toHaveTextContent('duplicate')
     expect(within(cells[4]).getByRole('button', { name: /Restore/ })).toBeInTheDocument()
   })
+
+  it('shows the transaction description placeholder for an empty individual transaction reason', () => {
+    mockTransactions.data = [
+      {
+        id: 'tx-1',
+        merchant_info: 'Corner Coffee',
+        amount: 120.5,
+        currency: 'INR',
+        timestamp: '2026-05-17T08:30:00Z',
+      },
+    ]
+
+    renderWithProviders(<IgnoredPage />, { route: '/ignored?tab=individual' })
+
+    const row = screen.getByRole('row', { name: /Corner Coffee/ })
+    const reasonCell = within(row).getAllByRole('cell')[3]
+    const reasonButton = within(reasonCell).getByRole('button', { name: 'Reason' })
+
+    expect(reasonCell).toHaveTextContent('—')
+    expect(reasonCell).not.toHaveTextContent('Reason')
+    expect(reasonButton.firstElementChild).toHaveClass('opacity-30')
+  })
+
+  it('keeps long individual transaction reasons truncated with a full-text tooltip', async () => {
+    const user = userEvent.setup()
+    const longReason =
+      'Claim rejected. Money refunded except GST and platform fees after support review.'
+    mockTransactions.data = [
+      {
+        id: 'tx-1',
+        merchant_info: 'ICICI LOMBARD',
+        amount: 35794.59,
+        currency: 'INR',
+        timestamp: '2026-06-06T12:28:00Z',
+        mute_reason: longReason,
+      },
+    ]
+
+    renderWithProviders(<IgnoredPage />, { route: '/ignored?tab=individual' })
+
+    const row = screen.getByRole('row', { name: /ICICI LOMBARD/ })
+    const reasonCell = within(row).getAllByRole('cell')[3]
+    const reasonButton = within(reasonCell).getByRole('button', { name: longReason })
+
+    expect(reasonButton).toHaveClass('truncate', 'w-full', 'max-w-full')
+
+    await user.hover(reasonButton)
+
+    expect(screen.getAllByText(longReason)).toHaveLength(2)
+  })
 })
