@@ -73,9 +73,6 @@ func (r *pgRuntimeRepository) GetReaderToken(ctx context.Context, tenant Tenant,
 }
 
 func (r *pgRuntimeRepository) DeleteReaderToken(ctx context.Context, tenant Tenant, reader string) error {
-	if strings.TrimSpace(reader) == "" {
-		return errors.New("reader cannot be blank")
-	}
 	_, err := r.pool.Exec(ctx, `
 		UPDATE reader_runtime
 		SET oauth_token = NULL, oauth_token_ciphertext = NULL, updated_at = NOW()
@@ -114,9 +111,6 @@ func (r *pgRuntimeRepository) GetLLMProviderCredentials(ctx context.Context, ten
 }
 
 func (r *pgRuntimeRepository) DeleteLLMProviderRuntime(ctx context.Context, tenant Tenant, provider string) error {
-	if strings.TrimSpace(provider) == "" {
-		return errors.New("llm provider cannot be blank")
-	}
 	_, err := r.pool.Exec(ctx, `DELETE FROM llm_provider_runtime WHERE tenant_id IS NOT DISTINCT FROM $1 AND provider = $2`, tenantIDParam(tenant), provider)
 	if err != nil {
 		return fmt.Errorf("deleting llm provider runtime for %q: %w", provider, err)
@@ -125,9 +119,6 @@ func (r *pgRuntimeRepository) DeleteLLMProviderRuntime(ctx context.Context, tena
 }
 
 func (r *pgRuntimeRepository) SetActiveLLMProvider(ctx context.Context, tenant Tenant, provider string) error {
-	if strings.TrimSpace(provider) == "" {
-		return errors.New("llm provider cannot be blank")
-	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("starting llm provider activation transaction: %w", err)
@@ -196,9 +187,6 @@ func (r *pgRuntimeRepository) GetActiveLLMProviderRuntime(ctx context.Context, t
 }
 
 func (r *pgRuntimeRepository) DeleteReaderRuntime(ctx context.Context, tenant Tenant, reader string) error {
-	if strings.TrimSpace(reader) == "" {
-		return errors.New("reader cannot be blank")
-	}
 	_, err := r.pool.Exec(ctx, `DELETE FROM reader_runtime WHERE tenant_id IS NOT DISTINCT FROM $1 AND reader = $2`, tenantIDParam(tenant), reader)
 	if err != nil {
 		return fmt.Errorf("deleting reader runtime for %q: %w", reader, err)
@@ -309,9 +297,6 @@ func (r *pgRuntimeRepository) SetCommunityURL(ctx context.Context, url string) e
 }
 
 func (r *pgRuntimeRepository) writeReaderEncryptedJSON(ctx context.Context, tenant Tenant, reader, column string, value []byte) error {
-	if strings.TrimSpace(reader) == "" {
-		return errors.New("reader cannot be blank")
-	}
 	if !json.Valid(value) {
 		return fmt.Errorf("%s for reader %q must be valid JSON", column, reader)
 	}
@@ -339,9 +324,6 @@ func (r *pgRuntimeRepository) writeReaderEncryptedJSON(ctx context.Context, tena
 
 func (r *pgRuntimeRepository) readReaderEncryptedJSON(ctx context.Context, tenant Tenant, reader, column string) ([]byte, bool, error) {
 	var ciphertext []byte
-	if strings.TrimSpace(reader) == "" {
-		return nil, false, errors.New("reader cannot be blank")
-	}
 	if r.secretBox == nil {
 		return nil, false, errors.New("store secret box is not initialized")
 	}
@@ -369,9 +351,6 @@ func (r *pgRuntimeRepository) readReaderEncryptedJSON(ctx context.Context, tenan
 }
 
 func (r *pgRuntimeRepository) writeReaderConfigJSON(ctx context.Context, tenant Tenant, reader string, value []byte) error {
-	if strings.TrimSpace(reader) == "" {
-		return errors.New("reader cannot be blank")
-	}
 	if !json.Valid(value) {
 		return fmt.Errorf("%s for reader %q must be valid JSON", readerRuntimeConfig, reader)
 	}
@@ -387,9 +366,6 @@ func (r *pgRuntimeRepository) writeReaderConfigJSON(ctx context.Context, tenant 
 
 func (r *pgRuntimeRepository) readReaderConfigJSON(ctx context.Context, tenant Tenant, reader string) ([]byte, bool, error) {
 	var value []byte
-	if strings.TrimSpace(reader) == "" {
-		return nil, false, errors.New("reader cannot be blank")
-	}
 	err := r.pool.QueryRow(ctx, `
 		SELECT config
 		FROM reader_runtime
@@ -405,9 +381,6 @@ func (r *pgRuntimeRepository) readReaderConfigJSON(ctx context.Context, tenant T
 }
 
 func (r *pgRuntimeRepository) writeLLMProviderConfigJSON(ctx context.Context, tenant Tenant, provider string, value []byte) error {
-	if strings.TrimSpace(provider) == "" {
-		return errors.New("llm provider cannot be blank")
-	}
 	if !json.Valid(value) {
 		return fmt.Errorf("config for llm provider %q must be valid JSON", provider)
 	}
@@ -423,9 +396,6 @@ func (r *pgRuntimeRepository) writeLLMProviderConfigJSON(ctx context.Context, te
 
 func (r *pgRuntimeRepository) readLLMProviderConfigJSON(ctx context.Context, tenant Tenant, provider string) ([]byte, bool, error) {
 	var value []byte
-	if strings.TrimSpace(provider) == "" {
-		return nil, false, errors.New("llm provider cannot be blank")
-	}
 	err := r.pool.QueryRow(ctx, `
 		SELECT config
 		FROM llm_provider_runtime
@@ -441,9 +411,6 @@ func (r *pgRuntimeRepository) readLLMProviderConfigJSON(ctx context.Context, ten
 }
 
 func (r *pgRuntimeRepository) writeLLMProviderEncryptedJSON(ctx context.Context, tenant Tenant, provider string, value []byte) error {
-	if strings.TrimSpace(provider) == "" {
-		return errors.New("llm provider cannot be blank")
-	}
 	if !json.Valid(value) {
 		return fmt.Errorf("%s for llm provider %q must be valid JSON", llmProviderCredentials, provider)
 	}
@@ -466,9 +433,6 @@ func (r *pgRuntimeRepository) writeLLMProviderEncryptedJSON(ctx context.Context,
 
 func (r *pgRuntimeRepository) readLLMProviderEncryptedJSON(ctx context.Context, tenant Tenant, provider string) ([]byte, bool, error) {
 	var ciphertext []byte
-	if strings.TrimSpace(provider) == "" {
-		return nil, false, errors.New("llm provider cannot be blank")
-	}
 	if r.secretBox == nil {
 		return nil, false, errors.New("store secret box is not initialized")
 	}
