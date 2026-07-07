@@ -3,6 +3,7 @@
 package component_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -59,4 +60,135 @@ func TestSettingsRoundTripAndCheckpointClear(t *testing.T) {
 			t.Fatalf("expected null checkpoint after clear, got %#v", checkpointAfterBody)
 		}
 	})
+}
+
+func TestLLMProviderRuntimeLifecycle(t *testing.T) {
+	helpers.WaitForHealthy(t)
+	client := helpers.NewClient(t)
+
+	type modelOption struct {
+		ID          string `json:"id"`
+		DisplayName string `json:"display_name"`
+		Quality     string `json:"quality"`
+		Cost        string `json:"cost"`
+	}
+	type provider struct {
+		Name         string        `json:"name"`
+		DisplayName  string        `json:"display_name"`
+		AuthType     string        `json:"auth_type"`
+		Capabilities []string      `json:"capabilities"`
+		ModelOptions []modelOption `json:"model_options"`
+	}
+	type status struct {
+		Name              string          `json:"name"`
+		Config            json.RawMessage `json:"config"`
+		ConfigPresent     bool            `json:"config_present"`
+		CredentialsStored bool            `json:"credentials_stored"`
+		Active            bool            `json:"active"`
+		Ready             bool            `json:"ready"`
+	}
+
+	providersResp := client.Get(t, "/api/llm/providers")
+	helpers.RequireStatus(t, providersResp, http.StatusOK)
+	providers := helpers.DecodeJSON[[]provider](t, providersResp)
+	if len(providers) != 1 || providers[0].Name != "openai" || providers[0].DisplayName != "OpenAI" {
+		t.Fatalf("unexpected providers: %#v", providers)
+	}
+	if providers[0].AuthType != "api_key" || len(providers[0].ModelOptions) == 0 {
+		t.Fatalf("expected OpenAI API-key provider with model options, got %#v", providers[0])
+	}
+
+	cases := []struct {
+		name              string
+		configPresent     bool
+		credentialsStored bool
+		ready             bool
+		assertConfig       func(t *testing.T, raw json.RawMessage)
+	}{
+		{
+			name: "initially unconfigured",
+			assertConfig: func(t *testing.T, raw json.RawMessage) {
+				t.Helper()
+				if string(raw) != "{}" {
+					t.Fatalf("initial config = %s, want empty object", raw)
+				}
+			},
+		},
+		{
+			name:              "configured with stored credentials but inactive",
+			configPresent:     true,
+			credentialsStored: true,
+			assertConfig: func(t *testing.T, raw json.RawMessage) {
+				t.Helper()
+				var config map[string]string
+				if err := json.Unmarshal(raw, &config); err != nil {
+					t.Fatalf("decode config: %v", err)
+				}
+				if config["model"] != "gpt-5.4-mini" || config["base_url"] != "https://api.openai.com/v1" {
+					t.Fatalf("unexpected config: %#v", config)
+				}
+			},
+		},
+		{
+			name: "disconnected",
+			assertConfig: func(t *testing.T, raw json.RawMessage) {
+				t.Helper()
+				if string(raw) != "{}" {
+					t.Fatalf("disconnected config = %s, want empty object", raw)
+				}
+			},
+		},
+	}
+
+	statusResp := client.Get(t, "/api/llm/providers/openai/status")
+	helpers.RequireStatus(t, statusResp, http.StatusOK)
+	assertLLMStatus(t, helpers.DecodeJSON[status](t, statusResp), cases[0])
+
+	saveConfig := client.JSON(t, http.MethodPut, "/api/llm/providers/openai/config", map[string]any{
+		"config": map[string]string{
+			"model":    "gpt-5.4-mini",
+			"base_url": "https://api.openai.com/v1",
+		},
+	})
+	helpers.RequireStatus(t, saveConfig, http.StatusOK)
+
+	saveCredentials := client.JSON(t, http.MethodPut, "/api/llm/providers/openai/credentials", map[string]string{
+		"api_key": "  sk-component-test  ",
+	})
+	helpers.RequireStatus(t, saveCredentials, http.StatusOK)
+
+	configuredResp := client.Get(t, "/api/llm/providers/openai/status")
+	helpers.RequireStatus(t, configuredResp, http.StatusOK)
+	assertLLMStatus(t, helpers.DecodeJSON[status](t, configuredResp), cases[1])
+
+	disconnect := client.JSON(t, http.MethodDelete, "/api/llm/providers/openai", nil)
+	helpers.RequireStatus(t, disconnect, http.StatusNoContent)
+
+	disconnectedResp := client.Get(t, "/api/llm/providers/openai/status")
+	helpers.RequireStatus(t, disconnectedResp, http.StatusOK)
+	assertLLMStatus(t, helpers.DecodeJSON[status](t, disconnectedResp), cases[2])
+}
+
+func assertLLMStatus(t *testing.T, got struct {
+	Name              string          `json:"name"`
+	Config            json.RawMessage `json:"config"`
+	ConfigPresent     bool            `json:"config_present"`
+	CredentialsStored bool            `json:"credentials_stored"`
+	Active            bool            `json:"active"`
+	Ready             bool            `json:"ready"`
+}, want struct {
+	name              string
+	configPresent     bool
+	credentialsStored bool
+	ready             bool
+	assertConfig       func(t *testing.T, raw json.RawMessage)
+}) {
+	t.Helper()
+	if got.Name != "openai" {
+		t.Fatalf("%s status provider = %q, want openai", want.name, got.Name)
+	}
+	if got.ConfigPresent != want.configPresent || got.CredentialsStored != want.credentialsStored || got.Ready != want.ready || got.Active {
+		t.Fatalf("%s status = %#v", want.name, got)
+	}
+	want.assertConfig(t, got.Config)
 }

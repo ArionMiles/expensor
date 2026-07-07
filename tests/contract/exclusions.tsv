@@ -12,6 +12,12 @@ GET	/providers/{name}/status	live provider readiness state
 GET	/providers/{name}/config	live provider runtime config
 PUT	/providers/{name}/config	live provider runtime config
 GET	/providers/{name}/credentials/status	external OAuth credential state
+PUT	/llm/providers/{name}/config	live LLM provider runtime config
+PUT	/llm/providers/{name}/credentials	LLM provider secret storage state
+POST	/llm/providers/{name}/healthcheck	external LLM provider connectivity
+POST	/llm/providers/{name}/activate	external LLM provider connectivity and runtime activation
+DELETE	/llm/providers/{name}	live LLM provider runtime disconnect state
+POST	/rule-drafts	external LLM provider generation state
 POST	/daemon/start	live reader runtime start state
 POST	/daemon/rescan	live reader runtime rescan state
 POST	/config/sync	external community content sync state

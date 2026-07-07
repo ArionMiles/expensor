@@ -120,6 +120,15 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("GET /api/scanning/status", h.GetScanningStatus)
 	mux.HandleFunc("POST /api/scanning/rescans", h.CreateScanningRescan)
 
+	// LLM providers
+	mux.HandleFunc("GET /api/llm/providers", h.ListLLMProviders)
+	mux.HandleFunc("GET /api/llm/providers/{name}/status", h.GetLLMProviderStatus)
+	mux.HandleFunc("PUT /api/llm/providers/{name}/config", h.SaveLLMProviderConfig)
+	mux.HandleFunc("PUT /api/llm/providers/{name}/credentials", h.SaveLLMProviderCredentials)
+	mux.HandleFunc("POST /api/llm/providers/{name}/healthcheck", h.HealthCheckLLMProvider)
+	mux.HandleFunc("POST /api/llm/providers/{name}/activate", h.ActivateLLMProvider)
+	mux.HandleFunc("DELETE /api/llm/providers/{name}", h.DisconnectLLMProvider)
+
 	// Provider listing
 	mux.HandleFunc("GET /api/providers", h.ListProviders)
 
@@ -200,6 +209,7 @@ func registerRoutes(mux *http.ServeMux, h *Handlers) {
 	mux.HandleFunc("GET /api/rules", h.ListRules)
 	mux.HandleFunc("GET /api/rules/export", h.ExportRules)
 	mux.HandleFunc("POST /api/rules/import", h.ImportRules)
+	mux.HandleFunc("POST /api/rule-drafts", h.CreateRuleDraft)
 	mux.HandleFunc("POST /api/rules", h.CreateRule)
 	mux.HandleFunc("PUT /api/rules/{id}", h.UpdateRule)
 	mux.HandleFunc("DELETE /api/rules/{id}", h.DeleteRule)

@@ -409,15 +409,26 @@ export function SourceValueCombobox({
 
 export function ResultValue({
   result,
+  expected = '',
+  active = true,
   optional = false,
 }: {
   result: RegexResult
+  expected?: string
+  active?: boolean
   optional?: boolean
 }) {
   const { t } = useI18n()
+  const expectedValue = expected.trim()
   if (result.invalid) return <span className="text-destructive">{t('common.invalid')}</span>
+  if (!active) return <span className="text-muted-foreground">{t('common.notSet')}</span>
   if (result.match !== null && result.match.trim() !== '') {
-    return <span className="font-mono text-green-500">{result.match}</span>
+    const matchesExpected = expectedValue === '' || result.match.trim() === expectedValue
+    return (
+      <span className={`font-mono ${matchesExpected ? 'text-green-500' : 'text-destructive'}`}>
+        {result.match}
+      </span>
+    )
   }
   if (optional) return <span className="text-muted-foreground">{t('common.optional')}</span>
   return <span className="text-destructive">{t('common.missing')}</span>

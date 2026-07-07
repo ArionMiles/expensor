@@ -121,6 +121,15 @@ const extractionDiagnostics: ExtractionDiagnostic[] = [
   },
 ]
 
+let openAIStatus = {
+  name: 'openai',
+  config: { model: 'gpt-5.4-mini', base_url: 'https://api.openai.com/v1' },
+  config_present: false,
+  credentials_stored: false,
+  active: false,
+  ready: false,
+}
+
 export const handlers = [
   http.get('/api/health', () => HttpResponse.json({ status: 'ok' })),
   http.get('/api/bootstrap', () => HttpResponse.json({ required: false })),
@@ -335,6 +344,69 @@ export const handlers = [
       ready: true,
     }),
   ),
+  http.get('/api/llm/providers', () =>
+    HttpResponse.json([
+      {
+        name: 'openai',
+        display_name: 'OpenAI',
+        description: 'OpenAI API provider',
+        auth_type: 'api_key',
+        capabilities: ['text_generation', 'json_schema'],
+        model_options: [
+          {
+            id: 'gpt-5.4-mini',
+            display_name: 'GPT-5.4 mini',
+            quality: 'Balanced',
+            cost: 'Lower',
+            description: 'Recommended for rule drafting.',
+            recommended: true,
+          },
+          {
+            id: 'gpt-5.4',
+            display_name: 'GPT-5.4',
+            quality: 'High',
+            cost: 'Medium',
+            description: 'Use when drafts need more reasoning headroom.',
+          },
+        ],
+      },
+    ]),
+  ),
+  http.get('/api/llm/providers/openai/status', () => HttpResponse.json(openAIStatus)),
+  http.put('/api/llm/providers/openai/config', async ({ request }) => {
+    const body = (await request.json()) as { config?: { model?: string; base_url?: string } }
+    openAIStatus = {
+      ...openAIStatus,
+      config: {
+        model: body.config?.model ?? openAIStatus.config.model,
+        base_url: body.config?.base_url ?? openAIStatus.config.base_url,
+      },
+      config_present: true,
+    }
+    return HttpResponse.json({ status: 'saved' })
+  }),
+  http.put('/api/llm/providers/openai/credentials', () => {
+    openAIStatus = { ...openAIStatus, credentials_stored: true }
+    return HttpResponse.json({ status: 'saved' })
+  }),
+  http.post('/api/llm/providers/openai/healthcheck', () =>
+    HttpResponse.json({ status: 'ok', message: 'OpenAI connection is healthy.' }),
+  ),
+  http.post('/api/llm/providers/openai/activate', () => {
+    openAIStatus = { ...openAIStatus, active: true, ready: true }
+    return HttpResponse.json({ status: 'active' })
+  }),
+  http.delete('/api/llm/providers/openai', () => {
+    openAIStatus = {
+      name: 'openai',
+      config: { model: 'gpt-5.4-mini', base_url: 'https://api.openai.com/v1' },
+      config_present: false,
+      credentials_stored: false,
+      active: false,
+      ready: false,
+    }
+    return new HttpResponse(null, { status: 204 })
+  }),
   http.delete('/api/config/providers/:reader/checkpoint', () => HttpResponse.json({})),
   http.post('/api/daemon/rescan', () => HttpResponse.json({ status: 'rescanning' })),
   http.post('/api/scanning/rescans', () => HttpResponse.json({ status: 'rescanning' })),

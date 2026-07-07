@@ -13,6 +13,10 @@ func (c stubClient) Complete(context.Context, Request) (Response, error) {
 	return Response{Text: "ok"}, nil
 }
 
+func (c stubClient) HealthCheck(context.Context) error {
+	return nil
+}
+
 func testProvider(name string, capabilities ...Capability) Provider {
 	return Provider{
 		Metadata: ProviderMetadata{

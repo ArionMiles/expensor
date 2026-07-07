@@ -31,6 +31,8 @@ POST	/transactions/{id}/labels	add transaction labels
 DELETE	/transactions/{id}/labels/{label}	remove transaction label
 GET	/providers	provider metadata
 GET	/providers/{name}/guide	provider setup guide
+GET	/llm/providers	LLM provider metadata
+GET	/llm/providers/{name}/status	LLM provider runtime status
 GET	/rules	rule listing
 POST	/rules	create rule
 GET	/rules/export	rule export document

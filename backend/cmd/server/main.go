@@ -10,10 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ArionMiles/expensor/backend/internal/assistant"
 	"github.com/ArionMiles/expensor/backend/internal/daemon"
 	scanscheduler "github.com/ArionMiles/expensor/backend/internal/daemon/scheduler"
 	"github.com/ArionMiles/expensor/backend/internal/httpapi"
 	"github.com/ArionMiles/expensor/backend/internal/llm"
+	openaiProvider "github.com/ArionMiles/expensor/backend/internal/llm/openai"
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
@@ -66,12 +68,17 @@ func run() int {
 	}
 	logger.Info("loaded embedded content", "rules", len(content.rules), "mcc_codes", len(content.mccEntries), "merchant_categories", len(content.catEntries))
 
-	promptCatalog, err := llm.LoadPromptCatalog(llmPromptsFS, "content/llm/prompts")
+	promptCatalog, err := llm.LoadPromptCatalog(llmContentFS, "content/llm/prompts")
 	if err != nil {
 		logger.Error("failed to load llm prompt catalog", "error", err)
 		return 1
 	}
 	logger.Info("loaded llm prompt catalog", "prompts", promptCatalog.Len())
+	openAIModelOptions, err := loadLLMModelOptions(llmContentFS, openaiProvider.ProviderName)
+	if err != nil {
+		logger.Error("failed to load OpenAI model options", "error", err)
+		return 1
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	sigChan := make(chan os.Signal, 1)
@@ -107,11 +114,22 @@ func run() int {
 	var st httpapi.Storer = instrumentedStore
 
 	llmRegistry := llm.NewRegistry()
+	if err := llmRegistry.RegisterProvider(openaiProvider.Provider(openAIModelOptions)); err != nil {
+		logger.Error("failed to register llm provider", "error", err)
+		return 1
+	}
+	llmLogger := logger.With("component", "llm")
+	llmScope := observability.NewScope(llmLogger, "github.com/ArionMiles/expensor/backend/internal/llm")
 	llmRouter := llm.NewRouter(llm.RouterConfig{
 		Registry: llmRegistry,
 		Runtime:  instrumentedStore,
 		Prompts:  promptCatalog,
+		Scope:    llmScope,
+		Logger:   llmLogger,
 	})
+	assistantLogger := logger.With("component", "assistant")
+	assistantScope := observability.NewScope(assistantLogger, "github.com/ArionMiles/expensor/backend/internal/assistant")
+	ruleDrafts := assistant.NewInstrumentedRuleDrafter(assistant.NewRuleDraftService(llmRouter), assistantScope, assistantLogger)
 	logger.Info("LLM router initialized", "providers", len(llmRegistry.ListProviders()), "prompts", llmRouter.PromptCatalog().Len())
 
 	dm := &daemonManager{}
@@ -155,6 +173,10 @@ func run() int {
 	})
 	handlers := httpapi.NewHandlers(httpapi.HandlersConfig{
 		Registry:           registry,
+		LLMRegistry:        llmRegistry,
+		LLMRouter:          llmRouter,
+		RuleDrafts:         ruleDrafts,
+		LLMScope:           llmScope,
 		Store:              st,
 		Daemon:             dm,
 		Version:            config.Version,

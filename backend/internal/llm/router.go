@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 
+	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
@@ -21,6 +23,8 @@ type RouterConfig struct {
 	Registry *Registry
 	Runtime  RuntimeStore
 	Prompts  *PromptCatalog
+	Scope    *observability.Scope
+	Logger   *slog.Logger
 }
 
 // Router resolves the active tenant provider and enforces capability requirements.
@@ -28,6 +32,8 @@ type Router struct {
 	registry *Registry
 	runtime  RuntimeStore
 	prompts  *PromptCatalog
+	scope    *observability.Scope
+	logger   *slog.Logger
 }
 
 // NewRouter creates an LLM router.
@@ -40,6 +46,8 @@ func NewRouter(cfg RouterConfig) *Router {
 		registry: registry,
 		runtime:  cfg.Runtime,
 		prompts:  cfg.Prompts,
+		scope:    cfg.Scope,
+		logger:   cfg.Logger,
 	}
 }
 
@@ -69,6 +77,7 @@ func (r *Router) Complete(ctx context.Context, tenant store.Tenant, req Request)
 	if err != nil {
 		return Response{}, fmt.Errorf("creating llm provider %q client: %w", runtime.Provider, err)
 	}
+	client = NewInstrumentedClient(client, runtime.Provider, r.scope, r.logger)
 	return client.Complete(ctx, req)
 }
 

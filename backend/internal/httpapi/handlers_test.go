@@ -19,7 +19,9 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/ArionMiles/expensor/backend/internal/assistant"
 	"github.com/ArionMiles/expensor/backend/internal/auth"
+	"github.com/ArionMiles/expensor/backend/internal/llm"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
@@ -82,6 +84,9 @@ type mockStore struct {
 	readerSecrets              map[string][]byte
 	readerTokens               map[string][]byte
 	readerConfigs              map[string]json.RawMessage
+	llmProviderConfigs         map[string]json.RawMessage
+	llmProviderCredentials     map[string][]byte
+	activeLLMProvider          string
 	getFacetsErr               error
 	facets                     *store.Facets
 	labels                     []store.Label
@@ -591,6 +596,82 @@ func (m *mockStore) DeleteReaderRuntime(_ context.Context, tenant store.Tenant, 
 	return nil
 }
 
+func (m *mockStore) llmProviderRuntimeKey(tenant store.Tenant, provider string) string {
+	if tenant.ID == "" {
+		panic("tenant id is required for llm provider runtime mock")
+	}
+	return tenant.ID + "/" + provider
+}
+
+func (m *mockStore) SetLLMProviderConfig(_ context.Context, tenant store.Tenant, provider string, config json.RawMessage) error {
+	if m.llmProviderConfigs == nil {
+		m.llmProviderConfigs = make(map[string]json.RawMessage)
+	}
+	m.llmProviderConfigs[m.llmProviderRuntimeKey(tenant, provider)] = append(json.RawMessage(nil), config...)
+	return nil
+}
+
+func (m *mockStore) GetLLMProviderConfig(_ context.Context, tenant store.Tenant, provider string) (json.RawMessage, bool, error) {
+	cfg, ok := m.llmProviderConfigs[m.llmProviderRuntimeKey(tenant, provider)]
+	return append(json.RawMessage(nil), cfg...), ok, nil
+}
+
+func (m *mockStore) SetLLMProviderCredentials(_ context.Context, tenant store.Tenant, provider string, credentials []byte) error {
+	if m.llmProviderCredentials == nil {
+		m.llmProviderCredentials = make(map[string][]byte)
+	}
+	m.llmProviderCredentials[m.llmProviderRuntimeKey(tenant, provider)] = append([]byte(nil), credentials...)
+	return nil
+}
+
+func (m *mockStore) GetLLMProviderCredentials(
+	_ context.Context,
+	tenant store.Tenant,
+	provider string,
+) (credentials []byte, found bool, err error) {
+	credentials, ok := m.llmProviderCredentials[m.llmProviderRuntimeKey(tenant, provider)]
+	return append([]byte(nil), credentials...), ok, nil
+}
+
+func (m *mockStore) DeleteLLMProviderRuntime(_ context.Context, tenant store.Tenant, provider string) error {
+	key := m.llmProviderRuntimeKey(tenant, provider)
+	delete(m.llmProviderConfigs, key)
+	delete(m.llmProviderCredentials, key)
+	if m.activeLLMProvider == provider {
+		m.activeLLMProvider = ""
+	}
+	return nil
+}
+
+func (m *mockStore) SetActiveLLMProvider(_ context.Context, _ store.Tenant, provider string) error {
+	m.activeLLMProvider = provider
+	return nil
+}
+
+func (m *mockStore) ClearActiveLLMProvider(_ context.Context, _ store.Tenant) error {
+	m.activeLLMProvider = ""
+	return nil
+}
+
+func (m *mockStore) GetActiveLLMProviderRuntime(
+	_ context.Context,
+	tenant store.Tenant,
+) (store.LLMProviderRuntime, bool, error) {
+	if m.activeLLMProvider == "" {
+		return store.LLMProviderRuntime{}, false, nil
+	}
+	key := m.llmProviderRuntimeKey(tenant, m.activeLLMProvider)
+	config := append(json.RawMessage(nil), m.llmProviderConfigs[key]...)
+	credentials := append([]byte(nil), m.llmProviderCredentials[key]...)
+	return store.LLMProviderRuntime{
+		Provider:       m.activeLLMProvider,
+		Config:         config,
+		Credentials:    credentials,
+		HasCredentials: len(credentials) > 0,
+		Active:         true,
+	}, true, nil
+}
+
 func (m *mockStore) GetFacets(_ context.Context, _ store.Tenant) (*store.Facets, error) {
 	if m.getFacetsErr != nil {
 		return nil, m.getFacetsErr
@@ -992,6 +1073,62 @@ func (r *testSearchReader) Search(_ context.Context, query api.EmailSearchQuery)
 	return r.result, r.err
 }
 
+type testLLMClient struct {
+	healthErr error
+}
+
+func (c testLLMClient) Complete(context.Context, llm.Request) (llm.Response, error) {
+	return llm.Response{}, errors.New("not implemented in test stub")
+}
+
+func (c testLLMClient) HealthCheck(context.Context) error {
+	return c.healthErr
+}
+
+func testLLMProvider(t *testing.T, client llm.Client) *llm.Registry {
+	t.Helper()
+	registry := llm.NewRegistry()
+	if err := registry.RegisterProvider(llm.Provider{
+		Metadata: llm.ProviderMetadata{
+			Name:         "openai",
+			DisplayName:  "OpenAI",
+			Description:  "OpenAI API provider",
+			Auth:         llm.AuthSpec{Type: llm.AuthTypeAPIKey, Required: true},
+			Capabilities: []llm.Capability{llm.CapabilityTextGeneration, llm.CapabilityJSONSchema},
+			ModelOptions: []llm.ModelOption{{
+				ID:          "gpt-5.4-mini",
+				DisplayName: "GPT-5.4 mini",
+				Quality:     "Balanced",
+				Cost:        "Lower",
+				Recommended: true,
+			}},
+		},
+		NewClient: func(llm.ClientConfig) (llm.Client, error) {
+			return client, nil
+		},
+	}); err != nil {
+		t.Fatalf("RegisterProvider() error = %v", err)
+	}
+	return registry
+}
+
+type stubRuleDraftService struct {
+	result assistant.RuleDraftResult
+	err    error
+	input  assistant.RuleDraftInput
+	tenant store.Tenant
+}
+
+func (s *stubRuleDraftService) DraftRule(
+	_ context.Context,
+	tenant store.Tenant,
+	input assistant.RuleDraftInput,
+) (assistant.RuleDraftResult, error) {
+	s.tenant = tenant
+	s.input = input
+	return s.result, s.err
+}
+
 func get(h http.HandlerFunc, target string) *httptest.ResponseRecorder {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, target, nil)
 	rr := httptest.NewRecorder()
@@ -1134,6 +1271,220 @@ func TestListReaders_NormalizesNilConfigSchema(t *testing.T) {
 	if len(readers[0].ConfigSchema) != 0 {
 		t.Fatalf("config_schema len = %d, want 0", len(readers[0].ConfigSchema))
 	}
+}
+
+func TestLLMProviderLifecycle(t *testing.T) {
+	ms := &mockStore{}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	h.llmRegistry = testLLMProvider(t, testLLMClient{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+
+	listReq := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/llm/providers", nil)
+	listRR := httptest.NewRecorder()
+	h.ListLLMProviders(listRR, listReq)
+	if listRR.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", listRR.Code, listRR.Body.String())
+	}
+	var providers []llmProviderInfoJSON
+	decodeJSON(t, listRR.Body.String(), &providers)
+	if len(providers) != 1 || providers[0].Name != "openai" || len(providers[0].ModelOptions) != 1 {
+		t.Fatalf("providers = %+v, want OpenAI with model options", providers)
+	}
+
+	configReq := httptest.NewRequestWithContext(
+		ctx,
+		http.MethodPut,
+		"/api/llm/providers/openai/config",
+		strings.NewReader(`{"config":{"model":"gpt-5.4-mini","base_url":"https://api.openai.com/v1"}}`),
+	)
+	configReq.SetPathValue("name", "openai")
+	configRR := httptest.NewRecorder()
+	h.SaveLLMProviderConfig(configRR, configReq)
+	if configRR.Code != http.StatusOK {
+		t.Fatalf("save config status = %d body=%s", configRR.Code, configRR.Body.String())
+	}
+	if string(ms.llmProviderConfigs["tenant-a/openai"]) != `{"model":"gpt-5.4-mini","base_url":"https://api.openai.com/v1"}` {
+		t.Fatalf("stored config = %s", ms.llmProviderConfigs["tenant-a/openai"])
+	}
+
+	credentialsReq := httptest.NewRequestWithContext(
+		ctx,
+		http.MethodPut,
+		"/api/llm/providers/openai/credentials",
+		strings.NewReader(`{"api_key":"  sk-test  "}`),
+	)
+	credentialsReq.SetPathValue("name", "openai")
+	credentialsRR := httptest.NewRecorder()
+	h.SaveLLMProviderCredentials(credentialsRR, credentialsReq)
+	if credentialsRR.Code != http.StatusOK {
+		t.Fatalf("save credentials status = %d body=%s", credentialsRR.Code, credentialsRR.Body.String())
+	}
+	if string(ms.llmProviderCredentials["tenant-a/openai"]) != `{"api_key":"sk-test"}` {
+		t.Fatalf("stored credentials = %s", ms.llmProviderCredentials["tenant-a/openai"])
+	}
+
+	activateReq := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/llm/providers/openai/activate", nil)
+	activateReq.SetPathValue("name", "openai")
+	activateRR := httptest.NewRecorder()
+	h.ActivateLLMProvider(activateRR, activateReq)
+	if activateRR.Code != http.StatusOK {
+		t.Fatalf("activate status = %d body=%s", activateRR.Code, activateRR.Body.String())
+	}
+	if ms.activeLLMProvider != "openai" {
+		t.Fatalf("active provider = %q, want openai", ms.activeLLMProvider)
+	}
+
+	statusReq := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/llm/providers/openai/status", nil)
+	statusReq.SetPathValue("name", "openai")
+	statusRR := httptest.NewRecorder()
+	h.GetLLMProviderStatus(statusRR, statusReq)
+	if statusRR.Code != http.StatusOK {
+		t.Fatalf("status response = %d body=%s", statusRR.Code, statusRR.Body.String())
+	}
+	var status llmProviderStatusJSON
+	decodeJSON(t, statusRR.Body.String(), &status)
+	if !status.ConfigPresent || !status.CredentialsStored || !status.Active || !status.Ready {
+		t.Fatalf("status = %+v, want configured active ready provider", status)
+	}
+
+	disconnectReq := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/api/llm/providers/openai", nil)
+	disconnectReq.SetPathValue("name", "openai")
+	disconnectRR := httptest.NewRecorder()
+	h.DisconnectLLMProvider(disconnectRR, disconnectReq)
+	if disconnectRR.Code != http.StatusNoContent {
+		t.Fatalf("disconnect status = %d body=%s", disconnectRR.Code, disconnectRR.Body.String())
+	}
+	if _, ok := ms.llmProviderConfigs["tenant-a/openai"]; ok {
+		t.Fatal("config was not removed")
+	}
+	if _, ok := ms.llmProviderCredentials["tenant-a/openai"]; ok {
+		t.Fatal("credentials were not removed")
+	}
+	if ms.activeLLMProvider != "" {
+		t.Fatalf("active provider = %q, want cleared", ms.activeLLMProvider)
+	}
+}
+
+func TestActivateLLMProviderMapsQuotaErrors(t *testing.T) {
+	ms := &mockStore{
+		llmProviderConfigs:     map[string]json.RawMessage{"tenant-a/openai": json.RawMessage(`{"model":"gpt-5.4-mini"}`)},
+		llmProviderCredentials: map[string][]byte{"tenant-a/openai": []byte(`{"api_key":"sk-test"}`)},
+	}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	h.llmRegistry = testLLMProvider(t, testLLMClient{healthErr: &llm.ProviderError{
+		Provider:   "openai",
+		StatusCode: http.StatusTooManyRequests,
+		Code:       "insufficient_quota",
+		Message:    "raw provider quota message",
+	}})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/llm/providers/openai/activate", nil)
+	req.SetPathValue("name", "openai")
+	rr := httptest.NewRecorder()
+
+	h.ActivateLLMProvider(rr, req)
+
+	if rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	if ms.activeLLMProvider != "" {
+		t.Fatalf("active provider = %q, want not activated", ms.activeLLMProvider)
+	}
+	if !strings.Contains(rr.Body.String(), "OpenAI API quota is unavailable") || strings.Contains(rr.Body.String(), "raw provider quota message") {
+		t.Fatalf("error body = %s, want friendly quota message", rr.Body.String())
+	}
+}
+
+func TestCreateRuleDraftReturnsDraftMatchesAndValidationIssues(t *testing.T) {
+	service := &stubRuleDraftService{result: assistant.RuleDraftResult{
+		Draft: assistant.RuleDraft{
+			Name:            "ICICI Credit Card",
+			SenderEmails:    []string{"alerts@example.com"},
+			SubjectContains: "Card alert",
+			AmountRegex:     `INR\s+([0-9.]+)`,
+			MerchantRegex:   `at\s+(.+)`,
+			CurrencyRegex:   `(INR)`,
+			Source:          api.Source{Type: "Credit Card", Bank: "ICICI", Label: "ICICI Credit Card"},
+			Notes:           "review amount",
+		},
+		Matches: []assistant.SampleMatch{{
+			SampleIndex: 1,
+			SampleName:  "Sample 2",
+			Amount:      "1521.00",
+			Merchant:    "Amazon",
+			Currency:    "INR",
+		}},
+		ValidationIssues: []assistant.RuleDraftSampleIssue{{
+			SampleIndex: 1,
+			SampleName:  "Sample 2",
+			Field:       "amount",
+			Expected:    "1522.00",
+			Actual:      "1521.00",
+			Message:     `Amount matched "1521.00", expected "1522.00".`,
+		}},
+	}}
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	h.ruleDrafts = service
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	body := `{
+		"name":"Current",
+		"sender_emails":["alerts@example.com"],
+		"subject_contains":"Card alert",
+		"amount_regex":"",
+		"merchant_regex":"",
+		"currency_regex":"",
+		"source":{"type":"Credit Card","bank":"ICICI","label":"ICICI Credit Card"},
+		"samples":[
+			{"name":"Sample 1","sender":"alerts@example.com","subject":"Card alert","body":"INR 10 at Cafe","expected":{"amount":"10","merchant":"Cafe","currency":"INR"}},
+			{"name":"Sample 2","sender":"alerts@example.com","subject":"Card alert","body":"INR 1521.00 at Amazon","expected":{"amount":"1522.00","merchant":"Amazon","currency":"INR"}}
+		]
+	}`
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/rule-drafts", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+
+	h.CreateRuleDraft(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	if service.tenant.ID != "tenant-a" {
+		t.Fatalf("tenant = %+v, want request tenant", service.tenant)
+	}
+	if len(service.input.Samples) != 2 || service.input.Samples[1].Expected.Amount != "1522.00" {
+		t.Fatalf("service input = %+v, want decoded samples", service.input)
+	}
+	var resp ruleDraftResponseJSON
+	decodeJSON(t, rr.Body.String(), &resp)
+	if resp.Draft.Name != "ICICI Credit Card" || len(resp.Matches) != 1 || len(resp.ValidationIssues) != 1 {
+		t.Fatalf("response = %+v, want draft, match and issue", resp)
+	}
+	if resp.Matches[0].SampleIndex != 1 || resp.ValidationIssues[0].SampleIndex != 1 || resp.ValidationIssues[0].Field != "amount" {
+		t.Fatalf("response = %+v, want sample-indexed validation issue", resp)
+	}
+}
+
+func TestCreateRuleDraftValidatesSamplesBeforeCallingService(t *testing.T) {
+	service := &stubRuleDraftService{}
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	h.ruleDrafts = service
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		"/api/rule-drafts",
+		strings.NewReader(`{"samples":[{"body":"email","expected":{"amount":"10","merchant":""}}]}`),
+	)
+	rr := httptest.NewRecorder()
+
+	h.CreateRuleDraft(rr, req)
+
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	if service.input.Samples != nil {
+		t.Fatalf("service was called with %+v, want validation to stop request", service.input)
+	}
+	assertValidationError(t, rr, "samples.expected", "body", "must include expected amount and merchant for at least one email body")
 }
 
 // --- credentials status ---

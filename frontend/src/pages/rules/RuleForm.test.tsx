@@ -12,6 +12,9 @@ import { RuleForm } from './RuleForm'
 const queryMocks = vi.hoisted(() => ({
   activeReader: 'gmail',
   createRule: vi.fn(),
+  draftPending: false,
+  draftRule: vi.fn(),
+  llmReady: true,
   updateRule: vi.fn(),
   rescan: vi.fn(),
 }))
@@ -46,6 +49,7 @@ vi.mock('@/api/queries', () => ({
     data: id === 'diag-1' ? diagnostic : undefined,
     isLoading: false,
   }),
+  useDraftRule: () => ({ mutate: queryMocks.draftRule, isPending: queryMocks.draftPending }),
   useFacets: () => ({
     data: {
       sources: ['Card', 'Existing Source'],
@@ -57,6 +61,7 @@ vi.mock('@/api/queries', () => ({
       buckets: [],
     },
   }),
+  useLLMProviderStatus: () => ({ data: { ready: queryMocks.llmReady } }),
   useRescan: () => ({ mutate: queryMocks.rescan }),
   useRules: () => ({
     data: [
@@ -103,7 +108,10 @@ function renderRuleForm(route: string, path: string) {
 describe('RuleForm diagnostics', () => {
   beforeEach(() => {
     queryMocks.activeReader = 'gmail'
+    queryMocks.draftPending = false
+    queryMocks.llmReady = true
     queryMocks.createRule.mockReset()
+    queryMocks.draftRule.mockReset()
     queryMocks.updateRule.mockReset()
     queryMocks.rescan.mockReset()
     sessionStorage.clear()
@@ -184,14 +192,183 @@ describe('RuleForm diagnostics', () => {
     expect(screen.getByDisplayValue('INR 99.00 at Books')).toBeInTheDocument()
   })
 
+  it('uses AI to draft extraction fields from email samples', async () => {
+    const user = userEvent.setup()
+    const draftID = saveRuleEmailSearchDraft({
+      subjectQuery: 'Card spend',
+      messages: [
+        {
+          id: 'message-1',
+          sender_email: 'alerts@example.com',
+          subject: 'Card spend approved',
+          body: 'INR 42.00 at Coffee',
+        },
+        {
+          id: 'message-2',
+          sender_email: 'alerts-alt@example.com',
+          subject: 'Card spend approved',
+          body: 'INR 99.00 at Books',
+        },
+      ],
+    })
+    queryMocks.draftRule.mockImplementation((_body, options) =>
+      options?.onSuccess?.({
+        draft: {
+          name: 'Card spend',
+          sender_emails: ['alerts@example.com', 'alerts-alt@example.com'],
+          subject_contains: 'Card spend approved',
+          amount_regex: 'INR ([0-9.]+)',
+          merchant_regex: 'at (.*)',
+          currency_regex: '(INR)',
+          transaction_source: 'ICICI Credit Card',
+          source: { type: 'Credit Card', bank: 'ICICI', label: 'ICICI Credit Card' },
+          notes: 'Matches both samples.',
+        },
+        matches: [],
+        validation_issues: [],
+      }),
+    )
+
+    renderRuleForm(`/rules/new?draft=${draftID}`, '/rules/new')
+
+    await user.type(screen.getByLabelText('Expected amount'), '42.00')
+    await user.type(screen.getByLabelText('Expected merchant'), 'Coffee')
+    await user.type(screen.getByLabelText('Expected currency'), 'INR')
+    await user.click(screen.getByRole('tab', { name: 'Sample 2' }))
+    await user.type(screen.getByLabelText('Expected amount'), '99.00')
+    await user.type(screen.getByLabelText('Expected merchant'), 'Books')
+    await user.type(screen.getByLabelText('Expected currency'), 'INR')
+
+    await user.click(
+      screen.getByRole('button', { name: 'Use AI to generate the extraction expressions' }),
+    )
+
+    expect(queryMocks.draftRule).toHaveBeenCalledTimes(1)
+    expect(queryMocks.draftRule.mock.calls[0][0]).toMatchObject({
+      subject_contains: 'Card spend approved',
+      samples: [
+        { expected: { amount: '42.00', merchant: 'Coffee', currency: 'INR' } },
+        { expected: { amount: '99.00', merchant: 'Books', currency: 'INR' } },
+      ],
+    })
+    expect(queryMocks.draftRule.mock.calls[0][0].sender_emails).toEqual(
+      expect.arrayContaining(['alerts@example.com', 'alerts-alt@example.com']),
+    )
+    const settings = screen.getByLabelText('Rule settings')
+    expect(within(settings).getByLabelText('Amount')).toHaveValue('INR ([0-9.]+)')
+    expect(within(settings).getByLabelText('Merchant')).toHaveValue('at (.*)')
+    expect(within(settings).getByLabelText('Currency')).toHaveValue('(INR)')
+    expect(screen.queryByText(/AI draft applied/)).not.toBeInTheDocument()
+  })
+
+  it('switches to the first AI draft sample with validation issues and marks mismatches inline', async () => {
+    const user = userEvent.setup()
+    const draftID = saveRuleEmailSearchDraft({
+      subjectQuery: 'Card spend',
+      messages: [
+        {
+          id: 'message-1',
+          sender_email: 'alerts@example.com',
+          subject: 'Card spend approved',
+          body: 'INR 42.00 at Coffee',
+        },
+        {
+          id: 'message-2',
+          sender_email: 'alerts@example.com',
+          subject: 'Card spend approved',
+          body: 'INR 1521.00 at Amazon',
+        },
+      ],
+    })
+    queryMocks.draftRule.mockImplementation((_body, options) =>
+      options?.onSuccess?.({
+        draft: {
+          name: 'Card spend',
+          sender_emails: ['alerts@example.com'],
+          subject_contains: 'Card spend approved',
+          amount_regex: 'INR ([0-9.]+)',
+          merchant_regex: 'at (.*)',
+          currency_regex: '(INR)',
+          transaction_source: 'ICICI Credit Card',
+          source: { type: 'Credit Card', bank: 'ICICI', label: 'ICICI Credit Card' },
+          notes: '',
+        },
+        matches: [
+          {
+            sample_index: 1,
+            sample_name: 'Sample 2',
+            amount: '1521.00',
+            merchant: 'Amazon',
+            currency: 'INR',
+          },
+        ],
+        validation_issues: [
+          {
+            sample_index: 1,
+            sample_name: 'Sample 2',
+            field: 'amount',
+            expected: '1522.00',
+            actual: '1521.00',
+            message: 'Amount matched "1521.00", expected "1522.00".',
+          },
+        ],
+      }),
+    )
+
+    renderRuleForm(`/rules/new?draft=${draftID}`, '/rules/new')
+
+    await user.type(screen.getByLabelText('Expected amount'), '42.00')
+    await user.type(screen.getByLabelText('Expected merchant'), 'Coffee')
+    await user.type(screen.getByLabelText('Expected currency'), 'INR')
+    await user.click(screen.getByRole('tab', { name: 'Sample 2' }))
+    await user.type(screen.getByLabelText('Expected amount'), '1522.00')
+    await user.type(screen.getByLabelText('Expected merchant'), 'Amazon')
+    await user.type(screen.getByLabelText('Expected currency'), 'INR')
+    await user.click(screen.getByRole('tab', { name: 'Sample 1' }))
+
+    await user.click(
+      screen.getByRole('button', { name: 'Use AI to generate the extraction expressions' }),
+    )
+
+    expect(screen.getByRole('tab', { selected: true })).toHaveTextContent('Sample 2')
+    expect(screen.getByRole('tab', { name: /Sample 2/ })).toHaveTextContent('1')
+    expect(screen.getByText('1521.00')).toHaveClass('text-destructive')
+    expect(screen.getByText('Amazon')).toHaveClass('text-green-500')
+    expect(screen.queryByText(/AI draft needs review/i)).not.toBeInTheDocument()
+  })
+
+  it('shows AI drafting progress on the AI button', () => {
+    queryMocks.draftPending = true
+
+    renderRuleForm('/rules/new', '/rules/new')
+
+    const button = screen.getByRole('button', { name: 'AI is generating extraction expressions' })
+    expect(button).toBeDisabled()
+    expect(button.querySelector('.animate-spin')).toBeInTheDocument()
+  })
+
+  it('explains that AI setup is required before drafting expressions', () => {
+    queryMocks.llmReady = false
+
+    renderRuleForm('/rules/new', '/rules/new')
+
+    expect(
+      screen.getByRole('button', {
+        name: 'Complete AI setup to automagically fill extraction expressions',
+      }),
+    ).toBeDisabled()
+  })
+
   it('shows extract labels and expected sample assertions', async () => {
     renderRuleForm('/rules/new', '/rules/new')
 
     expect(screen.queryByText('Go regexp syntax')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Go-compatible regex help' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Amount regex')).toBeInTheDocument()
-    expect(screen.getByLabelText('Merchant regex')).toBeInTheDocument()
-    expect(screen.getByLabelText('Currency regex')).toBeInTheDocument()
+    const settings = screen.getByLabelText('Rule settings')
+    expect(within(settings).getByLabelText('Amount')).toBeInTheDocument()
+    expect(within(settings).getByLabelText('Merchant')).toBeInTheDocument()
+    expect(within(settings).getByLabelText('Currency')).toBeInTheDocument()
+    expect(within(settings).getByRole('heading', { name: 'Source' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Expected' })).toBeInTheDocument()
     expect(screen.getByLabelText('Expected amount')).toBeInTheDocument()
     expect(screen.getByLabelText('Expected merchant')).toBeInTheDocument()
@@ -215,21 +392,40 @@ describe('RuleForm diagnostics', () => {
     expect(type).toHaveValue('Wallet')
   })
 
-  it('marks missing live extraction values in red when sample data exists', async () => {
+  it('keeps live extraction values neutral until regexes are entered', async () => {
     const user = userEvent.setup()
 
-    renderRuleForm('/rules/new?diagnostic=diag-1', '/rules/new')
+    renderRuleForm('/rules/new', '/rules/new')
 
-    await screen.findByDisplayValue(/Amount: 0/)
+    await user.type(screen.getByLabelText('Add sender'), 'alerts@example.com{Enter}')
+    await user.type(screen.getByLabelText('Sender'), 'alerts@example.com')
+    await user.type(screen.getByLabelText('Subject'), 'Card alert')
+    await user.type(screen.getByLabelText('Email body'), 'INR 1521.00 at Amazon')
+
+    expect(screen.getAllByText('not set').length).toBeGreaterThanOrEqual(2)
+    expect(screen.queryByText('Needs attention')).not.toBeInTheDocument()
+    expect(screen.queryByText('missing')).not.toBeInTheDocument()
+  })
+
+  it('marks live extraction mismatches in red after regexes are entered', async () => {
+    const user = userEvent.setup()
+
+    renderRuleForm('/rules/new', '/rules/new')
+
+    await user.type(screen.getByLabelText('Sender'), 'alerts@example.com')
+    await user.type(screen.getByLabelText('Email body'), 'INR 1521.00 at Amazon')
+    await user.type(screen.getByLabelText('Expected amount'), '1522.00')
+    await user.type(screen.getByLabelText('Expected merchant'), 'Amazon')
+    fireEvent.change(within(screen.getByLabelText('Rule settings')).getByLabelText('Amount'), {
+      target: { value: 'INR ([0-9.]+)' },
+    })
+    fireEvent.change(within(screen.getByLabelText('Rule settings')).getByLabelText('Merchant'), {
+      target: { value: 'at (.*)' },
+    })
+
     expect(screen.getByText('Needs attention')).toBeInTheDocument()
-    expect(
-      screen.getAllByText('missing').some((node) => node.classList.contains('text-destructive')),
-    ).toBe(true)
-
-    await user.click(screen.getByRole('button', { name: '+ Add sample' }))
-
-    expect(screen.getByRole('tab', { name: 'Sample 2' })).toBeInTheDocument()
-    expect(screen.getByText('No sample data yet')).toBeInTheDocument()
+    expect(screen.getByText('1521.00')).toHaveClass('text-destructive')
+    expect(screen.getByText('Amazon')).toHaveClass('text-green-500')
   })
 
   it('does not show missing live results or block saving when the sample is empty', async () => {
@@ -243,10 +439,12 @@ describe('RuleForm diagnostics', () => {
     await user.type(screen.getByRole('textbox', { name: 'Rule name' }), 'HDFC Credit Card')
     await user.type(screen.getByLabelText('Subject contains'), 'Credit Card')
     await user.type(screen.getByLabelText('Add sender'), 'alerts@hdfcbank.net{Enter}')
-    fireEvent.change(screen.getByLabelText('Amount regex'), {
+    fireEvent.change(within(screen.getByLabelText('Rule settings')).getByLabelText('Amount'), {
       target: { value: 'Amount: ([0-9.]+)' },
     })
-    fireEvent.change(screen.getByLabelText('Merchant regex'), { target: { value: 'at (.*)' } })
+    fireEvent.change(within(screen.getByLabelText('Rule settings')).getByLabelText('Merchant'), {
+      target: { value: 'at (.*)' },
+    })
     await user.click(screen.getByRole('button', { name: 'Save Rule' }))
 
     expect(queryMocks.createRule).toHaveBeenCalledTimes(1)
@@ -325,10 +523,12 @@ describe('RuleForm diagnostics', () => {
     await user.type(title, 'Existing rule name')
     await user.type(screen.getByLabelText('Subject contains'), 'Credit Card')
     await user.type(screen.getByLabelText('Add sender'), 'alerts@hdfcbank.net{Enter}')
-    fireEvent.change(screen.getByLabelText('Amount regex'), {
+    fireEvent.change(within(screen.getByLabelText('Rule settings')).getByLabelText('Amount'), {
       target: { value: 'Amount: ([0-9.]+)' },
     })
-    fireEvent.change(screen.getByLabelText('Merchant regex'), { target: { value: 'at (.*)' } })
+    fireEvent.change(within(screen.getByLabelText('Rule settings')).getByLabelText('Merchant'), {
+      target: { value: 'at (.*)' },
+    })
     await user.click(screen.getByRole('button', { name: 'Save Rule' }))
 
     expect(screen.getByText('Rule name already exists.')).toBeInTheDocument()
