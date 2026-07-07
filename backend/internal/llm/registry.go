@@ -30,6 +30,16 @@ type AuthSpec struct {
 	RequiredScopes []string `json:"required_scopes,omitempty"`
 }
 
+// ModelOption describes one provider model preset exposed to setup UIs.
+type ModelOption struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+	Quality     string `json:"quality"`
+	Cost        string `json:"cost"`
+	Description string `json:"description,omitempty"`
+	Recommended bool   `json:"recommended,omitempty"`
+}
+
 // ProviderMetadata describes an LLM provider for catalog display and routing.
 type ProviderMetadata struct {
 	Name         string          `json:"name"`
@@ -38,6 +48,7 @@ type ProviderMetadata struct {
 	Auth         AuthSpec        `json:"auth"`
 	ConfigSchema json.RawMessage `json:"config_schema,omitempty"`
 	Capabilities []Capability    `json:"capabilities"`
+	ModelOptions []ModelOption   `json:"model_options,omitempty"`
 }
 
 // Provider defines an LLM provider and the client it can construct.
@@ -84,6 +95,11 @@ func (r *Registry) RegisterProvider(provider Provider) error {
 	}
 	if len(provider.Metadata.ConfigSchema) > 0 && !json.Valid(provider.Metadata.ConfigSchema) {
 		return fmt.Errorf("llm provider %q config schema must be valid JSON", name)
+	}
+	for _, option := range provider.Metadata.ModelOptions {
+		if strings.TrimSpace(option.ID) == "" {
+			return fmt.Errorf("llm provider %q model option id is required", name)
+		}
 	}
 	if _, exists := r.providers[name]; exists {
 		return fmt.Errorf("%w: %s", ErrProviderAlreadyRegistered, name)

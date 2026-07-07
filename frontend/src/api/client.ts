@@ -31,6 +31,10 @@ import type {
   HealthResponse,
   Label,
   LoginRequest,
+  LLMHealthResponse,
+  LLMProviderConfig,
+  LLMProviderInfo,
+  LLMProviderStatus,
   MonthlyBreakdownData,
   MutedMerchantWithCount,
   PasswordPatch,
@@ -45,6 +49,8 @@ import type {
   ReaderStatus,
   Rule,
   RuleDocument,
+  RuleDraftRequest,
+  RuleDraftResponse,
   RulePayload,
   ScanningSettings,
   ScanningSettingsPatch,
@@ -348,6 +354,20 @@ export const api = {
       apiClient.patch<CommunitySyncSettings>('/config/sync/settings', patch),
   },
 
+  llm: {
+    providers: () => apiClient.get<LLMProviderInfo[]>('/llm/providers'),
+    status: (name: string) => apiClient.get<LLMProviderStatus>(`/llm/providers/${name}/status`),
+    saveConfig: (name: string, config: LLMProviderConfig) =>
+      apiClient.put(`/llm/providers/${name}/config`, { config }),
+    saveCredentials: (name: string, apiKey: string) =>
+      apiClient.put(`/llm/providers/${name}/credentials`, { api_key: apiKey }),
+    healthcheck: (name: string) =>
+      apiClient.post<LLMHealthResponse>(`/llm/providers/${name}/healthcheck`),
+    activate: (name: string) =>
+      apiClient.post<{ status: string }>(`/llm/providers/${name}/activate`),
+    disconnect: (name: string) => apiClient.delete(`/llm/providers/${name}`),
+  },
+
   rules: {
     list: () => apiClient.get<Rule[]>('/rules'),
     create: (body: RulePayload) => apiClient.post<Rule>('/rules', body),
@@ -355,6 +375,10 @@ export const api = {
     delete: (id: string) => apiClient.delete(`/rules/${id}`),
     export: () => apiClient.get<RuleDocument>('/rules/export'),
     import: (rules: RuleDocument) => apiClient.post<{ imported: number }>('/rules/import', rules),
+  },
+
+  ruleDrafts: {
+    create: (body: RuleDraftRequest) => apiClient.post<RuleDraftResponse>('/rule-drafts', body),
   },
 
   extractionDiagnostics: {

@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 
+	"github.com/ArionMiles/expensor/backend/internal/llm"
 	"github.com/ArionMiles/expensor/backend/internal/rules"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
@@ -25,8 +26,8 @@ var (
 	banksInput []byte
 	//go:embed content/readers/gmail/guide.json content/readers/thunderbird/guide.json
 	readersFS embed.FS
-	//go:embed content/llm/prompts/.gitkeep
-	llmPromptsFS embed.FS
+	//go:embed content/llm/prompts content/llm/providers
+	llmContentFS embed.FS
 )
 
 // embeddedContent bundles parsed startup assets.
@@ -135,6 +136,18 @@ func parseEmbedded(rulesJSON string, mccJSON, categoriesJSON []byte) (embeddedCo
 		return embeddedContent{}, fmt.Errorf("parsing categories JSON: %w", err)
 	}
 	return embeddedContent{rawRules: compiled, rules: compiled, mccEntries: mccEntries, catEntries: catEntries}, nil
+}
+
+func loadLLMModelOptions(fsys embed.FS, name string) ([]llm.ModelOption, error) {
+	body, err := fsys.ReadFile(fmt.Sprintf("content/llm/providers/%s_models.json", name))
+	if err != nil {
+		return nil, fmt.Errorf("reading %s llm model options: %w", name, err)
+	}
+	var options []llm.ModelOption
+	if err := json.Unmarshal(body, &options); err != nil {
+		return nil, fmt.Errorf("parsing %s llm model options: %w", name, err)
+	}
+	return options, nil
 }
 
 // uniqueCategoryNames returns sorted category names from MCC entries.

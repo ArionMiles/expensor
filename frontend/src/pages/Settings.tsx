@@ -22,13 +22,16 @@ import { SyncSettings } from './settings/SyncSettings'
 import { useI18n } from '@/i18n/I18nProvider'
 import type { MessageKey } from '@/i18n/messages'
 import { AccountSettings, AdminUsersSection } from './settings/AccountSettings'
+import { AISettings } from './settings/AISettings'
+import { Sparkles, type LucideIcon } from 'lucide-react'
 
-type SettingsTab = 'general' | 'daemon' | 'sync' | 'account' | 'admin'
+type SettingsTab = 'general' | 'daemon' | 'ai' | 'sync' | 'account' | 'admin'
 
-const TABS: { id: SettingsTab; labelKey: MessageKey }[] = [
+const TABS: { id: SettingsTab; labelKey: MessageKey; icon?: LucideIcon }[] = [
   { id: 'general', labelKey: 'nav.settings.general.subtitle' },
   { id: 'daemon', labelKey: 'nav.settings.daemon.subtitle' },
   { id: 'account', labelKey: 'nav.settings.account.subtitle' },
+  { id: 'ai', labelKey: 'nav.settings.ai.subtitle', icon: Sparkles },
   { id: 'sync', labelKey: 'nav.settings.sync.subtitle' },
   { id: 'admin', labelKey: 'nav.settings.admin.subtitle' },
 ]
@@ -494,23 +497,28 @@ export default function Settings() {
     <div className="mx-auto w-full max-w-4xl px-6 py-6">
       <h1 className="mb-6 text-lg font-semibold text-foreground">{t('nav.settings')}</h1>
       <div className="mb-6 flex gap-1 border-b border-border">
-        {tabs.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setTab(item.id)}
-            className={cn(
-              '-mb-px border-b-2 px-4 py-2 text-sm transition-colors',
-              tab === item.id
-                ? 'border-primary font-medium text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {t(item.labelKey)}
-          </button>
-        ))}
+        {tabs.map((item) => {
+          const Icon = item.icon
+          return (
+            <button
+              key={item.id}
+              onClick={() => setTab(item.id)}
+              className={cn(
+                '-mb-px inline-flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm transition-colors',
+                tab === item.id
+                  ? 'border-primary font-medium text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {Icon && <Icon size={15} aria-hidden="true" />}
+              {t(item.labelKey)}
+            </button>
+          )
+        })}
       </div>
       {tab === 'general' && <GeneralSettings />}
       {tab === 'daemon' && <DaemonSettings />}
+      {tab === 'ai' && <AISettings />}
       {tab === 'sync' && <SyncSettings />}
       {tab === 'account' && <AccountSettings />}
       {tab === 'admin' && <AdminSettings />}

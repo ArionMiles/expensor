@@ -14,11 +14,13 @@ import type {
   ExtractionDiagnosticListStatus,
   ExtractionDiagnosticStatus,
   LoginRequest,
+  LLMProviderConfig,
   MonthlyBreakdownData,
   PasswordPatch,
   PreferencesPatch,
   ProfilePatch,
   RuleDocument,
+  RuleDraftRequest,
   RulePayload,
   ScanningSettingsPatch,
   SyncStatus,
@@ -61,6 +63,8 @@ export const queryKeys = {
   buckets: ['config', 'buckets'] as const,
   setupStatus: ['config', 'setup-status'] as const,
   activeReader: ['scanning', 'settings', 'active-reader'] as const,
+  llmProviders: ['llm', 'providers'] as const,
+  llmProviderStatus: (name: string) => ['llm', 'providers', name, 'status'] as const,
 }
 
 export function useBootstrapStatus() {
@@ -443,6 +447,76 @@ export function useSaveReaderConfig() {
       qc.invalidateQueries({ queryKey: queryKeys.readerConfig(readerName) })
       qc.invalidateQueries({ queryKey: queryKeys.readerStatus(readerName) })
     },
+  })
+}
+
+export function useLLMProviders() {
+  return useQuery({
+    queryKey: queryKeys.llmProviders,
+    queryFn: () => api.llm.providers().then((r) => r.data),
+    staleTime: 60_000,
+  })
+}
+
+export function useLLMProviderStatus(name: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.llmProviderStatus(name),
+    queryFn: () => api.llm.status(name).then((r) => r.data),
+    enabled: enabled && name.length > 0,
+  })
+}
+
+export function useSaveLLMProviderConfig() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, config }: { name: string; config: LLMProviderConfig }) =>
+      api.llm.saveConfig(name, config),
+    onSuccess: (_, { name }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.llmProviderStatus(name) })
+    },
+  })
+}
+
+export function useSaveLLMProviderCredentials() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, apiKey }: { name: string; apiKey: string }) =>
+      api.llm.saveCredentials(name, apiKey),
+    onSuccess: (_, { name }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.llmProviderStatus(name) })
+    },
+  })
+}
+
+export function useHealthCheckLLMProvider() {
+  return useMutation({
+    mutationFn: (name: string) => api.llm.healthcheck(name).then((r) => r.data),
+  })
+}
+
+export function useActivateLLMProvider() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => api.llm.activate(name).then((r) => r.data),
+    onSuccess: (_, name) => {
+      qc.invalidateQueries({ queryKey: queryKeys.llmProviderStatus(name) })
+    },
+  })
+}
+
+export function useDisconnectLLMProvider() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => api.llm.disconnect(name),
+    onSuccess: (_, name) => {
+      qc.invalidateQueries({ queryKey: queryKeys.llmProviderStatus(name) })
+    },
+  })
+}
+
+export function useDraftRule() {
+  return useMutation({
+    mutationFn: (body: RuleDraftRequest) => api.ruleDrafts.create(body).then((r) => r.data),
   })
 }
 

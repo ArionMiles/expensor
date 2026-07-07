@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { X } from 'lucide-react'
+import { LoaderCircle, Sparkles, X } from 'lucide-react'
+import type { RuleDraftValidationIssue } from '@/api/types'
 import {
   useActiveReader,
   useCreateRule,
+  useDraftRule,
   useExtractionDiagnostic,
   useFacets,
+  useLLMProviderStatus,
   useRescan,
   useRules,
   useUpdateRule,
 } from '@/api/queries'
 import { ConfirmModal } from '@/components/ConfirmModal'
+import { useTooltip } from '@/hooks/useTooltip'
 import { useI18n } from '@/i18n/I18nProvider'
 import { loadRuleEmailSearchDraft } from './emailSearchDraft'
 import {
@@ -49,6 +53,8 @@ export function RuleForm() {
   const { data: diagnostic } = useExtractionDiagnostic(diagnosticID)
   const { data: activeReader = '' } = useActiveReader()
   const { data: facets } = useFacets()
+  const { data: llmStatus } = useLLMProviderStatus('openai')
+  const { handlers: aiTipHandlers, tip: aiTip } = useTooltip()
 
   const [form, setForm] = useState<FormState>(emptyForm)
   const [lastSavedName, setLastSavedName] = useState(t('rules.editor.newRuleName'))
@@ -60,6 +66,7 @@ export function RuleForm() {
   const [customBanks, setCustomBanks] = useState<string[]>([])
   const [toast, setToast] = useState('')
   const [formError, setFormError] = useState('')
+  const [draftIssues, setDraftIssues] = useState<RuleDraftValidationIssue[]>([])
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
@@ -67,6 +74,7 @@ export function RuleForm() {
 
   const { mutate: createRule, isPending: creating } = useCreateRule()
   const { mutate: updateRule, isPending: updating } = useUpdateRule()
+  const { mutate: draftRule, isPending: drafting } = useDraftRule()
   const { mutate: triggerRescan } = useRescan()
 
   useEffect(() => {
@@ -146,7 +154,10 @@ export function RuleForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diagnosticID, draftApplied, draftID, isCreate, t])
 
-  const updateForm = (patch: Partial<FormState>) => setForm((current) => ({ ...current, ...patch }))
+  const updateForm = (patch: Partial<FormState>) => {
+    setDraftIssues([])
+    setForm((current) => ({ ...current, ...patch }))
+  }
 
   const addSender = () => {
     const sender = form.senderDraft.trim().toLowerCase()
@@ -160,19 +171,24 @@ export function RuleForm() {
   const removeSender = (sender: string) =>
     updateForm({ senders: form.senders.filter((candidate) => candidate !== sender) })
 
-  const updateSample = (patch: Partial<SampleState>) =>
+  const updateSample = (patch: Partial<SampleState>) => {
+    setDraftIssues([])
     setSamples((current) =>
       current.map((sample, index) => (index === activeSample ? { ...sample, ...patch } : sample)),
     )
+  }
 
-  const updateExpected = (patch: Partial<SampleState['expected']>) =>
+  const updateExpected = (patch: Partial<SampleState['expected']>) => {
+    setDraftIssues([])
     setSamples((current) =>
       current.map((sample, index) =>
         index === activeSample ? { ...sample, expected: { ...sample.expected, ...patch } } : sample,
       ),
     )
+  }
 
   const addSample = () => {
+    setDraftIssues([])
     setSamples((current) => {
       const nextIndex = current.length + 1
       const next = [
@@ -185,6 +201,7 @@ export function RuleForm() {
   }
 
   const deleteSampleAt = (sampleIndex: number) => {
+    setDraftIssues([])
     setSamples((current) => {
       if (current.length === 1) {
         setActiveSample(0)
@@ -287,6 +304,25 @@ ${sample.body.replace(/\r\n/g, '\n')}`
     !selectedSampleExpectedMissing &&
     (!form.amountRegex.trim() || !form.merchantRegex.trim())
   const hasExportableSamples = samples.some(sampleHasValidationData)
+  const hasAIDraftSample = samples.some(
+    (sample) =>
+      sample.body.trim() && sample.expected.amount.trim() && sample.expected.merchant.trim(),
+  )
+  const aiReady = llmStatus?.ready ?? false
+  const aiDraftDisabled = drafting || !hasAIDraftSample || !aiReady
+  const aiDraftTooltip = drafting
+    ? t('rules.editor.aiDraftInProgress')
+    : aiReady
+      ? t('rules.editor.aiDraftTooltip')
+      : t('rules.editor.aiDraftSetupNeeded')
+  const issueCountsBySample = useMemo(() => {
+    const counts = new Map<number, number>()
+    draftIssues.forEach((issue) => {
+      if (issue.sample_index < 0) return
+      counts.set(issue.sample_index, (counts.get(issue.sample_index) ?? 0) + 1)
+    })
+    return counts
+  }, [draftIssues])
   const live = useMemo(
     () => ({
       amount: testRegex(form.amountRegex, selectedSample?.body ?? ''),
@@ -295,22 +331,37 @@ ${sample.body.replace(/\r\n/g, '\n')}`
     }),
     [form.amountRegex, form.currencyRegex, form.merchantRegex, selectedSample?.body],
   )
+  const shouldEvaluateExtraction =
+    selectedSample.body.trim() !== '' &&
+    (Boolean(form.amountRegex.trim() || form.merchantRegex.trim() || form.currencyRegex.trim()) ||
+      draftIssues.length > 0)
+  const selectedSampleSenderMatches =
+    selectedSample.sender.trim() === '' ||
+    (!selectedSampleSenderInvalid && form.senders.includes(selectedSample.sender))
+  const selectedSampleSubjectMatches =
+    selectedSample.subject.trim() === '' ||
+    !form.subjectContains ||
+    selectedSample.subject.includes(form.subjectContains)
+  const selectedSampleIdentityNeedsAttention =
+    !selectedSampleSenderMatches || !selectedSampleSubjectMatches
   const needsAttention =
     selectedSampleHasData &&
-    (selectedSampleSenderInvalid ||
-      live.amount.invalid ||
-      live.merchant.invalid ||
-      (selectedSample.body.trim() !== '' &&
-        (!live.amount.match ||
+    (selectedSampleIdentityNeedsAttention ||
+      (shouldEvaluateExtraction &&
+        (live.amount.invalid ||
+          live.merchant.invalid ||
+          !live.amount.match ||
           live.amount.match.trim() === '' ||
           !live.merchant.match ||
-          live.merchant.match.trim() === '')) ||
-      (selectedSample.expected.amount.trim() !== '' &&
-        live.amount.match !== selectedSample.expected.amount.trim()) ||
-      (selectedSample.expected.merchant.trim() !== '' &&
-        live.merchant.match !== selectedSample.expected.merchant.trim()) ||
-      (selectedSample.expected.currency.trim() !== '' &&
-        live.currency.match !== selectedSample.expected.currency.trim()))
+          live.merchant.match.trim() === '' ||
+          (selectedSample.expected.amount.trim() !== '' &&
+            live.amount.match !== selectedSample.expected.amount.trim()) ||
+          (selectedSample.expected.merchant.trim() !== '' &&
+            live.merchant.match !== selectedSample.expected.merchant.trim()) ||
+          (selectedSample.expected.currency.trim() !== '' &&
+            live.currency.match !== selectedSample.expected.currency.trim()))))
+  const showLiveStatus =
+    selectedSampleHasData && (selectedSampleIdentityNeedsAttention || shouldEvaluateExtraction)
 
   const validateForm = () => {
     setFormError('')
@@ -383,6 +434,53 @@ ${sample.body.replace(/\r\n/g, '\n')}`
     )
   }
 
+  const handleAIDraft = () => {
+    setFormError('')
+    setDraftIssues([])
+    draftRule(
+      {
+        ...buildRulePayload(),
+        samples,
+      },
+      {
+        onSuccess: (result) => {
+          const draft = result.draft
+          const nextIssues = result.validation_issues ?? []
+          updateForm({
+            name: draft.name || form.name,
+            subjectContains: draft.subject_contains,
+            amountRegex: draft.amount_regex,
+            merchantRegex: draft.merchant_regex,
+            currencyRegex: draft.currency_regex,
+            sourceType: draft.source.type,
+            bank: draft.source.bank,
+            senders: draft.sender_emails,
+            senderDraft: '',
+          })
+          if (draft.source.type)
+            setCustomTypes((current) => uniqueSorted([...current, draft.source.type]))
+          if (draft.source.bank)
+            setCustomBanks((current) => uniqueSorted([...current, draft.source.bank]))
+          setDraftIssues(nextIssues)
+          const issueSampleIndexes = uniqueSorted(
+            nextIssues
+              .map((issue) => issue.sample_index)
+              .filter((sampleIndex) => sampleIndex >= 0 && sampleIndex < samples.length)
+              .map(String),
+          ).map(Number)
+          if (
+            samples.length > 1 &&
+            issueSampleIndexes.length === 1 &&
+            issueSampleIndexes[0] !== activeSample
+          ) {
+            setActiveSample(issueSampleIndexes[0])
+          }
+        },
+        onError: (error) => setFormError(error.message),
+      },
+    )
+  }
+
   const handleSubmit = () => {
     const result = validateForm()
     if (!result.valid) return
@@ -424,6 +522,49 @@ ${sample.body.replace(/\r\n/g, '\n')}`
   }
 
   const isPending = creating || updating
+  const renderSampleTab = (sample: SampleState, index: number) => {
+    const issueCount = issueCountsBySample.get(index) ?? 0
+    return (
+      <span
+        key={`${sample.name}-${index}`}
+        className={`inline-flex shrink-0 items-center overflow-hidden rounded-full border text-sm font-medium ${
+          issueCount > 0 && index === activeSample
+            ? 'border-destructive/50 bg-destructive/10 text-foreground'
+            : issueCount > 0
+              ? 'border-destructive/40 text-destructive hover:bg-destructive/10'
+              : index === activeSample
+                ? 'border-primary/50 bg-primary/10 text-foreground'
+                : 'border-border text-muted-foreground hover:text-foreground'
+        }`}
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={index === activeSample}
+          onClick={() => setActiveSample(index)}
+          className="px-3 py-1.5"
+        >
+          {sample.name}
+          {issueCount > 0 && (
+            <span className="ml-2 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[10px] font-semibold text-destructive">
+              {issueCount}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          aria-label={t('rules.editor.removeSample', { name: sample.name })}
+          onClick={(event) => {
+            event.stopPropagation()
+            deleteSampleAt(index)
+          }}
+          className="pr-3 text-muted-foreground transition-colors hover:text-destructive"
+        >
+          <X aria-hidden="true" size={14} />
+        </button>
+      </span>
+    )
+  }
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4 px-6 py-5">
@@ -468,7 +609,7 @@ ${sample.body.replace(/\r\n/g, '\n')}`
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={isPending}
+            disabled={isPending || drafting}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {isPending ? t('common.saving') : t('rules.editor.saveRule')}
@@ -559,16 +700,33 @@ ${sample.body.replace(/\r\n/g, '\n')}`
                   </HintDot>
                 )}
               </div>
-              <div className="group relative">
-                <button
-                  type="button"
-                  aria-label={t('rules.editor.extractSyntaxHelp')}
-                  className="flex h-6 w-6 items-center justify-center rounded-full border border-border text-xs font-semibold text-muted-foreground hover:text-foreground"
-                >
-                  ?
-                </button>
-                <div className="pointer-events-none absolute right-0 top-8 z-50 hidden w-72 rounded-lg border border-border bg-card p-3 text-xs normal-case leading-relaxed text-card-foreground shadow-xl ring-1 ring-border group-hover:block">
-                  {t('rules.editor.extractSyntaxHelpText')}
+              <div className="flex items-center gap-2">
+                <span className="inline-flex" {...aiTipHandlers(aiDraftTooltip)}>
+                  <button
+                    type="button"
+                    onClick={handleAIDraft}
+                    disabled={aiDraftDisabled}
+                    aria-label={aiDraftTooltip}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-primary/40 text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-border disabled:text-muted-foreground disabled:opacity-60"
+                  >
+                    {drafting ? (
+                      <LoaderCircle aria-hidden="true" size={15} className="animate-spin" />
+                    ) : (
+                      <Sparkles aria-hidden="true" size={15} />
+                    )}
+                  </button>
+                </span>
+                <div className="group relative">
+                  <button
+                    type="button"
+                    aria-label={t('rules.editor.extractSyntaxHelp')}
+                    className="flex h-6 w-6 items-center justify-center rounded-full border border-border text-xs font-semibold text-muted-foreground hover:text-foreground"
+                  >
+                    ?
+                  </button>
+                  <div className="pointer-events-none absolute right-0 top-8 z-50 hidden w-72 rounded-lg border border-border bg-card p-3 text-xs normal-case leading-relaxed text-card-foreground shadow-xl ring-1 ring-border group-hover:block">
+                    {t('rules.editor.extractSyntaxHelpText')}
+                  </div>
                 </div>
               </div>
             </div>
@@ -653,37 +811,7 @@ ${sample.body.replace(/\r\n/g, '\n')}`
                 aria-label={t('rules.editor.sampleTabs')}
                 className="flex min-w-0 flex-1 flex-nowrap gap-2 overflow-x-auto pb-1"
               >
-                {samples.map((sample, index) => (
-                  <span
-                    key={`${sample.name}-${index}`}
-                    className={`inline-flex shrink-0 items-center overflow-hidden rounded-full border text-sm font-medium ${
-                      index === activeSample
-                        ? 'border-primary/50 bg-primary/10 text-foreground'
-                        : 'border-border text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={index === activeSample}
-                      onClick={() => setActiveSample(index)}
-                      className="px-3 py-1.5"
-                    >
-                      {sample.name}
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={t('rules.editor.removeSample', { name: sample.name })}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        deleteSampleAt(index)
-                      }}
-                      className="pr-3 text-muted-foreground transition-colors hover:text-destructive"
-                    >
-                      <X aria-hidden="true" size={14} />
-                    </button>
-                  </span>
-                ))}
+                {samples.map(renderSampleTab)}
               </div>
               <button
                 type="button"
@@ -788,7 +916,7 @@ ${sample.body.replace(/\r\n/g, '\n')}`
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {t('rules.editor.liveResult')}
                 </h2>
-                {selectedSampleHasData && (
+                {showLiveStatus && (
                   <span
                     className={`rounded-full border px-3 py-1 text-xs font-medium ${
                       needsAttention
@@ -809,16 +937,10 @@ ${sample.body.replace(/\r\n/g, '\n')}`
                       <dt className="text-muted-foreground">{t('common.sender')}</dt>
                       <dd
                         className={
-                          !selectedSampleSenderInvalid &&
-                          form.senders.includes(selectedSample.sender)
-                            ? 'text-green-500'
-                            : 'text-destructive'
+                          selectedSampleSenderMatches ? 'text-green-500' : 'text-destructive'
                         }
                       >
-                        {!selectedSampleSenderInvalid &&
-                        form.senders.includes(selectedSample.sender)
-                          ? t('common.matches')
-                          : t('common.missing')}
+                        {selectedSampleSenderMatches ? t('common.matches') : t('common.missing')}
                       </dd>
                     </div>
                   )}
@@ -827,16 +949,10 @@ ${sample.body.replace(/\r\n/g, '\n')}`
                       <dt className="text-muted-foreground">{t('common.subject')}</dt>
                       <dd
                         className={
-                          !form.subjectContains ||
-                          selectedSample.subject.includes(form.subjectContains)
-                            ? 'text-green-500'
-                            : 'text-destructive'
+                          selectedSampleSubjectMatches ? 'text-green-500' : 'text-destructive'
                         }
                       >
-                        {!form.subjectContains ||
-                        selectedSample.subject.includes(form.subjectContains)
-                          ? t('common.matches')
-                          : t('common.missing')}
+                        {selectedSampleSubjectMatches ? t('common.matches') : t('common.missing')}
                       </dd>
                     </div>
                   )}
@@ -845,19 +961,32 @@ ${sample.body.replace(/\r\n/g, '\n')}`
                       <div className="flex items-center justify-between gap-3 py-2">
                         <dt className="text-muted-foreground">{t('common.amount')}</dt>
                         <dd>
-                          <ResultValue result={live.amount} />
+                          <ResultValue
+                            result={live.amount}
+                            expected={selectedSample.expected.amount}
+                            active={shouldEvaluateExtraction}
+                          />
                         </dd>
                       </div>
                       <div className="flex items-center justify-between gap-3 py-2">
                         <dt className="text-muted-foreground">{t('common.merchant')}</dt>
                         <dd>
-                          <ResultValue result={live.merchant} />
+                          <ResultValue
+                            result={live.merchant}
+                            expected={selectedSample.expected.merchant}
+                            active={shouldEvaluateExtraction}
+                          />
                         </dd>
                       </div>
                       <div className="flex items-center justify-between gap-3 py-2">
                         <dt className="text-muted-foreground">{t('common.currency')}</dt>
                         <dd>
-                          <ResultValue result={live.currency} optional />
+                          <ResultValue
+                            result={live.currency}
+                            expected={selectedSample.expected.currency}
+                            active={shouldEvaluateExtraction}
+                            optional
+                          />
                         </dd>
                       </div>
                     </>
@@ -929,6 +1058,7 @@ ${sample.body.replace(/\r\n/g, '\n')}`
           onCancel={() => setSaveDialogOpen(false)}
         />
       )}
+      {aiTip}
     </div>
   )
 }

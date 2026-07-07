@@ -113,6 +113,17 @@ func (r *pgRuntimeRepository) GetLLMProviderCredentials(ctx context.Context, ten
 	return r.readLLMProviderEncryptedJSON(ctx, tenant, provider)
 }
 
+func (r *pgRuntimeRepository) DeleteLLMProviderRuntime(ctx context.Context, tenant Tenant, provider string) error {
+	if strings.TrimSpace(provider) == "" {
+		return errors.New("llm provider cannot be blank")
+	}
+	_, err := r.pool.Exec(ctx, `DELETE FROM llm_provider_runtime WHERE tenant_id IS NOT DISTINCT FROM $1 AND provider = $2`, tenantIDParam(tenant), provider)
+	if err != nil {
+		return fmt.Errorf("deleting llm provider runtime for %q: %w", provider, err)
+	}
+	return nil
+}
+
 func (r *pgRuntimeRepository) SetActiveLLMProvider(ctx context.Context, tenant Tenant, provider string) error {
 	if strings.TrimSpace(provider) == "" {
 		return errors.New("llm provider cannot be blank")

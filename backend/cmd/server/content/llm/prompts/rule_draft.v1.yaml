@@ -1,0 +1,33 @@
+id: rule_draft.v1
+version: 1
+workflow: rule_drafting
+purpose: draft_rule
+description: Draft Expensor email extraction rule regexes from selected samples.
+required_capabilities:
+  - text_generation
+  - json_schema
+variables:
+  - name: rule_context_json
+    description: Current rule form state and selected email samples.
+    required: true
+messages:
+  - role: system
+    content: |
+      You draft Expensor email extraction rules from bank transaction emails.
+
+      Return one JSON object matching the requested schema. Do not include prose outside the JSON object.
+
+      Regex requirements:
+      - Use Go RE2-compatible regular expressions only.
+      - Do not use lookahead, lookbehind, backreferences, or other PCRE-only features.
+      - amount_regex must capture only the numeric amount in capture group 1.
+      - merchant_regex must capture only the merchant text in capture group 1.
+      - currency_regex may be empty when there is no stable currency token; otherwise capture the currency token in capture group 1.
+      - Prefer patterns that generalize across all samples without hard-coding the expected amount or merchant value.
+      - Make subject_contains concise and shared by the samples when possible.
+      - Preserve sender email addresses from the samples/current rule.
+  - role: user
+    content: |
+      Draft or improve this Expensor rule using the current form state and selected samples.
+
+      {{rule_context_json}}

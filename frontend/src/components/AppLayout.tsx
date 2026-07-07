@@ -88,18 +88,18 @@ export function AppLayout() {
     const reader = activeReader ?? ''
     const actions: CommandPaletteAction[] = [
       {
+        id: 'create-rule-from-emails',
+        titleKey: 'command.actions.createRuleFromEmails' as const,
+        descriptionKey: 'command.actions.createRuleFromEmails.description' as const,
+        icon: Search,
+        keywords: ['create rule', 'email rule', 'rule from emails', 'search emails'],
+      },
+      {
         id: 'create-rule',
         titleKey: 'command.actions.createRule' as const,
         descriptionKey: 'command.actions.createRule.description' as const,
         icon: ScrollText,
         keywords: ['new rule', 'rule'],
-      },
-      {
-        id: 'create-rule-from-emails',
-        titleKey: 'command.actions.createRuleFromEmails' as const,
-        descriptionKey: 'command.actions.createRuleFromEmails.description' as const,
-        icon: Search,
-        keywords: ['email rule', 'rule from emails', 'search emails'],
       },
       {
         id: 'create-token',

@@ -20,50 +20,67 @@ type CommandPaletteItem =
   | {
       type: 'navigation'
       target: NavigationTarget
+      score: number
+      order: number
     }
   | {
       type: 'action'
       action: CommandPaletteAction
+      score: number
+      order: number
     }
 
-function matchesTarget(
+function scoreCandidate({
+  query,
+  primary,
+  secondary = [],
+  tertiary = [],
+}: {
+  query: string
+  primary: string[]
+  secondary?: string[]
+  tertiary?: string[]
+}) {
+  const normalized = query.trim().toLowerCase()
+  if (normalized === '') return 0
+
+  const cleanPrimary = primary.map((value) => value.toLowerCase()).filter(Boolean)
+  const cleanSecondary = secondary.map((value) => value.toLowerCase()).filter(Boolean)
+  const cleanTertiary = tertiary.map((value) => value.toLowerCase()).filter(Boolean)
+  if (cleanPrimary.some((value) => value === normalized)) return 0
+  if (cleanPrimary.some((value) => value.startsWith(normalized))) return 1
+  if (cleanSecondary.some((value) => value === normalized)) return 2
+  if (cleanSecondary.some((value) => value.startsWith(normalized))) return 3
+  if (cleanPrimary.some((value) => value.includes(normalized))) return 4
+  if (cleanSecondary.some((value) => value.includes(normalized))) return 5
+  if (cleanTertiary.some((value) => value.includes(normalized))) return 6
+  return Number.POSITIVE_INFINITY
+}
+
+function targetScore(
   target: NavigationTarget,
   query: string,
   t: (key: MessageKey) => string,
-): boolean {
-  const normalized = query.trim().toLowerCase()
-  if (normalized === '') return true
-
-  const haystack = [
-    t(target.titleKey),
-    target.subtitleKey ? t(target.subtitleKey) : '',
-    t(target.descriptionKey),
-    ...(target.keywords ?? []),
-  ]
-    .join(' ')
-    .toLowerCase()
-
-  return haystack.includes(normalized)
+): number {
+  return scoreCandidate({
+    query,
+    primary: [t(target.titleKey), target.subtitleKey ? t(target.subtitleKey) : ''],
+    secondary: target.keywords ?? [],
+    tertiary: [target.id, t(target.descriptionKey)],
+  })
 }
 
-function matchesAction(
+function actionScore(
   action: CommandPaletteAction,
   query: string,
   t: (key: MessageKey) => string,
-): boolean {
-  const normalized = query.trim().toLowerCase()
-  if (normalized === '') return true
-
-  const haystack = [
-    action.id,
-    t(action.titleKey),
-    t(action.descriptionKey),
-    ...(action.keywords ?? []),
-  ]
-    .join(' ')
-    .toLowerCase()
-
-  return haystack.includes(normalized)
+): number {
+  return scoreCandidate({
+    query,
+    primary: [t(action.titleKey), ...(action.keywords ?? [])],
+    secondary: [action.id],
+    tertiary: [t(action.descriptionKey)],
+  })
 }
 
 export function CommandPalette({
@@ -87,20 +104,36 @@ export function CommandPalette({
   const inputRef = useRef<HTMLInputElement | null>(null)
   const escapeClosedRef = useRef(false)
 
-  const filteredTargets = useMemo(
-    () => targets.filter((target) => matchesTarget(target, query, t)),
-    [targets, query, t],
+  const rankedTargets = useMemo(
+    () =>
+      targets
+        .map((target, index) => ({
+          type: 'navigation' as const,
+          target,
+          score: targetScore(target, query, t),
+          order: index + actions.length,
+        }))
+        .filter((item) => Number.isFinite(item.score)),
+    [actions.length, targets, query, t],
   )
-  const filteredActions = useMemo(
-    () => actions.filter((action) => matchesAction(action, query, t)),
+  const rankedActions = useMemo(
+    () =>
+      actions
+        .map((action, index) => ({
+          type: 'action' as const,
+          action,
+          score: actionScore(action, query, t),
+          order: index,
+        }))
+        .filter((item) => Number.isFinite(item.score)),
     [actions, query, t],
   )
   const items = useMemo<CommandPaletteItem[]>(
-    () => [
-      ...filteredActions.map((action) => ({ type: 'action' as const, action })),
-      ...filteredTargets.map((target) => ({ type: 'navigation' as const, target })),
-    ],
-    [filteredActions, filteredTargets],
+    () =>
+      [...rankedActions, ...rankedTargets].sort(
+        (left, right) => left.score - right.score || left.order - right.order,
+      ),
+    [rankedActions, rankedTargets],
   )
 
   useEffect(() => {
@@ -204,37 +237,41 @@ export function CommandPalette({
             </p>
           ) : (
             <>
-              {filteredActions.length > 0 && (
-                <CommandPaletteSection title={t('command.sections.actions')}>
-                  {filteredActions.map((action, index) => {
-                    return (
-                      <CommandPaletteActionOption
-                        key={action.id}
-                        action={action}
-                        selected={index === selectedIndex}
-                        onMouseEnter={() => setSelectedIndex(index)}
-                        onAction={onAction}
-                      />
-                    )
-                  })}
-                </CommandPaletteSection>
-              )}
-              {filteredTargets.length > 0 && (
-                <CommandPaletteSection title={t('command.sections.navigation')}>
-                  {filteredTargets.map((target, index) => {
-                    const itemIndex = filteredActions.length + index
-                    return (
-                      <CommandPaletteOption
-                        key={target.id}
-                        target={target}
-                        selected={itemIndex === selectedIndex}
-                        onMouseEnter={() => setSelectedIndex(itemIndex)}
-                        onNavigate={onNavigate}
-                      />
-                    )
-                  })}
-                </CommandPaletteSection>
-              )}
+              {items.map((item, index) => {
+                const previous = items[index - 1]
+                const showSection = !previous || previous.type !== item.type
+                const option =
+                  item.type === 'action' ? (
+                    <CommandPaletteActionOption
+                      key={item.action.id}
+                      action={item.action}
+                      selected={index === selectedIndex}
+                      onMouseEnter={() => setSelectedIndex(index)}
+                      onAction={onAction}
+                    />
+                  ) : (
+                    <CommandPaletteOption
+                      key={item.target.id}
+                      target={item.target}
+                      selected={index === selectedIndex}
+                      onMouseEnter={() => setSelectedIndex(index)}
+                      onNavigate={onNavigate}
+                    />
+                  )
+                return (
+                  <CommandPaletteSection
+                    key={item.type === 'action' ? item.action.id : item.target.id}
+                    title={
+                      item.type === 'action'
+                        ? t('command.sections.actions')
+                        : t('command.sections.navigation')
+                    }
+                    compact={!showSection}
+                  >
+                    {option}
+                  </CommandPaletteSection>
+                )
+              })}
             </>
           )}
         </div>
@@ -244,12 +281,22 @@ export function CommandPalette({
   )
 }
 
-function CommandPaletteSection({ title, children }: { title: string; children: ReactNode }) {
+function CommandPaletteSection({
+  title,
+  compact = false,
+  children,
+}: {
+  title: string
+  compact?: boolean
+  children: ReactNode
+}) {
   return (
-    <div className="py-1 first:pt-0">
-      <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        {title}
-      </div>
+    <div className={compact ? 'py-0' : 'py-1 first:pt-0'}>
+      {!compact && (
+        <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {title}
+        </div>
+      )}
       <div className="space-y-1">{children}</div>
     </div>
   )

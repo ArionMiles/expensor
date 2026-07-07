@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
@@ -29,6 +29,83 @@ function renderSettings(route = '/settings') {
   )
 }
 
+function mockOpenAISettings({
+  credentialsStored = false,
+  ready = false,
+  model = 'gpt-5.4-mini',
+  baseUrl = 'https://api.openai.com/v1',
+  requests,
+}: {
+  credentialsStored?: boolean
+  ready?: boolean
+  model?: string
+  baseUrl?: string
+  requests?: Array<{ path: string; body?: unknown }>
+} = {}) {
+  server.use(
+    http.get('/api/llm/providers', () =>
+      HttpResponse.json([
+        {
+          name: 'openai',
+          display_name: 'OpenAI',
+          description: 'OpenAI API',
+          auth_type: 'api_key',
+          capabilities: ['text_generation', 'json_schema'],
+          model_options: [
+            {
+              id: 'gpt-5.4-mini',
+              display_name: 'GPT-5.4 mini',
+              quality: 'Balanced',
+              cost: 'Lower',
+              description: 'Recommended for rule drafting.',
+              recommended: true,
+            },
+            {
+              id: 'gpt-5.4',
+              display_name: 'GPT-5.4',
+              quality: 'High',
+              cost: 'Medium',
+              description: 'Use when drafts need more reasoning headroom.',
+            },
+          ],
+        },
+      ]),
+    ),
+    http.get('/api/llm/providers/openai/status', () =>
+      HttpResponse.json({
+        name: 'openai',
+        config: { model, base_url: baseUrl },
+        config_present: true,
+        credentials_stored: credentialsStored,
+        active: ready,
+        ready,
+      }),
+    ),
+    http.put('/api/llm/providers/openai/config', async ({ request }) => {
+      const body = await request.json()
+      requests?.push({ path: '/api/llm/providers/openai/config', body })
+      return HttpResponse.json({})
+    }),
+    http.put('/api/llm/providers/openai/credentials', async ({ request }) => {
+      const body = await request.json()
+      requests?.push({ path: '/api/llm/providers/openai/credentials', body })
+      return HttpResponse.json({})
+    }),
+    http.post('/api/llm/providers/openai/healthcheck', () => {
+      requests?.push({ path: '/api/llm/providers/openai/healthcheck' })
+      return HttpResponse.json({ status: 'ok', message: 'OpenAI connection is healthy.' })
+    }),
+    http.post('/api/llm/providers/openai/activate', () => {
+      requests?.push({ path: '/api/llm/providers/openai/activate' })
+      return HttpResponse.json({ status: 'activated' })
+    }),
+    http.delete('/api/llm/providers/openai', () => {
+      requests?.push({ path: '/api/llm/providers/openai' })
+      return new HttpResponse(null, { status: 204 })
+    }),
+  )
+}
+
 describe('Settings', () => {
   it('uses the tab query param to control the visible section', async () => {
     renderSettings('/settings?tab=sync')
@@ -46,10 +123,10 @@ describe('Settings', () => {
       .getAllByRole('button')
       .map((button) => button.textContent?.trim())
       .filter((label) =>
-        ['General', 'Scanning', 'Account', 'Community', 'Admin'].includes(label ?? ''),
+        ['General', 'Scanning', 'Account', 'AI', 'Community', 'Admin'].includes(label ?? ''),
       )
 
-    expect(tabs).toEqual(['General', 'Scanning', 'Account', 'Community', 'Admin'])
+    expect(tabs).toEqual(['General', 'Scanning', 'Account', 'AI', 'Community', 'Admin'])
   })
 
   it('updates the tab query param when the user clicks a tab', async () => {
@@ -308,5 +385,69 @@ describe('Settings', () => {
 
     expect(writeText).toHaveBeenCalledWith('test')
     expect(await screen.findByText('Copied!')).toBeInTheDocument()
+  })
+
+  it('saves OpenAI settings and tests the connection with normalized config', async () => {
+    const user = userEvent.setup()
+    const requests: Array<{ path: string; body?: unknown }> = []
+    mockOpenAISettings({ requests })
+
+    renderSettings('/settings?tab=ai')
+
+    expect(await screen.findByRole('heading', { name: 'OpenAI' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /OpenAI API docs/ })).toHaveAttribute(
+      'href',
+      'https://developers.openai.com/api/reference/overview',
+    )
+    expect(screen.queryByDisplayValue('https://api.openai.com/v1')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Edit base URL' }))
+    expect(screen.getByDisplayValue('https://api.openai.com/v1')).toBeInTheDocument()
+
+    const modelInput = screen.getByLabelText('Model')
+    await user.clear(modelInput)
+    await user.type(modelInput, 'GPT-5.4')
+    await user.hover(await screen.findByText('Quality: High'))
+    expect(
+      await screen.findByText('Relative rule-drafting quality and reasoning headroom.'),
+    ).toBeInTheDocument()
+    await user.click(await screen.findByText('GPT-5.4'))
+    await user.type(screen.getByLabelText('API key'), 'sk-test')
+    await user.click(screen.getByRole('button', { name: 'Test' }))
+
+    await waitFor(() =>
+      expect(requests).toEqual([
+        {
+          path: '/api/llm/providers/openai/config',
+          body: { config: { model: 'gpt-5.4', base_url: 'https://api.openai.com/v1' } },
+        },
+        { path: '/api/llm/providers/openai/credentials', body: { api_key: 'sk-test' } },
+        { path: '/api/llm/providers/openai/healthcheck' },
+      ]),
+    )
+    expect(await screen.findByText('OpenAI connection is healthy.')).toBeInTheDocument()
+  })
+
+  it('shows a stored OpenAI key placeholder and disconnects through confirmation', async () => {
+    const user = userEvent.setup()
+    const requests: Array<{ path: string; body?: unknown }> = []
+    mockOpenAISettings({ credentialsStored: true, ready: true, requests })
+
+    renderSettings('/settings?tab=ai')
+
+    expect(await screen.findByText('Ready')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('••••••••••••••••')).toBeInTheDocument()
+    expect(screen.queryByText('Stored encrypted in Expensor.')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Disconnect' }))
+    expect(screen.getByRole('dialog', { name: 'Disconnect OpenAI?' })).toBeInTheDocument()
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Disconnect OpenAI?' })).getByRole('button', {
+        name: 'Disconnect',
+      }),
+    )
+
+    await waitFor(() => expect(requests).toContainEqual({ path: '/api/llm/providers/openai' }))
+    expect(await screen.findByText('OpenAI disconnected.')).toBeInTheDocument()
   })
 })

@@ -11,6 +11,8 @@ import (
 	"github.com/go-playground/form/v4"
 	"github.com/go-playground/validator/v10"
 
+	"github.com/ArionMiles/expensor/backend/internal/assistant"
+	"github.com/ArionMiles/expensor/backend/internal/llm"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
@@ -54,6 +56,9 @@ type DaemonRunRequest struct {
 // Handlers holds all dependencies for HTTP endpoint handlers.
 type Handlers struct {
 	registry           *plugins.Registry
+	llmRegistry        *llm.Registry
+	llmRouter          *llm.Router
+	ruleDrafts         ruleDraftService
 	authStore          authStore
 	settingsStore      settingsStore
 	scanningStore      scanningStore
@@ -62,6 +67,7 @@ type Handlers struct {
 	muteStore          muteStore
 	taxonomyStore      taxonomyStore
 	readerRuntimeStore readerRuntimeStore
+	llmRuntimeStore    llmRuntimeStore
 	ruleStore          ruleStore
 	syncStore          syncStore
 	diagnosticStore    diagnosticStore
@@ -91,6 +97,9 @@ type Handlers struct {
 // HandlersConfig holds all dependencies for NewHandlers.
 type HandlersConfig struct {
 	Registry           *plugins.Registry
+	LLMRegistry        *llm.Registry
+	LLMRouter          *llm.Router
+	RuleDrafts         *assistant.RuleDraftService
 	Store              Storer
 	Daemon             DaemonStatusProvider
 	Version            string
@@ -127,6 +136,9 @@ func NewHandlers(cfg HandlersConfig) *Handlers {
 	}
 	return &Handlers{
 		registry:           cfg.Registry,
+		llmRegistry:        cfg.LLMRegistry,
+		llmRouter:          cfg.LLMRouter,
+		ruleDrafts:         cfg.RuleDrafts,
 		authStore:          cfg.Store,
 		settingsStore:      cfg.Store,
 		scanningStore:      cfg.Store,
@@ -135,6 +147,7 @@ func NewHandlers(cfg HandlersConfig) *Handlers {
 		muteStore:          cfg.Store,
 		taxonomyStore:      cfg.Store,
 		readerRuntimeStore: cfg.Store,
+		llmRuntimeStore:    cfg.Store,
 		ruleStore:          cfg.Store,
 		syncStore:          cfg.Store,
 		diagnosticStore:    cfg.Store,

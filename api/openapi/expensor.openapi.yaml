@@ -482,6 +482,107 @@ definitions:
         example: 2026
         type: integer
     type: object
+  httpapi.LLMProviderConfigRequest:
+    properties:
+      base_url:
+        example: https://api.openai.com/v1
+        type: string
+      model:
+        example: gpt-5.4-mini
+        type: string
+    type: object
+  httpapi.LLMProviderConfigSaveRequest:
+    properties:
+      config:
+        $ref: '#/definitions/httpapi.LLMProviderConfigRequest'
+    required:
+    - config
+    type: object
+  httpapi.LLMProviderCredentialsRequest:
+    properties:
+      api_key:
+        example: sk-...
+        type: string
+    required:
+    - api_key
+    type: object
+  httpapi.LLMProviderHealthResponse:
+    properties:
+      message:
+        example: OpenAI connection is healthy.
+        type: string
+      status:
+        example: ok
+        type: string
+    type: object
+  httpapi.LLMProviderInfoResponse:
+    properties:
+      auth_type:
+        example: api_key
+        type: string
+      capabilities:
+        example:
+        - text_generation
+        - json_schema
+        items:
+          type: string
+        type: array
+      config_schema:
+        additionalProperties: {}
+        type: object
+      description:
+        example: Connect an OpenAI API key for usage-billed LLM workflows with structured
+          outputs.
+        type: string
+      display_name:
+        example: OpenAI
+        type: string
+      model_options:
+        items:
+          $ref: '#/definitions/httpapi.LLMProviderModelOption'
+        type: array
+      name:
+        example: openai
+        type: string
+    type: object
+  httpapi.LLMProviderModelOption:
+    properties:
+      cost:
+        example: Lower
+        type: string
+      description:
+        example: 'Recommended for rule drafting: strong quality with lower per-use
+          cost.'
+        type: string
+      display_name:
+        example: GPT-5.4 mini
+        type: string
+      id:
+        example: gpt-5.4-mini
+        type: string
+      quality:
+        example: Balanced
+        type: string
+      recommended:
+        example: true
+        type: boolean
+    type: object
+  httpapi.LLMProviderStatusResponse:
+    properties:
+      active:
+        type: boolean
+      config:
+        $ref: '#/definitions/httpapi.LLMProviderConfigRequest'
+      config_present:
+        type: boolean
+      credentials_stored:
+        type: boolean
+      name:
+        example: openai
+        type: string
+      ready:
+        type: boolean
+    type: object
   httpapi.LabelMappingsResponse:
     additionalProperties:
       items:
@@ -801,6 +902,141 @@ definitions:
     required:
     - rules
     - version
+    type: object
+  httpapi.RuleDraftExpectedRequest:
+    properties:
+      amount:
+        example: "123.45"
+        type: string
+      currency:
+        example: INR
+        type: string
+      merchant:
+        example: Example Store
+        type: string
+    type: object
+  httpapi.RuleDraftIssueResponse:
+    properties:
+      actual:
+        example: "123.00"
+        type: string
+      expected:
+        example: "123.45"
+        type: string
+      field:
+        example: amount
+        type: string
+      message:
+        example: Amount matched "123.00", expected "123.45".
+        type: string
+      sample_index:
+        example: 0
+        type: integer
+      sample_name:
+        example: Sample 1
+        type: string
+    type: object
+  httpapi.RuleDraftMatchResponse:
+    properties:
+      amount:
+        example: "123.45"
+        type: string
+      currency:
+        example: INR
+        type: string
+      merchant:
+        example: Example Store
+        type: string
+      sample_index:
+        example: 0
+        type: integer
+      sample_name:
+        example: Sample 1
+        type: string
+    type: object
+  httpapi.RuleDraftRequest:
+    properties:
+      amount_regex:
+        example: ""
+        type: string
+      currency_regex:
+        example: ""
+        type: string
+      merchant_regex:
+        example: ""
+        type: string
+      name:
+        example: Example Bank Card
+        type: string
+      samples:
+        items:
+          $ref: '#/definitions/httpapi.RuleDraftSampleRequest'
+        type: array
+      sender_emails:
+        items:
+          type: string
+        type: array
+      source:
+        $ref: '#/definitions/httpapi.RuleSourceResponse'
+      subject_contains:
+        example: Card spend
+        type: string
+    type: object
+  httpapi.RuleDraftResponse:
+    properties:
+      draft:
+        $ref: '#/definitions/httpapi.RuleDraftRuleResponse'
+      matches:
+        items:
+          $ref: '#/definitions/httpapi.RuleDraftMatchResponse'
+        type: array
+      validation_issues:
+        items:
+          $ref: '#/definitions/httpapi.RuleDraftIssueResponse'
+        type: array
+    type: object
+  httpapi.RuleDraftRuleResponse:
+    properties:
+      amount_regex:
+        example: INR\s+([0-9,.]+)
+        type: string
+      currency_regex:
+        example: (INR)
+        type: string
+      merchant_regex:
+        example: at\s+(.+)$
+        type: string
+      name:
+        example: Example Bank Card
+        type: string
+      notes:
+        type: string
+      sender_emails:
+        items:
+          type: string
+        type: array
+      source:
+        $ref: '#/definitions/httpapi.RuleSourceResponse'
+      subject_contains:
+        example: Card spend
+        type: string
+    type: object
+  httpapi.RuleDraftSampleRequest:
+    properties:
+      body:
+        example: You spent INR 123.45 at Example Store.
+        type: string
+      expected:
+        $ref: '#/definitions/httpapi.RuleDraftExpectedRequest'
+      name:
+        example: Sample 1
+        type: string
+      sender:
+        example: alerts@example.com
+        type: string
+      subject:
+        example: Card spend alert
+        type: string
     type: object
   httpapi.RuleImportResponse:
     properties:
@@ -2976,6 +3212,230 @@ paths:
       summary: Health check
       tags:
       - Bootstrap
+  /llm/providers:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/httpapi.LLMProviderInfoResponse'
+            type: array
+      summary: List LLM providers
+      tags:
+      - LLM
+  /llm/providers/{name}:
+    delete:
+      parameters:
+      - description: Provider name
+        example: openai
+        in: path
+        name: name
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Disconnect an LLM provider
+      tags:
+      - LLM
+  /llm/providers/{name}/activate:
+    post:
+      parameters:
+      - description: Provider name
+        example: openai
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.StatusOnlyResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Activate an LLM provider
+      tags:
+      - LLM
+  /llm/providers/{name}/config:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Provider name
+        example: openai
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Provider config
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.LLMProviderConfigSaveRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.StatusOnlyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Save LLM provider config
+      tags:
+      - LLM
+  /llm/providers/{name}/credentials:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Provider name
+        example: openai
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Provider credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.LLMProviderCredentialsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.StatusOnlyResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Save LLM provider credentials
+      tags:
+      - LLM
+  /llm/providers/{name}/healthcheck:
+    post:
+      parameters:
+      - description: Provider name
+        example: openai
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.LLMProviderHealthResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Check LLM provider connectivity
+      tags:
+      - LLM
+  /llm/providers/{name}/status:
+    get:
+      parameters:
+      - description: Provider name
+        example: openai
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.LLMProviderStatusResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Get LLM provider status
+      tags:
+      - LLM
   /merchants/categorize:
     post:
       consumes:
@@ -3712,6 +4172,47 @@ paths:
       summary: Discover Thunderbird profiles
       tags:
       - Providers
+  /rule-drafts:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Rule draft request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.RuleDraftRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.RuleDraftResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Draft a rule using the active LLM provider
+      tags:
+      - Rules
   /rules:
     get:
       consumes:

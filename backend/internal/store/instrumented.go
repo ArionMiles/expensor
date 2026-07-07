@@ -551,6 +551,15 @@ func (s *InstrumentedStore) GetLLMProviderCredentials(
 	return credentials, found, err
 }
 
+func (s *InstrumentedStore) DeleteLLMProviderRuntime(ctx context.Context, tenant Tenant, provider string) error {
+	ctx, span := s.scope.Start(ctx, "store.runtime.delete_llm_provider_runtime")
+	defer span.End()
+
+	err := s.next.DeleteLLMProviderRuntime(ctx, tenant, provider)
+	s.recordOperation(ctx, "runtime.delete_llm_provider_runtime", err)
+	return err
+}
+
 func (s *InstrumentedStore) SetActiveLLMProvider(ctx context.Context, tenant Tenant, provider string) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.set_active_llm_provider")
 	defer span.End()

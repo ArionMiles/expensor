@@ -404,6 +404,85 @@ export interface RuleDocument {
   rules: RuleImport[]
 }
 
+export interface LLMProviderInfo {
+  name: string
+  display_name: string
+  description: string
+  auth_type: 'api_key' | 'oauth' | 'none'
+  capabilities: string[]
+  config_schema?: Record<string, unknown>
+  model_options?: LLMProviderModelOption[]
+}
+
+export interface LLMProviderModelOption {
+  id: string
+  display_name: string
+  quality: string
+  cost: string
+  description?: string
+  recommended?: boolean
+}
+
+export interface LLMProviderConfig {
+  model?: string
+  base_url?: string
+}
+
+export interface LLMProviderStatus {
+  name: string
+  config: LLMProviderConfig
+  config_present: boolean
+  credentials_stored: boolean
+  active: boolean
+  ready: boolean
+}
+
+export interface LLMHealthResponse {
+  status: string
+  message?: string
+}
+
+export interface RuleDraftSample {
+  name: string
+  sender: string
+  subject: string
+  body: string
+  expected: {
+    amount: string
+    merchant: string
+    currency: string
+  }
+}
+
+export interface RuleDraftRequest extends RulePayload {
+  samples: RuleDraftSample[]
+}
+
+export interface RuleDraftRule extends RulePayload {
+  notes: string
+}
+
+export interface RuleDraftResponse {
+  draft: RuleDraftRule
+  matches: Array<{
+    sample_index: number
+    sample_name: string
+    amount: string
+    merchant: string
+    currency: string
+  }>
+  validation_issues?: RuleDraftValidationIssue[]
+}
+
+export interface RuleDraftValidationIssue {
+  sample_index: number
+  sample_name: string
+  field: string
+  expected?: string
+  actual?: string
+  message: string
+}
+
 export interface StatusResponse {
   daemon: DaemonStatus
   stats?: Stats

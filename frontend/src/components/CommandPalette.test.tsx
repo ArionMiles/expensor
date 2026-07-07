@@ -262,4 +262,52 @@ describe('CommandPalette', () => {
 
     expect(onAction).toHaveBeenCalledWith('logout')
   })
+
+  it('ranks the AI settings destination above incidental email matches for AI searches', async () => {
+    const user = userEvent.setup()
+
+    renderCommandPalette({
+      targets: NAVIGATION_TARGETS,
+      actions: [
+        {
+          id: 'create-rule-from-emails',
+          titleKey: 'command.actions.createRuleFromEmails',
+          descriptionKey: 'command.actions.createRuleFromEmails.description',
+        },
+      ],
+    })
+
+    await user.type(screen.getByRole('textbox'), 'AI')
+
+    const results = screen.getAllByRole('button').map((button) => button.textContent ?? '')
+    expect(results[0]).toContain('Settings / AI')
+  })
+
+  it('ranks creating rules from emails above the generic rule workbench action', async () => {
+    const user = userEvent.setup()
+
+    renderCommandPalette({
+      targets: [],
+      actions: [
+        {
+          id: 'create-rule-from-emails',
+          titleKey: 'command.actions.createRuleFromEmails',
+          descriptionKey: 'command.actions.createRuleFromEmails.description',
+          keywords: ['create rule', 'email rule', 'rule from emails', 'search emails'],
+        },
+        {
+          id: 'create-rule',
+          titleKey: 'command.actions.createRule',
+          descriptionKey: 'command.actions.createRule.description',
+          keywords: ['new rule', 'rule'],
+        },
+      ],
+    })
+
+    await user.type(screen.getByRole('textbox'), 'create')
+
+    const results = screen.getAllByRole('button').map((button) => button.textContent ?? '')
+    expect(results[0]).toContain('Create rule from emails')
+    expect(results[1]).toContain('Create new rule')
+  })
 })

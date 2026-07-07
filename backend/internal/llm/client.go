@@ -60,6 +60,8 @@ const (
 // ResponseFormat describes expected model output shape.
 type ResponseFormat struct {
 	Type   ResponseFormatType `json:"type"`
+	Name   string             `json:"name,omitempty"`
+	Strict bool               `json:"strict,omitempty"`
 	Schema json.RawMessage    `json:"schema,omitempty"`
 }
 
@@ -95,6 +97,7 @@ type Response struct {
 // Client is implemented by concrete LLM providers.
 type Client interface {
 	Complete(ctx context.Context, req Request) (Response, error)
+	HealthCheck(ctx context.Context) error
 }
 
 // ClientConfig contains tenant runtime state needed to construct a provider client.

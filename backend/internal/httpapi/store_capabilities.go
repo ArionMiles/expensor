@@ -111,6 +111,17 @@ type readerRuntimeStore interface {
 	DeleteReaderRuntime(ctx context.Context, tenant store.Tenant, reader string) error
 }
 
+type llmRuntimeStore interface {
+	SetLLMProviderConfig(ctx context.Context, tenant store.Tenant, provider string, config json.RawMessage) error
+	GetLLMProviderConfig(ctx context.Context, tenant store.Tenant, provider string) (json.RawMessage, bool, error)
+	SetLLMProviderCredentials(ctx context.Context, tenant store.Tenant, provider string, credentials []byte) error
+	GetLLMProviderCredentials(ctx context.Context, tenant store.Tenant, provider string) ([]byte, bool, error)
+	DeleteLLMProviderRuntime(ctx context.Context, tenant store.Tenant, provider string) error
+	SetActiveLLMProvider(ctx context.Context, tenant store.Tenant, provider string) error
+	ClearActiveLLMProvider(ctx context.Context, tenant store.Tenant) error
+	GetActiveLLMProviderRuntime(ctx context.Context, tenant store.Tenant) (store.LLMProviderRuntime, bool, error)
+}
+
 type ruleStore interface {
 	ListRules(ctx context.Context, tenant store.Tenant) ([]store.RuleRow, error)
 	GetRule(ctx context.Context, tenant store.Tenant, id string) (*store.RuleRow, error)

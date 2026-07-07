@@ -1,0 +1,368 @@
+package httpapi
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/ArionMiles/expensor/backend/internal/llm"
+	"github.com/ArionMiles/expensor/backend/internal/store"
+)
+
+type llmProviderInfoJSON struct {
+	Name         string            `json:"name"`
+	DisplayName  string            `json:"display_name"`
+	Description  string            `json:"description"`
+	AuthType     string            `json:"auth_type"`
+	Capabilities []llm.Capability  `json:"capabilities"`
+	ConfigSchema json.RawMessage   `json:"config_schema,omitempty"`
+	ModelOptions []llm.ModelOption `json:"model_options,omitempty"`
+}
+
+type llmProviderStatusJSON struct {
+	Name              string          `json:"name"`
+	Config            json.RawMessage `json:"config"`
+	ConfigPresent     bool            `json:"config_present"`
+	CredentialsStored bool            `json:"credentials_stored"`
+	Active            bool            `json:"active"`
+	Ready             bool            `json:"ready"`
+}
+
+type llmProviderConfigRequest struct {
+	Config json.RawMessage `json:"config" validate:"required"`
+}
+
+type llmProviderCredentialsRequest struct {
+	APIKey string `json:"api_key" validate:"required,no_control_chars"`
+}
+
+type llmProviderHealthResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+}
+
+// ListLLMProviders handles GET /api/llm/providers.
+//
+// @Summary List LLM providers
+// @Tags LLM
+// @Produce json
+// @Success 200 {array} LLMProviderInfoResponse
+// @Router /llm/providers [get]
+func (h *Handlers) ListLLMProviders(w http.ResponseWriter, _ *http.Request) {
+	if h.llmRegistry == nil {
+		writeJSON(w, http.StatusOK, []llmProviderInfoJSON{})
+		return
+	}
+	providers := h.llmRegistry.ListProviders()
+	out := make([]llmProviderInfoJSON, 0, len(providers))
+	for _, provider := range providers {
+		meta := provider.Metadata
+		out = append(out, llmProviderInfoJSON{
+			Name:         meta.Name,
+			DisplayName:  meta.DisplayName,
+			Description:  meta.Description,
+			AuthType:     string(meta.Auth.Type),
+			Capabilities: append([]llm.Capability(nil), meta.Capabilities...),
+			ConfigSchema: cloneRawJSON(meta.ConfigSchema),
+			ModelOptions: append([]llm.ModelOption(nil), meta.ModelOptions...),
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// GetLLMProviderStatus handles GET /api/llm/providers/{name}/status.
+//
+// @Summary Get LLM provider status
+// @Tags LLM
+// @Produce json
+// @Param name path string true "Provider name" example(openai)
+// @Success 200 {object} LLMProviderStatusResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /llm/providers/{name}/status [get]
+func (h *Handlers) GetLLMProviderStatus(w http.ResponseWriter, r *http.Request) {
+	provider, ok := h.llmProviderByPath(w, r)
+	if !ok {
+		return
+	}
+	status, err := h.llmProviderStatus(r.Context(), requestTenant(r), provider.Metadata.Name)
+	if err != nil {
+		h.logger.Error("get llm provider status", "provider", provider.Metadata.Name, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to load LLM provider status")
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+// SaveLLMProviderConfig handles PUT /api/llm/providers/{name}/config.
+//
+// @Summary Save LLM provider config
+// @Tags LLM
+// @Accept json
+// @Produce json
+// @Param name path string true "Provider name" example(openai)
+// @Param request body LLMProviderConfigSaveRequest true "Provider config"
+// @Success 200 {object} StatusOnlyResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /llm/providers/{name}/config [put]
+func (h *Handlers) SaveLLMProviderConfig(w http.ResponseWriter, r *http.Request) {
+	provider, ok := h.llmProviderByPath(w, r)
+	if !ok {
+		return
+	}
+	body, ok := decodeAndValidateJSON[llmProviderConfigRequest](h, w, r)
+	if !ok {
+		return
+	}
+	if !json.Valid(body.Config) {
+		writeError(w, http.StatusBadRequest, "invalid provider config JSON")
+		return
+	}
+	if err := h.llmRuntimeStore.SetLLMProviderConfig(r.Context(), requestTenant(r), provider.Metadata.Name, body.Config); err != nil {
+		h.logger.Error("save llm provider config", "provider", provider.Metadata.Name, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to save LLM provider config")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+// SaveLLMProviderCredentials handles PUT /api/llm/providers/{name}/credentials.
+//
+// @Summary Save LLM provider credentials
+// @Tags LLM
+// @Accept json
+// @Produce json
+// @Param name path string true "Provider name" example(openai)
+// @Param request body LLMProviderCredentialsRequest true "Provider credentials"
+// @Success 200 {object} StatusOnlyResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 422 {object} ValidationErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /llm/providers/{name}/credentials [put]
+func (h *Handlers) SaveLLMProviderCredentials(w http.ResponseWriter, r *http.Request) {
+	provider, ok := h.llmProviderByPath(w, r)
+	if !ok {
+		return
+	}
+	body, ok := decodeAndValidateJSON[llmProviderCredentialsRequest](h, w, r)
+	if !ok {
+		return
+	}
+	credentials, err := json.Marshal(map[string]string{"api_key": strings.TrimSpace(body.APIKey)})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to encode LLM provider credentials")
+		return
+	}
+	if err := h.llmRuntimeStore.SetLLMProviderCredentials(r.Context(), requestTenant(r), provider.Metadata.Name, credentials); err != nil {
+		h.logger.Error("save llm provider credentials", "provider", provider.Metadata.Name, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to save LLM provider credentials")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+// HealthCheckLLMProvider handles POST /api/llm/providers/{name}/healthcheck.
+//
+// @Summary Check LLM provider connectivity
+// @Tags LLM
+// @Produce json
+// @Param name path string true "Provider name" example(openai)
+// @Success 200 {object} LLMProviderHealthResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Failure 429 {object} ErrorResponse
+// @Failure 502 {object} ErrorResponse
+// @Router /llm/providers/{name}/healthcheck [post]
+func (h *Handlers) HealthCheckLLMProvider(w http.ResponseWriter, r *http.Request) {
+	provider, client, ok := h.llmProviderClientFromRuntime(w, r)
+	if !ok {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 75*time.Second)
+	defer cancel()
+	if err := client.HealthCheck(ctx); err != nil {
+		writeLLMProviderError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, llmProviderHealthResponse{
+		Status:  "ok",
+		Message: provider.Metadata.DisplayName + " connection is healthy.",
+	})
+}
+
+// ActivateLLMProvider handles POST /api/llm/providers/{name}/activate.
+//
+// @Summary Activate an LLM provider
+// @Tags LLM
+// @Produce json
+// @Param name path string true "Provider name" example(openai)
+// @Success 200 {object} StatusOnlyResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Failure 429 {object} ErrorResponse
+// @Failure 502 {object} ErrorResponse
+// @Router /llm/providers/{name}/activate [post]
+func (h *Handlers) ActivateLLMProvider(w http.ResponseWriter, r *http.Request) {
+	provider, client, ok := h.llmProviderClientFromRuntime(w, r)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 75*time.Second)
+	defer cancel()
+	if err := client.HealthCheck(ctx); err != nil {
+		writeLLMProviderError(w, err)
+		return
+	}
+	if err := h.llmRuntimeStore.SetActiveLLMProvider(r.Context(), requestTenant(r), provider.Metadata.Name); err != nil {
+		h.logger.Error("activate llm provider", "provider", provider.Metadata.Name, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to activate LLM provider")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "active"})
+}
+
+// DisconnectLLMProvider handles DELETE /api/llm/providers/{name}.
+//
+// @Summary Disconnect an LLM provider
+// @Tags LLM
+// @Param name path string true "Provider name" example(openai)
+// @Success 204
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /llm/providers/{name} [delete]
+func (h *Handlers) DisconnectLLMProvider(w http.ResponseWriter, r *http.Request) {
+	provider, ok := h.llmProviderByPath(w, r)
+	if !ok {
+		return
+	}
+	if err := h.llmRuntimeStore.DeleteLLMProviderRuntime(r.Context(), requestTenant(r), provider.Metadata.Name); err != nil {
+		h.logger.Error("disconnect llm provider", "provider", provider.Metadata.Name, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to disconnect LLM provider")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) llmProviderByPath(w http.ResponseWriter, r *http.Request) (llm.Provider, bool) {
+	if h.llmRegistry == nil {
+		writeError(w, http.StatusNotFound, "LLM providers are not configured")
+		return llm.Provider{}, false
+	}
+	name := r.PathValue("name")
+	provider, err := h.llmRegistry.GetProvider(name)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "LLM provider not found")
+		return llm.Provider{}, false
+	}
+	return provider, true
+}
+
+func (h *Handlers) llmProviderStatus(ctx context.Context, tenant store.Tenant, provider string) (llmProviderStatusJSON, error) {
+	config, configPresent, err := h.llmRuntimeStore.GetLLMProviderConfig(ctx, tenant, provider)
+	if err != nil {
+		return llmProviderStatusJSON{}, err
+	}
+	_, credentialsStored, err := h.llmRuntimeStore.GetLLMProviderCredentials(ctx, tenant, provider)
+	if err != nil {
+		return llmProviderStatusJSON{}, err
+	}
+	activeRuntime, activeFound, err := h.llmRuntimeStore.GetActiveLLMProviderRuntime(ctx, tenant)
+	if err != nil {
+		return llmProviderStatusJSON{}, err
+	}
+	if len(config) == 0 {
+		config = json.RawMessage(`{}`)
+	}
+	active := activeFound && activeRuntime.Provider == provider
+	return llmProviderStatusJSON{
+		Name:              provider,
+		Config:            cloneRawJSON(config),
+		ConfigPresent:     configPresent,
+		CredentialsStored: credentialsStored,
+		Active:            active,
+		Ready:             active && credentialsStored,
+	}, nil
+}
+
+func (h *Handlers) llmProviderClientFromRuntime(w http.ResponseWriter, r *http.Request) (llm.Provider, llm.Client, bool) {
+	provider, ok := h.llmProviderByPath(w, r)
+	if !ok {
+		return llm.Provider{}, nil, false
+	}
+	tenant := requestTenant(r)
+	config, _, err := h.llmRuntimeStore.GetLLMProviderConfig(r.Context(), tenant, provider.Metadata.Name)
+	if err != nil {
+		h.logger.Error("load llm provider config", "provider", provider.Metadata.Name, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to load LLM provider config")
+		return llm.Provider{}, nil, false
+	}
+	credentials, found, err := h.llmRuntimeStore.GetLLMProviderCredentials(r.Context(), tenant, provider.Metadata.Name)
+	if err != nil {
+		h.logger.Error("load llm provider credentials", "provider", provider.Metadata.Name, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to load LLM provider credentials")
+		return llm.Provider{}, nil, false
+	}
+	if !found {
+		writeError(w, http.StatusConflict, "LLM provider credentials are not configured")
+		return llm.Provider{}, nil, false
+	}
+	client, err := provider.NewClient(llm.ClientConfig{
+		Config:      cloneRawJSON(config),
+		Credentials: cloneRawJSON(credentials),
+	})
+	if err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return llm.Provider{}, nil, false
+	}
+	return provider, client, true
+}
+
+func writeLLMProviderError(w http.ResponseWriter, err error) {
+	var providerErr *llm.ProviderError
+	if errors.As(err, &providerErr) {
+		status := http.StatusBadGateway
+		message := providerErr.Message
+		switch providerErr.Code {
+		case "invalid_api_key":
+			status = http.StatusUnauthorized
+			message = "OpenAI API key was rejected. Check the key and try again."
+		case "insufficient_quota":
+			status = http.StatusTooManyRequests
+			message = "OpenAI API quota is unavailable. Add billing credits or choose another LLM provider."
+		case "rate_limit_exceeded":
+			status = http.StatusTooManyRequests
+			message = "OpenAI rate limit exceeded. Wait a moment and try again."
+		default:
+			switch providerErr.StatusCode {
+			case http.StatusUnauthorized:
+				status = http.StatusUnauthorized
+			case http.StatusTooManyRequests:
+				status = http.StatusTooManyRequests
+			}
+			if strings.TrimSpace(message) == "" {
+				message = "LLM provider request failed."
+			}
+		}
+		writeError(w, status, message)
+		return
+	}
+	writeError(w, http.StatusBadGateway, err.Error())
+}
+
+func cloneRawJSON(in []byte) json.RawMessage {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]byte, len(in))
+	copy(out, in)
+	return json.RawMessage(out)
+}

@@ -15,6 +15,7 @@ type Storer interface {
 	muteStore
 	taxonomyStore
 	readerRuntimeStore
+	llmRuntimeStore
 	ruleStore
 	syncStore
 	diagnosticStore

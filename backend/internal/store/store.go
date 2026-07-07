@@ -380,6 +380,11 @@ func (s *Store) GetLLMProviderCredentials(ctx context.Context, tenant Tenant, pr
 	return s.runtime.GetLLMProviderCredentials(ctx, tenant, provider)
 }
 
+// DeleteLLMProviderRuntime removes all runtime data for a tenant LLM provider.
+func (s *Store) DeleteLLMProviderRuntime(ctx context.Context, tenant Tenant, provider string) error {
+	return s.runtime.DeleteLLMProviderRuntime(ctx, tenant, provider)
+}
+
 // SetActiveLLMProvider marks one LLM provider active for a tenant.
 func (s *Store) SetActiveLLMProvider(ctx context.Context, tenant Tenant, provider string) error {
 	return s.runtime.SetActiveLLMProvider(ctx, tenant, provider)

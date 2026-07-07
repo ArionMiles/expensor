@@ -237,6 +237,111 @@ type RuleImportResponse struct {
 	Imported int `json:"imported" example:"1"`
 }
 
+type LLMProviderInfoResponse struct {
+	Name         string                   `json:"name" example:"openai"`
+	DisplayName  string                   `json:"display_name" example:"OpenAI"`
+	Description  string                   `json:"description" example:"Connect an OpenAI API key for usage-billed LLM workflows with structured outputs."`
+	AuthType     string                   `json:"auth_type" example:"api_key"`
+	Capabilities []string                 `json:"capabilities" example:"text_generation,json_schema"`
+	ConfigSchema map[string]any           `json:"config_schema,omitempty"`
+	ModelOptions []LLMProviderModelOption `json:"model_options,omitempty"`
+}
+
+type LLMProviderModelOption struct {
+	ID          string `json:"id" example:"gpt-5.4-mini"`
+	DisplayName string `json:"display_name" example:"GPT-5.4 mini"`
+	Quality     string `json:"quality" example:"Balanced"`
+	Cost        string `json:"cost" example:"Lower"`
+	Description string `json:"description,omitempty" example:"Recommended for rule drafting: strong quality with lower per-use cost."`
+	Recommended bool   `json:"recommended,omitempty" example:"true"`
+}
+
+type LLMProviderStatusResponse struct {
+	Name              string                   `json:"name" example:"openai"`
+	Config            LLMProviderConfigRequest `json:"config"`
+	ConfigPresent     bool                     `json:"config_present"`
+	CredentialsStored bool                     `json:"credentials_stored"`
+	Active            bool                     `json:"active"`
+	Ready             bool                     `json:"ready"`
+}
+
+type LLMProviderConfigSaveRequest struct {
+	Config LLMProviderConfigRequest `json:"config" validate:"required"`
+}
+
+type LLMProviderConfigRequest struct {
+	Model   string `json:"model" example:"gpt-5.4-mini"`
+	BaseURL string `json:"base_url" example:"https://api.openai.com/v1"`
+}
+
+type LLMProviderCredentialsRequest struct {
+	APIKey string `json:"api_key" validate:"required" example:"sk-..."`
+}
+
+type LLMProviderHealthResponse struct {
+	Status  string `json:"status" example:"ok"`
+	Message string `json:"message,omitempty" example:"OpenAI connection is healthy."`
+}
+
+type RuleDraftExpectedRequest struct {
+	Amount   string `json:"amount" example:"123.45"`
+	Merchant string `json:"merchant" example:"Example Store"`
+	Currency string `json:"currency" example:"INR"`
+}
+
+type RuleDraftSampleRequest struct {
+	Name     string                   `json:"name" example:"Sample 1"`
+	Sender   string                   `json:"sender" example:"alerts@example.com"`
+	Subject  string                   `json:"subject" example:"Card spend alert"`
+	Body     string                   `json:"body" example:"You spent INR 123.45 at Example Store."`
+	Expected RuleDraftExpectedRequest `json:"expected"`
+}
+
+type RuleDraftRequest struct {
+	Name            string                   `json:"name" example:"Example Bank Card"`
+	SenderEmails    []string                 `json:"sender_emails"`
+	SubjectContains string                   `json:"subject_contains" example:"Card spend"`
+	AmountRegex     string                   `json:"amount_regex" example:""`
+	MerchantRegex   string                   `json:"merchant_regex" example:""`
+	CurrencyRegex   string                   `json:"currency_regex" example:""`
+	Source          RuleSourceResponse       `json:"source"`
+	Samples         []RuleDraftSampleRequest `json:"samples"`
+}
+
+type RuleDraftRuleResponse struct {
+	Name            string             `json:"name" example:"Example Bank Card"`
+	SenderEmails    []string           `json:"sender_emails"`
+	SubjectContains string             `json:"subject_contains" example:"Card spend"`
+	AmountRegex     string             `json:"amount_regex" example:"INR\\s+([0-9,.]+)"`
+	MerchantRegex   string             `json:"merchant_regex" example:"at\\s+(.+)$"`
+	CurrencyRegex   string             `json:"currency_regex" example:"(INR)"`
+	Source          RuleSourceResponse `json:"source"`
+	Notes           string             `json:"notes"`
+}
+
+type RuleDraftMatchResponse struct {
+	SampleIndex int    `json:"sample_index" example:"0"`
+	SampleName  string `json:"sample_name" example:"Sample 1"`
+	Amount      string `json:"amount" example:"123.45"`
+	Merchant    string `json:"merchant" example:"Example Store"`
+	Currency    string `json:"currency" example:"INR"`
+}
+
+type RuleDraftIssueResponse struct {
+	SampleIndex int    `json:"sample_index" example:"0"`
+	SampleName  string `json:"sample_name" example:"Sample 1"`
+	Field       string `json:"field" example:"amount"`
+	Expected    string `json:"expected,omitempty" example:"123.45"`
+	Actual      string `json:"actual,omitempty" example:"123.00"`
+	Message     string `json:"message" example:"Amount matched \"123.00\", expected \"123.45\"."`
+}
+
+type RuleDraftResponse struct {
+	Draft            RuleDraftRuleResponse    `json:"draft"`
+	Matches          []RuleDraftMatchResponse `json:"matches"`
+	ValidationIssues []RuleDraftIssueResponse `json:"validation_issues,omitempty"`
+}
+
 // ConfigFieldResponse documents provider configuration field metadata.
 type ConfigFieldResponse struct {
 	Name      string `json:"name" example:"profilePath"`
