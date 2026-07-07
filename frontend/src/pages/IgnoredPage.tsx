@@ -18,6 +18,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { useI18n } from '@/i18n/I18nProvider'
+import { useTooltip } from '@/hooks/useTooltip'
 
 type MerchantSuggestState = { rect: DOMRect; value: string } | null
 
@@ -36,6 +37,7 @@ function EditableReason({
   const placeholderText = placeholder ?? t('common.reason')
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value ?? '')
+  const { handlers: reasonTip, tip: reasonTipEl } = useTooltip()
 
   const commit = () => {
     setEditing(false)
@@ -63,16 +65,20 @@ function EditableReason({
   }
 
   return (
-    <button
-      onClick={() => {
-        setDraft(value ?? '')
-        setEditing(true)
-      }}
-      className="truncate text-left text-xs text-muted-foreground hover:text-foreground"
-      aria-label={value || placeholderText}
-    >
-      {value || <span className="italic opacity-50">{placeholderText}</span>}
-    </button>
+    <>
+      <button
+        onClick={() => {
+          setDraft(value ?? '')
+          setEditing(true)
+        }}
+        {...reasonTip(value || placeholderText)}
+        className="block w-full max-w-full truncate text-left text-xs text-muted-foreground hover:text-foreground"
+        aria-label={value || placeholderText}
+      >
+        {value || <span className="opacity-30">—</span>}
+      </button>
+      {reasonTipEl}
+    </>
   )
 }
 
@@ -179,16 +185,16 @@ function IndividualTab() {
                 <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
                   {tx.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} {tx.currency}
                 </td>
-                <td className="max-w-[200px] px-3 py-2">
+                <td className="w-[200px] max-w-[200px] overflow-hidden px-3 py-2">
                   <EditableReason
                     value={tx.mute_reason}
                     onSave={(reason) => updateReason({ id: tx.id, reason })}
                   />
                 </td>
-                <td className="px-3 py-2 text-right">
+                <td className="w-[7rem] whitespace-nowrap px-3 py-2 text-right">
                   <button
                     onClick={() => setConfirmUnmute(tx.id)}
-                    className="flex items-center gap-1 text-xs text-primary hover:underline"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                   >
                     <Eye size={12} />
                     {t('ignored.action.restore')}
@@ -358,7 +364,7 @@ function MerchantTab() {
                     filtered.map((m) => (
                       <tr key={m.id} className="hover:bg-secondary/30">
                         <td className="px-3 py-2 font-mono text-xs text-foreground">{m.pattern}</td>
-                        <td className="max-w-[180px] px-3 py-2">
+                        <td className="w-[180px] max-w-[180px] overflow-hidden px-3 py-2">
                           <EditableReason
                             value={m.reason}
                             onSave={(reason) => updateReason({ id: m.id, reason })}
