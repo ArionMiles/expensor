@@ -13,6 +13,7 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/assistant"
 	"github.com/ArionMiles/expensor/backend/internal/llm"
+	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
@@ -85,6 +86,7 @@ type Handlers struct {
 	syncFn             func()                 // called by POST /api/config/sync; may be nil
 	banksData          []byte
 	logger             *slog.Logger
+	llmScope           *observability.Scope
 	logLevel           *slog.LevelVar
 	validate           *validator.Validate
 	queryDecoder       *form.Decoder
@@ -99,7 +101,8 @@ type HandlersConfig struct {
 	Registry           *plugins.Registry
 	LLMRegistry        *llm.Registry
 	LLMRouter          *llm.Router
-	RuleDrafts         *assistant.RuleDraftService
+	RuleDrafts         assistant.RuleDrafter
+	LLMScope           *observability.Scope
 	Store              Storer
 	Daemon             DaemonStatusProvider
 	Version            string
@@ -134,6 +137,12 @@ func NewHandlers(cfg HandlersConfig) *Handlers {
 		cfg.LogLevel = new(slog.LevelVar)
 		cfg.LogLevel.Set(slog.LevelInfo)
 	}
+	if cfg.Logger == nil {
+		cfg.Logger = slog.Default()
+	}
+	if cfg.LLMScope == nil {
+		cfg.LLMScope = observability.NewScope(cfg.Logger.With("component", "llm"), "github.com/ArionMiles/expensor/backend/internal/llm")
+	}
 	return &Handlers{
 		registry:           cfg.Registry,
 		llmRegistry:        cfg.LLMRegistry,
@@ -165,6 +174,7 @@ func NewHandlers(cfg HandlersConfig) *Handlers {
 		syncFn:             cfg.SyncFn,
 		banksData:          cfg.BanksData,
 		logger:             cfg.Logger,
+		llmScope:           cfg.LLMScope,
 		logLevel:           cfg.LogLevel,
 		validate:           newRequestValidator(),
 		queryDecoder:       newQueryDecoder(),

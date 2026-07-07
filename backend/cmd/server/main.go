@@ -118,12 +118,18 @@ func run() int {
 		logger.Error("failed to register llm provider", "error", err)
 		return 1
 	}
+	llmLogger := logger.With("component", "llm")
+	llmScope := observability.NewScope(llmLogger, "github.com/ArionMiles/expensor/backend/internal/llm")
 	llmRouter := llm.NewRouter(llm.RouterConfig{
 		Registry: llmRegistry,
 		Runtime:  instrumentedStore,
 		Prompts:  promptCatalog,
+		Scope:    llmScope,
+		Logger:   llmLogger,
 	})
-	ruleDrafts := assistant.NewRuleDraftService(llmRouter)
+	assistantLogger := logger.With("component", "assistant")
+	assistantScope := observability.NewScope(assistantLogger, "github.com/ArionMiles/expensor/backend/internal/assistant")
+	ruleDrafts := assistant.NewInstrumentedRuleDrafter(assistant.NewRuleDraftService(llmRouter), assistantScope, assistantLogger)
 	logger.Info("LLM router initialized", "providers", len(llmRegistry.ListProviders()), "prompts", llmRouter.PromptCatalog().Len())
 
 	dm := &daemonManager{}
@@ -170,6 +176,7 @@ func run() int {
 		LLMRegistry:        llmRegistry,
 		LLMRouter:          llmRouter,
 		RuleDrafts:         ruleDrafts,
+		LLMScope:           llmScope,
 		Store:              st,
 		Daemon:             dm,
 		Version:            config.Version,

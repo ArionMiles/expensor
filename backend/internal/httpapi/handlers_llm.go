@@ -323,6 +323,12 @@ func (h *Handlers) llmProviderClientFromRuntime(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusConflict, err.Error())
 		return llm.Provider{}, nil, false
 	}
+	client = llm.NewInstrumentedClient(
+		client,
+		provider.Metadata.Name,
+		h.llmScope,
+		h.logger.With("component", "llm"),
+	)
 	return provider, client, true
 }
 
