@@ -95,6 +95,16 @@ export interface AdminScanningSettingsPatch {
   max_concurrent_scans?: number
 }
 
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+
+export interface AdminLoggingSettings {
+  level: LogLevel
+}
+
+export interface AdminLoggingSettingsPatch {
+  level: LogLevel
+}
+
 export interface BootstrapStatus {
   required: boolean
 }

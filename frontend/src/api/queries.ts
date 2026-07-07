@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
 import type {
   AdminUserPatch,
+  AdminLoggingSettingsPatch,
   BootstrapRequest,
   CompleteAccountSetupRequest,
   BankColor,
@@ -31,6 +32,7 @@ export const queryKeys = {
   accessTokens: ['auth', 'tokens'] as const,
   adminUsers: ['auth', 'admin', 'users'] as const,
   adminScanningSettings: ['auth', 'admin', 'scanning-settings'] as const,
+  adminLoggingSettings: ['auth', 'admin', 'logging-settings'] as const,
   communitySyncSettings: ['config', 'sync', 'settings'] as const,
   health: ['health'] as const,
   status: ['status'] as const,
@@ -868,6 +870,23 @@ export function useUpdateAdminScanningSettings() {
     mutationFn: (patch: AdminScanningSettingsPatch) =>
       api.auth.admin.updateScanningSettings(patch).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.adminScanningSettings }),
+  })
+}
+
+export function useAdminLoggingSettings() {
+  return useQuery({
+    queryKey: queryKeys.adminLoggingSettings,
+    queryFn: () => api.auth.admin.loggingSettings().then((r) => r.data),
+    staleTime: 60_000,
+  })
+}
+
+export function useUpdateAdminLoggingSettings() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (patch: AdminLoggingSettingsPatch) =>
+      api.auth.admin.updateLoggingSettings(patch).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.adminLoggingSettings }),
   })
 }
 

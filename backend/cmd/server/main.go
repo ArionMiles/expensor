@@ -31,15 +31,16 @@ func run() int {
 		return 1
 	}
 
-	shutdownObservability, logger, err := observability.Setup(context.Background(), cfg.Observability)
+	observabilityRuntime, err := observability.Setup(context.Background(), cfg.Observability)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize observability: %v\n", err)
 		return 1
 	}
+	logger := observabilityRuntime.Logger
 	defer func() {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
-		if err := shutdownObservability(shutdownCtx); err != nil {
+		if err := observabilityRuntime.Shutdown(shutdownCtx); err != nil {
 			logger.Warn("failed to shutdown observability", "error", err)
 		}
 	}()
@@ -169,6 +170,7 @@ func run() int {
 		SyncFn:             syncFn,
 		BanksData:          banksInput,
 		Logger:             logger.With("component", "api"),
+		LogLevel:           observabilityRuntime.LogLevel,
 	})
 	server := httpapi.NewServer(cfg.Port, handlers, cfg.StaticDir, logger.With("component", "http"))
 

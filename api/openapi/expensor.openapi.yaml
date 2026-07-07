@@ -1,5 +1,29 @@
 basePath: /api
 definitions:
+  httpapi.AdminLoggingSettingsPatchRequest:
+    properties:
+      level:
+        enum:
+        - debug
+        - info
+        - warn
+        - error
+        example: debug
+        type: string
+    required:
+    - level
+    type: object
+  httpapi.AdminLoggingSettingsResponse:
+    properties:
+      level:
+        enum:
+        - debug
+        - info
+        - warn
+        - error
+        example: info
+        type: string
+    type: object
   httpapi.AdminScanningSettingsPatchRequest:
     properties:
       max_concurrent_scans:
@@ -1472,6 +1496,62 @@ paths:
       summary: Complete account setup
       tags:
       - Auth
+  /admin/logging/settings:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.AdminLoggingSettingsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Get runtime logging settings
+      tags:
+      - Admin
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Runtime logging settings patch
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.AdminLoggingSettingsPatchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.AdminLoggingSettingsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+      summary: Update runtime logging settings
+      tags:
+      - Admin
   /admin/scanning/settings:
     get:
       produces:

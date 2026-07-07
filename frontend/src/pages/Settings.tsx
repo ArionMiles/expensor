@@ -1,20 +1,22 @@
 import {
   useActiveReader,
+  useAdminLoggingSettings,
   useAdminScanningSettings,
   useClearReaderCheckpoint,
   usePreferences,
   useReaderCheckpoint,
   useRescan,
   useSession,
+  useUpdateAdminLoggingSettings,
   useUpdateAdminScanningSettings,
   useUpdatePreferences,
 } from '@/api/queries'
-import type { PreferencesPatch } from '@/api/types'
-import { cn } from '@/lib/utils'
-import { useCallback, useState } from 'react'
+import type { LogLevel, PreferencesPatch } from '@/api/types'
+import { FloatingDropdown, comboboxOptionClass, useComboboxNavigation } from '@/components/Combobox'
+import { cn, formatDate } from '@/lib/utils'
+import { useCallback, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useDisplay } from '@/contexts/DisplayContext'
-import { formatDate } from '@/lib/utils'
 import { GeneralSettings } from './settings/GeneralSettings'
 import { SyncSettings } from './settings/SyncSettings'
 import { useI18n } from '@/i18n/I18nProvider'
@@ -29,6 +31,38 @@ const TABS: { id: SettingsTab; labelKey: MessageKey }[] = [
   { id: 'account', labelKey: 'nav.settings.account.subtitle' },
   { id: 'sync', labelKey: 'nav.settings.sync.subtitle' },
   { id: 'admin', labelKey: 'nav.settings.admin.subtitle' },
+]
+
+const LOG_LEVELS: {
+  value: LogLevel
+  labelKey: MessageKey
+  hintKey: MessageKey
+  className: string
+}[] = [
+  {
+    value: 'debug',
+    labelKey: 'settings.admin.loggingLevel.debug',
+    hintKey: 'settings.admin.loggingLevelHint.debug',
+    className: 'bg-secondary text-muted-foreground',
+  },
+  {
+    value: 'info',
+    labelKey: 'settings.admin.loggingLevel.info',
+    hintKey: 'settings.admin.loggingLevelHint.info',
+    className: 'bg-primary/10 text-primary',
+  },
+  {
+    value: 'warn',
+    labelKey: 'settings.admin.loggingLevel.warn',
+    hintKey: 'settings.admin.loggingLevelHint.warn',
+    className: 'bg-warning/10 text-warning',
+  },
+  {
+    value: 'error',
+    labelKey: 'settings.admin.loggingLevel.error',
+    hintKey: 'settings.admin.loggingLevelHint.error',
+    className: 'bg-destructive/10 text-destructive',
+  },
 ]
 
 function SettingField({
@@ -241,11 +275,144 @@ function DaemonSettings() {
   )
 }
 
+function LogLevelSelect({
+  value,
+  onChange,
+}: {
+  value: LogLevel
+  onChange: (level: LogLevel) => void
+}) {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const selected = LOG_LEVELS.find((level) => level.value === value) ?? LOG_LEVELS[1]
+  const navigation = useComboboxNavigation({
+    open,
+    optionCount: LOG_LEVELS.length,
+    onOpenChange: setOpen,
+    onSelectIndex: (index) => {
+      const selectedLevel = LOG_LEVELS[index]
+      if (!selectedLevel) return
+      if (selectedLevel.value !== value) onChange(selectedLevel.value)
+      setOpen(false)
+      navigation.resetHighlight()
+    },
+  })
+  const highlighted = navigation.highlightedIndex
+
+  const selectedLabel = t(selected.labelKey)
+  const selectedHint = t(selected.hintKey)
+  const widestLevel = LOG_LEVELS.reduce((widest, level) => {
+    const levelLength = t(level.labelKey).length + t(level.hintKey).length
+    const widestLength = t(widest.labelKey).length + t(widest.hintKey).length
+    return levelLength > widestLength ? level : widest
+  }, LOG_LEVELS[0])
+  const widestLevelLabel = t(widestLevel.labelKey)
+  const widestLevelHint = t(widestLevel.hintKey)
+
+  return (
+    <div ref={containerRef} className="inline-grid max-w-full">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none invisible col-start-1 row-start-1 flex h-0 items-center justify-between gap-3 overflow-hidden rounded-md border px-3 py-2 text-sm"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <span
+            className={cn(
+              'inline-flex min-w-16 justify-center rounded px-2 py-0.5 text-xs font-semibold uppercase',
+              widestLevel.className,
+            )}
+          >
+            {widestLevelLabel}
+          </span>
+          <span className="whitespace-nowrap text-xs">{widestLevelHint}</span>
+        </span>
+        <span className="shrink-0 text-xs">▾</span>
+      </div>
+      <button
+        ref={buttonRef}
+        onClick={() => {
+          setOpen((current) => !current)
+          navigation.resetHighlight()
+        }}
+        {...navigation.getComboboxProps({
+          'aria-label': `${t('settings.admin.loggingTitle')} ${selectedLabel}`,
+          listboxVisible: open,
+        })}
+        className="col-start-1 row-start-1 flex w-full items-center justify-between gap-3 rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <span
+            className={cn(
+              'inline-flex min-w-16 justify-center rounded px-2 py-0.5 text-xs font-semibold uppercase',
+              selected.className,
+            )}
+          >
+            {selectedLabel}
+          </span>
+          <span className="truncate text-xs text-muted-foreground">{selectedHint}</span>
+        </span>
+        <span className="shrink-0 text-xs text-muted-foreground">▾</span>
+      </button>
+
+      <FloatingDropdown
+        open={open}
+        anchorRef={buttonRef}
+        containerRef={containerRef}
+        onOpenChange={setOpen}
+      >
+        {(style, setPortalNode) => (
+          <ul
+            ref={setPortalNode}
+            id={navigation.listboxId}
+            role="listbox"
+            className="fixed z-50 overflow-y-auto rounded-lg border border-border bg-card p-1 text-card-foreground shadow-lg"
+            style={{ ...style, width: style.minWidth }}
+          >
+            {LOG_LEVELS.map((level, index) => (
+              <li
+                key={level.value}
+                {...navigation.getOptionProps(index, {
+                  selected: level.value === value,
+                  onMouseDown: () => {
+                    if (level.value !== value) onChange(level.value)
+                    setOpen(false)
+                    navigation.resetHighlight()
+                  },
+                })}
+                className={comboboxOptionClass(
+                  index === highlighted,
+                  level.value === value,
+                  'whitespace-nowrap px-3',
+                )}
+              >
+                <span
+                  className={cn(
+                    'mr-3 inline-flex min-w-16 justify-center rounded px-2 py-0.5 text-xs font-semibold uppercase',
+                    level.className,
+                  )}
+                >
+                  {t(level.labelKey)}
+                </span>
+                <span className="text-xs text-muted-foreground">{t(level.hintKey)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </FloatingDropdown>
+    </div>
+  )
+}
+
 function AdminSettings() {
   const { t } = useI18n()
   const { data } = useAdminScanningSettings()
+  const { data: loggingData } = useAdminLoggingSettings()
   const update = useUpdateAdminScanningSettings()
+  const updateLogging = useUpdateAdminLoggingSettings()
   const current = data?.max_concurrent_scans ?? 4
+  const logLevel = loggingData?.level ?? 'info'
   const [draft, setDraft] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const value = draft ?? String(current)
@@ -287,6 +454,24 @@ function AdminSettings() {
             <span className="text-xs text-muted-foreground">{t('settings.admin.saving')}</span>
           )}
           {message && <span className="text-xs text-muted-foreground">{message}</span>}
+        </div>
+      </div>
+
+      <div>
+        <h2 className="mb-1 text-sm font-medium text-foreground">
+          {t('settings.admin.loggingTitle')}
+        </h2>
+        <p className="mb-4 text-xs text-muted-foreground">{t('settings.admin.loggingHint')}</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <LogLevelSelect
+            value={logLevel}
+            onChange={(level) => {
+              updateLogging.mutate({ level })
+            }}
+          />
+          {updateLogging.isPending && (
+            <span className="text-xs text-muted-foreground">{t('settings.admin.saving')}</span>
+          )}
         </div>
       </div>
 

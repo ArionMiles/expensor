@@ -19,7 +19,7 @@ import (
 
 func TestSetupInstallsSlogLogger(t *testing.T) {
 	var out bytes.Buffer
-	shutdown, logger, err := observability.Setup(context.Background(), config.Observability{
+	result, err := observability.Setup(context.Background(), config.Observability{
 		LogLevel: slog.LevelInfo,
 		Output:   &out,
 		Exporter: string(observability.ExporterNone),
@@ -28,12 +28,12 @@ func TestSetupInstallsSlogLogger(t *testing.T) {
 		t.Fatalf("Setup() error = %v", err)
 	}
 	defer func() {
-		if err := shutdown(context.Background()); err != nil {
+		if err := result.Shutdown(context.Background()); err != nil {
 			t.Fatalf("shutdown: %v", err)
 		}
 	}()
 
-	logger.Info("hello", "component", "test")
+	result.Logger.Info("hello", "component", "test")
 	slog.Default().Info("from default", "component", "slog")
 
 	got := out.String()
@@ -46,7 +46,7 @@ func TestSetupInstallsSlogLogger(t *testing.T) {
 }
 
 func TestSetupSupportsDisabledTelemetry(t *testing.T) {
-	shutdown, logger, err := observability.Setup(context.Background(), config.Observability{
+	result, err := observability.Setup(context.Background(), config.Observability{
 		LogLevel: slog.LevelInfo,
 		Output:   &bytes.Buffer{},
 		Exporter: string(observability.ExporterNone),
@@ -54,17 +54,17 @@ func TestSetupSupportsDisabledTelemetry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Setup() error = %v", err)
 	}
-	if logger == nil {
+	if result.Logger == nil {
 		t.Fatal("logger is nil")
 	}
-	if err := shutdown(context.Background()); err != nil {
+	if err := result.Shutdown(context.Background()); err != nil {
 		t.Fatalf("shutdown: %v", err)
 	}
 }
 
 func TestOperationRecorderAcceptsSuccessAndError(t *testing.T) {
 	logs := &bytes.Buffer{}
-	shutdown, logger, err := observability.Setup(context.Background(), config.Observability{
+	result, err := observability.Setup(context.Background(), config.Observability{
 		LogLevel: slog.LevelDebug,
 		Output:   logs,
 		Enabled:  true,
@@ -74,12 +74,12 @@ func TestOperationRecorderAcceptsSuccessAndError(t *testing.T) {
 		t.Fatalf("Setup() error = %v", err)
 	}
 	defer func() {
-		if err := shutdown(context.Background()); err != nil {
+		if err := result.Shutdown(context.Background()); err != nil {
 			t.Fatalf("shutdown: %v", err)
 		}
 	}()
 
-	scope := observability.NewScope(logger, "test")
+	scope := observability.NewScope(result.Logger, "test")
 	ctx, span := scope.Start(context.Background(), "store.test.success")
 	scope.RecordOperation(ctx, observability.Operation{
 		Namespace: "store",
@@ -95,6 +95,34 @@ func TestOperationRecorderAcceptsSuccessAndError(t *testing.T) {
 	})
 	if strings.Contains(logs.String(), "duration_ms") {
 		t.Fatalf("operation logs should not include duration_ms, got %q", logs.String())
+	}
+}
+
+func TestSetupReturnsMutableLogLevel(t *testing.T) {
+	var out bytes.Buffer
+	result, err := observability.Setup(context.Background(), config.Observability{
+		LogLevel: slog.LevelInfo,
+		Output:   &out,
+		Exporter: string(observability.ExporterNone),
+	})
+	if err != nil {
+		t.Fatalf("Setup() error = %v", err)
+	}
+	defer func() {
+		if err := result.Shutdown(context.Background()); err != nil {
+			t.Fatalf("shutdown: %v", err)
+		}
+	}()
+
+	result.Logger.Debug("before")
+	if strings.Contains(out.String(), "before") {
+		t.Fatalf("debug log emitted before level change: %q", out.String())
+	}
+
+	result.LogLevel.Set(slog.LevelDebug)
+	result.Logger.Debug("after")
+	if !strings.Contains(out.String(), "after") {
+		t.Fatalf("debug log missing after level change: %q", out.String())
 	}
 }
 
