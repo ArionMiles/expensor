@@ -42,6 +42,7 @@ func TestNewRegistry(t *testing.T) {
 
 	if registry == nil {
 		t.Fatal("expected non-nil registry")
+		return
 	}
 	if registry.providers == nil {
 		t.Error("expected providers map to be initialized")

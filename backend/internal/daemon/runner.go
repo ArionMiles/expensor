@@ -141,7 +141,10 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 	r.logger.Info("daemon started")
 
 	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return sink.Write(gctx, transactions, ackChan) })
+	g.Go(func() error {
+		defer close(ackChan)
+		return sink.Write(gctx, transactions, ackChan)
+	})
 	g.Go(func() error { return reader.Read(gctx, transactions, ackChan) })
 
 	if err := g.Wait(); err != nil &&

@@ -12,7 +12,7 @@ services:
       retries: 20
 
   backend:
-    image: golang:1.26.4-alpine
+    image: golang:1.26.5-alpine
     working_dir: /workspace/backend
     volumes:
       - ../..:/workspace
@@ -67,7 +67,7 @@ services:
         condition: service_healthy
 
   runner:
-    image: golang:1.26.4-alpine
+    image: golang:1.26.5-alpine
     working_dir: /workspace/tests/component
     volumes:
       - ../..:/workspace
