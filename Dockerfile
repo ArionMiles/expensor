@@ -23,7 +23,7 @@ RUN npm run build
 # --platform=$BUILDPLATFORM keeps the Go toolchain running natively on the build
 # host. Cross-compilation is handled purely via GOOS/GOARCH env vars below —
 # no QEMU required even when targeting linux/arm64.
-FROM --platform=$BUILDPLATFORM golang:1.26.4-alpine AS backend-builder
+FROM --platform=$BUILDPLATFORM golang:1.26.5-alpine AS backend-builder
 
 # Install build tooling needed by the Go toolchain.
 # This layer is cached as long as the base image doesn't change.
