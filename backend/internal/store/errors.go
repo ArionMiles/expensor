@@ -1,31 +1,32 @@
 package store
 
 import (
-	"errors"
-
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
-// ErrNotFound is returned when an operation targets a row that does not exist.
-var ErrNotFound = errors.New("not found")
+const (
+	messageNotFound                = "not found"
+	messageBootstrapUnavailable    = "bootstrap unavailable"
+	messageRuleNameConflict        = "rule name conflict"
+	messageDiagnosticConflict      = "diagnostic conflict"
+	messageAccessTokenNameConflict = "access token name conflict"
+	messageUserEmailConflict       = "user email conflict"
+	messagePaginationOverflow      = "pagination offset overflow"
+)
 
-// ErrBootstrapUnavailable is returned when first-admin bootstrap has already been completed.
-var ErrBootstrapUnavailable = errors.New("bootstrap unavailable")
+func notFound(op string) error {
+	return errors.E(op, errors.NotFound, messageNotFound)
+}
 
-// ErrRuleNameConflict is returned when a rule name is already in use.
-var ErrRuleNameConflict = errors.New("rule name conflict")
+func conflict(op string, args ...any) error {
+	return errors.E(append([]any{op, errors.Conflict}, args...)...)
+}
 
-// ErrDiagnosticConflict is returned when reopening a diagnostic would duplicate an existing open diagnostic.
-var ErrDiagnosticConflict = errors.New("diagnostic conflict")
-
-// ErrAccessTokenNameConflict is returned when a user already has an active access token with the same name.
-var ErrAccessTokenNameConflict = errors.New("access token name conflict")
-
-// ErrUserEmailConflict is returned when a user email is already in use.
-var ErrUserEmailConflict = errors.New("user email conflict")
-
-// ErrPaginationOverflow is returned when a requested page cannot be represented as a SQL offset.
-var ErrPaginationOverflow = errors.New("pagination offset overflow")
+func invalidInput(op string, args ...any) error {
+	return errors.E(append([]any{op, errors.InvalidInput}, args...)...)
+}
 
 func isDiagnosticOpenConflict(err error) bool {
 	return isUniqueViolationConstraint(

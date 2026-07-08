@@ -1,9 +1,10 @@
 package llm
 
 import (
-	"errors"
 	"strings"
 	"testing"
+
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 func TestRedactTextMasksCommonSensitiveValues(t *testing.T) {
@@ -21,8 +22,8 @@ func TestRedactTextMasksCommonSensitiveValues(t *testing.T) {
 
 func TestEnforceResultLimitsRejectsOversizedPayload(t *testing.T) {
 	err := EnforceResultLimits([]byte("abcdef"), ResultLimits{MaxBytes: 3})
-	if !errors.Is(err, ErrResultTooLarge) {
-		t.Fatalf("EnforceResultLimits() error = %v, want ErrResultTooLarge", err)
+	if errors.WhatKind(err) != KindResultTooLarge {
+		t.Fatalf("EnforceResultLimits() error = %v, want KindResultTooLarge", err)
 	}
 }
 
@@ -30,8 +31,8 @@ func TestValidateMutationSafetyRejectsUnexpectedMutations(t *testing.T) {
 	err := ValidateMutationSafety(MutationPolicy{AllowMutations: false}, []MutationRequest{
 		{Resource: "transactions", Operation: "update"},
 	})
-	if !errors.Is(err, ErrUnsafeMutation) {
-		t.Fatalf("ValidateMutationSafety() error = %v, want ErrUnsafeMutation", err)
+	if errors.WhatKind(err) != KindUnsafeMutation {
+		t.Fatalf("ValidateMutationSafety() error = %v, want KindUnsafeMutation", err)
 	}
 }
 

@@ -3,15 +3,13 @@ package llm
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
-
-var ErrNoProviderConfigured = errors.New("no llm provider configured")
 
 // RuntimeStore is the tenant-scoped LLM runtime state needed by the router.
 type RuntimeStore interface {
@@ -53,29 +51,31 @@ func NewRouter(cfg RouterConfig) *Router {
 
 // Complete resolves the active provider and delegates the request.
 func (r *Router) Complete(ctx context.Context, tenant store.Tenant, req Request) (Response, error) {
+	const op = "llm.Router.Complete"
+
 	if r.runtime == nil {
-		return Response{}, ErrNoProviderConfigured
+		return Response{}, errors.E(op, KindNoProviderConfigured, "no llm provider configured")
 	}
 	runtime, found, err := r.runtime.GetActiveLLMProviderRuntime(ctx, tenant)
 	if err != nil {
-		return Response{}, err
+		return Response{}, errors.E(op, err)
 	}
 	if !found {
-		return Response{}, ErrNoProviderConfigured
+		return Response{}, errors.E(op, KindNoProviderConfigured, "no llm provider configured")
 	}
 	provider, err := r.registry.GetProvider(runtime.Provider)
 	if err != nil {
-		return Response{}, err
+		return Response{}, errors.E(op, err)
 	}
 	if err := provider.RequireCapabilities(req.RequiredCapabilities...); err != nil {
-		return Response{}, err
+		return Response{}, errors.E(op, err)
 	}
 	client, err := provider.NewClient(ClientConfig{
 		Config:      cloneRawMessage(runtime.Config),
 		Credentials: cloneRawMessage(runtime.Credentials),
 	})
 	if err != nil {
-		return Response{}, fmt.Errorf("creating llm provider %q client: %w", runtime.Provider, err)
+		return Response{}, errors.E(op, fmt.Sprintf("creating llm provider %q client", runtime.Provider), err)
 	}
 	client = NewInstrumentedClient(client, runtime.Provider, r.scope, r.logger)
 	return client.Complete(ctx, req)

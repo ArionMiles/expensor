@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -22,6 +21,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 	"github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
 )
 
@@ -90,9 +90,9 @@ func (h *Handlers) SearchProviderMessages(w http.ResponseWriter, r *http.Request
 	searcher, err := h.newEmailSearcher(r.Context(), requestTenant(r), name)
 	if err != nil {
 		switch {
-		case errors.Is(err, errReaderNotRegistered):
+		case errors.WhatKind(err) == errors.NotFound:
 			writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
-		case errors.Is(err, errCredentialsMissing), errors.Is(err, oauth.ErrTokenMissing):
+		case errors.WhatKind(err) == oauth.KindCredentialsMissing, errors.WhatKind(err) == oauth.KindTokenMissing:
 			writeError(w, http.StatusPreconditionFailed, "provider is not authenticated")
 		default:
 			h.logger.Error("create provider for message search", "provider", name, "error", err)
@@ -114,9 +114,11 @@ func (h *Handlers) SearchProviderMessages(w http.ResponseWriter, r *http.Request
 }
 
 func (h *Handlers) newEmailSearcher(ctx context.Context, tenant store.Tenant, name string) (api.EmailSearcher, error) {
+	const op = "httpapi.Handlers.newEmailSearcher"
+
 	provider, err := h.registry.GetProvider(name)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errReaderNotRegistered, err)
+		return nil, errors.E(op, errors.NotFound, fmt.Sprintf("reader %q is no longer registered", name), err)
 	}
 
 	var httpClient *http.Client
@@ -127,7 +129,7 @@ func (h *Handlers) newEmailSearcher(ctx context.Context, tenant store.Tenant, na
 			return nil, fmt.Errorf("loading credentials for provider %q: %w", name, err)
 		}
 		if !ok {
-			return nil, errCredentialsMissing
+			return nil, errors.E(op, oauth.KindCredentialsMissing, "credentials file missing")
 		}
 		httpClient, err = oauth.NewFromJSONAndStore(ctx, oauth.StoreClientInput{
 			SecretJSON: secretJSON,
@@ -368,9 +370,11 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 // authorization code for a token, and persists it to the runtime store. The
 // redirectURL must match the one used when building the authorization URL.
 func (h *Handlers) exchangeAndSaveToken(ctx context.Context, tenant store.Tenant, name, code, redirectURL string) error {
+	const op = "httpapi.Handlers.exchangeAndSaveToken"
+
 	provider, err := h.registry.GetProvider(name)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errReaderNotRegistered, err)
+		return errors.E(op, errors.NotFound, fmt.Sprintf("reader %q is no longer registered", name), err)
 	}
 
 	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(ctx, tenant, name)
@@ -378,7 +382,7 @@ func (h *Handlers) exchangeAndSaveToken(ctx context.Context, tenant store.Tenant
 		return fmt.Errorf("failed to load credentials: %w", err)
 	}
 	if !ok {
-		return errCredentialsMissing
+		return errors.E(op, oauth.KindCredentialsMissing, "credentials file missing")
 	}
 
 	oauthCfg, err := oauth.GetOAuthConfig(secretJSON, redirectURL, provider.Metadata.Auth.RequiredScopes...)
@@ -446,7 +450,7 @@ func (h *Handlers) AuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.exchangeAndSaveToken(r.Context(), tenant, name, code, redirectURL); err != nil {
 		h.logger.Error("OAuth token exchange failed", "reader", name, "error", err)
-		if errors.Is(err, errCredentialsMissing) || errors.Is(err, errReaderNotRegistered) {
+		if errors.WhatKind(err) == oauth.KindCredentialsMissing || errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusInternalServerError, err.Error())
 		} else {
 			writeError(w, http.StatusBadRequest, err.Error())
@@ -545,7 +549,7 @@ func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.exchangeAndSaveToken(r.Context(), tenant, name, code, redirectURL); err != nil {
 		h.logger.Error("manual OAuth exchange failed", "reader", name, "error", err)
-		if errors.Is(err, errCredentialsMissing) || errors.Is(err, errReaderNotRegistered) {
+		if errors.WhatKind(err) == oauth.KindCredentialsMissing || errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusInternalServerError, err.Error())
 		} else {
 			writeError(w, http.StatusBadRequest, err.Error())

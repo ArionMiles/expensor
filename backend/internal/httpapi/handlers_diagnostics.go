@@ -1,12 +1,12 @@
 package httpapi
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/google/uuid"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // ListExtractionDiagnostics handles GET /api/extraction-diagnostics.
@@ -66,7 +66,7 @@ func (h *Handlers) GetExtractionDiagnostic(w http.ResponseWriter, r *http.Reques
 
 	row, err := h.diagnosticStore.GetExtractionDiagnostic(r.Context(), requestTenant(r), id)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusNotFound, "extraction diagnostic not found")
 			return
 		}
@@ -106,11 +106,11 @@ func (h *Handlers) UpdateExtractionDiagnosticStatus(w http.ResponseWriter, r *ht
 
 	row, err := h.diagnosticStore.UpdateExtractionDiagnosticStatus(r.Context(), requestTenant(r), id, body.Status)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusNotFound, "extraction diagnostic not found")
 			return
 		}
-		if errors.Is(err, store.ErrDiagnosticConflict) {
+		if errors.WhatKind(err) == errors.Conflict {
 			writeError(w, http.StatusConflict, "open extraction diagnostic already exists")
 			return
 		}

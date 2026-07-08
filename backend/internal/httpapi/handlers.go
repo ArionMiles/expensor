@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -22,11 +21,6 @@ const (
 	defaultBaseCurrency = "INR"
 	maxCredentialsSize  = 5 << 20 // 5 MB
 	oauthStateTTL       = 10 * time.Minute
-)
-
-var (
-	errCredentialsMissing  = errors.New("credentials file missing")
-	errReaderNotRegistered = errors.New("reader no longer registered")
 )
 
 // oauthStateEntry holds a pending OAuth state with an expiry time.

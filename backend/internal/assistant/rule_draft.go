@@ -3,14 +3,15 @@ package assistant
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 
 	"github.com/ArionMiles/expensor/backend/internal/llm"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 const (
@@ -21,10 +22,9 @@ const (
 )
 
 var (
-	ErrRuleDraftPromptMissing  = errors.New("rule draft prompt is not configured")
-	ErrRuleDraftInvalidInput   = errors.New("rule draft input is invalid")
-	ErrRuleDraftInvalidOutput  = errors.New("rule draft output is invalid")
-	ErrRuleDraftValidationFail = errors.New("rule draft validation failed")
+	KindRuleDraftPromptMissing = errors.Kind{Code: "rule_draft_prompt_missing", Status: http.StatusInternalServerError}
+	KindRuleDraftInvalidInput  = errors.Kind{Code: "rule_draft_invalid_input", Status: http.StatusUnprocessableEntity}
+	KindRuleDraftInvalidOutput = errors.Kind{Code: "rule_draft_invalid_output", Status: http.StatusUnprocessableEntity}
 )
 
 type RuleDraftService struct {
@@ -90,21 +90,23 @@ func NewRuleDraftService(router *llm.Router) *RuleDraftService {
 }
 
 func (s *RuleDraftService) DraftRule(ctx context.Context, tenant store.Tenant, input RuleDraftInput) (RuleDraftResult, error) {
+	const op = "assistant.RuleDraftService.DraftRule"
+
 	if s == nil || s.router == nil {
-		return RuleDraftResult{}, llm.ErrNoProviderConfigured
+		return RuleDraftResult{}, errors.E(op, llm.KindNoProviderConfigured, "no llm provider configured")
 	}
 	normalized, err := normalizeRuleDraftInput(input)
 	if err != nil {
-		return RuleDraftResult{}, err
+		return RuleDraftResult{}, errors.E(op, err)
 	}
 	prompt, ok := s.router.PromptCatalog().Get(ruleDraftWorkflow, ruleDraftPurpose)
 	if !ok {
-		return RuleDraftResult{}, ErrRuleDraftPromptMissing
+		return RuleDraftResult{}, errors.E(op, KindRuleDraftPromptMissing, "rule draft prompt is not configured")
 	}
 
 	draft, raw, err := s.requestDraft(ctx, tenant, prompt, normalized, "")
 	if err != nil {
-		return RuleDraftResult{}, err
+		return RuleDraftResult{}, errors.E(op, err)
 	}
 	matches, issues := validateRuleDraft(normalized.Samples, draft)
 	if len(issues) == 0 {
@@ -114,7 +116,7 @@ func (s *RuleDraftService) DraftRule(ctx context.Context, tenant store.Tenant, i
 	repairNote := fmt.Sprintf("The previous draft failed validation: %s. Previous draft JSON: %s", formatRuleDraftIssues(issues), raw)
 	draft, _, repairErr := s.requestDraft(ctx, tenant, prompt, normalized, repairNote)
 	if repairErr != nil {
-		return RuleDraftResult{}, repairErr
+		return RuleDraftResult{}, errors.E(op, repairErr)
 	}
 	matches, issues = validateRuleDraft(normalized.Samples, draft)
 	if len(issues) > 0 {
@@ -130,9 +132,11 @@ func (s *RuleDraftService) requestDraft(
 	input RuleDraftInput,
 	repairNote string,
 ) (RuleDraft, string, error) {
+	const op = "assistant.RuleDraftService.requestDraft"
+
 	contextJSON, err := ruleDraftContextJSON(input, repairNote)
 	if err != nil {
-		return RuleDraft{}, "", err
+		return RuleDraft{}, "", errors.E(op, err)
 	}
 	messages := renderPromptMessages(prompt.Messages, map[string]string{
 		"rule_context_json": contextJSON,
@@ -151,17 +155,24 @@ func (s *RuleDraftService) requestDraft(
 		},
 	})
 	if err != nil {
-		return RuleDraft{}, "", err
+		return RuleDraft{}, "", errors.E(op, err)
 	}
 	var draft RuleDraft
 	if err := json.Unmarshal([]byte(response.Text), &draft); err != nil {
-		return RuleDraft{}, response.Text, fmt.Errorf("%w: %w", ErrRuleDraftInvalidOutput, err)
+		return RuleDraft{}, response.Text, errors.E(
+			op,
+			KindRuleDraftInvalidOutput,
+			errors.User("rule draft response could not be parsed"),
+			err,
+		)
 	}
 	draft.normalize()
 	return draft, response.Text, nil
 }
 
 func normalizeRuleDraftInput(input RuleDraftInput) (RuleDraftInput, error) {
+	const op = "assistant.normalizeRuleDraftInput"
+
 	input.Current.normalize()
 	samples := make([]Sample, 0, len(input.Samples))
 	for _, sample := range input.Samples {
@@ -185,7 +196,8 @@ func normalizeRuleDraftInput(input RuleDraftInput) (RuleDraftInput, error) {
 		}
 	}
 	if len(samples) == 0 {
-		return RuleDraftInput{}, fmt.Errorf("%w: add at least one email sample", ErrRuleDraftInvalidInput)
+		msg := "add at least one email sample"
+		return RuleDraftInput{}, errors.E(op, KindRuleDraftInvalidInput, errors.User(msg), msg)
 	}
 	hasExpected := false
 	for _, sample := range samples {
@@ -195,7 +207,8 @@ func normalizeRuleDraftInput(input RuleDraftInput) (RuleDraftInput, error) {
 		}
 	}
 	if !hasExpected {
-		return RuleDraftInput{}, fmt.Errorf("%w: add expected amount and merchant to at least one sample", ErrRuleDraftInvalidInput)
+		msg := "add expected amount and merchant to at least one sample"
+		return RuleDraftInput{}, errors.E(op, KindRuleDraftInvalidInput, errors.User(msg), msg)
 	}
 	input.Samples = samples
 	return input, nil

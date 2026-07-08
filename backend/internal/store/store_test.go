@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -23,6 +22,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // testStore holds a live *store.Store and the container DSN for teardown.
@@ -668,8 +668,8 @@ func TestExtractionDiagnostics_ReopenConflictReturnsSentinelError(t *testing.T) 
 	}
 
 	_, err = ts.UpdateExtractionDiagnosticStatus(ctx, store.Tenant{}, originalID, store.DiagnosticStatusOpen)
-	if !errors.Is(err, store.ErrDiagnosticConflict) {
-		t.Fatalf("reopen should return ErrDiagnosticConflict, got %v", err)
+	if errors.WhatKind(err) != errors.Conflict {
+		t.Fatalf("reopen should return Conflict kind, got %v", err)
 	}
 	openRows, err := ts.ListExtractionDiagnostics(ctx, store.Tenant{}, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen})
 	if err != nil {
@@ -745,11 +745,11 @@ func TestExtractionDiagnostics_NotFound(t *testing.T) {
 	ctx := context.Background()
 	missingID := "22222222-2222-2222-2222-222222222222"
 
-	if _, err := ts.GetExtractionDiagnostic(ctx, store.Tenant{}, missingID); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("GetExtractionDiagnostic should return ErrNotFound, got %v", err)
+	if _, err := ts.GetExtractionDiagnostic(ctx, store.Tenant{}, missingID); errors.WhatKind(err) != errors.NotFound {
+		t.Fatalf("GetExtractionDiagnostic should return NotFound kind, got %v", err)
 	}
-	if _, err := ts.UpdateExtractionDiagnosticStatus(ctx, store.Tenant{}, missingID, store.DiagnosticStatusResolved); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("UpdateExtractionDiagnosticStatus should return ErrNotFound, got %v", err)
+	if _, err := ts.UpdateExtractionDiagnosticStatus(ctx, store.Tenant{}, missingID, store.DiagnosticStatusResolved); errors.WhatKind(err) != errors.NotFound {
+		t.Fatalf("UpdateExtractionDiagnosticStatus should return NotFound kind, got %v", err)
 	}
 }
 
@@ -816,8 +816,8 @@ func TestListTransactions_RejectsOffsetOverflow(t *testing.T) {
 		store.Tenant{},
 		store.ListFilter{Page: math.MaxInt, PageSize: 100},
 	)
-	if !errors.Is(err, store.ErrPaginationOverflow) {
-		t.Fatalf("expected ErrPaginationOverflow, got %v", err)
+	if errors.WhatKind(err) != errors.InvalidInput {
+		t.Fatalf("expected InvalidInput kind, got %v", err)
 	}
 }
 
@@ -1084,8 +1084,8 @@ func TestGetTransaction_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := ts.GetTransaction(ctx, store.Tenant{}, "00000000-0000-0000-0000-000000000000")
-	if !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("expected ErrNotFound, got %v", err)
+	if errors.WhatKind(err) != errors.NotFound {
+		t.Fatalf("expected NotFound kind, got %v", err)
 	}
 }
 
@@ -1118,7 +1118,7 @@ func TestUpdateDescription_NotFound(t *testing.T) {
 
 	err := ts.UpdateDescription(ctx, store.Tenant{}, "00000000-0000-0000-0000-000000000000", "nope")
 	if err == nil {
-		t.Fatal("expected ErrNotFound, got nil")
+		t.Fatal("expected NotFound kind, got nil")
 	}
 }
 
@@ -1177,7 +1177,7 @@ func TestRemoveLabel_NotFound(t *testing.T) {
 
 	err := ts.RemoveLabel(ctx, store.Tenant{}, id, "nonexistent")
 	if err == nil {
-		t.Fatal("expected ErrNotFound, got nil")
+		t.Fatal("expected NotFound kind, got nil")
 	}
 }
 
@@ -1404,8 +1404,8 @@ func TestSearchTransactions_RejectsOffsetOverflow(t *testing.T) {
 		"coffee",
 		store.ListFilter{Page: math.MaxInt, PageSize: 100},
 	)
-	if !errors.Is(err, store.ErrPaginationOverflow) {
-		t.Fatalf("expected ErrPaginationOverflow, got %v", err)
+	if errors.WhatKind(err) != errors.InvalidInput {
+		t.Fatalf("expected InvalidInput kind, got %v", err)
 	}
 }
 
@@ -1960,8 +1960,8 @@ func TestCreateRuleDuplicateNameReturnsConflict(t *testing.T) {
 	}
 
 	_, err := ts.CreateRule(ctx, store.Tenant{}, row)
-	if !errors.Is(err, store.ErrRuleNameConflict) {
-		t.Fatalf("CreateRule duplicate error = %v, want ErrRuleNameConflict", err)
+	if errors.WhatKind(err) != errors.Conflict {
+		t.Fatalf("CreateRule duplicate error = %v, want Conflict kind", err)
 	}
 }
 
@@ -1991,8 +1991,8 @@ func TestUpdateRuleDuplicateNameReturnsConflict(t *testing.T) {
 		AmountRegex:   `(\d+)`,
 		MerchantRegex: `(.+)`,
 	})
-	if !errors.Is(err, store.ErrRuleNameConflict) {
-		t.Fatalf("UpdateRule duplicate error = %v, want ErrRuleNameConflict", err)
+	if errors.WhatKind(err) != errors.Conflict {
+		t.Fatalf("UpdateRule duplicate error = %v, want Conflict kind", err)
 	}
 }
 
@@ -2016,8 +2016,8 @@ func TestDeleteRule_PredefinedRuleNotDeleted(t *testing.T) {
 	predefinedRule := rules[0]
 
 	delErr := ts.DeleteRule(context.Background(), store.Tenant{}, predefinedRule.ID)
-	if !errors.Is(delErr, store.ErrNotFound) {
-		t.Errorf("expected ErrNotFound when deleting predefined rule, got %v", delErr)
+	if errors.WhatKind(delErr) != errors.NotFound {
+		t.Errorf("expected NotFound kind when deleting predefined rule, got %v", delErr)
 	}
 }
 

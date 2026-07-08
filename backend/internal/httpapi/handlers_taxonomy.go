@@ -3,13 +3,13 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // ListLabels handles GET /api/config/labels.
@@ -81,7 +81,7 @@ func (h *Handlers) UpdateLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.taxonomyStore.UpdateLabel(r.Context(), requestTenant(r), name, body.Color); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusNotFound, "label not found")
 			return
 		}
@@ -350,7 +350,7 @@ func (h *Handlers) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.taxonomyStore.DeleteCategory(r.Context(), requestTenant(r), name, removeFromTransactions); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusNotFound, "category not found")
 			return
 		}
@@ -457,7 +457,7 @@ func (h *Handlers) DeleteBucket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.taxonomyStore.DeleteBucket(r.Context(), requestTenant(r), name, removeFromTransactions); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusNotFound, "bucket not found")
 			return
 		}
@@ -711,7 +711,7 @@ func (h *Handlers) RemoveLabel(w http.ResponseWriter, r *http.Request) {
 	label := r.PathValue("label")
 
 	if err := h.transactionStore.RemoveLabel(r.Context(), requestTenant(r), id, label); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusNotFound, "label not found on transaction")
 			return
 		}

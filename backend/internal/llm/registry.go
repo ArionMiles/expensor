@@ -2,16 +2,11 @@ package llm
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
-)
 
-var (
-	ErrProviderNotFound          = errors.New("llm provider not found")
-	ErrProviderAlreadyRegistered = errors.New("llm provider already registered")
-	ErrCapabilityUnsupported     = errors.New("llm capability unsupported")
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // AuthType describes how an LLM provider authenticates.
@@ -59,6 +54,8 @@ type Provider struct {
 
 // RequireCapabilities returns an error if the provider lacks a required capability.
 func (p Provider) RequireCapabilities(required ...Capability) error {
+	const op = "llm.Provider.RequireCapabilities"
+
 	if len(required) == 0 {
 		return nil
 	}
@@ -68,7 +65,7 @@ func (p Provider) RequireCapabilities(required ...Capability) error {
 	}
 	for _, capability := range required {
 		if _, ok := available[capability]; !ok {
-			return fmt.Errorf("%w: %s", ErrCapabilityUnsupported, capability)
+			return errors.E(op, KindCapabilityUnsupported, fmt.Sprintf("llm capability unsupported: %s", capability))
 		}
 	}
 	return nil
@@ -86,23 +83,25 @@ func NewRegistry() *Registry {
 
 // RegisterProvider registers an LLM provider.
 func (r *Registry) RegisterProvider(provider Provider) error {
+	const op = "llm.Registry.RegisterProvider"
+
 	name := strings.TrimSpace(provider.Metadata.Name)
 	if name == "" {
-		return errors.New("llm provider name is required")
+		return errors.E(op, errors.InvalidInput, "llm provider name is required")
 	}
 	if provider.NewClient == nil {
-		return fmt.Errorf("llm provider %q client factory is required", name)
+		return errors.E(op, errors.InvalidInput, fmt.Sprintf("llm provider %q client factory is required", name))
 	}
 	if len(provider.Metadata.ConfigSchema) > 0 && !json.Valid(provider.Metadata.ConfigSchema) {
-		return fmt.Errorf("llm provider %q config schema must be valid JSON", name)
+		return errors.E(op, errors.InvalidInput, fmt.Sprintf("llm provider %q config schema must be valid JSON", name))
 	}
 	for _, option := range provider.Metadata.ModelOptions {
 		if strings.TrimSpace(option.ID) == "" {
-			return fmt.Errorf("llm provider %q model option id is required", name)
+			return errors.E(op, errors.InvalidInput, fmt.Sprintf("llm provider %q model option id is required", name))
 		}
 	}
 	if _, exists := r.providers[name]; exists {
-		return fmt.Errorf("%w: %s", ErrProviderAlreadyRegistered, name)
+		return errors.E(op, KindProviderConflict, fmt.Sprintf("llm provider %q already registered", name))
 	}
 	provider.Metadata.Name = name
 	r.providers[name] = provider
@@ -111,9 +110,11 @@ func (r *Registry) RegisterProvider(provider Provider) error {
 
 // GetProvider returns a provider by name.
 func (r *Registry) GetProvider(name string) (Provider, error) {
+	const op = "llm.Registry.GetProvider"
+
 	provider, ok := r.providers[name]
 	if !ok {
-		return Provider{}, fmt.Errorf("%w: %s", ErrProviderNotFound, name)
+		return Provider{}, errors.E(op, KindProviderNotFound, fmt.Sprintf("llm provider %q not found", name))
 	}
 	return provider, nil
 }

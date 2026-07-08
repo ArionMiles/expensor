@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/rules"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // --- rules ---
@@ -252,7 +252,7 @@ func (h *Handlers) CreateRule(w http.ResponseWriter, r *http.Request) {
 	row := ruleMutationToRow(body)
 	created, err := h.ruleStore.CreateRule(r.Context(), requestTenant(r), row)
 	if err != nil {
-		if errors.Is(err, store.ErrRuleNameConflict) {
+		if errors.WhatKind(err) == errors.Conflict {
 			writeError(w, http.StatusConflict, "rule name already exists")
 			return
 		}
@@ -316,11 +316,11 @@ func (h *Handlers) UpdateRule(w http.ResponseWriter, r *http.Request) {
 	row := ruleMutationToRow(body)
 	updated, err := h.ruleStore.UpdateRule(r.Context(), requestTenant(r), id, row)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusNotFound, "rule not found")
 			return
 		}
-		if errors.Is(err, store.ErrRuleNameConflict) {
+		if errors.WhatKind(err) == errors.Conflict {
 			writeError(w, http.StatusConflict, "rule name already exists")
 			return
 		}
@@ -352,7 +352,7 @@ func (h *Handlers) DeleteRule(w http.ResponseWriter, r *http.Request) {
 	}
 	existing, err := h.ruleStore.GetRule(r.Context(), requestTenant(r), id)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusNotFound, "rule not found")
 			return
 		}
@@ -364,7 +364,7 @@ func (h *Handlers) DeleteRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.ruleStore.DeleteRule(r.Context(), requestTenant(r), id); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusNotFound, "rule not found")
 			return
 		}

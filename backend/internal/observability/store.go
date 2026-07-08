@@ -9,6 +9,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 const errorStatus = "error"
@@ -61,6 +63,7 @@ func (s *Scope) RecordOperation(ctx context.Context, op Operation) {
 	if op.Err != nil {
 		span.SetStatus(codes.Error, errorStatus)
 		logAttrs = append(logAttrs, slog.Any("error", op.Err))
+		logAttrs = append(logAttrs, errors.LogAttrs(op.Err)...)
 		s.logger.LogAttrs(ctx, slog.LevelError, "operation failed", logAttrs...)
 		return
 	}

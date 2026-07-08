@@ -1,15 +1,11 @@
 package llm
 
 import (
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
-)
 
-var (
-	ErrResultTooLarge = errors.New("llm result too large")
-	ErrUnsafeMutation = errors.New("llm mutation is not allowed")
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 var (
@@ -53,8 +49,10 @@ type ResultLimits struct {
 
 // EnforceResultLimits validates a raw provider result size.
 func EnforceResultLimits(payload []byte, limits ResultLimits) error {
+	const op = "llm.EnforceResultLimits"
+
 	if limits.MaxBytes > 0 && len(payload) > limits.MaxBytes {
-		return fmt.Errorf("%w: %d bytes exceeds %d", ErrResultTooLarge, len(payload), limits.MaxBytes)
+		return errors.E(op, KindResultTooLarge, fmt.Sprintf("llm result too large: %d bytes exceeds %d", len(payload), limits.MaxBytes))
 	}
 	return nil
 }
@@ -74,23 +72,25 @@ type MutationPolicy struct {
 
 // ValidateMutationSafety validates proposed mutations before persistence.
 func ValidateMutationSafety(policy MutationPolicy, mutations []MutationRequest) error {
+	const op = "llm.ValidateMutationSafety"
+
 	if len(mutations) == 0 {
 		return nil
 	}
 	if !policy.AllowMutations {
-		return fmt.Errorf("%w: mutations are disabled", ErrUnsafeMutation)
+		return errors.E(op, KindUnsafeMutation, "llm mutation is not allowed: mutations are disabled")
 	}
 	resources := stringSet(policy.AllowedResources)
 	operations := stringSet(policy.AllowedOperations)
 	for _, mutation := range mutations {
 		if len(resources) > 0 {
 			if _, ok := resources[strings.TrimSpace(mutation.Resource)]; !ok {
-				return fmt.Errorf("%w: resource %q", ErrUnsafeMutation, mutation.Resource)
+				return errors.E(op, KindUnsafeMutation, fmt.Sprintf("llm mutation is not allowed: resource %q", mutation.Resource))
 			}
 		}
 		if len(operations) > 0 {
 			if _, ok := operations[strings.TrimSpace(mutation.Operation)]; !ok {
-				return fmt.Errorf("%w: operation %q", ErrUnsafeMutation, mutation.Operation)
+				return errors.E(op, KindUnsafeMutation, fmt.Sprintf("llm mutation is not allowed: operation %q", mutation.Operation))
 			}
 		}
 	}

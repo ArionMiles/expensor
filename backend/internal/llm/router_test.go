@@ -3,10 +3,10 @@ package llm
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 type stubRuntimeStore struct {
@@ -26,8 +26,8 @@ func TestRouterReturnsNoProviderConfigured(t *testing.T) {
 	})
 
 	_, err := router.Complete(context.Background(), store.Tenant{ID: "tenant-a"}, Request{})
-	if !errors.Is(err, ErrNoProviderConfigured) {
-		t.Fatalf("Complete() error = %v, want ErrNoProviderConfigured", err)
+	if errors.WhatKind(err) != KindNoProviderConfigured {
+		t.Fatalf("Complete() error = %v, want KindNoProviderConfigured", err)
 	}
 }
 
@@ -50,7 +50,7 @@ func TestRouterRequiresProviderCapabilities(t *testing.T) {
 	_, err := router.Complete(context.Background(), store.Tenant{ID: "tenant-a"}, Request{
 		RequiredCapabilities: []Capability{CapabilityTools},
 	})
-	if !errors.Is(err, ErrCapabilityUnsupported) {
-		t.Fatalf("Complete() error = %v, want ErrCapabilityUnsupported", err)
+	if errors.WhatKind(err) != KindCapabilityUnsupported {
+		t.Fatalf("Complete() error = %v, want KindCapabilityUnsupported", err)
 	}
 }

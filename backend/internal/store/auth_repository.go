@@ -40,7 +40,7 @@ func (r *pgAuthRepository) CreateBootstrapAdmin(ctx context.Context, input Creat
 		return nil, fmt.Errorf("counting users for bootstrap: %w", err)
 	}
 	if existingUsers > 0 {
-		return nil, ErrBootstrapUnavailable
+		return nil, conflict("store.auth.create_bootstrap_admin", messageBootstrapUnavailable)
 	}
 
 	user, err := insertUser(ctx, tx, CreateUserInput{
@@ -122,7 +122,7 @@ func (r *pgAuthRepository) UpdateUser(ctx context.Context, id string, input Upda
 	`, id, input.DisplayName, input.Role, input.AvatarKey, input.Disabled))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, notFound("store.auth.update_user")
 		}
 		return nil, fmt.Errorf("updating user: %w", err)
 	}
@@ -140,7 +140,7 @@ func (r *pgAuthRepository) UpdateUserPassword(ctx context.Context, id string, in
 		return fmt.Errorf("updating user password: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return notFound("store.auth.update_user_password")
 	}
 	return nil
 }
@@ -151,7 +151,7 @@ func (r *pgAuthRepository) DeleteUser(ctx context.Context, id string) error {
 		return fmt.Errorf("deleting user: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return notFound("store.auth.delete_user")
 	}
 	return nil
 }
@@ -165,7 +165,7 @@ func (r *pgAuthRepository) FindUserByEmail(ctx context.Context, email string) (*
 	`, email))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, notFound("store.auth.find_user_by_email")
 		}
 		return nil, fmt.Errorf("finding user by email: %w", err)
 	}
@@ -181,7 +181,7 @@ func (r *pgAuthRepository) FindUserByID(ctx context.Context, id string) (*User, 
 	`, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, notFound("store.auth.find_user_by_id")
 		}
 		return nil, fmt.Errorf("finding user by id: %w", err)
 	}
@@ -208,7 +208,7 @@ func (r *pgAuthRepository) FindSessionByHash(ctx context.Context, tokenHash stri
 	`, tokenHash))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, notFound("store.auth.find_session_by_hash")
 		}
 		return nil, fmt.Errorf("finding session by hash: %w", err)
 	}
@@ -221,7 +221,7 @@ func (r *pgAuthRepository) RevokeSession(ctx context.Context, id string) error {
 		return fmt.Errorf("revoking session: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return notFound("store.auth.revoke_session")
 	}
 	return nil
 }
@@ -234,7 +234,7 @@ func (r *pgAuthRepository) CreateAccessToken(ctx context.Context, input CreateAc
 	`, input.UserID, input.Name, input.TokenHash, input.ExpiresAt))
 	if err != nil {
 		if isAccessTokenNameConflict(err) {
-			return nil, ErrAccessTokenNameConflict
+			return nil, conflict("store.auth.create_access_token", messageAccessTokenNameConflict)
 		}
 		return nil, fmt.Errorf("creating access token: %w", err)
 	}
@@ -275,7 +275,7 @@ func (r *pgAuthRepository) FindAccessTokenByHash(ctx context.Context, tokenHash 
 	`, tokenHash))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, notFound("store.auth.find_access_token_by_hash")
 		}
 		return nil, fmt.Errorf("finding access token by hash: %w", err)
 	}
@@ -288,7 +288,7 @@ func (r *pgAuthRepository) RevokeAccessToken(ctx context.Context, id, userID str
 		return fmt.Errorf("revoking access token: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return notFound("store.auth.revoke_access_token")
 	}
 	return nil
 }
@@ -313,7 +313,7 @@ func (r *pgAuthRepository) FindAccountSetupTokenByHash(ctx context.Context, toke
 	`, tokenHash))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, notFound("store.auth.find_account_setup_token_by_hash")
 		}
 		return nil, fmt.Errorf("finding account setup token by hash: %w", err)
 	}
@@ -326,7 +326,7 @@ func (r *pgAuthRepository) MarkAccountSetupTokenUsed(ctx context.Context, id str
 		return fmt.Errorf("marking account setup token used: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return notFound("store.auth.mark_account_setup_token_used")
 	}
 	return nil
 }
@@ -348,7 +348,7 @@ func (r *pgAuthRepository) CompleteAccountSetup(ctx context.Context, input Compl
 	`, input.TokenHash))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, notFound("store.auth.complete_account_setup")
 		}
 		return nil, fmt.Errorf("finding active account setup token: %w", err)
 	}
@@ -392,7 +392,7 @@ func insertUser(ctx context.Context, tx pgx.Tx, input CreateUserInput) (*User, e
 	`, input.Email, input.PasswordHash, input.DisplayName, role, avatarKey))
 	if err != nil {
 		if isUserEmailConflict(err) {
-			return nil, ErrUserEmailConflict
+			return nil, conflict("store.auth.create_user", messageUserEmailConflict)
 		}
 		return nil, fmt.Errorf("creating user: %w", err)
 	}

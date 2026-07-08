@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/llm"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 const (
@@ -68,20 +68,22 @@ func Provider(modelOptions []llm.ModelOption) llm.Provider {
 
 // NewClient builds an OpenAI API client from encrypted credentials and provider config.
 func NewClient(input llm.ClientConfig) (llm.Client, error) {
+	const op = "llm.openai.NewClient"
+
 	var creds credentials
 	if len(input.Credentials) > 0 {
 		if err := json.Unmarshal(input.Credentials, &creds); err != nil {
-			return nil, fmt.Errorf("decoding OpenAI credentials: %w", err)
+			return nil, errors.E(op, errors.InvalidInput, "decoding OpenAI credentials", err)
 		}
 	}
 	if strings.TrimSpace(creds.APIKey) == "" {
-		return nil, errors.New("OpenAI API key is not configured")
+		return nil, errors.E(op, errors.FailedPrecondition, "OpenAI API key is not configured")
 	}
 
 	cfg := providerConfig{Model: defaultModel, BaseURL: defaultBaseURL}
 	if len(input.Config) > 0 {
 		if err := json.Unmarshal(input.Config, &cfg); err != nil {
-			return nil, fmt.Errorf("decoding OpenAI config: %w", err)
+			return nil, errors.E(op, errors.InvalidInput, "decoding OpenAI config", err)
 		}
 	}
 	cfg.Model = strings.TrimSpace(cfg.Model)
@@ -102,6 +104,8 @@ func NewClient(input llm.ClientConfig) (llm.Client, error) {
 }
 
 func (c *client) HealthCheck(ctx context.Context) error {
+	const op = "llm.openai.HealthCheck"
+
 	schema := json.RawMessage(`{
 		"type":"object",
 		"additionalProperties":false,
@@ -125,59 +129,61 @@ func (c *client) HealthCheck(ctx context.Context) error {
 		},
 	})
 	if err != nil {
-		return err
+		return errors.E(op, err)
 	}
 	var out struct {
 		OK bool `json:"ok"`
 	}
 	if err := json.Unmarshal([]byte(resp.Text), &out); err != nil || !out.OK {
-		return errors.New("OpenAI healthcheck returned an invalid structured response")
+		return errors.E(op, errors.BadGateway, "OpenAI healthcheck returned an invalid structured response")
 	}
 	return nil
 }
 
 func (c *client) Complete(ctx context.Context, req llm.Request) (llm.Response, error) {
+	const op = "llm.openai.Complete"
+
 	payload, err := c.responsesPayload(req)
 	if err != nil {
-		return llm.Response{}, err
+		return llm.Response{}, errors.E(op, err)
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return llm.Response{}, fmt.Errorf("building OpenAI request: %w", err)
+		return llm.Response{}, errors.E(op, errors.Internal, "building OpenAI request", err)
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/responses", bytes.NewReader(body))
 	if err != nil {
-		return llm.Response{}, fmt.Errorf("building OpenAI request: %w", err)
+		return llm.Response{}, errors.E(op, errors.Internal, "building OpenAI request", err)
 	}
 	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	httpResp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return llm.Response{}, fmt.Errorf("calling OpenAI: %w", err)
+		return llm.Response{}, errors.E(op, errors.Unavailable, "calling OpenAI", err)
 	}
 	defer httpResp.Body.Close()
 
 	respBody, err := io.ReadAll(io.LimitReader(httpResp.Body, 4<<20))
 	if err != nil {
-		return llm.Response{}, fmt.Errorf("reading OpenAI response: %w", err)
+		return llm.Response{}, errors.E(op, errors.BadGateway, "reading OpenAI response", err)
 	}
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
-		return llm.Response{}, openAIProviderError(httpResp.StatusCode, respBody)
+		return llm.Response{}, errors.E(op, openAIProviderError(httpResp.StatusCode, respBody))
 	}
 
 	var resp responsesResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return llm.Response{}, fmt.Errorf("decoding OpenAI response: %w", err)
+		return llm.Response{}, errors.E(op, errors.BadGateway, "decoding OpenAI response", err)
 	}
 	if resp.Error != nil {
-		return llm.Response{}, &llm.ProviderError{
+		return llm.Response{}, errors.E(op, &llm.ProviderError{
 			Provider:   ProviderName,
 			StatusCode: httpResp.StatusCode,
 			Code:       resp.Error.Code,
 			Message:    resp.Error.Message,
-		}
+		})
 	}
 
 	text := strings.TrimSpace(resp.OutputText)
@@ -185,7 +191,7 @@ func (c *client) Complete(ctx context.Context, req llm.Request) (llm.Response, e
 		text = strings.TrimSpace(resp.FirstOutputText())
 	}
 	if text == "" {
-		return llm.Response{}, errors.New("OpenAI response did not include output text")
+		return llm.Response{}, errors.E(op, errors.BadGateway, "OpenAI response did not include output text")
 	}
 	return llm.Response{
 		Text:         text,
@@ -196,6 +202,8 @@ func (c *client) Complete(ctx context.Context, req llm.Request) (llm.Response, e
 }
 
 func (c *client) responsesPayload(req llm.Request) (responsesRequest, error) {
+	const op = "llm.openai.responsesPayload"
+
 	payload := responsesRequest{
 		Model:           c.model,
 		Input:           make([]responsesInputItem, 0, len(req.Messages)),
@@ -216,12 +224,12 @@ func (c *client) responsesPayload(req llm.Request) (responsesRequest, error) {
 		})
 	}
 	if len(payload.Input) == 0 {
-		return responsesRequest{}, errors.New("OpenAI request requires at least one non-empty message")
+		return responsesRequest{}, errors.E(op, errors.InvalidInput, "OpenAI request requires at least one non-empty message")
 	}
 	if req.ResponseFormat.Type != "" && req.ResponseFormat.Type != llm.ResponseFormatText {
 		format, err := responseTextFormat(req.ResponseFormat)
 		if err != nil {
-			return responsesRequest{}, err
+			return responsesRequest{}, errors.E(op, err)
 		}
 		payload.Text = &responsesText{Format: format}
 	}
@@ -229,6 +237,8 @@ func (c *client) responsesPayload(req llm.Request) (responsesRequest, error) {
 }
 
 func responseTextFormat(format llm.ResponseFormat) (responsesTextFormat, error) {
+	const op = "llm.openai.responseTextFormat"
+
 	switch format.Type {
 	case llm.ResponseFormatJSONSchema:
 		name := strings.TrimSpace(format.Name)
@@ -236,11 +246,11 @@ func responseTextFormat(format llm.ResponseFormat) (responsesTextFormat, error) 
 			name = "expensor_response"
 		}
 		if len(format.Schema) == 0 || !json.Valid(format.Schema) {
-			return responsesTextFormat{}, errors.New("json_schema response format requires a valid schema")
+			return responsesTextFormat{}, errors.E(op, errors.InvalidInput, "json_schema response format requires a valid schema")
 		}
 		var schema map[string]any
 		if err := json.Unmarshal(format.Schema, &schema); err != nil {
-			return responsesTextFormat{}, fmt.Errorf("decoding json_schema response format: %w", err)
+			return responsesTextFormat{}, errors.E(op, errors.InvalidInput, "decoding json_schema response format", err)
 		}
 		return responsesTextFormat{
 			Type:   "json_schema",
@@ -251,7 +261,7 @@ func responseTextFormat(format llm.ResponseFormat) (responsesTextFormat, error) 
 	case llm.ResponseFormatJSONObject:
 		return responsesTextFormat{Type: "json_object"}, nil
 	default:
-		return responsesTextFormat{}, fmt.Errorf("unsupported OpenAI response format %q", format.Type)
+		return responsesTextFormat{}, errors.E(op, errors.InvalidInput, fmt.Sprintf("unsupported OpenAI response format %q", format.Type))
 	}
 }
 

@@ -77,7 +77,7 @@ func (r *pgTaxonomyRepository) UpdateLabel(ctx context.Context, tenant Tenant, n
 		return fmt.Errorf("updating label: executing label update: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("updating label: %w", ErrNotFound)
+		return notFound("store.taxonomy.update_label")
 	}
 	return nil
 }
@@ -473,7 +473,7 @@ func ensureTaxonomyCanBeDeleted(ctx context.Context, tx pgx.Tx, tenant Tenant, n
 	var isDefault bool
 	err := tx.QueryRow(ctx, spec.selectDefaultSQL, name, tenantIDParam(tenant)).Scan(&isDefault)
 	if err != nil {
-		return ErrNotFound
+		return notFound("store.taxonomy.delete_" + spec.kind)
 	}
 	if isDefault {
 		return fmt.Errorf("cannot delete default %s %q", spec.kind, name)

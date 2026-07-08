@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -10,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 type pgTransactionsRepository struct {
@@ -104,11 +105,10 @@ func (r *pgTransactionsRepository) queryTransactions(
 
 func transactionOffset(filter ListFilter) (int, error) {
 	if filter.Page-1 > math.MaxInt/filter.PageSize {
-		return 0, fmt.Errorf(
-			"%w: page=%d page_size=%d",
-			ErrPaginationOverflow,
-			filter.Page,
-			filter.PageSize,
+		return 0, errors.E(
+			"store.transactions.list",
+			errors.InvalidInput,
+			fmt.Sprintf("%s: page=%d page_size=%d", messagePaginationOverflow, filter.Page, filter.PageSize),
 		)
 	}
 	return (filter.Page - 1) * filter.PageSize, nil
@@ -157,7 +157,7 @@ func (r *pgTransactionsRepository) getTransactionQuery(ctx context.Context, tena
 		return nil, err
 	}
 	if len(txns) == 0 {
-		return nil, ErrNotFound
+		return nil, notFound("store.transactions.get")
 	}
 
 	if err := r.loadLabels(ctx, txns); err != nil {
@@ -175,7 +175,7 @@ func (r *pgTransactionsRepository) UpdateDescription(ctx context.Context, tenant
 		return fmt.Errorf("updating description: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return notFound("store.transactions.update_description")
 	}
 	return nil
 }
@@ -286,7 +286,7 @@ func (r *pgTransactionsRepository) RemoveLabel(ctx context.Context, tenant Tenan
 		return fmt.Errorf("removing label: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return notFound("store.transactions.remove_label")
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -543,7 +543,7 @@ func (r *pgTransactionsRepository) UpdateTransaction(ctx context.Context, tenant
 		return fmt.Errorf("updating transaction: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return notFound("store.transactions.update")
 	}
 	return nil
 }
@@ -568,7 +568,7 @@ func (r *pgTransactionsRepository) MuteTransaction(ctx context.Context, tenant T
 		return fmt.Errorf("muting transaction: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return notFound("store.transactions.mute")
 	}
 	return nil
 }
@@ -583,7 +583,7 @@ func (r *pgTransactionsRepository) UpdateMuteReason(ctx context.Context, tenant 
 		return fmt.Errorf("updating mute reason: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return notFound("store.transactions.update_mute_reason")
 	}
 	return nil
 }
@@ -597,7 +597,7 @@ func (r *pgTransactionsRepository) UpdateMerchantReason(ctx context.Context, ten
 		return fmt.Errorf("updating merchant reason: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return notFound("store.transactions.update_merchant_reason")
 	}
 	return nil
 }
@@ -713,7 +713,7 @@ func (r *pgTransactionsRepository) DeleteMutedMerchant(ctx context.Context, tena
 		return fmt.Errorf("deleting muted merchant: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return notFound("store.transactions.delete_muted_merchant")
 	}
 	return nil
 }
@@ -742,7 +742,7 @@ func (r *pgTransactionsRepository) DeleteMutedMerchantAndUnmute(ctx context.Cont
 		`DELETE FROM muted_merchants WHERE id=$1 AND tenant_id IS NOT DISTINCT FROM $2 RETURNING pattern`, id, tenantIDParam(tenant),
 	).Scan(&pattern); err != nil {
 		if errorsIsNoRows(err) {
-			return ErrNotFound
+			return notFound("store.transactions.delete_muted_merchant_and_unmute")
 		}
 		return fmt.Errorf("deleting muted merchant: %w", err)
 	}

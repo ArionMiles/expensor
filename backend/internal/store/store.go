@@ -427,7 +427,7 @@ func (s *Store) CreateLabel(ctx context.Context, tenant Tenant, name, color stri
 	return s.taxonomy.CreateLabel(ctx, tenant, name, color)
 }
 
-// UpdateLabel changes the color of an existing label. Returns ErrNotFound if no row matched.
+// UpdateLabel changes the color of an existing label. Returns a NotFound error kind if no row matched.
 func (s *Store) UpdateLabel(ctx context.Context, tenant Tenant, name, color string) error {
 	return s.taxonomy.UpdateLabel(ctx, tenant, name, color)
 }
@@ -475,7 +475,7 @@ func (s *Store) CreateCategory(ctx context.Context, tenant Tenant, name, descrip
 	return s.taxonomy.CreateCategory(ctx, tenant, name, description)
 }
 
-// DeleteCategory removes a category by name. Returns ErrNotFound if it does not exist.
+// DeleteCategory removes a category by name. Returns a NotFound error kind if it does not exist.
 // Returns an error if the category is a default one.
 func (s *Store) DeleteCategory(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
 	return s.taxonomy.DeleteCategory(ctx, tenant, name, removeFromTransactions)
@@ -508,7 +508,7 @@ func (s *Store) CreateBucket(ctx context.Context, tenant Tenant, name, descripti
 	return s.taxonomy.CreateBucket(ctx, tenant, name, description)
 }
 
-// DeleteBucket removes a bucket by name. Returns ErrNotFound if it does not exist.
+// DeleteBucket removes a bucket by name. Returns a NotFound error kind if it does not exist.
 // Returns an error if the bucket is a default one.
 func (s *Store) DeleteBucket(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
 	return s.taxonomy.DeleteBucket(ctx, tenant, name, removeFromTransactions)
@@ -532,7 +532,7 @@ func (s *Store) RemoveBucketByMerchant(ctx context.Context, tenant Tenant, bucke
 // --- Transaction update ---
 
 // UpdateTransaction updates one or more optional fields on a transaction.
-// Only non-nil pointer fields are written. Returns ErrNotFound if no row matched.
+// Only non-nil pointer fields are written. Returns a NotFound error kind if no row matched.
 func (s *Store) UpdateTransaction(ctx context.Context, tenant Tenant, id string, u TransactionUpdate) error {
 	return s.txns.UpdateTransaction(ctx, tenant, id, u)
 }
@@ -544,7 +544,7 @@ func (s *Store) ListRules(ctx context.Context, tenant Tenant) ([]RuleRow, error)
 	return s.rules.ListRules(ctx, tenant)
 }
 
-// GetRule fetches a single rule by UUID. Returns ErrNotFound if no row matched.
+// GetRule fetches a single rule by UUID. Returns a NotFound error kind if no row matched.
 func (s *Store) GetRule(ctx context.Context, tenant Tenant, id string) (*RuleRow, error) {
 	return s.rules.GetRule(ctx, tenant, id)
 }
@@ -555,12 +555,12 @@ func (s *Store) CreateRule(ctx context.Context, tenant Tenant, r RuleRow) (*Rule
 }
 
 // UpdateRule updates any rule by ID. All rules (predefined and user-created) are editable.
-// Returns ErrNotFound if no row matched.
+// Returns a NotFound error kind if no row matched.
 func (s *Store) UpdateRule(ctx context.Context, tenant Tenant, id string, r RuleRow) (*RuleRow, error) {
 	return s.rules.UpdateRule(ctx, tenant, id, r)
 }
 
-// DeleteRule removes a non-predefined rule by ID. Returns ErrNotFound if no row matched.
+// DeleteRule removes a non-predefined rule by ID. Returns a NotFound error kind if no row matched.
 // Predefined rules cannot be deleted.
 func (s *Store) DeleteRule(ctx context.Context, tenant Tenant, id string) error {
 	return s.rules.DeleteRule(ctx, tenant, id)
@@ -677,7 +677,7 @@ func (s *Store) UnmuteByPattern(ctx context.Context, tenant Tenant, pattern stri
 
 // DeleteMutedMerchantAndUnmute atomically deletes the merchant pattern and
 // sets muted=false on all matching transactions in a single transaction.
-// Returns ErrNotFound if no row matched the id.
+// Returns a NotFound error kind if no row matched the id.
 func (s *Store) DeleteMutedMerchantAndUnmute(ctx context.Context, tenant Tenant, id string) error {
 	return s.txns.DeleteMutedMerchantAndUnmute(ctx, tenant, id)
 }

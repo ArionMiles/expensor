@@ -2,12 +2,12 @@ package store_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 func TestTenantScopedTransactionsAndReadModels(t *testing.T) {
@@ -50,11 +50,11 @@ func TestTenantScopedTransactionsAndReadModels(t *testing.T) {
 		t.Fatalf("tenant A totals = %+v, want one INR 10 transaction", totals)
 	}
 
-	if _, err := ts.GetTransaction(ctx, tenantA, idB); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("GetTransaction tenant A on tenant B row error = %v, want ErrNotFound", err)
+	if _, err := ts.GetTransaction(ctx, tenantA, idB); errors.WhatKind(err) != errors.NotFound {
+		t.Fatalf("GetTransaction tenant A on tenant B row error = %v, want NotFound kind", err)
 	}
-	if err := ts.UpdateTransaction(ctx, tenantA, idB, store.TransactionUpdate{Description: ptrString("cross tenant")}); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("UpdateTransaction tenant A on tenant B row error = %v, want ErrNotFound", err)
+	if err := ts.UpdateTransaction(ctx, tenantA, idB, store.TransactionUpdate{Description: ptrString("cross tenant")}); errors.WhatKind(err) != errors.NotFound {
+		t.Fatalf("UpdateTransaction tenant A on tenant B row error = %v, want NotFound kind", err)
 	}
 
 	stats, err := ts.GetStats(ctx, tenantA, "INR")
@@ -223,8 +223,8 @@ func TestTenantScopedRulesAndDiagnostics(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CreateRule tenant B with same name: %v", err)
 	}
-	if _, err := ts.GetRule(ctx, tenantB, ruleA.ID); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("GetRule tenant B on tenant A rule error = %v, want ErrNotFound", err)
+	if _, err := ts.GetRule(ctx, tenantB, ruleA.ID); errors.WhatKind(err) != errors.NotFound {
+		t.Fatalf("GetRule tenant B on tenant A rule error = %v, want NotFound kind", err)
 	}
 
 	diagnostic := tenantScopeDiagnostic("diag-message", "Same user rule")
@@ -241,8 +241,8 @@ func TestTenantScopedRulesAndDiagnostics(t *testing.T) {
 	if len(rows) != 1 || rows[0].MessageID != "diag-message" {
 		t.Fatalf("tenant A diagnostics = %#v", rows)
 	}
-	if _, err := ts.GetExtractionDiagnostic(ctx, tenantB, rows[0].ID); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("GetExtractionDiagnostic tenant B on tenant A diagnostic error = %v, want ErrNotFound", err)
+	if _, err := ts.GetExtractionDiagnostic(ctx, tenantB, rows[0].ID); errors.WhatKind(err) != errors.NotFound {
+		t.Fatalf("GetExtractionDiagnostic tenant B on tenant A diagnostic error = %v, want NotFound kind", err)
 	}
 }
 

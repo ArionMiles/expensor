@@ -3,8 +3,9 @@ package llm
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
+
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 type stubClient struct{}
@@ -58,7 +59,7 @@ func TestRegistryRejectsInvalidProvider(t *testing.T) {
 		{
 			name:     "blank name",
 			provider: testProvider(" \t\n"),
-			wantErr:  "llm provider name is required",
+			wantErr:  "llm.Registry.RegisterProvider: llm provider name is required",
 		},
 		{
 			name: "missing client factory",
@@ -67,7 +68,7 @@ func TestRegistryRejectsInvalidProvider(t *testing.T) {
 				provider.NewClient = nil
 				return provider
 			}(),
-			wantErr: `llm provider "test-provider" client factory is required`,
+			wantErr: `llm.Registry.RegisterProvider: llm provider "test-provider" client factory is required`,
 		},
 		{
 			name: "invalid config schema",
@@ -76,7 +77,7 @@ func TestRegistryRejectsInvalidProvider(t *testing.T) {
 				provider.Metadata.ConfigSchema = json.RawMessage(`{"bad"`)
 				return provider
 			}(),
-			wantErr: `llm provider "test-provider" config schema must be valid JSON`,
+			wantErr: `llm.Registry.RegisterProvider: llm provider "test-provider" config schema must be valid JSON`,
 		},
 	}
 
@@ -104,8 +105,8 @@ func TestRegistryRejectsDuplicateProvider(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected duplicate error, got nil")
 	}
-	if !errors.Is(err, ErrProviderAlreadyRegistered) {
-		t.Fatalf("error = %v, want ErrProviderAlreadyRegistered", err)
+	if errors.WhatKind(err) != KindProviderConflict {
+		t.Fatalf("error = %v, want KindProviderConflict", err)
 	}
 }
 
@@ -115,7 +116,7 @@ func TestProviderSupportsCapabilities(t *testing.T) {
 	if err := provider.RequireCapabilities(CapabilityTools); err != nil {
 		t.Fatalf("RequireCapabilities(CapabilityTools) error = %v", err)
 	}
-	if err := provider.RequireCapabilities(CapabilityStreaming); !errors.Is(err, ErrCapabilityUnsupported) {
-		t.Fatalf("RequireCapabilities(CapabilityStreaming) error = %v, want ErrCapabilityUnsupported", err)
+	if err := provider.RequireCapabilities(CapabilityStreaming); errors.WhatKind(err) != KindCapabilityUnsupported {
+		t.Fatalf("RequireCapabilities(CapabilityStreaming) error = %v, want KindCapabilityUnsupported", err)
 	}
 }
