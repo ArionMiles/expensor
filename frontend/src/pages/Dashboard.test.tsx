@@ -10,6 +10,7 @@ import {
   DEFAULT_SPEND_BREAKDOWN_MODE,
   DEFAULT_HEATMAP_METRIC,
   SummarySection,
+  buildZonedDayRangeParams,
   dashboardBreakdownData,
   dashboardBreakdownParams,
   displayBucketLabel,
@@ -145,6 +146,15 @@ describe('BreakdownTimeline', () => {
 describe('MetricToggle', () => {
   it('uses count as the default heatmap metric', () => {
     expect(DEFAULT_HEATMAP_METRIC).toBe('count')
+  })
+})
+
+describe('dashboard date ranges', () => {
+  it('builds annual heatmap drilldowns from the selected local day', () => {
+    expect(buildZonedDayRangeParams(new Date(2026, 6, 6), 'Asia/Calcutta')).toEqual({
+      from: '2026-07-05T18:30:00Z',
+      to: '2026-07-06T18:29:59Z',
+    })
   })
 })
 

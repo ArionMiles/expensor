@@ -435,6 +435,10 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
 
   const hasRange = value.from || value.to
   const rightMonth = useMemo(() => addMonths(viewMonth, 1), [viewMonth])
+  const hasPendingRange = Boolean(pending.from && pending.to)
+  const hasPendingSingleDay = Boolean(
+    pending.from && pending.to && isSameDay(pending.from, pending.to),
+  )
 
   const selectDay = (day: Date) => {
     setActivePreset('Custom')
@@ -489,6 +493,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
   }
 
   const apply = () => {
+    if (!hasPendingRange) return
     onChange(pending)
     setOpen(false)
   }
@@ -602,44 +607,58 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
                 </div>
               </div>
 
-              <div
-                className={cn(
-                  'mt-4 flex flex-wrap items-center gap-3 border-t border-border pt-3',
-                  pending.from ? 'justify-between' : 'justify-end',
-                )}
-              >
-                {pending.from && (
-                  <TimeRangeEditor
-                    from={pendingFrom}
-                    to={pending.to}
-                    onChange={(range) => {
-                      setActivePreset('Custom')
-                      setPending(range)
-                    }}
-                  />
-                )}
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={clearPending}
-                    disabled={!pending.from}
-                    className="text-xs text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Clear
-                  </button>
-                  <button
-                    type="button"
-                    onClick={apply}
-                    disabled={!pending.from}
-                    className={cn(
-                      'rounded-md px-4 py-2 text-xs font-medium transition-colors',
-                      pending.from
-                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                        : 'cursor-not-allowed bg-secondary text-muted-foreground opacity-50',
-                    )}
-                  >
-                    Apply
-                  </button>
+              <div className="mt-4 grid gap-3 border-t border-border pt-3">
+                <div
+                  className={cn(
+                    'flex items-center gap-3',
+                    pending.from ? 'justify-between' : 'justify-end',
+                  )}
+                >
+                  {pending.from && (
+                    <TimeRangeEditor
+                      from={pendingFrom}
+                      to={pending.to}
+                      onChange={(range) => {
+                        setActivePreset('Custom')
+                        setPending(range)
+                      }}
+                    />
+                  )}
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={clearPending}
+                      disabled={!pending.from}
+                      className="text-xs text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Clear
+                    </button>
+                    <button
+                      type="button"
+                      onClick={apply}
+                      disabled={!hasPendingRange}
+                      className={cn(
+                        'rounded-md px-4 py-2 text-xs font-medium transition-colors',
+                        hasPendingRange
+                          ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                          : 'cursor-not-allowed bg-secondary text-muted-foreground opacity-50',
+                      )}
+                    >
+                      Apply
+                    </button>
+                  </div>
+                </div>
+                <div className="min-h-4 text-xs" role="status">
+                  {pending.from && !pending.to && (
+                    <span className="text-muted-foreground">
+                      Start date selected. Click an end date, or click it again for one day.
+                    </span>
+                  )}
+                  {hasPendingSingleDay && (
+                    <span className="text-primary">
+                      Single date selected. Click Apply to filter this day.
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

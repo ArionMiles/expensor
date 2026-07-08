@@ -1122,6 +1122,18 @@ function zonedDateTimeToUtcIso(
   return new Date(guess - correctedOffset * 60 * 1000).toISOString().split('.')[0] + 'Z'
 }
 
+export function buildZonedDayRangeParams(
+  date: Date,
+  timeZone: string,
+): { from: string; to: string } {
+  const nav = { year: date.getFullYear(), month: date.getMonth() + 1 }
+  const day = date.getDate()
+  return {
+    from: zonedDateTimeToUtcIso(nav, timeZone, day, 0, 0, 0),
+    to: zonedDateTimeToUtcIso(nav, timeZone, day, 23, 59, 59),
+  }
+}
+
 export function buildMonthRangeParams(
   monthLabel: string,
   timeZone: string,
@@ -1587,14 +1599,7 @@ export function SpendingPatternsSection() {
           metric={metric}
           currency={currency}
           onDayClick={(date) => {
-            const from =
-              new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0))
-                .toISOString()
-                .split('.')[0] + 'Z'
-            const to =
-              new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59))
-                .toISOString()
-                .split('.')[0] + 'Z'
+            const { from, to } = buildZonedDayRangeParams(date, heatmapTimezone)
             navigate(
               `/transactions?date_from=${encodeURIComponent(from)}&date_to=${encodeURIComponent(to)}&show_filters=1`,
             )
