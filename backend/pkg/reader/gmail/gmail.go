@@ -135,10 +135,16 @@ func (r *Reader) observabilityScope() *observability.Scope {
 // It runs until the context is canceled.
 // Messages are marked as processed only after receiving acknowledgment via ackChan.
 func (r *Reader) Read(ctx context.Context, out chan<- *api.TransactionDetails, ackChan <-chan string) error {
-	defer close(out)
-
 	// Start goroutine to update state when transactions are successfully written.
-	go r.handleAcknowledgments(ctx, ackChan)
+	ackDone := make(chan struct{})
+	go func() {
+		defer close(ackDone)
+		r.handleAcknowledgments(ctx, ackChan)
+	}()
+	defer func() {
+		close(out)
+		<-ackDone
+	}()
 
 	ticker := time.NewTicker(r.interval)
 	defer ticker.Stop()
@@ -202,22 +208,25 @@ func (r *Reader) saveCheckpointAfterIteration(iterationErr error) {
 
 // handleAcknowledgments updates state when transactions are successfully written.
 func (r *Reader) handleAcknowledgments(ctx context.Context, ackChan <-chan string) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case msgID, ok := <-ackChan:
-			if !ok {
-				r.logger.Info("acknowledgment channel closed")
-				return
-			}
-			if r.state != nil {
-				if err := r.state.MarkProcessed(ctx, msgID); err != nil {
-					r.logger.Warn("failed to mark message as processed in state", "message_id", msgID, "error", err)
-				}
+	if ackChan == nil {
+		return
+	}
+	for msgID := range ackChan {
+		if r.state != nil {
+			if err := r.markProcessed(ctx, msgID); err != nil {
+				r.logger.Warn("failed to mark message as processed in state", "message_id", msgID, "error", err)
 			}
 		}
 	}
+	r.logger.Info("acknowledgment channel closed")
+}
+
+const processedMessageMarkTimeout = 3 * time.Second
+
+func (r *Reader) markProcessed(ctx context.Context, msgID string) error {
+	markCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), processedMessageMarkTimeout)
+	defer cancel()
+	return r.state.MarkProcessed(markCtx, msgID)
 }
 
 const (

@@ -127,10 +127,16 @@ func (r *Reader) observabilityScope() *observability.Scope {
 // It runs until the context is canceled.
 // Messages are marked as processed only after receiving acknowledgment via ackChan.
 func (r *Reader) Read(ctx context.Context, out chan<- *api.TransactionDetails, ackChan <-chan string) error {
-	defer close(out)
-
 	// Start goroutine to handle acknowledgments
-	go r.handleAcknowledgments(ctx, ackChan)
+	ackDone := make(chan struct{})
+	go func() {
+		defer close(ackDone)
+		r.handleAcknowledgments(ctx, ackChan)
+	}()
+	defer func() {
+		close(out)
+		<-ackDone
+	}()
 
 	ticker := time.NewTicker(r.interval)
 	defer ticker.Stop()
@@ -188,25 +194,28 @@ func (r *Reader) saveCheckpoint() {
 
 // handleAcknowledgments marks messages as processed when they're successfully written.
 func (r *Reader) handleAcknowledgments(ctx context.Context, ackChan <-chan string) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case msgKey, ok := <-ackChan:
-			if !ok {
-				r.logger.Info("acknowledgment channel closed")
-				return
-			}
-			// Mark as processed in state
-			if r.state != nil {
-				if err := r.state.MarkProcessed(ctx, msgKey); err != nil {
-					r.logger.Warn("failed to mark message as processed", "message_key", msgKey, "error", err)
-				} else {
-					r.logger.Debug("marked message as processed", "message_key", msgKey)
-				}
+	if ackChan == nil {
+		return
+	}
+	for msgKey := range ackChan {
+		// Mark as processed in state
+		if r.state != nil {
+			if err := r.markProcessed(ctx, msgKey); err != nil {
+				r.logger.Warn("failed to mark message as processed", "message_key", msgKey, "error", err)
+			} else {
+				r.logger.Debug("marked message as processed", "message_key", msgKey)
 			}
 		}
 	}
+	r.logger.Info("acknowledgment channel closed")
+}
+
+const processedMessageMarkTimeout = 3 * time.Second
+
+func (r *Reader) markProcessed(ctx context.Context, msgKey string) error {
+	markCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), processedMessageMarkTimeout)
+	defer cancel()
+	return r.state.MarkProcessed(markCtx, msgKey)
 }
 
 // scanAllMailboxes scans all configured mailboxes for new transactions.

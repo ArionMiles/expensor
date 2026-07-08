@@ -21,6 +21,8 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
+	"github.com/ArionMiles/expensor/backend/internal/state"
+	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
@@ -79,6 +81,52 @@ func (s *blockingDiagnosticSink) callCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.calls
+}
+
+type contextCheckingProcessedMessageStore struct {
+	mu        sync.Mutex
+	marked    []string
+	errAtCall error
+}
+
+func (s *contextCheckingProcessedMessageStore) IsMessageProcessed(_ context.Context, _ store.Tenant, _ string) (bool, error) {
+	return false, nil
+}
+
+func (s *contextCheckingProcessedMessageStore) MarkMessageProcessed(ctx context.Context, _ store.Tenant, key string, _ time.Time) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.marked = append(s.marked, key)
+	s.errAtCall = ctx.Err()
+	return nil
+}
+
+func TestHandleAcknowledgmentsMarksPendingAckAfterContextCancellation(t *testing.T) {
+	processedStore := &contextCheckingProcessedMessageStore{}
+	reader := &Reader{
+		state:  state.NewDBManager(processedStore, store.Tenant{}, slog.New(slog.NewTextHandler(io.Discard, nil))),
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ackChan := make(chan string, 1)
+	ackChan <- "msg-processed"
+	close(ackChan)
+	cancel()
+
+	reader.handleAcknowledgments(ctx, ackChan)
+
+	processedStore.mu.Lock()
+	defer processedStore.mu.Unlock()
+	if !reflect.DeepEqual(processedStore.marked, []string{"msg-processed"}) {
+		t.Fatalf("marked messages = %v, want [msg-processed]", processedStore.marked)
+	}
+	if processedStore.errAtCall != nil {
+		t.Fatalf("mark context error = %v, want live context", processedStore.errAtCall)
+	}
 }
 
 func b64(s string) string {
