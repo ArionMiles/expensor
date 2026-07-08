@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import { useState } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DateRangePicker } from './DateRangePicker'
 import { renderWithProviders } from '@/test/render'
 
@@ -21,6 +21,10 @@ function getSelectableDayButton() {
 }
 
 describe('DateRangePicker', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('opens and closes the picker', () => {
     renderWithProviders(<DateRangePicker value={{}} onChange={vi.fn()} />)
 
@@ -133,7 +137,13 @@ describe('DateRangePicker', () => {
     const onChange = vi.fn()
 
     renderWithProviders(
-      <DateRangePicker value={{ from: new Date('2026-04-01T00:00:00') }} onChange={onChange} />,
+      <DateRangePicker
+        value={{
+          from: new Date('2026-04-01T00:00:00'),
+          to: new Date('2026-04-01T23:59:59'),
+        }}
+        onChange={onChange}
+      />,
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Select date range' }))
@@ -150,7 +160,13 @@ describe('DateRangePicker', () => {
     const onChange = vi.fn()
 
     renderWithProviders(
-      <DateRangePicker value={{ from: new Date('2026-04-01T00:00:00') }} onChange={onChange} />,
+      <DateRangePicker
+        value={{
+          from: new Date('2026-04-01T00:00:00'),
+          to: new Date('2026-04-01T23:59:59'),
+        }}
+        onChange={onChange}
+      />,
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Select date range' }))
@@ -170,7 +186,13 @@ describe('DateRangePicker', () => {
     const onChange = vi.fn()
 
     renderWithProviders(
-      <DateRangePicker value={{ from: new Date('2026-04-01T00:00:00') }} onChange={onChange} />,
+      <DateRangePicker
+        value={{
+          from: new Date('2026-04-01T00:00:00'),
+          to: new Date('2026-04-01T23:59:59'),
+        }}
+        onChange={onChange}
+      />,
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Select date range' }))
@@ -186,7 +208,13 @@ describe('DateRangePicker', () => {
     const onChange = vi.fn()
 
     renderWithProviders(
-      <DateRangePicker value={{ from: new Date('2026-04-01T09:30:00') }} onChange={onChange} />,
+      <DateRangePicker
+        value={{
+          from: new Date('2026-04-01T09:30:00'),
+          to: new Date('2026-04-01T23:59:59'),
+        }}
+        onChange={onChange}
+      />,
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Select date range' }))
@@ -238,8 +266,42 @@ describe('DateRangePicker', () => {
     const nextRange = onChange.mock.calls[0][0]
     expect(nextRange.from).toEqual(new Date(2026, 3, 1, 0, 0, 0, 0))
     expect(nextRange.to).toEqual(new Date(2027, 2, 31, 23, 59, 59, 999))
+  })
 
-    vi.useRealTimers()
+  it('does not apply a one-sided custom date selection', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 6, 9, 12))
+    const onChange = vi.fn()
+
+    renderWithProviders(<DateRangePicker value={{}} onChange={onChange} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select date range' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Monday, July 6th, 2026' }))
+
+    expect(
+      screen.getByText('Start date selected. Click an end date, or click it again for one day.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('selects a single-day range when the same date is clicked twice', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 6, 9, 12))
+    const onChange = vi.fn()
+
+    renderWithProviders(<DateRangePicker value={{}} onChange={onChange} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select date range' }))
+    const day = screen.getByRole('button', { name: 'Monday, July 6th, 2026' })
+    fireEvent.click(day)
+    fireEvent.click(day)
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    expect(onChange).toHaveBeenCalledWith({
+      from: new Date(2026, 6, 6, 0, 0, 0, 0),
+      to: new Date(2026, 6, 6, 23, 59, 59, 999),
+    })
   })
 
   it('updates the rendered range text after applying a selection', () => {
@@ -253,6 +315,7 @@ describe('DateRangePicker', () => {
     const dayButton = getSelectableDayButton()
     expect(dayButton).toBeDefined()
 
+    fireEvent.click(dayButton!)
     fireEvent.click(dayButton!)
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
 

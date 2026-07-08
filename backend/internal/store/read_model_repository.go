@@ -541,17 +541,18 @@ func (r *pgReadModelRepository) spendingHeatmapReadModel(ctx context.Context, te
 // Results are ordered by date ascending. Returns an empty (non-nil) slice when
 func (r *pgReadModelRepository) annualSpendReadModel(ctx context.Context, tenant Tenant, year int) ([]DailyBucket, error) {
 	buckets := []DailyBucket{}
+	tz := r.appTimezone(ctx, tenant)
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT
-			timestamp::date          AS date,
-			COALESCE(SUM(amount), 0) AS amount,
-			COUNT(*)                 AS count
+			(timestamp AT TIME ZONE $2)::date AS date,
+			COALESCE(SUM(amount), 0)           AS amount,
+			COUNT(*)                           AS count
 		FROM transactions
-		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $2 AND EXTRACT(YEAR FROM timestamp) = $1
+		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND EXTRACT(YEAR FROM timestamp AT TIME ZONE $2) = $1
 		GROUP BY date
 		ORDER BY date
-	`, year, tenantIDParam(tenant))
+	`, year, tz, tenantIDParam(tenant))
 	if err != nil {
 		return nil, fmt.Errorf("fetching annual spend for %d: %w", year, err)
 	}

@@ -1069,6 +1069,7 @@ func TestGetTransaction_Found(t *testing.T) {
 	}
 	if txn == nil {
 		t.Fatal("expected transaction, got nil")
+		return
 	}
 	if txn.MerchantInfo != "Apple Store" {
 		t.Errorf("want MerchantInfo=Apple Store, got %s", txn.MerchantInfo)
@@ -1754,6 +1755,7 @@ func TestHeatmapBucketMatchesListTransactionsForWeekdayHour_AllTime(t *testing.T
 	}
 	if bucket == nil {
 		t.Fatal("expected Sunday 23:00 bucket in all-time heatmap")
+		return
 	}
 
 	txns, result, err := ts.ListTransactions(ctx, store.Tenant{}, store.ListFilter{
@@ -1898,6 +1900,43 @@ func TestGetAnnualSpend_EmptyDB(t *testing.T) {
 	}
 	if len(buckets) != 0 {
 		t.Errorf("expected 0 buckets in empty DB, got %d", len(buckets))
+	}
+}
+
+func TestGetAnnualSpend_UsesAppTimezone(t *testing.T) {
+	ts := newTestStore(t)
+	defer ts.cleanup()
+
+	ctx := context.Background()
+	if err := ts.SetAppConfig(ctx, store.Tenant{}, "app.timezone", "Asia/Kolkata"); err != nil {
+		t.Fatalf("SetAppConfig: %v", err)
+	}
+
+	if _, err := ts.InsertForTest(ctx, store.InsertParams{
+		MessageID:    "annual-heatmap-local-day",
+		Amount:       1976.62,
+		Currency:     "INR",
+		MerchantInfo: "Local Day Merchant",
+		Category:     "Food",
+		Timestamp:    time.Date(2026, time.July, 5, 18, 30, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("InsertForTest: %v", err)
+	}
+
+	buckets, err := ts.GetAnnualSpend(ctx, store.Tenant{}, 2026)
+	if err != nil {
+		t.Fatalf("GetAnnualSpend: %v", err)
+	}
+
+	got := map[string]int{}
+	for _, bucket := range buckets {
+		got[bucket.Date.Format(time.DateOnly)] = bucket.Count
+	}
+	if got["2026-07-06"] != 1 {
+		t.Fatalf("expected timestamp to bucket under local day 2026-07-06, got %#v", got)
+	}
+	if got["2026-07-05"] != 0 {
+		t.Fatalf("expected no UTC-day bucket for 2026-07-05, got %#v", got)
 	}
 }
 

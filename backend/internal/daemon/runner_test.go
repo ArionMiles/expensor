@@ -158,6 +158,7 @@ func TestNew(t *testing.T) {
 
 			if runner == nil {
 				t.Fatal("expected non-nil runner")
+				return
 			}
 			if runner.registry == nil {
 				t.Error("expected registry to be set")
