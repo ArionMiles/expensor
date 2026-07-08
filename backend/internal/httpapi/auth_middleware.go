@@ -1,13 +1,13 @@
 package httpapi
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/auth"
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 func authMiddleware(h *Handlers, next http.Handler) http.Handler {
@@ -91,7 +91,7 @@ func (h *Handlers) authenticateBearer(w http.ResponseWriter, r *http.Request, ra
 func (h *Handlers) authenticatedUser(w http.ResponseWriter, r *http.Request, userID string) (*store.User, bool) {
 	user, err := h.authStore.FindUserByID(r.Context(), userID)
 	if err != nil {
-		if !errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) != errors.NotFound {
 			h.logger.Error("authenticate user", "error", err)
 		}
 		writeError(w, http.StatusUnauthorized, "authentication required")

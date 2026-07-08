@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/auth"
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 const (
@@ -157,7 +157,7 @@ func (h *Handlers) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		AvatarKey:    normalizeAvatarKey(body.AvatarKey),
 	})
 	if err != nil {
-		if errors.Is(err, store.ErrBootstrapUnavailable) {
+		if errors.WhatKind(err) == errors.Conflict {
 			writeError(w, http.StatusConflict, "bootstrap unavailable")
 			return
 		}
@@ -229,7 +229,7 @@ func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(sessionCookieName); err == nil && cookie.Value != "" {
 		session, findErr := h.authStore.FindSessionByHash(r.Context(), auth.HashOpaqueToken(cookie.Value))
 		if findErr == nil {
-			if err := h.authStore.RevokeSession(r.Context(), session.ID); err != nil && !errors.Is(err, store.ErrNotFound) {
+			if err := h.authStore.RevokeSession(r.Context(), session.ID); err != nil && errors.WhatKind(err) != errors.NotFound {
 				h.logger.Error("revoke session", "error", err)
 				writeError(w, http.StatusInternalServerError, "failed to log out")
 				return
@@ -280,7 +280,7 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	user, err := h.authStore.UpdateUser(r.Context(), principal.UserID, input)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
@@ -322,7 +322,7 @@ func (h *Handlers) UpdatePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.authStore.UpdateUserPassword(r.Context(), user.ID, store.UpdateUserPasswordInput{PasswordHash: passwordHash}); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
@@ -368,7 +368,7 @@ func (h *Handlers) CreateAccessToken(w http.ResponseWriter, r *http.Request) {
 		TokenHash: hash,
 	})
 	if err != nil {
-		if errors.Is(err, store.ErrAccessTokenNameConflict) {
+		if errors.WhatKind(err) == errors.Conflict {
 			writeError(w, http.StatusConflict, fmt.Sprintf("Token %s already exists.", strings.TrimSpace(body.Name)))
 			return
 		}
@@ -424,7 +424,7 @@ func (h *Handlers) RevokeAccessToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.authStore.RevokeAccessToken(r.Context(), r.PathValue("id"), principal.UserID); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusNotFound, "token not found")
 			return
 		}
@@ -467,7 +467,7 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 		AvatarKey: "default",
 	})
 	if err != nil {
-		if errors.Is(err, store.ErrUserEmailConflict) {
+		if errors.WhatKind(err) == errors.Conflict {
 			writeError(w, http.StatusConflict, fmt.Sprintf("User %s already exists.", strings.ToLower(strings.TrimSpace(body.Email))))
 			return
 		}
@@ -547,7 +547,7 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	user, err := h.authStore.UpdateUser(r.Context(), userID, input)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusNotFound, "user not found")
 			return
 		}
@@ -583,7 +583,7 @@ func (h *Handlers) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.authStore.DeleteUser(r.Context(), userID); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusNotFound, "user not found")
 			return
 		}
@@ -613,7 +613,7 @@ func (h *Handlers) CreateSetupToken(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
 	user, err := h.authStore.FindUserByID(r.Context(), userID)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusNotFound, "user not found")
 			return
 		}
@@ -695,7 +695,7 @@ func (h *Handlers) CompleteAccountSetup(w http.ResponseWriter, r *http.Request) 
 		AvatarKey:    normalizeAvatarKey(body.AvatarKey),
 	})
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusUnauthorized, "invalid or expired setup token")
 			return
 		}
@@ -717,7 +717,7 @@ func (h *Handlers) accountSetupUserFromToken(w http.ResponseWriter, r *http.Requ
 	}
 	setupToken, err := h.authStore.FindAccountSetupTokenByHash(r.Context(), auth.HashOpaqueToken(tokenValue))
 	if err != nil || setupToken.UsedAt != nil || !setupToken.ExpiresAt.After(time.Now()) {
-		if err != nil && !errors.Is(err, store.ErrNotFound) {
+		if err != nil && errors.WhatKind(err) != errors.NotFound {
 			h.logger.Error("find account setup token", "error", err)
 			writeError(w, http.StatusInternalServerError, "failed to fetch account setup")
 			return nil, false
@@ -727,7 +727,7 @@ func (h *Handlers) accountSetupUserFromToken(w http.ResponseWriter, r *http.Requ
 	}
 	user, err := h.authStore.FindUserByID(r.Context(), setupToken.UserID)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusUnauthorized, "invalid or expired setup token")
 			return nil, false
 		}
@@ -771,7 +771,7 @@ func (h *Handlers) currentUser(w http.ResponseWriter, r *http.Request) (*store.U
 	}
 	user, err := h.authStore.FindUserByID(r.Context(), principal.UserID)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusUnauthorized, "authentication required")
 			return nil, false
 		}

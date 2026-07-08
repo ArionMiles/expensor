@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -25,12 +25,22 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 const (
 	testTransactionID   = "11111111-1111-1111-1111-111111111111"
 	testRuleID          = "22222222-2222-2222-2222-222222222222"
 	testMutedMerchantID = "33333333-3333-3333-3333-333333333333"
+)
+
+var (
+	errStoreNotFound                = errors.E(errors.NotFound, "not found")
+	errStoreConflict                = errors.E(errors.Conflict, "conflict")
+	errStoreAccessTokenNameConflict = errors.E(errors.Conflict, "access token name conflict")
+	errStoreUserEmailConflict       = errors.E(errors.Conflict, "user email conflict")
+	errStoreRuleNameConflict        = errors.E(errors.Conflict, "rule name conflict")
+	errStoreDiagnosticConflict      = errors.E(errors.Conflict, "diagnostic conflict")
 )
 
 // --- mocks ---
@@ -40,6 +50,16 @@ type mockDaemon struct {
 }
 
 func (m *mockDaemon) Status() DaemonStatus { return m.status }
+
+func mockStoreErr(op string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.WhatKind(err) != errors.Unknown {
+		return errors.E(op, err)
+	}
+	return err
+}
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
@@ -179,7 +199,7 @@ func (m *mockStore) CreateBootstrapAdmin(_ context.Context, input store.CreateBo
 func (m *mockStore) CreateUser(_ context.Context, input store.CreateUserInput) (*store.User, error) {
 	m.createdUser = input
 	if m.createUserErr != nil {
-		return nil, m.createUserErr
+		return nil, mockStoreErr("store.auth.create_user", m.createUserErr)
 	}
 	return &store.User{
 		ID:           "user-id",
@@ -233,7 +253,7 @@ func (m *mockStore) DeleteUser(_ context.Context, id string) error {
 	m.deletedUserID = id
 	if m.usersByID != nil {
 		if _, ok := m.usersByID[id]; !ok {
-			return store.ErrNotFound
+			return mockStoreErr("store.auth.delete_user", errStoreNotFound)
 		}
 		delete(m.usersByID, id)
 	}
@@ -246,7 +266,7 @@ func (m *mockStore) FindUserByEmail(_ context.Context, email string) (*store.Use
 			return user, nil
 		}
 	}
-	return nil, store.ErrNotFound
+	return nil, mockStoreErr("store.auth.find_user_by_email", errStoreNotFound)
 }
 
 func (m *mockStore) FindUserByID(_ context.Context, id string) (*store.User, error) {
@@ -255,7 +275,7 @@ func (m *mockStore) FindUserByID(_ context.Context, id string) (*store.User, err
 			return user, nil
 		}
 	}
-	return nil, store.ErrNotFound
+	return nil, mockStoreErr("store.auth.find_user_by_id", errStoreNotFound)
 }
 
 func (m *mockStore) CreateSession(_ context.Context, input store.CreateSessionInput) (*store.Session, error) {
@@ -269,7 +289,7 @@ func (m *mockStore) FindSessionByHash(_ context.Context, tokenHash string) (*sto
 			return session, nil
 		}
 	}
-	return nil, store.ErrNotFound
+	return nil, mockStoreErr("store.auth.find_session_by_hash", errStoreNotFound)
 }
 
 func (m *mockStore) RevokeSession(_ context.Context, id string) error {
@@ -280,7 +300,7 @@ func (m *mockStore) RevokeSession(_ context.Context, id string) error {
 func (m *mockStore) CreateAccessToken(_ context.Context, input store.CreateAccessTokenInput) (*store.AccessToken, error) {
 	m.createdAccessToken = input
 	if m.createAccessTokenErr != nil {
-		return nil, m.createAccessTokenErr
+		return nil, mockStoreErr("store.auth.create_access_token", m.createAccessTokenErr)
 	}
 	return &store.AccessToken{ID: "access-token-id", UserID: input.UserID, Name: input.Name, TokenHash: input.TokenHash, ExpiresAt: input.ExpiresAt}, nil
 }
@@ -296,7 +316,7 @@ func (m *mockStore) FindAccessTokenByHash(_ context.Context, tokenHash string) (
 			return token, nil
 		}
 	}
-	return nil, store.ErrNotFound
+	return nil, mockStoreErr("store.auth.find_access_token_by_hash", errStoreNotFound)
 }
 
 func (m *mockStore) RevokeAccessToken(_ context.Context, id, userID string) error {
@@ -316,7 +336,7 @@ func (m *mockStore) FindAccountSetupTokenByHash(_ context.Context, tokenHash str
 			return token, nil
 		}
 	}
-	return nil, store.ErrNotFound
+	return nil, mockStoreErr("store.auth.find_account_setup_token_by_hash", errStoreNotFound)
 }
 
 func (m *mockStore) MarkAccountSetupTokenUsed(_ context.Context, id string) error {
@@ -332,7 +352,7 @@ func (m *mockStore) CompleteAccountSetup(_ context.Context, input store.Complete
 	if m.completedSetupUser != nil {
 		return m.completedSetupUser, nil
 	}
-	return nil, store.ErrNotFound
+	return nil, mockStoreErr("store.auth.complete_account_setup", errStoreNotFound)
 }
 
 func (m *mockStore) ListTransactions(
@@ -349,15 +369,15 @@ func (m *mockStore) ListTransactions(
 }
 
 func (m *mockStore) GetTransaction(_ context.Context, _ store.Tenant, _ string) (*store.Transaction, error) {
-	return m.getResult, m.getErr
+	return m.getResult, mockStoreErr("store.transactions.get", m.getErr)
 }
 
 func (m *mockStore) AddLabels(_ context.Context, _ store.Tenant, _ string, _ []string) error {
-	return m.addLabelsErr
+	return mockStoreErr("store.transactions.add_labels", m.addLabelsErr)
 }
 
 func (m *mockStore) RemoveLabel(_ context.Context, _ store.Tenant, _, _ string) error {
-	return m.removeLblErr
+	return mockStoreErr("store.transactions.remove_label", m.removeLblErr)
 }
 
 func (m *mockStore) SearchTransactions(
@@ -440,7 +460,7 @@ func (m *mockStore) GetAppConfig(_ context.Context, tenant store.Tenant, key str
 			return v, nil
 		}
 	}
-	return "", errors.New("not found")
+	return "", stderrors.New("not found")
 }
 
 func (m *mockStore) SetAppConfig(_ context.Context, _ store.Tenant, key, value string) error {
@@ -674,7 +694,7 @@ func (m *mockStore) GetActiveLLMProviderRuntime(
 
 func (m *mockStore) GetFacets(_ context.Context, _ store.Tenant) (*store.Facets, error) {
 	if m.getFacetsErr != nil {
-		return nil, m.getFacetsErr
+		return nil, mockStoreErr("store.transactions.facets", m.getFacetsErr)
 	}
 	if m.facets != nil {
 		return m.facets, nil
@@ -694,7 +714,7 @@ func (m *mockStore) GetFacets(_ context.Context, _ store.Tenant) (*store.Facets,
 
 func (m *mockStore) ListLabels(_ context.Context, _ store.Tenant) ([]store.Label, error) {
 	if m.labelsErr != nil {
-		return nil, m.labelsErr
+		return nil, mockStoreErr("store.taxonomy.labels", m.labelsErr)
 	}
 	if m.labels == nil {
 		return []store.Label{}, nil
@@ -703,16 +723,16 @@ func (m *mockStore) ListLabels(_ context.Context, _ store.Tenant) ([]store.Label
 }
 
 func (m *mockStore) CreateLabel(_ context.Context, _ store.Tenant, _, _ string) error {
-	return m.labelsErr
+	return mockStoreErr("store.taxonomy.labels", m.labelsErr)
 }
 
 func (m *mockStore) UpdateLabel(_ context.Context, _ store.Tenant, _, _ string) error {
-	return m.updateErr
+	return mockStoreErr("store.update", m.updateErr)
 }
 
 func (m *mockStore) DeleteLabel(_ context.Context, _ store.Tenant, _ string, removeFromTransactions bool) error {
 	m.deleteLabelCleanup = removeFromTransactions
-	return m.labelsErr
+	return mockStoreErr("store.taxonomy.labels", m.labelsErr)
 }
 
 func (m *mockStore) RemoveLabelByMerchant(_ context.Context, _ store.Tenant, _, _ string) (int64, error) {
@@ -746,7 +766,7 @@ func (m *mockStore) GetMonthlyBreakdownSpend(_ context.Context, _ store.Tenant, 
 
 func (m *mockStore) ListCategories(_ context.Context, _ store.Tenant) ([]store.Category, error) {
 	if m.catsErr != nil {
-		return nil, m.catsErr
+		return nil, mockStoreErr("store.taxonomy.categories", m.catsErr)
 	}
 	if m.categories == nil {
 		return []store.Category{}, nil
@@ -755,12 +775,12 @@ func (m *mockStore) ListCategories(_ context.Context, _ store.Tenant) ([]store.C
 }
 
 func (m *mockStore) CreateCategory(_ context.Context, _ store.Tenant, _, _ string) error {
-	return m.catsErr
+	return mockStoreErr("store.taxonomy.categories", m.catsErr)
 }
 
 func (m *mockStore) DeleteCategory(_ context.Context, _ store.Tenant, _ string, removeFromTransactions bool) error {
 	m.deleteCategoryCleanup = removeFromTransactions
-	return m.catsErr
+	return mockStoreErr("store.taxonomy.categories", m.catsErr)
 }
 
 func (m *mockStore) GetCategoryMappings(_ context.Context, _ store.Tenant) (map[string][]string, error) {
@@ -786,7 +806,7 @@ func (m *mockStore) RemoveCategoryByMerchant(_ context.Context, _ store.Tenant, 
 
 func (m *mockStore) ListBuckets(_ context.Context, _ store.Tenant) ([]store.Bucket, error) {
 	if m.bucketsErr != nil {
-		return nil, m.bucketsErr
+		return nil, mockStoreErr("store.taxonomy.buckets", m.bucketsErr)
 	}
 	if m.buckets == nil {
 		return []store.Bucket{}, nil
@@ -795,12 +815,12 @@ func (m *mockStore) ListBuckets(_ context.Context, _ store.Tenant) ([]store.Buck
 }
 
 func (m *mockStore) CreateBucket(_ context.Context, _ store.Tenant, _, _ string) error {
-	return m.bucketsErr
+	return mockStoreErr("store.taxonomy.buckets", m.bucketsErr)
 }
 
 func (m *mockStore) DeleteBucket(_ context.Context, _ store.Tenant, _ string, removeFromTransactions bool) error {
 	m.deleteBucketCleanup = removeFromTransactions
-	return m.bucketsErr
+	return mockStoreErr("store.taxonomy.buckets", m.bucketsErr)
 }
 
 func (m *mockStore) GetBucketMappings(_ context.Context, _ store.Tenant) (map[string][]string, error) {
@@ -826,12 +846,12 @@ func (m *mockStore) RemoveBucketByMerchant(_ context.Context, _ store.Tenant, _,
 
 func (m *mockStore) UpdateTransaction(_ context.Context, _ store.Tenant, _ string, update store.TransactionUpdate) error {
 	m.updatedTransaction = update
-	return m.updateTxErr
+	return mockStoreErr("store.transactions.update", m.updateTxErr)
 }
 
 func (m *mockStore) ListRules(_ context.Context, _ store.Tenant) ([]store.RuleRow, error) {
 	if m.rulesErr != nil {
-		return nil, m.rulesErr
+		return nil, mockStoreErr("store.rules.list", m.rulesErr)
 	}
 	if m.rules != nil {
 		return m.rules, nil
@@ -840,12 +860,12 @@ func (m *mockStore) ListRules(_ context.Context, _ store.Tenant) ([]store.RuleRo
 }
 
 func (m *mockStore) GetRule(_ context.Context, _ store.Tenant, _ string) (*store.RuleRow, error) {
-	return m.ruleResult, m.ruleErr
+	return m.ruleResult, mockStoreErr("store.rules.get", m.ruleErr)
 }
 
 func (m *mockStore) CreateRule(_ context.Context, _ store.Tenant, r store.RuleRow) (*store.RuleRow, error) {
 	if m.ruleErr != nil {
-		return nil, m.ruleErr
+		return nil, mockStoreErr("store.rules.write", m.ruleErr)
 	}
 	r.ID = "new-id"
 	return &r, nil
@@ -853,18 +873,18 @@ func (m *mockStore) CreateRule(_ context.Context, _ store.Tenant, r store.RuleRo
 
 func (m *mockStore) UpdateRule(_ context.Context, _ store.Tenant, _ string, r store.RuleRow) (*store.RuleRow, error) {
 	if m.ruleErr != nil {
-		return nil, m.ruleErr
+		return nil, mockStoreErr("store.rules.write", m.ruleErr)
 	}
 	return &r, nil
 }
 
 func (m *mockStore) DeleteRule(_ context.Context, _ store.Tenant, _ string) error {
-	return m.ruleErr
+	return mockStoreErr("store.rules.delete", m.ruleErr)
 }
 
 func (m *mockStore) ImportUserRules(_ context.Context, _ store.Tenant, rows []store.RuleRow) error {
 	m.importedRules = rows
-	return m.importErr
+	return mockStoreErr("store.rules.import", m.importErr)
 }
 
 func (m *mockStore) MuteTransaction(_ context.Context, _ store.Tenant, id string, muted bool, reason string) error {
@@ -941,7 +961,7 @@ func (m *mockStore) ListExtractionDiagnostics(
 ) ([]store.ExtractionDiagnosticRow, error) {
 	m.diagnosticFilter = f
 	if m.diagnosticErr != nil {
-		return nil, m.diagnosticErr
+		return nil, mockStoreErr("store.diagnostics.list", m.diagnosticErr)
 	}
 	if m.diagnostics != nil {
 		return m.diagnostics, nil
@@ -950,7 +970,7 @@ func (m *mockStore) ListExtractionDiagnostics(
 }
 
 func (m *mockStore) GetExtractionDiagnostic(_ context.Context, _ store.Tenant, _ string) (*store.ExtractionDiagnosticRow, error) {
-	return m.diagnosticResult, m.diagnosticErr
+	return m.diagnosticResult, mockStoreErr("store.diagnostics.get", m.diagnosticErr)
 }
 
 func (m *mockStore) UpdateExtractionDiagnosticStatus(
@@ -961,7 +981,7 @@ func (m *mockStore) UpdateExtractionDiagnosticStatus(
 ) (*store.ExtractionDiagnosticRow, error) {
 	m.updateDiagnosticID = id
 	m.updateDiagnosticStat = status
-	return m.diagnosticResult, m.diagnosticErr
+	return m.diagnosticResult, mockStoreErr("store.diagnostics.get", m.diagnosticErr)
 }
 
 // newTestHandlers returns a Handlers wired with a real (minimal) plugin registry,
@@ -1035,7 +1055,7 @@ func (p *testProvider) NewReader(input plugins.ProviderInput) (api.Reader, error
 	if p.reader != nil {
 		return p.reader, nil
 	}
-	return nil, errors.New("not implemented in test stub")
+	return nil, stderrors.New("not implemented in test stub")
 }
 
 func (p *testProvider) NewEmailSearcher(input plugins.ProviderInput) (api.EmailSearcher, error) {
@@ -1045,7 +1065,7 @@ func (p *testProvider) NewEmailSearcher(input plugins.ProviderInput) (api.EmailS
 	}
 	searcher, ok := reader.(api.EmailSearcher)
 	if !ok {
-		return nil, errors.New("not implemented in test stub")
+		return nil, stderrors.New("not implemented in test stub")
 	}
 	return searcher, nil
 }
@@ -1078,7 +1098,7 @@ type testLLMClient struct {
 }
 
 func (c testLLMClient) Complete(context.Context, llm.Request) (llm.Response, error) {
-	return llm.Response{}, errors.New("not implemented in test stub")
+	return llm.Response{}, stderrors.New("not implemented in test stub")
 }
 
 func (c testLLMClient) HealthCheck(context.Context) error {
@@ -1200,7 +1220,7 @@ func TestStatus_WithStats(t *testing.T) {
 }
 
 func TestStatus_StatsError(t *testing.T) {
-	st := &mockStore{statsErr: errors.New("stats failed")}
+	st := &mockStore{statsErr: stderrors.New("stats failed")}
 	h := newTestHandlers(t, st, &mockDaemon{})
 	rr := get(h.Status, "/api/status")
 
@@ -2107,7 +2127,7 @@ func TestListTransactions_WithResults(t *testing.T) {
 }
 
 func TestListTransactions_StoreError(t *testing.T) {
-	st := &mockStore{listErr: errors.New("db error")}
+	st := &mockStore{listErr: stderrors.New("db error")}
 	h := newTestHandlers(t, st, &mockDaemon{})
 	rr := get(h.ListTransactions, "/api/transactions")
 	if rr.Code != http.StatusInternalServerError {
@@ -2226,7 +2246,7 @@ func TestGetTransaction_Found(t *testing.T) {
 }
 
 func TestGetTransaction_NotFound(t *testing.T) {
-	st := &mockStore{getErr: store.ErrNotFound}
+	st := &mockStore{getErr: errStoreNotFound}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/22222222-2222-2222-2222-222222222222", nil)
@@ -2316,7 +2336,7 @@ func TestUpdateTransaction_MuteReasonOnly(t *testing.T) {
 }
 
 func TestUpdateTransaction_NotFound(t *testing.T) {
-	st := &mockStore{updateTxErr: store.ErrNotFound}
+	st := &mockStore{updateTxErr: errStoreNotFound}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	body := `{"description":"x"}`
@@ -2331,7 +2351,7 @@ func TestUpdateTransaction_NotFound(t *testing.T) {
 }
 
 func TestUpdateTransaction_FetchUpdatedNotFound(t *testing.T) {
-	st := &mockStore{getErr: store.ErrNotFound}
+	st := &mockStore{getErr: errStoreNotFound}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/api/transactions/"+testTransactionID, strings.NewReader(`{}`))
@@ -2457,7 +2477,7 @@ func TestGetExtractionDiagnostic_Found(t *testing.T) {
 }
 
 func TestGetExtractionDiagnostic_NotFound(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{diagnosticErr: store.ErrNotFound}, &mockDaemon{})
+	h := newTestHandlers(t, &mockStore{diagnosticErr: errStoreNotFound}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/extraction-diagnostics/22222222-2222-2222-2222-222222222222", nil)
 	req.SetPathValue("id", "22222222-2222-2222-2222-222222222222")
@@ -2470,7 +2490,7 @@ func TestGetExtractionDiagnostic_NotFound(t *testing.T) {
 }
 
 func TestGetExtractionDiagnostic_InvalidID(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{diagnosticErr: errors.New("store should not be called")}, &mockDaemon{})
+	h := newTestHandlers(t, &mockStore{diagnosticErr: stderrors.New("store should not be called")}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/extraction-diagnostics/not-a-uuid", nil)
 	req.SetPathValue("id", "not-a-uuid")
@@ -2533,7 +2553,7 @@ func TestUpdateExtractionDiagnosticStatus_InvalidJSON(t *testing.T) {
 }
 
 func TestUpdateExtractionDiagnosticStatus_NotFound(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{diagnosticErr: store.ErrNotFound}, &mockDaemon{})
+	h := newTestHandlers(t, &mockStore{diagnosticErr: errStoreNotFound}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(
 		context.Background(),
@@ -2551,7 +2571,7 @@ func TestUpdateExtractionDiagnosticStatus_NotFound(t *testing.T) {
 }
 
 func TestUpdateExtractionDiagnosticStatus_InvalidID(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{diagnosticErr: errors.New("store should not be called")}, &mockDaemon{})
+	h := newTestHandlers(t, &mockStore{diagnosticErr: stderrors.New("store should not be called")}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(
 		context.Background(),
@@ -2569,7 +2589,7 @@ func TestUpdateExtractionDiagnosticStatus_InvalidID(t *testing.T) {
 }
 
 func TestUpdateExtractionDiagnosticStatus_Conflict(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{diagnosticErr: store.ErrDiagnosticConflict}, &mockDaemon{})
+	h := newTestHandlers(t, &mockStore{diagnosticErr: errStoreDiagnosticConflict}, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(
 		context.Background(),
@@ -2653,7 +2673,7 @@ func TestAddLabels_BatchSuccess(t *testing.T) {
 }
 
 func TestAddLabels_StoreError_Returns500(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{addLabelsErr: errors.New("db error")}, &mockDaemon{})
+	h := newTestHandlers(t, &mockStore{addLabelsErr: stderrors.New("db error")}, &mockDaemon{})
 
 	body := `{"labels":["food"]}`
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/transactions/11111111-1111-1111-1111-111111111111/labels", strings.NewReader(body))
@@ -2680,7 +2700,7 @@ func TestRemoveLabel_Success(t *testing.T) {
 }
 
 func TestRemoveLabel_NotFound(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{removeLblErr: store.ErrNotFound}, &mockDaemon{})
+	h := newTestHandlers(t, &mockStore{removeLblErr: errStoreNotFound}, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/transactions/11111111-1111-1111-1111-111111111111/labels/missing", nil)
 	req.SetPathValue("id", testTransactionID)
 	req.SetPathValue("label", "missing")
@@ -3356,7 +3376,7 @@ func TestGetFacets_ReturnsLabelCounts(t *testing.T) {
 }
 
 func TestGetFacets_StoreError(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{getFacetsErr: errors.New("db error")}, &mockDaemon{})
+	h := newTestHandlers(t, &mockStore{getFacetsErr: stderrors.New("db error")}, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/facets", nil)
 	rr := httptest.NewRecorder()
 	h.GetFacets(rr, req)
@@ -3412,13 +3432,13 @@ func TestCreateLabel_RejectsInvalidColor(t *testing.T) {
 }
 
 func TestDeleteLabel_NotFound(t *testing.T) {
-	ms := &mockStore{labelsErr: store.ErrNotFound}
+	ms := &mockStore{labelsErr: errStoreNotFound}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/config/labels/missing", nil)
 	req.SetPathValue("name", "missing")
 	rr := httptest.NewRecorder()
-	// DeleteLabel returns the labelsErr directly; since it's ErrNotFound the handler
-	// logs and returns 500 (DeleteLabel has no ErrNotFound branch in the handler).
+	// DeleteLabel returns the labelsErr directly; since it's NotFound kind the handler
+	// logs and returns 500 (DeleteLabel has no NotFound kind branch in the handler).
 	// The store just returns the error; handler writes 500. Verify non-204.
 	h.DeleteLabel(rr, req)
 	if rr.Code == http.StatusNoContent {
@@ -3720,7 +3740,7 @@ func TestGetHeatmap_Success(t *testing.T) {
 }
 
 func TestGetHeatmap_StoreError_Returns500(t *testing.T) {
-	ms := &mockStore{heatmapErr: errors.New("db connection lost")}
+	ms := &mockStore{heatmapErr: stderrors.New("db connection lost")}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap", nil)
@@ -3812,7 +3832,7 @@ func TestGetHeatmap_WithYear_ReturnsAnnualData(t *testing.T) {
 }
 
 func TestGetHeatmap_WithYearStoreError_Returns500(t *testing.T) {
-	ms := &mockStore{annualErr: errors.New("db connection lost")}
+	ms := &mockStore{annualErr: stderrors.New("db connection lost")}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/stats/heatmap?year=2026", nil)
@@ -3927,7 +3947,7 @@ func TestCreateRule_AcceptsSourceObjectAndSenderEmails(t *testing.T) {
 }
 
 func TestCreateRule_DuplicateNameReturns409(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{ruleErr: store.ErrRuleNameConflict}, &mockDaemon{})
+	h := newTestHandlers(t, &mockStore{ruleErr: errStoreRuleNameConflict}, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/rules", strings.NewReader(validRuleBody))
 	rr := httptest.NewRecorder()
 
@@ -4050,7 +4070,7 @@ func TestUpdateRule_AnyRule_FullUpdate(t *testing.T) {
 }
 
 func TestUpdateRule_DuplicateNameReturns409(t *testing.T) {
-	ms := &mockStore{ruleErr: store.ErrRuleNameConflict}
+	ms := &mockStore{ruleErr: errStoreRuleNameConflict}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	body := `{
 		"name":"duplicate",
@@ -4948,7 +4968,7 @@ func TestCategorizeMerchant_InvalidJSON(t *testing.T) {
 }
 
 func TestCategorizeMerchant_StoreError(t *testing.T) {
-	h := newTestHandlers(t, &mockStore{updateErr: errors.New("db down")}, &mockDaemon{})
+	h := newTestHandlers(t, &mockStore{updateErr: stderrors.New("db down")}, &mockDaemon{})
 	body := `{"merchant":"Netflix","category":"Entertainment","bucket":"Wants"}`
 	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/merchants/categorize", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -19,6 +18,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 type scheduledScanRunner struct {
@@ -104,7 +104,8 @@ func (r *scheduledScanRunner) oauthClient(ctx context.Context, tenant store.Tena
 		return nil, err
 	}
 	if !ok {
-		return nil, scanscheduler.NewMissingCredentialsFailure(oauth.ErrCredentialsMissing)
+		err := errors.E("server.scheduledScanRunner.oauthClient", oauth.KindCredentialsMissing, "reader credentials missing")
+		return nil, scanscheduler.NewMissingCredentialsFailure(err)
 	}
 
 	httpClient, err := oauth.NewFromJSONAndStore(ctx, oauth.StoreClientInput{
@@ -118,7 +119,7 @@ func (r *scheduledScanRunner) oauthClient(ctx context.Context, tenant store.Tena
 		return httpClient, nil
 	}
 	switch {
-	case errors.Is(err, oauth.ErrTokenMissing):
+	case errors.WhatKind(err) == oauth.KindTokenMissing:
 		return nil, scanscheduler.NewMissingTokenFailure(err)
 	case oauth.IsInvalidGrant(err):
 		return nil, scanscheduler.NewInvalidGrantFailure(err)

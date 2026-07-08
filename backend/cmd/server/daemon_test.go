@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"io"
 	"log/slog"
 	"testing"
@@ -12,6 +12,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 func TestDaemonManager_SetRunning(t *testing.T) {
@@ -34,7 +35,7 @@ func TestDaemonManager_SetRunning(t *testing.T) {
 func TestDaemonManager_SetStopped_WithError(t *testing.T) {
 	dm := &daemonManager{}
 	dm.setRunning(time.Now())
-	dm.setStopped(errors.New("connection refused"))
+	dm.setStopped(stderrors.New("connection refused"))
 
 	s := dm.Status()
 	if s.Running {
@@ -62,7 +63,7 @@ func TestDaemonManager_SetStopped_CanceledContextNotRecorded(t *testing.T) {
 func TestDaemonManager_SetStopped_NilErrorClearsLastError(t *testing.T) {
 	dm := &daemonManager{}
 	dm.setRunning(time.Now())
-	dm.setStopped(errors.New("first error"))
+	dm.setStopped(stderrors.New("first error"))
 	dm.setRunning(time.Now())
 	dm.setStopped(nil)
 
@@ -109,7 +110,7 @@ type daemonCoordinatorTestStore struct {
 }
 
 func (s *daemonCoordinatorTestStore) GetAppConfig(_ context.Context, _ store.Tenant, _ string) (string, error) {
-	return "", store.ErrNotFound
+	return "", errors.E(errors.NotFound, "not found")
 }
 
 func (s *daemonCoordinatorTestStore) SetAppConfig(_ context.Context, _ store.Tenant, _, _ string) error {

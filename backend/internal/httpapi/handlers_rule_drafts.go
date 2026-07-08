@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strings"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/llm"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 type ruleDraftService interface {
@@ -116,20 +116,27 @@ func (h *Handlers) CreateRuleDraft(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) writeRuleDraftError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, llm.ErrNoProviderConfigured):
+	switch errors.WhatKind(err) {
+	case llm.KindNoProviderConfigured:
 		writeError(w, http.StatusConflict, "Configure an LLM provider before drafting rules.")
-	case errors.Is(err, llm.ErrCapabilityUnsupported):
+	case llm.KindCapabilityUnsupported:
 		writeError(w, http.StatusConflict, "The active LLM provider does not support structured rule drafting.")
-	case errors.Is(err, assistant.ErrRuleDraftInvalidInput):
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
-	case errors.Is(err, assistant.ErrRuleDraftValidationFail), errors.Is(err, assistant.ErrRuleDraftInvalidOutput):
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
-	case errors.Is(err, assistant.ErrRuleDraftPromptMissing):
+	case assistant.KindRuleDraftInvalidInput:
+		writeError(w, http.StatusUnprocessableEntity, safeRuleDraftErrorMessage(err, "rule draft input is invalid"))
+	case assistant.KindRuleDraftInvalidOutput:
+		writeError(w, http.StatusUnprocessableEntity, safeRuleDraftErrorMessage(err, "rule draft output is invalid"))
+	case assistant.KindRuleDraftPromptMissing:
 		writeError(w, http.StatusInternalServerError, "rule drafting prompt is not configured")
 	default:
 		writeLLMProviderError(w, err)
 	}
+}
+
+func safeRuleDraftErrorMessage(err error, fallback string) string {
+	if msg := errors.UserMsg(err); msg != "" {
+		return msg
+	}
+	return fallback
 }
 
 func validateRuleDraftRequest(w http.ResponseWriter, body ruleDraftRequestJSON) bool {

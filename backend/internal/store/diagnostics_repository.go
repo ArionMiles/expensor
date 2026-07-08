@@ -119,7 +119,7 @@ func (r *pgDiagnosticsRepository) GetExtractionDiagnostic(ctx context.Context, t
 		return nil, fmt.Errorf("fetching extraction diagnostic: %w", err)
 	}
 	if len(result) == 0 {
-		return nil, ErrNotFound
+		return nil, notFound("store.diagnostics.get")
 	}
 	return &result[0], nil
 }
@@ -145,7 +145,7 @@ func (r *pgDiagnosticsRepository) UpdateExtractionDiagnosticStatus(
 	)
 	if err != nil {
 		if isDiagnosticOpenConflict(err) {
-			return nil, fmt.Errorf("open diagnostic already exists for reader/message/rule: %w", ErrDiagnosticConflict)
+			return nil, conflict("store.diagnostics.update_status", fmt.Errorf("open diagnostic already exists for reader/message/rule: %s", messageDiagnosticConflict))
 		}
 		return nil, fmt.Errorf("updating extraction diagnostic status: %w", err)
 	}
@@ -153,12 +153,12 @@ func (r *pgDiagnosticsRepository) UpdateExtractionDiagnosticStatus(
 	result, err := scanDiagnosticRows(rows)
 	if err != nil {
 		if isDiagnosticOpenConflict(err) {
-			return nil, fmt.Errorf("open diagnostic already exists for reader/message/rule: %w", ErrDiagnosticConflict)
+			return nil, conflict("store.diagnostics.update_status", fmt.Errorf("open diagnostic already exists for reader/message/rule: %s", messageDiagnosticConflict))
 		}
 		return nil, fmt.Errorf("updating extraction diagnostic status: %w", err)
 	}
 	if len(result) == 0 {
-		return nil, ErrNotFound
+		return nil, notFound("store.diagnostics.update_status")
 	}
 	return &result[0], nil
 }

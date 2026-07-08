@@ -3,7 +3,7 @@ package assistant
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	stderrors "errors"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -11,6 +11,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/llm"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 type ruleDraftRuntimeStore struct {
@@ -42,7 +43,7 @@ func (c *queuedRuleDraftClient) Complete(_ context.Context, req llm.Request) (ll
 		}
 	}
 	if len(c.responses) == 0 {
-		return llm.Response{}, errors.New("unexpected rule draft request")
+		return llm.Response{}, stderrors.New("unexpected rule draft request")
 	}
 	text := c.responses[0]
 	c.responses = c.responses[1:]
@@ -253,8 +254,8 @@ func TestRuleDraftServiceRejectsInvalidInputsBeforeProviderCall(t *testing.T) {
 	_, err := service.DraftRule(context.Background(), store.Tenant{ID: "tenant-a"}, RuleDraftInput{
 		Samples: []Sample{{Body: "email body", Expected: Expected{Amount: "10"}}},
 	})
-	if !errors.Is(err, ErrRuleDraftInvalidInput) {
-		t.Fatalf("DraftRule() error = %v, want ErrRuleDraftInvalidInput", err)
+	if errors.WhatKind(err) != KindRuleDraftInvalidInput {
+		t.Fatalf("DraftRule() error = %v, want KindRuleDraftInvalidInput", err)
 	}
 	if len(client.requests) != 0 {
 		t.Fatalf("requests = %d, want no provider call", len(client.requests))
@@ -266,8 +267,8 @@ func TestRuleDraftServiceReportsPromptAndOutputFailures(t *testing.T) {
 		service := newRuleDraftServiceForTest(t, &queuedRuleDraftClient{}, &llm.PromptCatalog{})
 
 		_, err := service.DraftRule(context.Background(), store.Tenant{ID: "tenant-a"}, validRuleDraftInput())
-		if !errors.Is(err, ErrRuleDraftPromptMissing) {
-			t.Fatalf("DraftRule() error = %v, want ErrRuleDraftPromptMissing", err)
+		if errors.WhatKind(err) != KindRuleDraftPromptMissing {
+			t.Fatalf("DraftRule() error = %v, want KindRuleDraftPromptMissing", err)
 		}
 	})
 
@@ -275,8 +276,8 @@ func TestRuleDraftServiceReportsPromptAndOutputFailures(t *testing.T) {
 		service := newRuleDraftServiceForTest(t, &queuedRuleDraftClient{responses: []string{"not-json"}}, ruleDraftPromptCatalog(t))
 
 		_, err := service.DraftRule(context.Background(), store.Tenant{ID: "tenant-a"}, validRuleDraftInput())
-		if !errors.Is(err, ErrRuleDraftInvalidOutput) {
-			t.Fatalf("DraftRule() error = %v, want ErrRuleDraftInvalidOutput", err)
+		if errors.WhatKind(err) != KindRuleDraftInvalidOutput {
+			t.Fatalf("DraftRule() error = %v, want KindRuleDraftInvalidOutput", err)
 		}
 	})
 }

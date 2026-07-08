@@ -1,12 +1,12 @@
 package httpapi
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // --- transactions ---
@@ -170,7 +170,7 @@ func (h *Handlers) GetTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 	txn, err := h.transactionStore.GetTransaction(r.Context(), requestTenant(r), id)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusNotFound, "transaction not found")
 			return
 		}
@@ -254,7 +254,7 @@ func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := h.transactionStore.GetTransaction(r.Context(), requestTenant(r), id)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusNotFound, "transaction not found")
 			return
 		}
@@ -297,7 +297,7 @@ func (h *Handlers) patchTransaction(
 }
 
 func (h *Handlers) writeTransactionPatchError(w http.ResponseWriter, err error, operation string) bool {
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.WhatKind(err) == errors.NotFound {
 		writeError(w, http.StatusNotFound, "transaction not found")
 		return false
 	}
@@ -378,7 +378,7 @@ func (h *Handlers) UpdateMerchantReason(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := h.muteStore.UpdateMerchantReason(r.Context(), requestTenant(r), id, body.Reason); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusNotFound, "muted merchant not found")
 			return
 		}
@@ -422,7 +422,7 @@ func (h *Handlers) DeleteMutedMerchant(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.WhatKind(err) == errors.NotFound {
 			writeError(w, http.StatusNotFound, "muted merchant not found")
 			return
 		}

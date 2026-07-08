@@ -75,7 +75,7 @@ func (r *pgRulesRepository) GetRule(ctx context.Context, tenant Tenant, id strin
 		return nil, err
 	}
 	if len(result) == 0 {
-		return nil, ErrNotFound
+		return nil, notFound("store.rules.get")
 	}
 	return &result[0], nil
 }
@@ -94,7 +94,7 @@ func (r *pgRulesRepository) CreateRule(ctx context.Context, tenant Tenant, rule 
 	)
 	if err != nil {
 		if isRuleNameConflict(err) {
-			return nil, ErrRuleNameConflict
+			return nil, conflict("store.rules.create", messageRuleNameConflict)
 		}
 		return nil, fmt.Errorf("creating rule: %w", err)
 	}
@@ -102,7 +102,7 @@ func (r *pgRulesRepository) CreateRule(ctx context.Context, tenant Tenant, rule 
 	result, err := scanRuleRows(rows)
 	if err != nil {
 		if isRuleNameConflict(err) {
-			return nil, ErrRuleNameConflict
+			return nil, conflict("store.rules.create", messageRuleNameConflict)
 		}
 		return nil, fmt.Errorf("creating rule: %w", err)
 	}
@@ -126,7 +126,7 @@ func (r *pgRulesRepository) UpdateRule(ctx context.Context, tenant Tenant, id st
 	)
 	if err != nil {
 		if isRuleNameConflict(err) {
-			return nil, ErrRuleNameConflict
+			return nil, conflict("store.rules.update", messageRuleNameConflict)
 		}
 		return nil, fmt.Errorf("updating rule: %w", err)
 	}
@@ -134,12 +134,12 @@ func (r *pgRulesRepository) UpdateRule(ctx context.Context, tenant Tenant, id st
 	result, err := scanRuleRows(rows)
 	if err != nil {
 		if isRuleNameConflict(err) {
-			return nil, ErrRuleNameConflict
+			return nil, conflict("store.rules.update", messageRuleNameConflict)
 		}
 		return nil, fmt.Errorf("updating rule: %w", err)
 	}
 	if len(result) == 0 {
-		return nil, ErrNotFound
+		return nil, notFound("store.rules.update")
 	}
 	return &result[0], nil
 }
@@ -152,7 +152,7 @@ func (r *pgRulesRepository) DeleteRule(ctx context.Context, tenant Tenant, id st
 		return fmt.Errorf("deleting rule: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return notFound("store.rules.delete")
 	}
 	return nil
 }

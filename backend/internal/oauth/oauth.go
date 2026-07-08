@@ -4,7 +4,6 @@ package oauth
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -14,11 +13,12 @@ import (
 	"golang.org/x/oauth2/google"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 var (
-	ErrCredentialsMissing = errors.New("reader credentials missing")
-	ErrTokenMissing       = errors.New("reader token missing")
+	KindCredentialsMissing = errors.Kind{Code: "oauth_credentials_missing", Status: http.StatusPreconditionFailed}
+	KindTokenMissing       = errors.Kind{Code: "oauth_token_missing", Status: http.StatusPreconditionFailed}
 )
 
 // ReaderTokenStore is the DB persistence surface used by store-backed OAuth clients.
@@ -38,24 +38,26 @@ type StoreClientInput struct {
 
 // NewFromJSONAndStore creates a new HTTP client with OAuth2 credentials from JSON content and a DB-backed token store.
 func NewFromJSONAndStore(ctx context.Context, input StoreClientInput) (*http.Client, error) {
+	const op = "oauth.NewFromJSONAndStore"
+
 	config, err := google.ConfigFromJSON(input.SecretJSON, input.Scopes...)
 	if err != nil {
-		return nil, fmt.Errorf("parsing client secret: %w", err)
+		return nil, errors.E(op, errors.InvalidInput, "parsing client secret", err)
 	}
 	if input.Store == nil {
-		return nil, fmt.Errorf("token store is nil")
+		return nil, errors.E(op, errors.Internal, "token store is nil")
 	}
 
 	tokenJSON, ok, err := input.Store.GetReaderToken(ctx, input.Tenant, input.Reader)
 	if err != nil {
-		return nil, fmt.Errorf("loading token for reader %q: %w", input.Reader, err)
+		return nil, errors.E(op, "loading token for reader "+input.Reader, err)
 	}
 	if !ok {
-		return nil, fmt.Errorf("loading token for reader %q: %w", input.Reader, ErrTokenMissing)
+		return nil, errors.E(op, KindTokenMissing, "reader token missing")
 	}
 	tok := &oauth2.Token{}
 	if err := json.Unmarshal(tokenJSON, tok); err != nil {
-		return nil, fmt.Errorf("parsing token for reader %q: %w", input.Reader, err)
+		return nil, errors.E(op, errors.InvalidInput, "parsing token for reader "+input.Reader, err)
 	}
 
 	tokenSource := &persistingStoreTokenSource{
@@ -66,7 +68,7 @@ func NewFromJSONAndStore(ctx context.Context, input StoreClientInput) (*http.Cli
 		tokenSource: config.TokenSource(ctx, tok),
 	}
 	if _, err := tokenSource.Token(); err != nil {
-		return nil, fmt.Errorf("refreshing token for reader %q: %w", input.Reader, err)
+		return nil, errors.E(op, errors.FailedPrecondition, "refreshing token for reader "+input.Reader, err)
 	}
 	return oauth2.NewClient(ctx, tokenSource), nil
 }
@@ -102,9 +104,11 @@ func (p *persistingStoreTokenSource) Token() (*oauth2.Token, error) {
 
 // GetOAuthConfig creates an OAuth2 config from client secret JSON.
 func GetOAuthConfig(secretJSON []byte, redirectURL string, scopes ...string) (*oauth2.Config, error) {
+	const op = "oauth.GetOAuthConfig"
+
 	config, err := google.ConfigFromJSON(secretJSON, scopes...)
 	if err != nil {
-		return nil, fmt.Errorf("parsing client secret: %w", err)
+		return nil, errors.E(op, errors.InvalidInput, "parsing client secret", err)
 	}
 
 	config.RedirectURL = redirectURL

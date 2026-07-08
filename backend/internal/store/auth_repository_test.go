@@ -2,12 +2,12 @@ package store_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/auth"
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 func TestAuthRepositoryBootstrapAndSessionLifecycle(t *testing.T) {
@@ -82,8 +82,8 @@ func TestAuthRepositoryBootstrapAndSessionLifecycle(t *testing.T) {
 		PasswordHash: "$2a$10$abcdefghijklmnopqrstuu6Z6RMcYbqVvB6KZlSmLfHLj6y8s3zme",
 		AvatarKey:    "default",
 	})
-	if !errors.Is(err, store.ErrBootstrapUnavailable) {
-		t.Fatalf("second bootstrap error = %v, want ErrBootstrapUnavailable", err)
+	if errors.WhatKind(err) != errors.Conflict {
+		t.Fatalf("second bootstrap error = %v, want Conflict kind", err)
 	}
 }
 
@@ -201,8 +201,8 @@ func TestAuthRepositoryRejectsActiveAccessTokenNameConflict(t *testing.T) {
 		Name:      "test",
 		TokenHash: "sha256:test-token-b",
 	})
-	if !errors.Is(err, store.ErrAccessTokenNameConflict) {
-		t.Fatalf("CreateAccessToken(duplicate) error = %v, want ErrAccessTokenNameConflict", err)
+	if errors.WhatKind(err) != errors.Conflict {
+		t.Fatalf("CreateAccessToken(duplicate) error = %v, want Conflict kind", err)
 	}
 }
 
@@ -226,8 +226,8 @@ func TestAuthRepositoryRejectsDuplicateUserEmail(t *testing.T) {
 		Role:        store.UserRoleUser,
 		AvatarKey:   "ledger",
 	})
-	if !errors.Is(err, store.ErrUserEmailConflict) {
-		t.Fatalf("CreateUser(duplicate) error = %v, want ErrUserEmailConflict", err)
+	if errors.WhatKind(err) != errors.Conflict {
+		t.Fatalf("CreateUser(duplicate) error = %v, want Conflict kind", err)
 	}
 }
 
@@ -357,8 +357,8 @@ func TestAuthRepositoryListsAndUpdatesUsers(t *testing.T) {
 	if err := auth.VerifyPassword(updated.PasswordHash, "correct horse battery staple"); err != nil {
 		t.Fatalf("updated password hash did not verify: %v", err)
 	}
-	if err := ts.UpdateUserPassword(ctx, "00000000-0000-0000-0000-000000000000", store.UpdateUserPasswordInput{PasswordHash: nextHash}); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("UpdateUserPassword(missing) error = %v, want ErrNotFound", err)
+	if err := ts.UpdateUserPassword(ctx, "00000000-0000-0000-0000-000000000000", store.UpdateUserPasswordInput{PasswordHash: nextHash}); errors.WhatKind(err) != errors.NotFound {
+		t.Fatalf("UpdateUserPassword(missing) error = %v, want NotFound kind", err)
 	}
 
 	users, err := ts.ListUsers(ctx)
@@ -379,8 +379,8 @@ func TestAuthRepositoryListsAndUpdatesUsers(t *testing.T) {
 	if len(users) != 1 || users[0].ID != admin.ID {
 		t.Fatalf("users after delete = %#v", users)
 	}
-	if err := ts.DeleteUser(ctx, user.ID); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("DeleteUser(missing) error = %v, want ErrNotFound", err)
+	if err := ts.DeleteUser(ctx, user.ID); errors.WhatKind(err) != errors.NotFound {
+		t.Fatalf("DeleteUser(missing) error = %v, want NotFound kind", err)
 	}
 }
 
@@ -432,7 +432,7 @@ func TestAuthRepositoryCompletesAccountSetupOnce(t *testing.T) {
 		DisplayName:  "Setup User",
 		AvatarKey:    "default",
 	})
-	if !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("second CompleteAccountSetup() error = %v, want ErrNotFound", err)
+	if errors.WhatKind(err) != errors.NotFound {
+		t.Fatalf("second CompleteAccountSetup() error = %v, want NotFound kind", err)
 	}
 }

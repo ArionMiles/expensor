@@ -3,7 +3,7 @@ package assistant
 import (
 	"bytes"
 	"context"
-	"errors"
+	stderrors "errors"
 	"log/slog"
 	"strings"
 	"testing"
@@ -16,6 +16,7 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 type instrumentedRuleDrafterStub struct {
@@ -86,14 +87,18 @@ func TestInstrumentedRuleDrafterRecordsSanitizedErrors(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	scope := observability.NewScope(logger, "test/assistant")
 	drafter := NewInstrumentedRuleDrafter(instrumentedRuleDrafterStub{
-		err: errors.Join(ErrRuleDraftInvalidOutput, errors.New("raw provider output contained sensitive data")),
+		err: errors.E(
+			"assistant.RuleDraftService.requestDraft",
+			KindRuleDraftInvalidOutput,
+			stderrors.New("raw provider output contained sensitive data"),
+		),
 	}, scope, logger)
 
 	_, err := drafter.DraftRule(context.Background(), store.Tenant{ID: "tenant-a"}, RuleDraftInput{
 		Samples: []Sample{{Body: "email body must not be logged"}},
 	})
-	if !errors.Is(err, ErrRuleDraftInvalidOutput) {
-		t.Fatalf("DraftRule() error = %v, want ErrRuleDraftInvalidOutput", err)
+	if errors.WhatKind(err) != KindRuleDraftInvalidOutput {
+		t.Fatalf("DraftRule() error = %v, want KindRuleDraftInvalidOutput", err)
 	}
 
 	spans := recorder.Ended()

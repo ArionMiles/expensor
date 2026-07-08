@@ -221,7 +221,7 @@ func TestCreateAccessTokenReturnsRawTokenOnce(t *testing.T) {
 }
 
 func TestCreateAccessTokenNameConflictReturnsConflict(t *testing.T) {
-	ms := &mockStore{createAccessTokenErr: store.ErrAccessTokenNameConflict}
+	ms := &mockStore{createAccessTokenErr: errStoreAccessTokenNameConflict}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/tokens", strings.NewReader(`{"name":"test"}`))
@@ -496,7 +496,7 @@ func TestCreateUserAsAdmin(t *testing.T) {
 }
 
 func TestCreateUserEmailConflictReturnsConflict(t *testing.T) {
-	ms := &mockStore{createUserErr: store.ErrUserEmailConflict}
+	ms := &mockStore{createUserErr: errStoreUserEmailConflict}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "admin", TenantID: "admin", Role: auth.RoleAdmin})
 	req := httptest.NewRequestWithContext(

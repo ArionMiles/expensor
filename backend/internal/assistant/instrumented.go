@@ -2,7 +2,6 @@ package assistant
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/llm"
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 const ruleDraftOutcomeError = "error"
@@ -90,6 +90,7 @@ func (d *InstrumentedRuleDrafter) logError(ctx context.Context, err error, sampl
 		slog.String("error_class", ruleDraftErrorClass(err)),
 		slog.Int("sample_count", sampleCount),
 	}
+	logAttrs = append(logAttrs, errors.LogDetailAttrs(err)...)
 	if spanContext := trace.SpanFromContext(ctx).SpanContext(); spanContext.IsValid() {
 		logAttrs = append(logAttrs,
 			slog.String("trace_id", spanContext.TraceID().String()),
@@ -100,20 +101,20 @@ func (d *InstrumentedRuleDrafter) logError(ctx context.Context, err error, sampl
 }
 
 func ruleDraftErrorClass(err error) string {
-	switch {
-	case errors.Is(err, llm.ErrNoProviderConfigured):
+	switch errors.WhatKind(err) {
+	case llm.KindNoProviderConfigured:
 		return "no_provider_configured"
-	case errors.Is(err, llm.ErrCapabilityUnsupported):
+	case llm.KindCapabilityUnsupported:
 		return "capability_unsupported"
-	case errors.Is(err, ErrRuleDraftInvalidInput):
+	case KindRuleDraftInvalidInput:
 		return "invalid_input"
-	case errors.Is(err, ErrRuleDraftInvalidOutput):
+	case KindRuleDraftInvalidOutput:
 		return "invalid_output"
-	case errors.Is(err, ErrRuleDraftPromptMissing):
+	case KindRuleDraftPromptMissing:
 		return "prompt_missing"
-	case errors.Is(err, context.Canceled):
+	case errors.Canceled:
 		return "context_canceled"
-	case errors.Is(err, context.DeadlineExceeded):
+	case errors.DeadlineExceeded:
 		return "deadline_exceeded"
 	default:
 		return "error"

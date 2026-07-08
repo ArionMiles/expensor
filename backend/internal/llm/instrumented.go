@@ -2,7 +2,6 @@ package llm
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ArionMiles/expensor/backend/internal/observability"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // InstrumentedClient records provider-neutral telemetry around an LLM client.
@@ -139,6 +139,7 @@ func (c *InstrumentedClient) logError(ctx context.Context, message, operation st
 	if statusCode := providerStatusCode(err); statusCode > 0 {
 		logAttrs = append(logAttrs, slog.Int("status_code", statusCode))
 	}
+	logAttrs = append(logAttrs, errors.LogDetailAttrs(err)...)
 	if spanContext := trace.SpanFromContext(ctx).SpanContext(); spanContext.IsValid() {
 		logAttrs = append(logAttrs,
 			slog.String("trace_id", spanContext.TraceID().String()),

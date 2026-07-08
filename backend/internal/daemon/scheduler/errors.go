@@ -2,9 +2,8 @@
 package scheduler
 
 import (
-	"errors"
-
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // FailureKind identifies the user-visible class of a scan failure.
@@ -33,6 +32,18 @@ func (f *FailureError) Error() string {
 
 func (f *FailureError) Unwrap() error {
 	return f.Err
+}
+
+// ErrorKind maps scheduler failures onto the application's error taxonomy.
+func (f *FailureError) ErrorKind() errors.Kind {
+	switch f.Kind {
+	case FailureNeedsAuth, FailureReaderNotConfigured:
+		return errors.FailedPrecondition
+	case FailureTemporary:
+		return errors.Unavailable
+	default:
+		return errors.Unknown
+	}
 }
 
 func NewMissingCredentialsFailure(err error) error {
