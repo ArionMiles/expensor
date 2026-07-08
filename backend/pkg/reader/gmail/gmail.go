@@ -208,9 +208,6 @@ func (r *Reader) saveCheckpointAfterIteration(iterationErr error) {
 
 // handleAcknowledgments updates state when transactions are successfully written.
 func (r *Reader) handleAcknowledgments(ctx context.Context, ackChan <-chan string) {
-	if ackChan == nil {
-		return
-	}
 	for msgID := range ackChan {
 		if r.state != nil {
 			if err := r.markProcessed(ctx, msgID); err != nil {

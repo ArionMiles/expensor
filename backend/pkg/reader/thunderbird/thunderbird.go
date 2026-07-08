@@ -194,9 +194,6 @@ func (r *Reader) saveCheckpoint() {
 
 // handleAcknowledgments marks messages as processed when they're successfully written.
 func (r *Reader) handleAcknowledgments(ctx context.Context, ackChan <-chan string) {
-	if ackChan == nil {
-		return
-	}
 	for msgKey := range ackChan {
 		// Mark as processed in state
 		if r.state != nil {

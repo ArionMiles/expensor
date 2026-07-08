@@ -823,7 +823,9 @@ func TestRead_CheckpointAfterListMessagesResult(t *testing.T) {
 				logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 			}
 
-			err = reader.Read(ctx, make(chan *api.TransactionDetails), nil)
+			ackChan := make(chan string)
+			close(ackChan)
+			err = reader.Read(ctx, make(chan *api.TransactionDetails), ackChan)
 			if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatalf("Read error = %v, want context cancellation", err)
 			}
