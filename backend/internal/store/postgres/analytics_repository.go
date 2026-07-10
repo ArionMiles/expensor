@@ -11,9 +11,9 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type pgReadModelRepository struct {
+type analyticsRepository struct {
 	pool    *pgxpool.Pool
-	runtime *pgRuntimeRepository
+	runtime *runtimeRepository
 	now     func() time.Time
 }
 
@@ -35,39 +35,39 @@ type chartDataLoadRequest struct {
 	CategoryMonthlyFn func(context.Context) (map[string]CategoryMonthlyEntry, error)
 }
 
-func newPGReadModelRepository(deps repositoryDependencies, runtime *pgRuntimeRepository) *pgReadModelRepository {
-	return &pgReadModelRepository{
+func newAnalyticsRepository(deps repositoryDependencies, runtime *runtimeRepository) *analyticsRepository {
+	return &analyticsRepository{
 		pool:    deps.pool,
 		runtime: runtime,
 		now:     deps.now,
 	}
 }
 
-func (r *pgReadModelRepository) GetStats(ctx context.Context, tenant Tenant, baseCurrency string) (*Stats, error) {
+func (r *analyticsRepository) GetStats(ctx context.Context, tenant Tenant, baseCurrency string) (*Stats, error) {
 	return r.statsReadModel(ctx, tenant, baseCurrency)
 }
 
-func (r *pgReadModelRepository) GetChartData(ctx context.Context, tenant Tenant) (*ChartData, error) {
+func (r *analyticsRepository) GetChartData(ctx context.Context, tenant Tenant) (*ChartData, error) {
 	return r.chartDataReadModel(ctx, tenant)
 }
 
-func (r *pgReadModelRepository) GetDashboardData(ctx context.Context, tenant Tenant) (*DashboardData, error) {
+func (r *analyticsRepository) GetDashboardData(ctx context.Context, tenant Tenant) (*DashboardData, error) {
 	return r.dashboardDataReadModel(ctx, tenant)
 }
 
-func (r *pgReadModelRepository) GetSpendingHeatmap(ctx context.Context, tenant Tenant, from, to *time.Time) (*HeatmapData, error) {
+func (r *analyticsRepository) GetSpendingHeatmap(ctx context.Context, tenant Tenant, from, to *time.Time) (*HeatmapData, error) {
 	return r.spendingHeatmapReadModel(ctx, tenant, from, to)
 }
 
-func (r *pgReadModelRepository) GetAnnualSpend(ctx context.Context, tenant Tenant, year int) ([]DailyBucket, error) {
+func (r *analyticsRepository) GetAnnualSpend(ctx context.Context, tenant Tenant, year int) ([]DailyBucket, error) {
 	return r.annualSpendReadModel(ctx, tenant, year)
 }
 
-func (r *pgReadModelRepository) GetMonthlyBreakdownSpend(ctx context.Context, tenant Tenant, dimension string, months int) (*MonthlyBreakdownData, error) {
+func (r *analyticsRepository) GetMonthlyBreakdownSpend(ctx context.Context, tenant Tenant, dimension string, months int) (*MonthlyBreakdownData, error) {
 	return r.monthlyBreakdownSpendReadModel(ctx, tenant, dimension, months)
 }
 
-func (r *pgReadModelRepository) statsReadModel(ctx context.Context, tenant Tenant, baseCurrency string) (*Stats, error) {
+func (r *analyticsRepository) statsReadModel(ctx context.Context, tenant Tenant, baseCurrency string) (*Stats, error) {
 	const mainQ = `
 		SELECT COUNT(*),
 		       COALESCE(SUM(CASE WHEN currency = $1 THEN amount ELSE 0 END), 0)
@@ -112,11 +112,11 @@ func (r *pgReadModelRepository) statsReadModel(ctx context.Context, tenant Tenan
 	return &st, nil
 }
 
-func (r *pgReadModelRepository) chartDataReadModel(ctx context.Context, tenant Tenant) (*ChartData, error) {
+func (r *analyticsRepository) chartDataReadModel(ctx context.Context, tenant Tenant) (*ChartData, error) {
 	return r.getChartDataAt(ctx, tenant, r.nowTime())
 }
 
-func (r *pgReadModelRepository) getChartDataAt(ctx context.Context, tenant Tenant, now time.Time) (*ChartData, error) {
+func (r *analyticsRepository) getChartDataAt(ctx context.Context, tenant Tenant, now time.Time) (*ChartData, error) {
 	tz := r.appTimezone(ctx, tenant)
 	return r.loadChartData(ctx, chartDataLoadRequest{
 		Monthly: chartQueryRequest{
@@ -219,7 +219,7 @@ func (r *pgReadModelRepository) getChartDataAt(ctx context.Context, tenant Tenan
 	})
 }
 
-func (r *pgReadModelRepository) dashboardDataReadModel(ctx context.Context, tenant Tenant) (*DashboardData, error) {
+func (r *analyticsRepository) dashboardDataReadModel(ctx context.Context, tenant Tenant) (*DashboardData, error) {
 	baseCurrency := r.dashboardBaseCurrency(ctx, tenant)
 	now := r.nowTime()
 	window := r.dashboardMonthBounds(ctx, tenant, now)
@@ -256,7 +256,7 @@ func (r *pgReadModelRepository) dashboardDataReadModel(ctx context.Context, tena
 	}, nil
 }
 
-func (r *pgReadModelRepository) getStatsBetween(ctx context.Context, tenant Tenant, baseCurrency string, startUTC, endUTC time.Time) (*Stats, error) {
+func (r *analyticsRepository) getStatsBetween(ctx context.Context, tenant Tenant, baseCurrency string, startUTC, endUTC time.Time) (*Stats, error) {
 	const mainQ = `
 		SELECT COUNT(*),
 		       COALESCE(SUM(CASE WHEN currency = $1 THEN amount ELSE 0 END), 0)
@@ -303,7 +303,7 @@ func (r *pgReadModelRepository) getStatsBetween(ctx context.Context, tenant Tena
 	return st, nil
 }
 
-func (r *pgReadModelRepository) getChartDataBetween(ctx context.Context, tenant Tenant, loc *time.Location, startUTC, endUTC time.Time) (*ChartData, error) {
+func (r *analyticsRepository) getChartDataBetween(ctx context.Context, tenant Tenant, loc *time.Location, startUTC, endUTC time.Time) (*ChartData, error) {
 	tz := loc.String()
 	return r.loadChartData(ctx, chartDataLoadRequest{
 		Monthly: chartQueryRequest{
@@ -410,16 +410,16 @@ func (r *pgReadModelRepository) getChartDataBetween(ctx context.Context, tenant 
 }
 
 // queryCategoryMonthly returns per-category spend totals for the current and prior calendar month.
-func (r *pgReadModelRepository) queryCategoryMonthly(ctx context.Context, tenant Tenant) (map[string]CategoryMonthlyEntry, error) {
+func (r *analyticsRepository) queryCategoryMonthly(ctx context.Context, tenant Tenant) (map[string]CategoryMonthlyEntry, error) {
 	return r.queryCategoryMonthlyAt(ctx, tenant, r.nowTime())
 }
 
-func (r *pgReadModelRepository) queryCategoryMonthlyAt(ctx context.Context, tenant Tenant, now time.Time) (map[string]CategoryMonthlyEntry, error) {
+func (r *analyticsRepository) queryCategoryMonthlyAt(ctx context.Context, tenant Tenant, now time.Time) (map[string]CategoryMonthlyEntry, error) {
 	window := r.dashboardMonthBounds(ctx, tenant, now)
 	return r.queryCategoryMonthlyBetween(ctx, tenant, window.loc, window.startUTC, window.endUTC)
 }
 
-func (r *pgReadModelRepository) queryCategoryMonthlyBetween(
+func (r *analyticsRepository) queryCategoryMonthlyBetween(
 	ctx context.Context,
 	tenant Tenant,
 	loc *time.Location,
@@ -461,7 +461,7 @@ func (r *pgReadModelRepository) queryCategoryMonthlyBetween(
 	return m, rows.Err()
 }
 
-func (r *pgReadModelRepository) nowTime() time.Time {
+func (r *analyticsRepository) nowTime() time.Time {
 	if r != nil && r.now != nil {
 		return r.now()
 	}
@@ -469,7 +469,7 @@ func (r *pgReadModelRepository) nowTime() time.Time {
 }
 
 // GetSpendingHeatmap returns transaction totals aggregated by weekday×hour and
-func (r *pgReadModelRepository) spendingHeatmapReadModel(ctx context.Context, tenant Tenant, from, to *time.Time) (*HeatmapData, error) {
+func (r *analyticsRepository) spendingHeatmapReadModel(ctx context.Context, tenant Tenant, from, to *time.Time) (*HeatmapData, error) {
 	hd := &HeatmapData{
 		ByWeekdayHour: []WeekdayHourBucket{},
 		ByDayOfMonth:  []DayOfMonthBucket{},
@@ -539,7 +539,7 @@ func (r *pgReadModelRepository) spendingHeatmapReadModel(ctx context.Context, te
 
 // GetAnnualSpend returns per-day transaction totals for a given calendar year.
 // Results are ordered by date ascending. Returns an empty (non-nil) slice when
-func (r *pgReadModelRepository) annualSpendReadModel(ctx context.Context, tenant Tenant, year int) ([]DailyBucket, error) {
+func (r *analyticsRepository) annualSpendReadModel(ctx context.Context, tenant Tenant, year int) ([]DailyBucket, error) {
 	buckets := []DailyBucket{}
 	tz := r.appTimezone(ctx, tenant)
 
@@ -587,7 +587,7 @@ func buildHeatmapWhere(tenant Tenant, from, to *time.Time) (string, []any) {
 }
 
 // GetFacets returns the distinct non-empty values for source, category, currency, and label
-func (r *pgReadModelRepository) queryTimeBuckets(ctx context.Context, q string, args ...any) ([]TimeBucket, error) {
+func (r *analyticsRepository) queryTimeBuckets(ctx context.Context, q string, args ...any) ([]TimeBucket, error) {
 	rows, err := r.pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -605,7 +605,7 @@ func (r *pgReadModelRepository) queryTimeBuckets(ctx context.Context, q string, 
 	return buckets, rows.Err()
 }
 
-func (r *pgReadModelRepository) queryStringFloat(ctx context.Context, q string, dest map[string]float64, args ...any) error {
+func (r *analyticsRepository) queryStringFloat(ctx context.Context, q string, dest map[string]float64, args ...any) error {
 	rows, err := r.pool.Query(ctx, q, args...)
 	if err != nil {
 		return err
@@ -623,7 +623,7 @@ func (r *pgReadModelRepository) queryStringFloat(ctx context.Context, q string, 
 	return rows.Err()
 }
 
-func (r *pgReadModelRepository) loadChartData(ctx context.Context, request chartDataLoadRequest) (*ChartData, error) {
+func (r *analyticsRepository) loadChartData(ctx context.Context, request chartDataLoadRequest) (*ChartData, error) {
 	cd := newChartData()
 	g, groupCtx := errgroup.WithContext(ctx)
 
@@ -690,7 +690,7 @@ func newChartData() *ChartData {
 	}
 }
 
-func (r *pgReadModelRepository) monthlyBreakdownSpendReadModel(
+func (r *analyticsRepository) monthlyBreakdownSpendReadModel(
 	ctx context.Context,
 	tenant Tenant,
 	dimension string,
@@ -828,7 +828,7 @@ func (r *pgReadModelRepository) monthlyBreakdownSpendReadModel(
 	}, nil
 }
 
-func (r *pgReadModelRepository) appTimezone(ctx context.Context, tenant Tenant) string {
+func (r *analyticsRepository) appTimezone(ctx context.Context, tenant Tenant) string {
 	const fallback = "UTC"
 
 	tz, err := r.runtime.GetAppConfig(ctx, tenant, "app.timezone")
@@ -841,7 +841,7 @@ func (r *pgReadModelRepository) appTimezone(ctx context.Context, tenant Tenant) 
 	return tz
 }
 
-func (r *pgReadModelRepository) dashboardBaseCurrency(ctx context.Context, tenant Tenant) string {
+func (r *analyticsRepository) dashboardBaseCurrency(ctx context.Context, tenant Tenant) string {
 	const fallback = "INR"
 
 	baseCurrency, err := r.runtime.GetAppConfig(ctx, tenant, "base_currency")
@@ -858,7 +858,7 @@ type dashboardMonthWindow struct {
 	label    string
 }
 
-func (r *pgReadModelRepository) dashboardMonthBounds(ctx context.Context, tenant Tenant, now time.Time) dashboardMonthWindow {
+func (r *analyticsRepository) dashboardMonthBounds(ctx context.Context, tenant Tenant, now time.Time) dashboardMonthWindow {
 	tz := r.appTimezone(ctx, tenant)
 	loc, err := time.LoadLocation(tz)
 	if err != nil {

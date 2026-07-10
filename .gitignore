@@ -48,7 +48,7 @@ backend/data/
 
 llm-output-files/
 
-# Local dev environment — copy from tests/.env.example
+# Local dev environment overrides
 tests/.env
 
 # Git worktrees

@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type pgTaxonomyRepository struct {
+type taxonomyRepository struct {
 	pool *pgxpool.Pool
 }
 
@@ -18,13 +18,13 @@ type taxonomyItem struct {
 	IsDefault   bool
 }
 
-func newPGTaxonomyRepository(deps repositoryDependencies) *pgTaxonomyRepository {
-	return &pgTaxonomyRepository{
+func newTaxonomyRepository(deps repositoryDependencies) *taxonomyRepository {
+	return &taxonomyRepository{
 		pool: deps.pool,
 	}
 }
 
-func (r *pgTaxonomyRepository) ListLabels(ctx context.Context, tenant Tenant) ([]Label, error) {
+func (r *taxonomyRepository) ListLabels(ctx context.Context, tenant Tenant) ([]Label, error) {
 	labels := []Label{}
 	rows, err := r.pool.Query(ctx,
 		`SELECT name, color, created_at FROM labels WHERE tenant_id IS NOT DISTINCT FROM $1 ORDER BY name`,
@@ -48,7 +48,7 @@ func (r *pgTaxonomyRepository) ListLabels(ctx context.Context, tenant Tenant) ([
 	return labels, nil
 }
 
-func (r *pgTaxonomyRepository) CreateLabel(ctx context.Context, tenant Tenant, name, color string) error {
+func (r *taxonomyRepository) CreateLabel(ctx context.Context, tenant Tenant, name, color string) error {
 	_, err := r.pool.Exec(ctx,
 		labelUpsertSQL(tenant),
 		tenantIDParam(tenant), name, color,
@@ -68,7 +68,7 @@ func labelUpsertSQL(tenant Tenant) string {
 			ON CONFLICT (tenant_id, name) WHERE tenant_id IS NOT NULL DO NOTHING`
 }
 
-func (r *pgTaxonomyRepository) UpdateLabel(ctx context.Context, tenant Tenant, name, color string) error {
+func (r *taxonomyRepository) UpdateLabel(ctx context.Context, tenant Tenant, name, color string) error {
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE labels SET color = $1 WHERE name = $2 AND tenant_id IS NOT DISTINCT FROM $3`,
 		color, name, tenantIDParam(tenant),
@@ -82,7 +82,7 @@ func (r *pgTaxonomyRepository) UpdateLabel(ctx context.Context, tenant Tenant, n
 	return nil
 }
 
-func (r *pgTaxonomyRepository) DeleteLabel(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
+func (r *taxonomyRepository) DeleteLabel(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("deleting label: beginning delete-label transaction: %w", err)
@@ -118,7 +118,7 @@ func (r *pgTaxonomyRepository) DeleteLabel(ctx context.Context, tenant Tenant, n
 	return nil
 }
 
-func (r *pgTaxonomyRepository) ApplyLabelByMerchant(ctx context.Context, tenant Tenant, label, pattern string) (int64, error) {
+func (r *taxonomyRepository) ApplyLabelByMerchant(ctx context.Context, tenant Tenant, label, pattern string) (int64, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("beginning apply-label-by-merchant transaction: %w", err)
@@ -174,7 +174,7 @@ func labelMerchantUpsertSQL(tenant Tenant) string {
 		 ON CONFLICT (tenant_id, label, merchant_pattern) WHERE tenant_id IS NOT NULL DO NOTHING`
 }
 
-func (r *pgTaxonomyRepository) RemoveLabelByMerchant(ctx context.Context, tenant Tenant, label, pattern string) (int64, error) {
+func (r *taxonomyRepository) RemoveLabelByMerchant(ctx context.Context, tenant Tenant, label, pattern string) (int64, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("beginning remove-label-by-merchant transaction: %w", err)
@@ -284,7 +284,7 @@ func transactionLabelHasSources(ctx context.Context, tx pgx.Tx, transactionID, l
 	return remaining > 0, nil
 }
 
-func (r *pgTaxonomyRepository) GetLabelMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
+func (r *taxonomyRepository) GetLabelMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
 	result := make(map[string][]string)
 	rows, err := r.pool.Query(ctx, `
 			SELECT label, merchant_pattern
@@ -307,7 +307,7 @@ func (r *pgTaxonomyRepository) GetLabelMappings(ctx context.Context, tenant Tena
 	return result, rows.Err()
 }
 
-func (r *pgTaxonomyRepository) listTaxonomyItems(ctx context.Context, tenant Tenant, query, itemName string) ([]taxonomyItem, error) {
+func (r *taxonomyRepository) listTaxonomyItems(ctx context.Context, tenant Tenant, query, itemName string) ([]taxonomyItem, error) {
 	items := []taxonomyItem{}
 	rows, err := r.pool.Query(ctx, query, tenantIDParam(tenant))
 	if err != nil {
@@ -325,7 +325,7 @@ func (r *pgTaxonomyRepository) listTaxonomyItems(ctx context.Context, tenant Ten
 	return items, rows.Err()
 }
 
-func (r *pgTaxonomyRepository) ListCategories(ctx context.Context, tenant Tenant) ([]Category, error) {
+func (r *taxonomyRepository) ListCategories(ctx context.Context, tenant Tenant) ([]Category, error) {
 	items, err := r.listTaxonomyItems(
 		ctx,
 		tenant,
@@ -342,7 +342,7 @@ func (r *pgTaxonomyRepository) ListCategories(ctx context.Context, tenant Tenant
 	return cats, nil
 }
 
-func (r *pgTaxonomyRepository) CreateCategory(ctx context.Context, tenant Tenant, name, description string) error {
+func (r *taxonomyRepository) CreateCategory(ctx context.Context, tenant Tenant, name, description string) error {
 	_, err := r.pool.Exec(ctx,
 		taxonomyItemUpsertSQL(tenant, "categories"),
 		tenantIDParam(tenant), name, description,
@@ -353,7 +353,7 @@ func (r *pgTaxonomyRepository) CreateCategory(ctx context.Context, tenant Tenant
 	return nil
 }
 
-func (r *pgTaxonomyRepository) DeleteCategory(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
+func (r *taxonomyRepository) DeleteCategory(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
 	return r.deleteNamedTaxonomy(ctx, taxonomyDeleteInput{
 		tenant:                 tenant,
 		name:                   name,
@@ -369,7 +369,7 @@ func (r *pgTaxonomyRepository) DeleteCategory(ctx context.Context, tenant Tenant
 	})
 }
 
-func (r *pgTaxonomyRepository) ListBuckets(ctx context.Context, tenant Tenant) ([]Bucket, error) {
+func (r *taxonomyRepository) ListBuckets(ctx context.Context, tenant Tenant) ([]Bucket, error) {
 	items, err := r.listTaxonomyItems(
 		ctx,
 		tenant,
@@ -386,7 +386,7 @@ func (r *pgTaxonomyRepository) ListBuckets(ctx context.Context, tenant Tenant) (
 	return buckets, nil
 }
 
-func (r *pgTaxonomyRepository) CreateBucket(ctx context.Context, tenant Tenant, name, description string) error {
+func (r *taxonomyRepository) CreateBucket(ctx context.Context, tenant Tenant, name, description string) error {
 	_, err := r.pool.Exec(ctx,
 		taxonomyItemUpsertSQL(tenant, "buckets"),
 		tenantIDParam(tenant), name, description,
@@ -397,7 +397,7 @@ func (r *pgTaxonomyRepository) CreateBucket(ctx context.Context, tenant Tenant, 
 	return nil
 }
 
-func (r *pgTaxonomyRepository) DeleteBucket(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
+func (r *taxonomyRepository) DeleteBucket(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
 	return r.deleteNamedTaxonomy(ctx, taxonomyDeleteInput{
 		tenant:                 tenant,
 		name:                   name,
@@ -447,7 +447,7 @@ type taxonomyDeleteInput struct {
 	spec                   taxonomyDeleteSpec
 }
 
-func (r *pgTaxonomyRepository) deleteNamedTaxonomy(
+func (r *taxonomyRepository) deleteNamedTaxonomy(
 	ctx context.Context,
 	input taxonomyDeleteInput,
 ) error {

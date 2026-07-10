@@ -10,15 +10,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type pgAuthRepository struct {
+type authRepository struct {
 	pool *pgxpool.Pool
 }
 
-func newPGAuthRepository(deps repositoryDependencies) *pgAuthRepository {
-	return &pgAuthRepository{pool: deps.pool}
+func newAuthRepository(deps repositoryDependencies) *authRepository {
+	return &authRepository{pool: deps.pool}
 }
 
-func (r *pgAuthRepository) BootstrapRequired(ctx context.Context) (bool, error) {
+func (r *authRepository) BootstrapRequired(ctx context.Context) (bool, error) {
 	var exists bool
 	if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM users)`).Scan(&exists); err != nil {
 		return false, fmt.Errorf("checking bootstrap status: %w", err)
@@ -26,7 +26,7 @@ func (r *pgAuthRepository) BootstrapRequired(ctx context.Context) (bool, error) 
 	return !exists, nil
 }
 
-func (r *pgAuthRepository) CreateBootstrapAdmin(ctx context.Context, input CreateBootstrapAdminInput) (*User, error) {
+func (r *authRepository) CreateBootstrapAdmin(ctx context.Context, input CreateBootstrapAdminInput) (*User, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("beginning bootstrap admin transaction: %w", err)
@@ -59,7 +59,7 @@ func (r *pgAuthRepository) CreateBootstrapAdmin(ctx context.Context, input Creat
 	return user, nil
 }
 
-func (r *pgAuthRepository) CreateUser(ctx context.Context, input CreateUserInput) (*User, error) {
+func (r *authRepository) CreateUser(ctx context.Context, input CreateUserInput) (*User, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("beginning create user transaction: %w", err)
@@ -78,7 +78,7 @@ func (r *pgAuthRepository) CreateUser(ctx context.Context, input CreateUserInput
 	return user, nil
 }
 
-func (r *pgAuthRepository) ListUsers(ctx context.Context) ([]User, error) {
+func (r *authRepository) ListUsers(ctx context.Context) ([]User, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, id AS tenant_id, email, COALESCE(password_hash, ''), display_name, role, avatar_key,
 		       disabled_at, created_at, updated_at
@@ -104,7 +104,7 @@ func (r *pgAuthRepository) ListUsers(ctx context.Context) ([]User, error) {
 	return users, nil
 }
 
-func (r *pgAuthRepository) UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, error) {
+func (r *authRepository) UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, error) {
 	user, err := scanUser(r.pool.QueryRow(ctx, `
 		UPDATE users
 		SET display_name = COALESCE($2, display_name),
@@ -129,7 +129,7 @@ func (r *pgAuthRepository) UpdateUser(ctx context.Context, id string, input Upda
 	return user, nil
 }
 
-func (r *pgAuthRepository) UpdateUserPassword(ctx context.Context, id string, input UpdateUserPasswordInput) error {
+func (r *authRepository) UpdateUserPassword(ctx context.Context, id string, input UpdateUserPasswordInput) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE users
 		SET password_hash = $2,
@@ -145,7 +145,7 @@ func (r *pgAuthRepository) UpdateUserPassword(ctx context.Context, id string, in
 	return nil
 }
 
-func (r *pgAuthRepository) DeleteUser(ctx context.Context, id string) error {
+func (r *authRepository) DeleteUser(ctx context.Context, id string) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("deleting user: %w", err)
@@ -156,7 +156,7 @@ func (r *pgAuthRepository) DeleteUser(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *pgAuthRepository) FindUserByEmail(ctx context.Context, email string) (*User, error) {
+func (r *authRepository) FindUserByEmail(ctx context.Context, email string) (*User, error) {
 	user, err := scanUser(r.pool.QueryRow(ctx, `
 		SELECT id, id AS tenant_id, email, COALESCE(password_hash, ''), display_name, role, avatar_key,
 		       disabled_at, created_at, updated_at
@@ -172,7 +172,7 @@ func (r *pgAuthRepository) FindUserByEmail(ctx context.Context, email string) (*
 	return user, nil
 }
 
-func (r *pgAuthRepository) FindUserByID(ctx context.Context, id string) (*User, error) {
+func (r *authRepository) FindUserByID(ctx context.Context, id string) (*User, error) {
 	user, err := scanUser(r.pool.QueryRow(ctx, `
 		SELECT id, id AS tenant_id, email, COALESCE(password_hash, ''), display_name, role, avatar_key,
 		       disabled_at, created_at, updated_at
@@ -188,7 +188,7 @@ func (r *pgAuthRepository) FindUserByID(ctx context.Context, id string) (*User, 
 	return user, nil
 }
 
-func (r *pgAuthRepository) CreateSession(ctx context.Context, input CreateSessionInput) (*Session, error) {
+func (r *authRepository) CreateSession(ctx context.Context, input CreateSessionInput) (*Session, error) {
 	session, err := scanSession(r.pool.QueryRow(ctx, `
 		INSERT INTO sessions (user_id, token_hash, expires_at)
 		VALUES ($1, $2, $3)
@@ -200,7 +200,7 @@ func (r *pgAuthRepository) CreateSession(ctx context.Context, input CreateSessio
 	return session, nil
 }
 
-func (r *pgAuthRepository) FindSessionByHash(ctx context.Context, tokenHash string) (*Session, error) {
+func (r *authRepository) FindSessionByHash(ctx context.Context, tokenHash string) (*Session, error) {
 	session, err := scanSession(r.pool.QueryRow(ctx, `
 		SELECT id, user_id, token_hash, created_at, expires_at, last_used_at, revoked_at
 		FROM sessions
@@ -215,7 +215,7 @@ func (r *pgAuthRepository) FindSessionByHash(ctx context.Context, tokenHash stri
 	return session, nil
 }
 
-func (r *pgAuthRepository) RevokeSession(ctx context.Context, id string) error {
+func (r *authRepository) RevokeSession(ctx context.Context, id string) error {
 	tag, err := r.pool.Exec(ctx, `UPDATE sessions SET revoked_at = NOW() WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("revoking session: %w", err)
@@ -226,7 +226,7 @@ func (r *pgAuthRepository) RevokeSession(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *pgAuthRepository) CreateAccessToken(ctx context.Context, input CreateAccessTokenInput) (*AccessToken, error) {
+func (r *authRepository) CreateAccessToken(ctx context.Context, input CreateAccessTokenInput) (*AccessToken, error) {
 	token, err := scanAccessToken(r.pool.QueryRow(ctx, `
 		INSERT INTO access_tokens (user_id, name, token_hash, expires_at)
 		VALUES ($1, $2, $3, $4)
@@ -241,7 +241,7 @@ func (r *pgAuthRepository) CreateAccessToken(ctx context.Context, input CreateAc
 	return token, nil
 }
 
-func (r *pgAuthRepository) ListAccessTokens(ctx context.Context, userID string) ([]AccessToken, error) {
+func (r *authRepository) ListAccessTokens(ctx context.Context, userID string) ([]AccessToken, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, user_id, name, token_hash, created_at, expires_at, last_used_at, revoked_at
 		FROM access_tokens
@@ -267,7 +267,7 @@ func (r *pgAuthRepository) ListAccessTokens(ctx context.Context, userID string) 
 	return tokens, nil
 }
 
-func (r *pgAuthRepository) FindAccessTokenByHash(ctx context.Context, tokenHash string) (*AccessToken, error) {
+func (r *authRepository) FindAccessTokenByHash(ctx context.Context, tokenHash string) (*AccessToken, error) {
 	token, err := scanAccessToken(r.pool.QueryRow(ctx, `
 		SELECT id, user_id, name, token_hash, created_at, expires_at, last_used_at, revoked_at
 		FROM access_tokens
@@ -282,7 +282,7 @@ func (r *pgAuthRepository) FindAccessTokenByHash(ctx context.Context, tokenHash 
 	return token, nil
 }
 
-func (r *pgAuthRepository) RevokeAccessToken(ctx context.Context, id, userID string) error {
+func (r *authRepository) RevokeAccessToken(ctx context.Context, id, userID string) error {
 	tag, err := r.pool.Exec(ctx, `UPDATE access_tokens SET revoked_at = NOW() WHERE id = $1 AND user_id = $2`, id, userID)
 	if err != nil {
 		return fmt.Errorf("revoking access token: %w", err)
@@ -293,7 +293,7 @@ func (r *pgAuthRepository) RevokeAccessToken(ctx context.Context, id, userID str
 	return nil
 }
 
-func (r *pgAuthRepository) CreateAccountSetupToken(ctx context.Context, input CreateAccountSetupTokenInput) (*AccountSetupToken, error) {
+func (r *authRepository) CreateAccountSetupToken(ctx context.Context, input CreateAccountSetupTokenInput) (*AccountSetupToken, error) {
 	token, err := scanAccountSetupToken(r.pool.QueryRow(ctx, `
 		INSERT INTO account_setup_tokens (user_id, token_hash, expires_at)
 		VALUES ($1, $2, $3)
@@ -305,7 +305,7 @@ func (r *pgAuthRepository) CreateAccountSetupToken(ctx context.Context, input Cr
 	return token, nil
 }
 
-func (r *pgAuthRepository) FindAccountSetupTokenByHash(ctx context.Context, tokenHash string) (*AccountSetupToken, error) {
+func (r *authRepository) FindAccountSetupTokenByHash(ctx context.Context, tokenHash string) (*AccountSetupToken, error) {
 	token, err := scanAccountSetupToken(r.pool.QueryRow(ctx, `
 		SELECT id, user_id, token_hash, created_at, expires_at, used_at
 		FROM account_setup_tokens
@@ -320,7 +320,7 @@ func (r *pgAuthRepository) FindAccountSetupTokenByHash(ctx context.Context, toke
 	return token, nil
 }
 
-func (r *pgAuthRepository) MarkAccountSetupTokenUsed(ctx context.Context, id string) error {
+func (r *authRepository) MarkAccountSetupTokenUsed(ctx context.Context, id string) error {
 	tag, err := r.pool.Exec(ctx, `UPDATE account_setup_tokens SET used_at = NOW() WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("marking account setup token used: %w", err)
@@ -331,7 +331,7 @@ func (r *pgAuthRepository) MarkAccountSetupTokenUsed(ctx context.Context, id str
 	return nil
 }
 
-func (r *pgAuthRepository) CompleteAccountSetup(ctx context.Context, input CompleteAccountSetupInput) (*User, error) {
+func (r *authRepository) CompleteAccountSetup(ctx context.Context, input CompleteAccountSetupInput) (*User, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("beginning account setup transaction: %w", err)

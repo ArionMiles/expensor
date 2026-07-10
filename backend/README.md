@@ -72,23 +72,13 @@ task build:binary   # optimised binary at ../bin/expensor
 ## Running
 
 ```bash
-# Gmail + Postgres
-export EXPENSOR_DB_BACKEND=postgres
-export POSTGRES_HOST=localhost
-export POSTGRES_DB=expensor
-export POSTGRES_USER=expensor
-export POSTGRES_PASSWORD=secret
+# Local backend using tests/config.dev.toml and the Postgres dev container
 task run
 
-# Thunderbird + Postgres
-export EXPENSOR_DB_BACKEND=postgres
-export THUNDERBIRD_PROFILE=/home/user/.thunderbird/abc123.default
-export THUNDERBIRD_MAILBOXES=INBOX,Archives
-export POSTGRES_HOST=localhost
-export POSTGRES_DB=expensor
-export POSTGRES_USER=expensor
-export POSTGRES_PASSWORD=secret
-task run
+# Full local app stack
+task dev
 ```
 
-See the root [README](../README.md) for the full environment variable reference.
+The local tasks load `tests/config.dev.toml` through `EXPENSOR_CONFIG_FILE`. Override
+values with environment variables when needed, for example `task run DB_BACKEND=postgres`.
+See the root [README](../README.md) for the full configuration reference.

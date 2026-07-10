@@ -22,15 +22,15 @@ type Store struct {
 	logger    *slog.Logger
 	now       func() time.Time
 	secretBox *auth.SecretBox
-	auth      *pgAuthRepository
-	community *pgCommunityRepository
-	diag      *pgDiagnosticsRepository
-	readModel *pgReadModelRepository
-	rules     *pgRulesRepository
-	runtime   *pgRuntimeRepository
-	scanning  *pgScanningRepository
-	taxonomy  *pgTaxonomyRepository
-	txns      *pgTransactionsRepository
+	auth      *authRepository
+	community *communityRepository
+	diag      *diagnosticsRepository
+	analytics *analyticsRepository
+	rules     *rulesRepository
+	runtime   *runtimeRepository
+	scanning  *scanningRepository
+	taxonomy  *taxonomyRepository
+	txns      *transactionsRepository
 }
 
 var _ api.DiagnosticSink = (*Store)(nil)
@@ -96,15 +96,15 @@ func (s *Store) initRepositories() {
 		now:       s.now,
 		secretBox: s.secretBox,
 	}
-	s.auth = newPGAuthRepository(deps)
-	s.community = newPGCommunityRepository(deps)
-	s.diag = newPGDiagnosticsRepository(deps)
-	s.rules = newPGRulesRepository(deps)
-	s.runtime = newPGRuntimeRepository(deps)
-	s.scanning = newPGScanningRepository(deps)
-	s.readModel = newPGReadModelRepository(deps, s.runtime)
-	s.taxonomy = newPGTaxonomyRepository(deps)
-	s.txns = newPGTransactionsRepository(deps)
+	s.auth = newAuthRepository(deps)
+	s.community = newCommunityRepository(deps)
+	s.diag = newDiagnosticsRepository(deps)
+	s.rules = newRulesRepository(deps)
+	s.runtime = newRuntimeRepository(deps)
+	s.scanning = newScanningRepository(deps)
+	s.analytics = newAnalyticsRepository(deps, s.runtime)
+	s.taxonomy = newTaxonomyRepository(deps)
+	s.txns = newTransactionsRepository(deps)
 }
 
 // Close releases the store's connection pool.
@@ -244,29 +244,29 @@ func (s *Store) SearchTransactions(
 
 // GetStats returns aggregate counts and totals across all transactions.
 func (s *Store) GetStats(ctx context.Context, tenant Tenant, baseCurrency string) (*Stats, error) {
-	return s.readModel.GetStats(ctx, tenant, baseCurrency)
+	return s.analytics.GetStats(ctx, tenant, baseCurrency)
 }
 
 // GetChartData returns time-series and breakdown data for dashboard charts.
 // All chart queries run concurrently.
 func (s *Store) GetChartData(ctx context.Context, tenant Tenant) (*ChartData, error) {
-	return s.readModel.GetChartData(ctx, tenant)
+	return s.analytics.GetChartData(ctx, tenant)
 }
 
 // GetDashboardData returns dashboard data split into current-month and all-time sections.
 func (s *Store) GetDashboardData(ctx context.Context, tenant Tenant) (*DashboardData, error) {
-	return s.readModel.GetDashboardData(ctx, tenant)
+	return s.analytics.GetDashboardData(ctx, tenant)
 }
 
 // by day-of-month. When from and to are both non-nil, only transactions within
 // [from, to] (inclusive) are included; nil/nil returns all-time data.
 func (s *Store) GetSpendingHeatmap(ctx context.Context, tenant Tenant, from, to *time.Time) (*HeatmapData, error) {
-	return s.readModel.GetSpendingHeatmap(ctx, tenant, from, to)
+	return s.analytics.GetSpendingHeatmap(ctx, tenant, from, to)
 }
 
 // the year has no transactions.
 func (s *Store) GetAnnualSpend(ctx context.Context, tenant Tenant, year int) ([]DailyBucket, error) {
-	return s.readModel.GetAnnualSpend(ctx, tenant, year)
+	return s.analytics.GetAnnualSpend(ctx, tenant, year)
 }
 
 // GetSpendingHeatmap. Returns empty string and nil args when both are nil.
@@ -456,7 +456,7 @@ func (s *Store) RemoveLabelByMerchant(ctx context.Context, tenant Tenant, label,
 // GetMonthlyBreakdownSpend returns a 12-month spend series for labels, categories, or buckets.
 // Muted transactions are excluded. Months are emitted in the configured app timezone.
 func (s *Store) GetMonthlyBreakdownSpend(ctx context.Context, tenant Tenant, dimension string, months int) (*MonthlyBreakdownData, error) {
-	return s.readModel.GetMonthlyBreakdownSpend(ctx, tenant, dimension, months)
+	return s.analytics.GetMonthlyBreakdownSpend(ctx, tenant, dimension, months)
 }
 
 // GetLabelMappings returns persisted merchant patterns for each label.

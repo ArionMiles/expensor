@@ -25,6 +25,9 @@ func TestLoadDefaultsToSQLiteWhenDatabaseBackendIsUnset(t *testing.T) {
 	if cfg.Database.Backend != config.DatabaseBackendSQLite {
 		t.Fatalf("Database.Backend = %q, want %q", cfg.Database.Backend, config.DatabaseBackendSQLite)
 	}
+	if cfg.Database.BackendConfigured {
+		t.Fatal("Database.BackendConfigured = true, want false")
+	}
 }
 
 func TestLoadRequiresPostgresConnectionFieldsWhenPostgresConfigured(t *testing.T) {
@@ -55,6 +58,9 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	}
 	if cfg.Database.Backend != config.DatabaseBackendPostgres || cfg.Database.BatchSize != 10 || cfg.Database.FlushInterval != 30 {
 		t.Fatalf("database defaults: %#v", cfg.Database)
+	}
+	if !cfg.Database.BackendConfigured {
+		t.Fatal("Database.BackendConfigured = false, want true")
 	}
 	if cfg.Postgres.Port != 5432 || cfg.Postgres.SSLMode != "disable" || cfg.Postgres.MaxPoolSize != 10 {
 		t.Fatalf("postgres defaults: %#v", cfg.Postgres)
@@ -415,6 +421,8 @@ func clearConfigEnv(t *testing.T) {
 		"EXPENSOR_DB_BACKEND",
 		"EXPENSOR_DB_BATCH_SIZE",
 		"EXPENSOR_DB_FLUSH_INTERVAL",
+		"EXPENSOR_SQLITE_PATH",
+		"EXPENSOR_SQLITE_BUSY_TIMEOUT",
 		"EXPENSOR_COMMUNITY_URL",
 		"EXPENSOR_CONTENT_SYNC_INTERVAL",
 		"EXPENSOR_CONTENT_SYNC_TIMEOUT",

@@ -23,6 +23,8 @@ type TransactionIngestor struct {
 	scope         *observability.Scope
 }
 
+const defaultTransactionCurrency = "INR"
+
 // NewTransactionIngestor creates a transaction ingestor backed by the store pool.
 func (s *Store) NewTransactionIngestor(cfg IngestionConfig, logger *slog.Logger) *TransactionIngestor {
 	if logger == nil {
@@ -255,7 +257,7 @@ func (w *TransactionIngestor) observabilityScope() *observability.Scope {
 func (w *TransactionIngestor) normalizeWriteInput(txn *api.TransactionDetails) (string, time.Time) {
 	currency := txn.Currency
 	if currency == "" {
-		currency = "INR"
+		currency = defaultTransactionCurrency
 	}
 
 	timestamp, err := time.Parse(time.RFC3339, txn.Timestamp)

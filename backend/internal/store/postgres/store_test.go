@@ -1,4 +1,4 @@
-package postgres_test
+package postgres
 
 import (
 	"bytes"
@@ -19,16 +19,15 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
-	"github.com/ArionMiles/expensor/backend/internal/store/postgres"
 	"github.com/ArionMiles/expensor/backend/internal/store/postgres/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
-// testStore holds a live *postgres.Store and the container DSN for teardown.
+// testStore holds a live *Store and the container DSN for teardown.
 type testStore struct {
-	*postgres.Store
+	*Store
 	cleanup func()
 	logs    *bytes.Buffer
 }
@@ -84,7 +83,7 @@ func newTestStoreWithLogger(t *testing.T, logs *bytes.Buffer) *testStore {
 		logger = slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
 
-	st, err := postgres.NewWithSecurity(cfg, config.Security{SecretKey: bytes.Repeat([]byte{4}, 32)}, logger)
+	st, err := NewWithSecurity(cfg, config.Security{SecretKey: bytes.Repeat([]byte{4}, 32)}, logger)
 	if err != nil {
 		_ = ctr.Terminate(ctx)
 		t.Fatalf("failed to create store: %v", err)
@@ -107,7 +106,7 @@ func runStoreTestMigrations(ctx context.Context, t *testing.T, cfg config.Postgr
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s pool_max_conns=1",
 		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.SSLMode,
 	)
-	poolCfg, err := postgres.ParsePoolConfig(connStr)
+	poolCfg, err := ParsePoolConfig(connStr)
 	if err != nil {
 		_ = ctr.Terminate(ctx)
 		t.Fatalf("parse migration pool config: %v", err)
@@ -128,12 +127,12 @@ func runStoreTestMigrations(ctx context.Context, t *testing.T, cfg config.Postgr
 }
 
 // seedTransaction inserts one transaction and returns its UUID.
-func seedTransaction(ctx context.Context, t *testing.T, st *postgres.Store, params postgres.InsertParams) string {
+func seedTransaction(ctx context.Context, t *testing.T, st *Store, params InsertParams) string {
 	t.Helper()
 	if params.Timestamp.IsZero() {
 		params.Timestamp = time.Now()
 	}
-	id, err := st.InsertForTest(ctx, params)
+	id, err := insertForTest(ctx, st, params)
 	if err != nil {
 		t.Fatalf("seedTransaction: %v", err)
 	}
@@ -369,7 +368,7 @@ func TestLLMProviderRuntimeStoresTenantConfigCredentialsAndActiveProvider(t *tes
 	assertJSONBytesEqual(t, gotCredentials, credentials)
 
 	var ciphertext []byte
-	if err := ts.PoolForTest().QueryRow(ctx, `
+	if err := poolForTest(ts.Store).QueryRow(ctx, `
 		SELECT credentials_ciphertext
 		FROM llm_provider_runtime
 		WHERE tenant_id = $1 AND provider = $2
@@ -859,13 +858,13 @@ func TestListTransactions_FilterMissingCategoryBucketAndLabel(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	missingID, err := ts.InsertForTest(ctx, store.InsertParams{
+	missingID, err := insertForTest(ctx, ts.Store, store.InsertParams{
 		MessageID: "missing-taxonomy-1", Amount: 100, Currency: "INR", MerchantInfo: "Unknown",
 	})
 	if err != nil {
 		t.Fatalf("InsertForTest missing: %v", err)
 	}
-	labeledID, err := ts.InsertForTest(ctx, store.InsertParams{
+	labeledID, err := insertForTest(ctx, ts.Store, store.InsertParams{
 		MessageID: "labeled-taxonomy-1", Amount: 200, Currency: "INR", MerchantInfo: "Known",
 		Category: "Food", Bucket: "Needs",
 	})
@@ -919,13 +918,13 @@ func TestGetDashboardData_IncludesUncategorizedBreakdowns(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	_, err := ts.InsertForTest(ctx, store.InsertParams{
+	_, err := insertForTest(ctx, ts.Store, store.InsertParams{
 		MessageID: "dashboard-missing-taxonomy-1", Amount: 125, Currency: "INR", MerchantInfo: "Unknown",
 	})
 	if err != nil {
 		t.Fatalf("InsertForTest missing: %v", err)
 	}
-	knownID, err := ts.InsertForTest(ctx, store.InsertParams{
+	knownID, err := insertForTest(ctx, ts.Store, store.InsertParams{
 		MessageID: "dashboard-known-taxonomy-1", Amount: 250, Currency: "INR", MerchantInfo: "Known",
 		Category: "Food", Bucket: "Investments",
 	})
@@ -1434,7 +1433,7 @@ func TestSearchTransactions_HonorsAscendingSort(t *testing.T) {
 			Timestamp:    time.Date(2026, time.March, 1, 9, 0, 0, 0, time.UTC),
 		},
 	} {
-		if _, err := ts.InsertForTest(ctx, p); err != nil {
+		if _, err := insertForTest(ctx, ts.Store, p); err != nil {
 			t.Fatalf("InsertForTest: %v", err)
 		}
 	}
@@ -1482,7 +1481,7 @@ func TestSearchTransactions_AppliesDateAndSourceTypeFilters(t *testing.T) {
 			Timestamp:    time.Date(2026, time.May, 20, 12, 0, 0, 0, time.UTC),
 		},
 	} {
-		if _, err := ts.InsertForTest(ctx, params); err != nil {
+		if _, err := insertForTest(ctx, ts.Store, params); err != nil {
 			t.Fatalf("InsertForTest: %v", err)
 		}
 	}
@@ -1664,7 +1663,7 @@ func TestHeatmapBucketMatchesListTransactionsForWeekdayHour(t *testing.T) {
 	}
 
 	for i, tsAt := range timestamps {
-		if _, err := ts.InsertForTest(ctx, store.InsertParams{
+		if _, err := insertForTest(ctx, ts.Store, store.InsertParams{
 			MessageID:    fmt.Sprintf("heatmap-weekday-hour-%d", i),
 			Amount:       100,
 			Currency:     "INR",
@@ -1730,7 +1729,7 @@ func TestHeatmapBucketMatchesListTransactionsForWeekdayHour_AllTime(t *testing.T
 	}
 
 	for i, txn := range timestamps {
-		if _, err := ts.InsertForTest(ctx, store.InsertParams{
+		if _, err := insertForTest(ctx, ts.Store, store.InsertParams{
 			MessageID:    fmt.Sprintf("heatmap-all-time-%d", i),
 			Amount:       txn.amount,
 			Currency:     "INR",
@@ -1806,7 +1805,7 @@ func TestGetSpendingHeatmapSupportsSingleSidedBounds(t *testing.T) {
 		},
 	}
 	for _, txn := range timestamps {
-		if _, err := ts.InsertForTest(ctx, store.InsertParams{
+		if _, err := insertForTest(ctx, ts.Store, store.InsertParams{
 			MessageID:    txn.messageID,
 			Amount:       100,
 			Currency:     "INR",
@@ -1850,7 +1849,7 @@ func TestGetSpendingHeatmap_DayOfMonthUsesLocalTimezone(t *testing.T) {
 	at := time.Date(2026, time.April, 30, 20, 30, 0, 0, time.UTC)
 	from := time.Date(2026, time.April, 30, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, time.May, 1, 23, 59, 59, 0, time.UTC)
-	if _, err := ts.InsertForTest(ctx, store.InsertParams{
+	if _, err := insertForTest(ctx, ts.Store, store.InsertParams{
 		MessageID:    "heatmap-day-rollover",
 		Amount:       250,
 		Currency:     "INR",
@@ -1913,7 +1912,7 @@ func TestGetAnnualSpend_UsesAppTimezone(t *testing.T) {
 		t.Fatalf("SetAppConfig: %v", err)
 	}
 
-	if _, err := ts.InsertForTest(ctx, store.InsertParams{
+	if _, err := insertForTest(ctx, ts.Store, store.InsertParams{
 		MessageID:    "annual-heatmap-local-day",
 		Amount:       1976.62,
 		Currency:     "INR",
@@ -2066,7 +2065,7 @@ func TestV2MigrationBackfillsRulesAndTransactions(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	_, err := ts.PoolForTest().Exec(ctx, `
+	_, err := poolForTest(ts.Store).Exec(ctx, `
 		INSERT INTO rules
 			(name, sender_email, subject_contains, amount_regex, merchant_regex, transaction_source, predefined)
 		VALUES
@@ -2078,7 +2077,7 @@ func TestV2MigrationBackfillsRulesAndTransactions(t *testing.T) {
 		t.Fatalf("seed legacy rules: %v", err)
 	}
 
-	_, err = ts.PoolForTest().Exec(ctx, `
+	_, err = poolForTest(ts.Store).Exec(ctx, `
 		INSERT INTO transactions
 			(message_id, amount, currency, timestamp, merchant_info, source, source_label, source_type, bank)
 		VALUES
@@ -2094,12 +2093,12 @@ func TestV2MigrationBackfillsRulesAndTransactions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read migration: %v", err)
 	}
-	if _, err = ts.PoolForTest().Exec(ctx, string(migrationSQL)); err != nil {
+	if _, err = poolForTest(ts.Store).Exec(ctx, string(migrationSQL)); err != nil {
 		t.Fatalf("run v2 migration: %v", err)
 	}
 
 	var exists bool
-	if err = ts.PoolForTest().QueryRow(ctx,
+	if err = poolForTest(ts.Store).QueryRow(ctx,
 		`SELECT EXISTS(SELECT 1 FROM rules WHERE name = 'HDFC Credit Card (debit alert)' AND predefined = true)`,
 	).Scan(&exists); err != nil {
 		t.Fatalf("check stale predefined rule: %v", err)
@@ -2108,7 +2107,7 @@ func TestV2MigrationBackfillsRulesAndTransactions(t *testing.T) {
 		t.Fatal("expected stale v1 predefined rule to be removed")
 	}
 
-	if err = ts.PoolForTest().QueryRow(ctx,
+	if err = poolForTest(ts.Store).QueryRow(ctx,
 		`SELECT EXISTS(SELECT 1 FROM rules WHERE name = 'Custom Legacy Rule' AND predefined = false)`,
 	).Scan(&exists); err != nil {
 		t.Fatalf("check custom legacy rule: %v", err)
@@ -2119,7 +2118,7 @@ func TestV2MigrationBackfillsRulesAndTransactions(t *testing.T) {
 
 	var senderEmails []string
 	var sourceType, sourceLabel, bank string
-	if err = ts.PoolForTest().QueryRow(ctx, `
+	if err = poolForTest(ts.Store).QueryRow(ctx, `
 		SELECT sender_emails, source_type, source_label, bank
 		FROM rules
 		WHERE name = 'HDFC Credit Card' AND predefined = true
@@ -2139,7 +2138,7 @@ func TestV2MigrationBackfillsRulesAndTransactions(t *testing.T) {
 		sourceType  string
 		bank        string
 	}
-	rows, err := ts.PoolForTest().Query(ctx, `
+	rows, err := poolForTest(ts.Store).Query(ctx, `
 		SELECT message_id, source_label, source_type, bank
 		FROM transactions
 		WHERE message_id IN ('legacy-hdfc-card', 'legacy-icici-imobile', 'already-structured')
@@ -2180,14 +2179,14 @@ func TestListTransactions_FilterByBucket(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	id1, err := ts.InsertForTest(ctx, store.InsertParams{
+	id1, err := insertForTest(ctx, ts.Store, store.InsertParams{
 		MessageID: "bucket-wants", Amount: 100, Currency: "INR",
 		MerchantInfo: "Netflix", Category: "Entertainment", Bucket: "wants",
 	})
 	if err != nil {
 		t.Fatalf("seed wants: %v", err)
 	}
-	if _, err = ts.InsertForTest(ctx, store.InsertParams{
+	if _, err = insertForTest(ctx, ts.Store, store.InsertParams{
 		MessageID: "bucket-needs", Amount: 200, Currency: "INR",
 		MerchantInfo: "Rent", Category: "Housing", Bucket: "needs",
 	}); err != nil {
@@ -2218,7 +2217,7 @@ func TestGetFacets_IncludesBuckets(t *testing.T) {
 		{MessageID: "fct-1", Amount: 100, Currency: "INR", MerchantInfo: "Netflix", Category: "Entertainment", Bucket: "wants"},
 		{MessageID: "fct-2", Amount: 200, Currency: "INR", MerchantInfo: "Rent", Category: "Housing", Bucket: "needs"},
 	} {
-		if _, err := ts.InsertForTest(ctx, p); err != nil {
+		if _, err := insertForTest(ctx, ts.Store, p); err != nil {
 			t.Fatalf("seed: %v", err)
 		}
 	}
@@ -2323,7 +2322,7 @@ func TestTransactionsStructuredSourceFacetsAndFilters(t *testing.T) {
 		{MessageID: "structured-source-3", Amount: 300, MerchantInfo: "Uber", SourceType: "Credit Card", SourceLabel: "ICICI Credit Card", Bank: "ICICI"},
 	}
 	for _, p := range seed {
-		if _, err := ts.InsertForTest(ctx, p); err != nil {
+		if _, err := insertForTest(ctx, ts.Store, p); err != nil {
 			t.Fatalf("seed: %v", err)
 		}
 	}
@@ -2364,7 +2363,7 @@ func TestGetChartData_BySource(t *testing.T) {
 		{MessageID: "src-2", Amount: 200, Currency: "INR", MerchantInfo: "Swiggy", Category: "Food", Source: "SBI Debit Card", SourceType: "Debit Card", Bank: "SBI"},
 		{MessageID: "src-3", Amount: 50, Currency: "INR", MerchantInfo: "Netflix", Category: "Entertainment", Source: "HDFC Credit Card", SourceType: "Credit Card", Bank: "HDFC"},
 	} {
-		if _, err := ts.InsertForTest(ctx, p); err != nil {
+		if _, err := insertForTest(ctx, ts.Store, p); err != nil {
 			t.Fatalf("seed: %v", err)
 		}
 	}
@@ -2414,7 +2413,7 @@ func TestGetCurrentMonthDashboardData_UsesConfiguredTimezone(t *testing.T) {
 		t.Fatalf("test setup expected UTC month boundary rollover, got local=%s utc=%s", startLocal, boundaryUTC)
 	}
 
-	if _, err := ts.InsertForTest(ctx, store.InsertParams{
+	if _, err := insertForTest(ctx, ts.Store, store.InsertParams{
 		MessageID:    "month-boundary",
 		Amount:       1000,
 		Currency:     "INR",
@@ -2447,10 +2446,10 @@ func TestGetChartData_MonthlySpendUsesConfiguredTimezone(t *testing.T) {
 		t.Fatalf("SetAppConfig: %v", err)
 	}
 
-	restoreNow := ts.SetNowForTestSequence(time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC))
+	restoreNow := setNowForTestSequence(ts.Store, time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC))
 	defer restoreNow()
 
-	if _, err := ts.InsertForTest(ctx, store.InsertParams{
+	if _, err := insertForTest(ctx, ts.Store, store.InsertParams{
 		MessageID:    "all-time-month-boundary",
 		Amount:       750,
 		Currency:     "INR",
@@ -2495,14 +2494,14 @@ func TestGetDashboardData_UsesSingleNowAcrossSections(t *testing.T) {
 		t.Fatalf("SetAppConfig: %v", err)
 	}
 
-	restoreNow := ts.SetNowForTestSequence(
+	restoreNow := setNowForTestSequence(ts.Store,
 		time.Date(2026, time.March, 31, 18, 0, 0, 0, time.UTC),
 		time.Date(2026, time.March, 31, 19, 0, 0, 0, time.UTC),
 		time.Date(2026, time.March, 31, 19, 0, 0, 0, time.UTC),
 	)
 	defer restoreNow()
 
-	if _, err := ts.InsertForTest(ctx, store.InsertParams{
+	if _, err := insertForTest(ctx, ts.Store, store.InsertParams{
 		MessageID:    "dashboard-now-consistency",
 		Amount:       750,
 		Currency:     "INR",
@@ -2647,10 +2646,10 @@ func TestGetMonthlyBreakdownSpend_ByDimension(t *testing.T) {
 		t.Fatalf("SetAppConfig: %v", err)
 	}
 
-	restoreNow := ts.SetNowForTestSequence(time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC))
+	restoreNow := setNowForTestSequence(ts.Store, time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC))
 	defer restoreNow()
 
-	janID, err := ts.InsertForTest(ctx, store.InsertParams{
+	janID, err := insertForTest(ctx, ts.Store, store.InsertParams{
 		MessageID:    "series-jan",
 		Amount:       100,
 		Currency:     "INR",
@@ -2666,7 +2665,7 @@ func TestGetMonthlyBreakdownSpend_ByDimension(t *testing.T) {
 		t.Fatalf("AddLabel jan: %v", err)
 	}
 
-	if _, err := ts.InsertForTest(ctx, store.InsertParams{
+	if _, err := insertForTest(ctx, ts.Store, store.InsertParams{
 		MessageID:    "series-feb",
 		Amount:       250,
 		Currency:     "INR",
@@ -2678,7 +2677,7 @@ func TestGetMonthlyBreakdownSpend_ByDimension(t *testing.T) {
 		t.Fatalf("InsertForTest feb: %v", err)
 	}
 
-	marID, err := ts.InsertForTest(ctx, store.InsertParams{
+	marID, err := insertForTest(ctx, ts.Store, store.InsertParams{
 		MessageID:    "series-mar",
 		Amount:       300,
 		Currency:     "INR",
@@ -2694,7 +2693,7 @@ func TestGetMonthlyBreakdownSpend_ByDimension(t *testing.T) {
 		t.Fatalf("AddLabel mar: %v", err)
 	}
 
-	if _, err := ts.InsertForTest(ctx, store.InsertParams{
+	if _, err := insertForTest(ctx, ts.Store, store.InsertParams{
 		MessageID:    "series-apr-uncategorized",
 		Amount:       400,
 		Currency:     "INR",

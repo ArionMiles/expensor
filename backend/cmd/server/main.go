@@ -92,7 +92,7 @@ func run() int {
 	}
 	defer runtime.Close()
 
-	resolver, err := seedStartupData(ctx, runtime.Store, content, logger)
+	resolver, err := seedStartupData(ctx, runtime.Postgres, content, logger)
 	if err != nil {
 		logger.Error("startup seeding failed", "error", err)
 		return 1
@@ -100,7 +100,17 @@ func run() int {
 
 	storeLogger := logger.With("component", "store")
 	storeScope := observability.NewScope(storeLogger, "github.com/ArionMiles/expensor/backend/internal/store")
-	instrumentedStore := store.NewInstrumentedStore(runtime.Store, storeScope, storeLogger)
+	instrumentedStore := store.NewInstrumentedStore(store.InstrumentedStoreDeps{
+		Auth:         runtime.Postgres,
+		Analytics:    runtime.Postgres,
+		Community:    runtime.Postgres,
+		Diagnostics:  runtime.Postgres,
+		Rules:        runtime.Postgres,
+		Runtime:      runtime.Postgres,
+		Scanning:     runtime.Postgres,
+		Taxonomy:     runtime.Postgres,
+		Transactions: runtime.Postgres,
+	}, storeScope, storeLogger)
 	var st httpapi.Storer = instrumentedStore
 
 	llmRegistry := llm.NewRegistry()

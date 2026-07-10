@@ -9,17 +9,17 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
-type pgDiagnosticsRepository struct {
+type diagnosticsRepository struct {
 	pool *pgxpool.Pool
 }
 
-func newPGDiagnosticsRepository(deps repositoryDependencies) *pgDiagnosticsRepository {
-	return &pgDiagnosticsRepository{
+func newDiagnosticsRepository(deps repositoryDependencies) *diagnosticsRepository {
+	return &diagnosticsRepository{
 		pool: deps.pool,
 	}
 }
 
-func (r *pgDiagnosticsRepository) RecordExtractionDiagnostic(ctx context.Context, tenant Tenant, diagnostic api.ExtractionDiagnostic) error {
+func (r *diagnosticsRepository) RecordExtractionDiagnostic(ctx context.Context, tenant Tenant, diagnostic api.ExtractionDiagnostic) error {
 	q := diagnosticUpsertSQL(tenant)
 
 	_, err := r.pool.Exec(ctx, q,
@@ -75,7 +75,7 @@ func diagnosticUpsertSQL(tenant Tenant) string {
 		`
 }
 
-func (r *pgDiagnosticsRepository) ListExtractionDiagnostics(ctx context.Context, tenant Tenant, f DiagnosticFilter) ([]ExtractionDiagnosticRow, error) {
+func (r *diagnosticsRepository) ListExtractionDiagnostics(ctx context.Context, tenant Tenant, f DiagnosticFilter) ([]ExtractionDiagnosticRow, error) {
 	if err := ValidateDiagnosticFilterStatus(f.Status); err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func (r *pgDiagnosticsRepository) ListExtractionDiagnostics(ctx context.Context,
 	return result, nil
 }
 
-func (r *pgDiagnosticsRepository) GetExtractionDiagnostic(ctx context.Context, tenant Tenant, id string) (*ExtractionDiagnosticRow, error) {
+func (r *diagnosticsRepository) GetExtractionDiagnostic(ctx context.Context, tenant Tenant, id string) (*ExtractionDiagnosticRow, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+diagnosticColumns+` FROM extraction_diagnostics WHERE id = $1 AND tenant_id IS NOT DISTINCT FROM $2`,
 		id, tenantIDParam(tenant),
@@ -124,7 +124,7 @@ func (r *pgDiagnosticsRepository) GetExtractionDiagnostic(ctx context.Context, t
 	return &result[0], nil
 }
 
-func (r *pgDiagnosticsRepository) UpdateExtractionDiagnosticStatus(
+func (r *diagnosticsRepository) UpdateExtractionDiagnosticStatus(
 	ctx context.Context,
 	tenant Tenant,
 	id string,

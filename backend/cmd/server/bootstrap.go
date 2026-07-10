@@ -21,7 +21,6 @@ import (
 )
 
 type storeRuntime struct {
-	Store    store.Backend
 	Postgres *postgres.Store
 }
 
@@ -70,7 +69,7 @@ func openPostgresStore(ctx context.Context, cfg config.App, logger *slog.Logger)
 	if err != nil {
 		return storeRuntime{}, err
 	}
-	return storeRuntime{Store: pgStore, Postgres: pgStore}, nil
+	return storeRuntime{Postgres: pgStore}, nil
 }
 
 // runPostgresMigrations applies migrations through a short-lived startup pool.
@@ -155,8 +154,16 @@ func registerPlugins(registry *plugins.Registry, fs embed.FS, logger *slog.Logge
 	return nil
 }
 
+type startupSeedStore interface {
+	SeedPredefinedRules(ctx context.Context, rules []store.RuleRow) error
+	SeedMCCCodes(ctx context.Context, entries []store.MCCEntry) error
+	SeedMerchantCategories(ctx context.Context, entries []store.MerchantCategoryEntry) (int64, error)
+	SeedMCCCategories(ctx context.Context, names []string) error
+	LoadCategorySnapshot(ctx context.Context) (api.CategoryResolver, error)
+}
+
 // seedStartupData persists bundled content and builds the category resolver.
-func seedStartupData(ctx context.Context, runtimeStore store.Backend, content embeddedContent, logger *slog.Logger) (api.CategoryResolver, error) {
+func seedStartupData(ctx context.Context, runtimeStore startupSeedStore, content embeddedContent, logger *slog.Logger) (api.CategoryResolver, error) {
 	systemRuleRows := buildSystemRuleRows(content.rawRules)
 	if err := runtimeStore.SeedPredefinedRules(ctx, systemRuleRows); err != nil {
 		return nil, apperrors.E("server.seed_startup_data", apperrors.Internal, "seeding predefined rules", err)

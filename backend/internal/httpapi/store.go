@@ -1,8 +1,6 @@
 package httpapi
 
-import (
-	"github.com/ArionMiles/expensor/backend/internal/store"
-)
+import "github.com/ArionMiles/expensor/backend/internal/store"
 
 // Storer is the subset of store.Store operations used by the API handlers.
 // Using an interface allows handler unit tests to inject a mock without a real database.
@@ -21,8 +19,4 @@ type Storer interface {
 	diagnosticStore
 }
 
-// compile-time checks for the shared backend and instrumentation surfaces.
-var (
-	_ Storer = (store.Backend)(nil)
-	_ Storer = (*store.InstrumentedStore)(nil)
-)
+var _ Storer = (*store.InstrumentedStore)(nil)

@@ -2,20 +2,21 @@ package httpapi
 
 import (
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/internal/store/postgres"
 )
 
 // Compile-time checks that the concrete store implementations satisfy the
 // smaller capability interfaces used by API handlers.
 var (
-	_ settingsStore      = (store.Backend)(nil)
-	_ analyticsStore     = (store.Backend)(nil)
-	_ transactionStore   = (store.Backend)(nil)
-	_ muteStore          = (store.Backend)(nil)
-	_ taxonomyStore      = (store.Backend)(nil)
-	_ readerRuntimeStore = (store.Backend)(nil)
-	_ ruleStore          = (store.Backend)(nil)
-	_ syncStore          = (store.Backend)(nil)
-	_ diagnosticStore    = (store.Backend)(nil)
+	_ settingsStore      = (*postgres.Store)(nil)
+	_ analyticsStore     = (*postgres.Store)(nil)
+	_ transactionStore   = (*postgres.Store)(nil)
+	_ muteStore          = (*postgres.Store)(nil)
+	_ taxonomyStore      = (*postgres.Store)(nil)
+	_ readerRuntimeStore = (*postgres.Store)(nil)
+	_ ruleStore          = (*postgres.Store)(nil)
+	_ syncStore          = (*postgres.Store)(nil)
+	_ diagnosticStore    = (*postgres.Store)(nil)
 
 	_ settingsStore      = (*store.InstrumentedStore)(nil)
 	_ analyticsStore     = (*store.InstrumentedStore)(nil)

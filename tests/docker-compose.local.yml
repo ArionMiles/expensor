@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-expensor}
       POSTGRES_USER: ${POSTGRES_USER:-expensor}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-expensor_password}
     volumes:
       - expensor_dev_postgres:/var/lib/postgresql/data
     ports:

@@ -407,3 +407,106 @@ type TransactionListResult struct {
 	Total       int     `json:"total"`
 	TotalAmount float64 `json:"total_amount"`
 }
+
+// ListFilter controls pagination and filtering for ListTransactions.
+type ListFilter struct {
+	Page               int    // 1-based
+	PageSize           int    // max rows per page
+	Category           string // partial match, empty = all
+	CategoryMissing    bool   // true = category is NULL or empty
+	ExcludeCategories  []string
+	Currency           string // partial match, empty = all
+	Source             string // partial match, empty = all
+	ExcludeSources     []string
+	SourceType         string
+	ExcludeSourceTypes []string
+	Bank               string
+	ExcludeBanks       []string
+	Bucket             string // partial match, empty = all
+	BucketMissing      bool   // true = bucket is NULL or empty
+	ExcludeBuckets     []string
+	Label              string // filter by label, empty = all
+	LabelMissing       bool   // true = no labels assigned
+	ExcludeLabels      []string
+	Merchant           string // partial match on merchant_info, empty = all
+	ShowMuted          bool   // when true, muted transactions are included; default hides them
+	MutedOnly          bool   // when true, only muted=true (for click-through from Muted page)
+	IndividualOnly     bool   // when true, only muted=true AND muted_by_merchant=false (per-tx mutes)
+	Weekday            *int   // nil = all weekdays; uses configured timezone and backend weekday convention
+	HourFrom           *int   // nil = all hours; non-nil filters transaction hour >= *HourFrom
+	HourTo             *int   // nil = all hours; non-nil filters transaction hour <= *HourTo
+	Timezone           string // IANA timezone for hour extraction; defaults to UTC when empty
+	From               *time.Time
+	To                 *time.Time
+	SortBy             string // "timestamp" (only supported value for now); default = "timestamp"
+	SortDir            string // "asc" | "desc"; default = "desc"
+}
+
+// IngestionConfig controls daemon transaction ingestion batching.
+type IngestionConfig struct {
+	// Tenant identifies the tenant that owns written transactions. Empty keeps the temporary legacy tenant.
+	Tenant Tenant
+	// BatchSize is the number of transactions to buffer before writing.
+	BatchSize int
+	// FlushInterval is the time between automatic flushes.
+	FlushInterval time.Duration
+}
+
+type ScanningState string
+
+const (
+	ScanningStateQueued              ScanningState = "queued"
+	ScanningStateStarting            ScanningState = "starting"
+	ScanningStateRunning             ScanningState = "running"
+	ScanningStateBackingOff          ScanningState = "backing_off"
+	ScanningStateNeedsAuth           ScanningState = "needs_auth"
+	ScanningStateReaderNotConfigured ScanningState = "reader_not_configured"
+	ScanningStatePaused              ScanningState = "paused"
+	ScanningStateStopped             ScanningState = "stopped"
+)
+
+type ScanningReasonCode string
+
+const (
+	ScanningReasonNone                ScanningReasonCode = ""
+	ScanningReasonMissingCredentials  ScanningReasonCode = "needs_auth_missing_credentials"
+	ScanningReasonMissingToken        ScanningReasonCode = "needs_auth_missing_token"
+	ScanningReasonInvalidGrant        ScanningReasonCode = "needs_auth_invalid_grant"
+	ScanningReasonReaderNotConfigured ScanningReasonCode = "reader_not_configured"
+	ScanningReasonTemporaryFailure    ScanningReasonCode = "temporary_failure"
+)
+
+type SchedulerConfig struct {
+	MaxConcurrentScans int
+	UpdatedAt          time.Time
+}
+
+type SchedulerConfigPatch struct {
+	MaxConcurrentScans *int
+}
+
+type TenantScanningState struct {
+	TenantID      string
+	ActiveReader  string
+	Enabled       bool
+	State         ScanningState
+	ReasonCode    ScanningReasonCode
+	PublicMessage string
+	LastStartedAt *time.Time
+	LastStoppedAt *time.Time
+	LastFailedAt  *time.Time
+	NextRetryAt   *time.Time
+	RetryCount    int
+	UpdatedAt     time.Time
+}
+
+type ScanningStateUpdate struct {
+	State         ScanningState
+	ReasonCode    ScanningReasonCode
+	PublicMessage string
+	LastStartedAt *time.Time
+	LastStoppedAt *time.Time
+	LastFailedAt  *time.Time
+	NextRetryAt   *time.Time
+	RetryCount    *int
+}

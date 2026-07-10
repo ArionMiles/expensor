@@ -1,4 +1,4 @@
-package postgres_test
+package postgres
 
 import (
 	"context"
@@ -7,13 +7,12 @@ import (
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
-	"github.com/ArionMiles/expensor/backend/internal/store/postgres"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
 type testIngestor struct {
-	*postgres.TransactionIngestor
-	st *postgres.Store
+	*TransactionIngestor
+	st *Store
 }
 
 func newTestIngestor(t *testing.T, overrides store.IngestionConfig) *testIngestor {
@@ -62,7 +61,7 @@ func TestWrite_PersistsStructuredSourceFields(t *testing.T) {
 	assertWrite(t, w, []*api.TransactionDetails{txn}, 5*time.Second)
 
 	var source, sourceType, sourceLabel, bank string
-	err := w.st.PoolForTest().QueryRow(ctx, `
+	err := poolForTest(w.st).QueryRow(ctx, `
 		SELECT source, source_type, source_label, bank
 		FROM transactions
 		WHERE message_id = $1
@@ -144,7 +143,7 @@ func TestWrite_PersistsManualLabelProvenanceForPayloadLabels(t *testing.T) {
 	assertWrite(t, w, []*api.TransactionDetails{txn}, 5*time.Second)
 
 	var provenanceCount int
-	err := w.st.PoolForTest().QueryRow(ctx, `
+	err := poolForTest(w.st).QueryRow(ctx, `
 		SELECT COUNT(*)
 		FROM transaction_label_sources tls
 		JOIN transactions t ON t.id = tls.transaction_id
@@ -206,7 +205,7 @@ func TestWrite_Upsert_PreservesUserEdits(t *testing.T) {
 	assertWrite(t, w, []*api.TransactionDetails{initial}, 5*time.Second)
 
 	// Step 2: simulate user edits directly in the DB.
-	_, err := w.st.PoolForTest().Exec(ctx,
+	_, err := poolForTest(w.st).Exec(ctx,
 		`UPDATE transactions SET description = $1, category = $2, bucket = $3 WHERE message_id = $4`,
 		"Anniversary dinner", "Dining Out", "Needs", msgID,
 	)
@@ -232,7 +231,7 @@ func TestWrite_Upsert_PreservesUserEdits(t *testing.T) {
 	var gotDesc, gotCategory, gotBucket string
 	var gotAmount float64
 	var gotMerchant string
-	err = w.st.PoolForTest().QueryRow(ctx,
+	err = poolForTest(w.st).QueryRow(ctx,
 		`SELECT description, category, bucket, amount, merchant_info FROM transactions WHERE message_id = $1`,
 		msgID,
 	).Scan(&gotDesc, &gotCategory, &gotBucket, &gotAmount, &gotMerchant)
@@ -294,7 +293,7 @@ func TestWrite_Upsert_PopulatesEmptyCategoryBucket(t *testing.T) {
 	assertWrite(t, w, []*api.TransactionDetails{reprocessed}, 5*time.Second)
 
 	var gotCategory, gotBucket string
-	err := w.st.PoolForTest().QueryRow(context.Background(),
+	err := poolForTest(w.st).QueryRow(context.Background(),
 		`SELECT category, bucket FROM transactions WHERE message_id = $1`, msgID,
 	).Scan(&gotCategory, &gotBucket)
 	if err != nil {
@@ -317,14 +316,14 @@ func TestWrite_AutoAppliesMerchantLabelToFutureTransactions(t *testing.T) {
 	const merchant = "Netflix"
 	const label = "subscription"
 
-	_, err := w.st.PoolForTest().Exec(ctx, `
+	_, err := poolForTest(w.st).Exec(ctx, `
 		INSERT INTO labels (name, color) VALUES ($1, $2) ON CONFLICT (name) WHERE tenant_id IS NULL DO NOTHING
 	`, label, "#f59e0b")
 	if err != nil {
 		t.Fatalf("seed label row: %v", err)
 	}
 
-	_, err = w.st.PoolForTest().Exec(ctx, `
+	_, err = poolForTest(w.st).Exec(ctx, `
 		INSERT INTO label_merchants (label, merchant_pattern) VALUES ($1, $2)
 		ON CONFLICT (label, merchant_pattern) WHERE tenant_id IS NULL DO NOTHING
 	`, label, merchant)
@@ -345,7 +344,7 @@ func TestWrite_AutoAppliesMerchantLabelToFutureTransactions(t *testing.T) {
 	assertWrite(t, w, []*api.TransactionDetails{txn}, 5*time.Second)
 
 	var labels []string
-	err = w.st.PoolForTest().QueryRow(ctx, `
+	err = poolForTest(w.st).QueryRow(ctx, `
 		SELECT COALESCE(array_agg(label ORDER BY label), '{}')
 		FROM transaction_labels tl
 		JOIN transactions t ON t.id = tl.transaction_id
@@ -365,7 +364,7 @@ func TestWrite_AutoAppliesMerchantCategoryBucketToFutureTransactions(t *testing.
 	w := newTestIngestor(t, store.IngestionConfig{BatchSize: 1, FlushInterval: time.Second})
 	ctx := context.Background()
 
-	_, err := w.st.PoolForTest().Exec(ctx, `
+	_, err := poolForTest(w.st).Exec(ctx, `
 		INSERT INTO mcc_codes (code, description, category, bucket)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (code) DO UPDATE
@@ -378,7 +377,7 @@ func TestWrite_AutoAppliesMerchantCategoryBucketToFutureTransactions(t *testing.
 		t.Fatalf("seed mcc code: %v", err)
 	}
 
-	_, err = w.st.PoolForTest().Exec(ctx, `
+	_, err = poolForTest(w.st).Exec(ctx, `
 		INSERT INTO merchant_categories (fragment, mcc_code, category, bucket, user_locked)
 		VALUES ($1, $2, NULL, NULL, true)
 		ON CONFLICT (fragment) WHERE tenant_id IS NULL DO UPDATE
@@ -391,7 +390,7 @@ func TestWrite_AutoAppliesMerchantCategoryBucketToFutureTransactions(t *testing.
 		t.Fatalf("seed MCC-backed merchant category: %v", err)
 	}
 
-	_, err = w.st.PoolForTest().Exec(ctx, `
+	_, err = poolForTest(w.st).Exec(ctx, `
 		INSERT INTO merchant_categories (fragment, category, bucket, user_locked)
 		VALUES ($1, $2, $3, true)
 		ON CONFLICT (fragment) WHERE tenant_id IS NULL DO UPDATE
@@ -430,7 +429,7 @@ func TestWrite_AutoAppliesMerchantCategoryBucketToFutureTransactions(t *testing.
 	check := func(messageID, wantCategory, wantBucket string) {
 		t.Helper()
 		var category, bucket string
-		err = w.st.PoolForTest().QueryRow(ctx, `
+		err = poolForTest(w.st).QueryRow(ctx, `
 			SELECT category, bucket FROM transactions WHERE message_id = $1
 		`, messageID).Scan(&category, &bucket)
 		if err != nil {

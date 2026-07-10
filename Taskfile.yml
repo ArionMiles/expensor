@@ -370,9 +370,9 @@ tasks:
     cmd: |
       if [ "${RECREATE:-0}" = "1" ]; then
         echo "Recreating dev postgres (RECREATE=1)..."
-        docker compose -f docker-compose.local.yml --env-file .env down -v
+        docker compose -f docker-compose.local.yml down -v
       fi
-      docker compose -f docker-compose.local.yml --env-file .env up -d postgres
+      docker compose -f docker-compose.local.yml up -d postgres
       echo "Waiting for postgres to be healthy..."
       until docker inspect --format '{{.State.Health.Status}}' expensor-dev-postgres 2>/dev/null | grep -q "healthy"; do
         sleep 1
@@ -387,7 +387,7 @@ tasks:
       workflows do not require observability ports to be available.
     dir: tests
     cmd: |
-      docker compose -f docker-compose.local.yml --env-file .env --profile observability up -d jaeger otel-collector prometheus
+      docker compose -f docker-compose.local.yml --profile observability up -d jaeger otel-collector prometheus
       echo "Jaeger traces: http://localhost:16686"
       echo "Prometheus metrics: http://localhost:9090"
 
@@ -395,18 +395,27 @@ tasks:
     summary: Stop the local development PostgreSQL container.
     desc: Stops the local dev postgres container without removing its volume.
     dir: tests
-    cmd: docker compose -f docker-compose.local.yml --env-file .env stop
+    cmd: docker compose -f docker-compose.local.yml stop
 
   # ── RUN ──────────────────────────────────────────────────────────────────────
 
   run:
     summary: Start the backend server with local dev environment.
-    desc: Loads tests/.env if present and starts the backend server locally from backend/cmd/server.
-    cmd: |
-      set -a
-      [ -f tests/.env ] && . tests/.env
-      set +a
-      cd backend && go run ./cmd/server
+    desc: Starts the backend server locally with tests/config.dev.toml. Local tasks default to DB_BACKEND=postgres until SQLite support lands.
+    cmds:
+      - task: run:backend
+
+  run:backend:
+    internal: true
+    dir: backend
+    vars:
+      DEV_DB_BACKEND: '{{default "postgres" .DB_BACKEND}}'
+      VERSION: '{{default "dev" .VERSION}}'
+    env:
+      EXPENSOR_CONFIG_FILE: "{{.ROOT_DIR}}/tests/config.dev.toml"
+      EXPENSOR_DB_BACKEND: "{{.DEV_DB_BACKEND}}"
+      EXPENSOR_SECRET_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    cmd: go run -ldflags="-X github.com/ArionMiles/expensor/backend/pkg/config.Version={{.VERSION}}" ./cmd/server
 
   frontend:install:
     summary: Install frontend npm dependencies (skipped if node_modules already exists).
@@ -427,16 +436,12 @@ tasks:
     summary: Start local dev containers, backend, and frontend.
     desc: >-
       Ensures the local dev containers are running (idempotent), waits for
-      postgres to be healthy, starts the backend (loading tests/.env), waits
+      postgres to be healthy, starts the backend with tests/config.dev.toml, waits
       for /api/health, then starts the Vite dev server. Observability UIs are
       available at Jaeger traces: http://localhost:16686 and Prometheus metrics:
       http://localhost:9090. Kills the backend when the frontend exits. Pass
       RECREATE=1 to wipe and recreate the postgres volume.
     cmd: |
-      set -a
-      [ -f tests/.env ] && . tests/.env
-      set +a
-
       # Start local dev containers (idempotent)
       RECREATE=${RECREATE:-0} task db:start
       task observability:start
@@ -451,7 +456,7 @@ tasks:
       fi
 
       # Start backend in background
-      (set -a; [ -f tests/.env ] && . tests/.env; set +a; cd backend && go run -ldflags="-X github.com/ArionMiles/expensor/backend/pkg/config.Version=${DEV_VERSION}" ./cmd/server) &
+      task run:backend VERSION="${DEV_VERSION}" DB_BACKEND="{{default "postgres" .DB_BACKEND}}" &
       BACKEND_PID=$!
       echo "Backend started (pid $BACKEND_PID), waiting for /api/health..."
       until curl -sf http://localhost:8080/api/health > /dev/null 2>&1; do

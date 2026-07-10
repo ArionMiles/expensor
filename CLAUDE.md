@@ -42,7 +42,7 @@ Define Go interfaces at consumer boundaries. Do not create package-local interfa
 
 Do not call instrumentation helpers from inside repository implementations. Wrap store/repository interfaces with decorators that own logging, metrics, and tracing, then delegate to the concrete implementation.
 
-Store instrumentation decorators must keep the delegated call visible in each method: start the span inline, call `s.next.Method(...)` directly, record the operation result, and return. Do not hide store calls inside callback helpers such as `observe1`/`observe2`.
+Store instrumentation decorators must keep the delegated call visible in each method: start the span inline, call the relevant behavior-boundary dependency directly, record the operation result, and return. Do not hide store calls inside callback helpers such as `observe1`/`observe2`.
 
 Keep concrete Postgres repositories focused on database behavior. New store behavior must live in the owning repository file, not in `internal/store/store.go`.
 
@@ -78,13 +78,13 @@ HTTP validation improves contracts and error reporting; it is not SQL-injection 
 Reader plugins implement interfaces in `pkg/api`. Plugins are registered in `cmd/server/main.go` and selected at runtime via the web UI (not env vars). Adding a new reader means implementing `plugins.ReaderPlugin` and registering it in the registry.
 
 ### Storer interface
-`internal/httpapi/store.go` defines `Storer` — a narrow interface over the persistence surface used by HTTP handlers. It is not the concrete Postgres store. When adding a new store method that a handler needs, add it to `Storer` first, then implement it through `store.Backend` and the concrete backend store. The compile-time assertions in `store.go` catch mismatches for `store.Backend` and the instrumented wrapper.
+`internal/httpapi/store.go` defines `Storer` — a narrow interface over the persistence surface used by HTTP handlers. It is not the concrete Postgres store. When adding a new store method that a handler needs, add it to `Storer` first, then implement it on the concrete backend store and the instrumented wrapper. The compile-time assertions in `store.go` catch mismatches.
 
 ### Handler tests
 Unit tests in `internal/api/handlers_test.go` use `mockStore` (not a real DB). When adding a new `Storer` method, add the corresponding mock method too. Use `httptest.NewRequestWithContext(context.Background(), ...)` — not `httptest.NewRequest`.
 
 ### Integration tests
-`internal/store/postgres/store_test.go` and `internal/store/postgres/ingestion_test.go` spin up a real Postgres container via testcontainers-go. Skip with `-short`. These tests live in `package postgres_test` as external tests.
+`internal/store/postgres/store_test.go` and `internal/store/postgres/ingestion_test.go` spin up a real Postgres container via testcontainers-go. Skip with `-short`. These tests live in `package postgres` so test-only helpers can access unexported internals without adding production methods.
 
 ### Migrations
 Postgres SQL files in `backend/internal/store/postgres/migrations/` are embedded into the binary and run automatically on startup. Name new files `NNN_description.sql` (next sequential number). Migrations use `IF NOT EXISTS` and `ON CONFLICT DO NOTHING` — they must be idempotent.

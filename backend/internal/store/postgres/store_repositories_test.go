@@ -1,4 +1,4 @@
-package postgres_test
+package postgres
 
 import (
 	"bytes"
@@ -36,9 +36,19 @@ func newInstrumentedTestStore(t *testing.T) *instrumentedTestStore {
 	logger := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	scope := observability.NewScope(logger, "test.store")
 	return &instrumentedTestStore{
-		InstrumentedStore: store.NewInstrumentedStore(ts.Store, scope, logger),
-		base:              ts,
-		logs:              logs,
+		InstrumentedStore: store.NewInstrumentedStore(store.InstrumentedStoreDeps{
+			Auth:         ts.Store,
+			Analytics:    ts.Store,
+			Community:    ts.Store,
+			Diagnostics:  ts.Store,
+			Rules:        ts.Store,
+			Runtime:      ts.Store,
+			Scanning:     ts.Store,
+			Taxonomy:     ts.Store,
+			Transactions: ts.Store,
+		}, scope, logger),
+		base: ts,
+		logs: logs,
 	}
 }
 

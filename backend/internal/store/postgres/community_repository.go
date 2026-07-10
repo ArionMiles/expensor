@@ -10,7 +10,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
-type pgCommunityRepository struct {
+type communityRepository struct {
 	pool *pgxpool.Pool
 }
 
@@ -20,37 +20,37 @@ type categorySnapshotEntry struct {
 	bucket   string
 }
 
-func newPGCommunityRepository(deps repositoryDependencies) *pgCommunityRepository {
-	return &pgCommunityRepository{
+func newCommunityRepository(deps repositoryDependencies) *communityRepository {
+	return &communityRepository{
 		pool: deps.pool,
 	}
 }
 
-func (r *pgCommunityRepository) ApplyCategoryByMerchant(ctx context.Context, tenant Tenant, category, merchant string) (int64, error) {
+func (r *communityRepository) ApplyCategoryByMerchant(ctx context.Context, tenant Tenant, category, merchant string) (int64, error) {
 	return r.applyTaxonomyByMerchant(ctx, tenant, merchant, "category", category)
 }
 
-func (r *pgCommunityRepository) ApplyBucketByMerchant(ctx context.Context, tenant Tenant, bucket, merchant string) (int64, error) {
+func (r *communityRepository) ApplyBucketByMerchant(ctx context.Context, tenant Tenant, bucket, merchant string) (int64, error) {
 	return r.applyTaxonomyByMerchant(ctx, tenant, merchant, "bucket", bucket)
 }
 
-func (r *pgCommunityRepository) RemoveCategoryByMerchant(ctx context.Context, tenant Tenant, category, merchant string) (int64, error) {
+func (r *communityRepository) RemoveCategoryByMerchant(ctx context.Context, tenant Tenant, category, merchant string) (int64, error) {
 	return r.removeTaxonomyByMerchant(ctx, tenant, merchant, "category", category)
 }
 
-func (r *pgCommunityRepository) RemoveBucketByMerchant(ctx context.Context, tenant Tenant, bucket, merchant string) (int64, error) {
+func (r *communityRepository) RemoveBucketByMerchant(ctx context.Context, tenant Tenant, bucket, merchant string) (int64, error) {
 	return r.removeTaxonomyByMerchant(ctx, tenant, merchant, "bucket", bucket)
 }
 
-func (r *pgCommunityRepository) GetCategoryMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
+func (r *communityRepository) GetCategoryMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
 	return r.getTaxonomyMappings(ctx, tenant, "category")
 }
 
-func (r *pgCommunityRepository) GetBucketMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
+func (r *communityRepository) GetBucketMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
 	return r.getTaxonomyMappings(ctx, tenant, "bucket")
 }
 
-func (r *pgCommunityRepository) CategorizeMerchant(ctx context.Context, tenant Tenant, merchant, category, bucket string) (int64, error) {
+func (r *communityRepository) CategorizeMerchant(ctx context.Context, tenant Tenant, merchant, category, bucket string) (int64, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("beginning categorize-merchant transaction: %w", err)
@@ -95,7 +95,7 @@ func merchantCategoryConflict(tenant Tenant) string {
 	return "ON CONFLICT (tenant_id, fragment) WHERE tenant_id IS NOT NULL"
 }
 
-func (r *pgCommunityRepository) applyTaxonomyByMerchant(
+func (r *communityRepository) applyTaxonomyByMerchant(
 	ctx context.Context,
 	tenant Tenant,
 	merchant string,
@@ -136,7 +136,7 @@ func (r *pgCommunityRepository) applyTaxonomyByMerchant(
 	return rowsUpdated, nil
 }
 
-func (r *pgCommunityRepository) removeTaxonomyByMerchant(
+func (r *communityRepository) removeTaxonomyByMerchant(
 	ctx context.Context,
 	tenant Tenant,
 	merchant string,
@@ -163,7 +163,7 @@ func (r *pgCommunityRepository) removeTaxonomyByMerchant(
 	return rowsUpdated, nil
 }
 
-func (r *pgCommunityRepository) getTaxonomyMappings(ctx context.Context, tenant Tenant, column string) (map[string][]string, error) {
+func (r *communityRepository) getTaxonomyMappings(ctx context.Context, tenant Tenant, column string) (map[string][]string, error) {
 	mappings := map[string][]string{}
 	rows, err := r.pool.Query(ctx, fmt.Sprintf(
 		`SELECT %s, fragment FROM merchant_categories WHERE tenant_id IS NOT DISTINCT FROM $1 AND %s IS NOT NULL ORDER BY %s, fragment`,
@@ -186,7 +186,7 @@ func (r *pgCommunityRepository) getTaxonomyMappings(ctx context.Context, tenant 
 	return mappings, rows.Err()
 }
 
-func (r *pgCommunityRepository) SeedMCCCodes(ctx context.Context, entries []MCCEntry) error {
+func (r *communityRepository) SeedMCCCodes(ctx context.Context, entries []MCCEntry) error {
 	for _, entry := range entries {
 		_, err := r.pool.Exec(ctx, `
 			INSERT INTO mcc_codes (code, description, category, bucket, updated_at)
@@ -204,7 +204,7 @@ func (r *pgCommunityRepository) SeedMCCCodes(ctx context.Context, entries []MCCE
 	return nil
 }
 
-func (r *pgCommunityRepository) SeedMerchantCategories(ctx context.Context, entries []MerchantCategoryEntry) (int64, error) {
+func (r *communityRepository) SeedMerchantCategories(ctx context.Context, entries []MerchantCategoryEntry) (int64, error) {
 	var updated int64
 	for _, entry := range entries {
 		tag, err := r.pool.Exec(ctx, `
@@ -225,7 +225,7 @@ func (r *pgCommunityRepository) SeedMerchantCategories(ctx context.Context, entr
 	return updated, nil
 }
 
-func (r *pgCommunityRepository) LoadCategorySnapshot(ctx context.Context) (api.CategoryResolver, error) {
+func (r *communityRepository) LoadCategorySnapshot(ctx context.Context) (api.CategoryResolver, error) {
 	entries, err := r.loadCategorySnapshotEntries(ctx)
 	if err != nil {
 		return nil, err
@@ -233,7 +233,7 @@ func (r *pgCommunityRepository) LoadCategorySnapshot(ctx context.Context) (api.C
 	return categoryResolverFromEntries(entries), nil
 }
 
-func (r *pgCommunityRepository) loadCategorySnapshotEntries(ctx context.Context) ([]categorySnapshotEntry, error) {
+func (r *communityRepository) loadCategorySnapshotEntries(ctx context.Context) ([]categorySnapshotEntry, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT mc.fragment,
 		       COALESCE(m.category, mc.category, '') AS category,
@@ -280,7 +280,7 @@ func categoryResolverFromEntries(entries []categorySnapshotEntry) api.CategoryRe
 	}
 }
 
-func (r *pgCommunityRepository) SeedMCCCategories(ctx context.Context, names []string) error {
+func (r *communityRepository) SeedMCCCategories(ctx context.Context, names []string) error {
 	for _, name := range names {
 		_, err := r.pool.Exec(ctx, `
 			INSERT INTO categories (name, is_default)
