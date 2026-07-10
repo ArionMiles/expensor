@@ -17,15 +17,14 @@ backend/
 │       └── main.go
 ├── internal/
 │   ├── daemon/              # Reader → store ingestion pipeline
-│   ├── store/               # PostgreSQL persistence and read models
-│   │   └── runner.go
+│   ├── store/               # Backend-neutral store types and instrumentation
+│   │   └── postgres/        # PostgreSQL persistence, read models, and migrations
 │   └── plugins/             # Reader plugin catalog/registry
 │       └── registry.go
-├── migrations/              # SQL migrations (run on startup)
 └── pkg/
     ├── api/                 # Core interfaces & types (Reader, Rule, Labels)
     ├── client/              # OAuth2 HTTP client helper
-    ├── config/              # Environment-based configuration
+    ├── config/              # TOML and environment-based configuration
     ├── extractor/           # Regex amount & merchant extraction
     ├── observability/       # slog setup plus OpenTelemetry traces/metrics
     ├── state/               # SHA-256 keyed dedup state (prevents reprocessing)
@@ -74,6 +73,7 @@ task build:binary   # optimised binary at ../bin/expensor
 
 ```bash
 # Gmail + Postgres
+export EXPENSOR_DB_BACKEND=postgres
 export POSTGRES_HOST=localhost
 export POSTGRES_DB=expensor
 export POSTGRES_USER=expensor
@@ -81,6 +81,7 @@ export POSTGRES_PASSWORD=secret
 task run
 
 # Thunderbird + Postgres
+export EXPENSOR_DB_BACKEND=postgres
 export THUNDERBIRD_PROFILE=/home/user/.thunderbird/abc123.default
 export THUNDERBIRD_MAILBOXES=INBOX,Archives
 export POSTGRES_HOST=localhost

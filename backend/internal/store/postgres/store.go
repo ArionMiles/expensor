@@ -1,5 +1,5 @@
-// Package store provides database query and persistence operations for Expensor.
-package store
+// Package postgres provides PostgreSQL query and persistence operations for Expensor.
+package postgres
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/auth"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
+	apperrors "github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // Store wraps a pgxpool.Pool and provides query operations for the API layer.
@@ -52,7 +53,7 @@ func NewWithSecurity(cfg config.Postgres, security config.Security, logger *slog
 
 	poolCfg, err := ParsePoolConfig(connStr)
 	if err != nil {
-		return nil, fmt.Errorf("parsing store connection string: %w", err)
+		return nil, apperrors.E("postgres.store.open", apperrors.InvalidArgument, "parsing store connection string", err)
 	}
 
 	poolCfg.MaxConns = cfg.MaxPoolSize
@@ -62,7 +63,7 @@ func NewWithSecurity(cfg config.Postgres, security config.Security, logger *slog
 
 	pool, err := pgxpool.NewWithConfig(context.Background(), poolCfg)
 	if err != nil {
-		return nil, fmt.Errorf("creating store pool: %w", err)
+		return nil, apperrors.E("postgres.store.open", apperrors.Unavailable, "creating store pool", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -70,7 +71,7 @@ func NewWithSecurity(cfg config.Postgres, security config.Security, logger *slog
 
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
-		return nil, fmt.Errorf("pinging store database: %w", err)
+		return nil, apperrors.E("postgres.store.open", apperrors.Unavailable, "pinging store database", err)
 	}
 
 	var secretBox *auth.SecretBox
@@ -78,7 +79,7 @@ func NewWithSecurity(cfg config.Postgres, security config.Security, logger *slog
 		secretBox, err = auth.NewSecretBox(security.SecretKey)
 		if err != nil {
 			pool.Close()
-			return nil, fmt.Errorf("creating store secret box: %w", err)
+			return nil, apperrors.E("postgres.store.open", apperrors.InvalidArgument, "creating store secret box", err)
 		}
 	}
 
@@ -202,7 +203,7 @@ func (s *Store) queryTransactionTotals(
 
 // ListTransactions returns a paginated, filtered list of transactions and the total
 // count plus total amount matching the filter (ignoring pagination).
-func (s *Store) ListTransactions(ctx context.Context, tenant Tenant, f ListFilter) ([]Transaction, TransactionListResult, error) {
+func (s *Store) ListTransactions(ctx context.Context, tenant Tenant, f ListFilter) (transactions []Transaction, result TransactionListResult, err error) {
 	return s.txns.ListTransactions(ctx, tenant, f)
 }
 
@@ -237,7 +238,7 @@ func (s *Store) SearchTransactions(
 	tenant Tenant,
 	query string,
 	f ListFilter,
-) ([]Transaction, TransactionListResult, error) {
+) (transactions []Transaction, result TransactionListResult, err error) {
 	return s.txns.SearchTransactions(ctx, tenant, query, f)
 }
 
@@ -396,7 +397,7 @@ func (s *Store) ClearActiveLLMProvider(ctx context.Context, tenant Tenant) error
 }
 
 // GetActiveLLMProviderRuntime returns the active tenant LLM provider runtime state.
-func (s *Store) GetActiveLLMProviderRuntime(ctx context.Context, tenant Tenant) (LLMProviderRuntime, bool, error) {
+func (s *Store) GetActiveLLMProviderRuntime(ctx context.Context, tenant Tenant) (runtime LLMProviderRuntime, found bool, err error) {
 	return s.runtime.GetActiveLLMProviderRuntime(ctx, tenant)
 }
 
@@ -570,25 +571,6 @@ func (s *Store) DeleteRule(ctx context.Context, tenant Tenant, id string) error 
 // Uses ON CONFLICT DO NOTHING so user edits to predefined rules are never overwritten.
 func (s *Store) SeedPredefinedRules(ctx context.Context, rules []RuleRow) error {
 	return s.rules.SeedPredefinedRules(ctx, rules)
-}
-
-// ValidateDiagnosticFilterStatus reports whether status is a supported diagnostic filter value.
-func ValidateDiagnosticFilterStatus(status string) error {
-	switch status {
-	case DiagnosticStatusOpen, DiagnosticStatusResolved, DiagnosticStatusIgnored, DiagnosticStatusAll:
-		return nil
-	default:
-		return fmt.Errorf("invalid diagnostic status %q", status)
-	}
-}
-
-func validateDiagnosticRowStatus(status string) error {
-	switch status {
-	case DiagnosticStatusOpen, DiagnosticStatusResolved, DiagnosticStatusIgnored:
-		return nil
-	default:
-		return fmt.Errorf("invalid diagnostic status %q", status)
-	}
 }
 
 // RecordExtractionDiagnostic persists a failed extraction attempt for the temporary legacy tenant.

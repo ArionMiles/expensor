@@ -21,8 +21,8 @@ type Storer interface {
 	diagnosticStore
 }
 
-// compile-time check: *store.Store must satisfy Storer.
+// compile-time checks for the shared backend and instrumentation surfaces.
 var (
-	_ Storer = (*store.Store)(nil)
+	_ Storer = (store.Backend)(nil)
 	_ Storer = (*store.InstrumentedStore)(nil)
 )

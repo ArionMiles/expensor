@@ -1,4 +1,4 @@
-package store
+package postgres
 
 import (
 	"context"
@@ -584,21 +584,6 @@ func buildHeatmapWhere(tenant Tenant, from, to *time.Time) (string, []any) {
 		return " WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $2 AND timestamp >= $1", []any{*from, tenantIDParam(tenant)}
 	}
 	return " WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $1 AND timestamp <= $2", []any{*from, *to, tenantIDParam(tenant)}
-}
-
-// Facets holds distinct filter values for the transactions UI dropdowns.
-type Facets struct {
-	Sources        []string       `json:"sources"`
-	SourceTypes    []string       `json:"source_types"`
-	Banks          []string       `json:"banks"`
-	Categories     []string       `json:"categories"`
-	CategoryCounts map[string]int `json:"category_counts"`
-	Currencies     []string       `json:"currencies"`
-	Merchants      []string       `json:"merchants"`
-	Labels         []string       `json:"labels"`
-	LabelCounts    map[string]int `json:"label_counts"`
-	Buckets        []string       `json:"buckets"`
-	BucketCounts   map[string]int `json:"bucket_counts"`
 }
 
 // GetFacets returns the distinct non-empty values for source, category, currency, and label

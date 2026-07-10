@@ -12,11 +12,11 @@ import (
 
 // InstrumentedStore records telemetry around the full store surface.
 type InstrumentedStore struct {
-	next  *Store
+	next  Backend
 	scope *observability.Scope
 }
 
-func NewInstrumentedStore(next *Store, scope *observability.Scope, logger *slog.Logger) *InstrumentedStore {
+func NewInstrumentedStore(next Backend, scope *observability.Scope, logger *slog.Logger) *InstrumentedStore {
 	if logger == nil {
 		logger = slog.Default()
 	}

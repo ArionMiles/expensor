@@ -227,6 +227,21 @@ type MonthlyBreakdownData struct {
 	Series []MonthlyBreakdownSeries `json:"series"`
 }
 
+// Facets holds distinct filter values for the transactions UI dropdowns.
+type Facets struct {
+	Sources        []string       `json:"sources"`
+	SourceTypes    []string       `json:"source_types"`
+	Banks          []string       `json:"banks"`
+	Categories     []string       `json:"categories"`
+	CategoryCounts map[string]int `json:"category_counts"`
+	Currencies     []string       `json:"currencies"`
+	Merchants      []string       `json:"merchants"`
+	Labels         []string       `json:"labels"`
+	LabelCounts    map[string]int `json:"label_counts"`
+	Buckets        []string       `json:"buckets"`
+	BucketCounts   map[string]int `json:"bucket_counts"`
+}
+
 // WeekdayHourBucket holds transaction totals for a (weekday, hour) cell.
 // Weekday follows PostgreSQL DOW convention: 0=Sunday … 6=Saturday.
 type WeekdayHourBucket struct {

@@ -1,4 +1,4 @@
-package store_test
+package postgres_test
 
 import (
 	"context"
@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/internal/store/postgres"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
 type testIngestor struct {
-	*store.TransactionIngestor
-	st *store.Store
+	*postgres.TransactionIngestor
+	st *postgres.Store
 }
 
 func newTestIngestor(t *testing.T, overrides store.IngestionConfig) *testIngestor {

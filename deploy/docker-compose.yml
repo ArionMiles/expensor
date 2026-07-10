@@ -38,6 +38,7 @@ services:
     ports:
       - "8080:8080"
     environment:
+      EXPENSOR_DB_BACKEND: postgres
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: expensor

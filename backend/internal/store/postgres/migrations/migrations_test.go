@@ -12,7 +12,7 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/internal/store/postgres"
 )
 
 func newMigrationTestPool(t *testing.T) *pgxpool.Pool {
@@ -39,7 +39,7 @@ func newMigrationTestPool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("connection string: %v", err)
 	}
 
-	poolCfg, err := store.ParsePoolConfig(dsn)
+	poolCfg, err := postgres.ParsePoolConfig(dsn)
 	if err != nil {
 		_ = ctr.Terminate(ctx)
 		t.Fatalf("parse pool config: %v", err)

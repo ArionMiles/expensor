@@ -78,16 +78,16 @@ HTTP validation improves contracts and error reporting; it is not SQL-injection 
 Reader plugins implement interfaces in `pkg/api`. Plugins are registered in `cmd/server/main.go` and selected at runtime via the web UI (not env vars). Adding a new reader means implementing `plugins.ReaderPlugin` and registering it in the registry.
 
 ### Storer interface
-`internal/api/store.go` defines `Storer` — a narrow interface over `*store.Store` used by HTTP handlers. It is **not** `*store.Store` itself. When adding a new store method that a handler needs, add it to `Storer` first, then implement it on `*store.Store`. The compile-time assertion `var _ Storer = (*store.Store)(nil)` at the bottom of `store.go` will catch mismatches.
+`internal/httpapi/store.go` defines `Storer` — a narrow interface over the persistence surface used by HTTP handlers. It is not the concrete Postgres store. When adding a new store method that a handler needs, add it to `Storer` first, then implement it through `store.Backend` and the concrete backend store. The compile-time assertions in `store.go` catch mismatches for `store.Backend` and the instrumented wrapper.
 
 ### Handler tests
 Unit tests in `internal/api/handlers_test.go` use `mockStore` (not a real DB). When adding a new `Storer` method, add the corresponding mock method too. Use `httptest.NewRequestWithContext(context.Background(), ...)` — not `httptest.NewRequest`.
 
 ### Integration tests
-`internal/store/store_test.go` and `internal/store/ingestion_test.go` spin up a real Postgres container via testcontainers-go. Skip with `-short`. These tests live in `package store_test` as external tests.
+`internal/store/postgres/store_test.go` and `internal/store/postgres/ingestion_test.go` spin up a real Postgres container via testcontainers-go. Skip with `-short`. These tests live in `package postgres_test` as external tests.
 
 ### Migrations
-SQL files in `backend/migrations/` are embedded into the binary and run automatically on startup. Name new files `NNN_description.sql` (next sequential number). Migrations use `IF NOT EXISTS` and `ON CONFLICT DO NOTHING` — they must be idempotent.
+Postgres SQL files in `backend/internal/store/postgres/migrations/` are embedded into the binary and run automatically on startup. Name new files `NNN_description.sql` (next sequential number). Migrations use `IF NOT EXISTS` and `ON CONFLICT DO NOTHING` — they must be idempotent.
 
 ### Rules and fixtures
 Bundled extraction rules live in `backend/cmd/server/content/rules.json` as a versioned v2 document. Treat this as the source of truth for rule edits and contributions. Rules use exact sender matching with `sender_emails`; add every supported sender address explicitly. Rule source is structured as `source.type`, `source.label`, and `source.bank`. When bundled rules introduce a new type or bank, update the matching `presets.source_types` or `presets.banks` entry too.

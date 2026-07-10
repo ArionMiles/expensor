@@ -39,6 +39,7 @@ func run() int {
 		return 1
 	}
 	logger := observabilityRuntime.Logger
+	logDatabaseBackend(cfg.Database, logger)
 	defer func() {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
@@ -55,11 +56,6 @@ func run() int {
 	logger.Info("plugins registered",
 		"providers", len(registry.ListProviders()),
 	)
-
-	if err := waitForPostgres(cfg.Postgres, logger); err != nil {
-		logger.Error("postgres not reachable at startup", "error", err)
-		return 1
-	}
 
 	content, err := parseEmbedded(rulesInput, mccInput, categoriesInput)
 	if err != nil {
@@ -89,28 +85,22 @@ func run() int {
 		cancel()
 	}()
 
-	if err := runMigrations(cfg.Postgres, logger); err != nil {
-		logger.Error("failed to run migrations", "error", err)
-		return 1
-	}
-
-	pgStore, storeErr := store.NewWithSecurity(cfg.Postgres, cfg.Security, logger.With("component", "store"))
+	runtime, storeErr := openConfiguredStore(ctx, cfg, logger)
 	if storeErr != nil {
 		logger.Error("failed to connect store", "error", storeErr)
 		return 1
 	}
+	defer runtime.Close()
 
-	resolver, err := seedStartupData(ctx, pgStore, content, logger)
+	resolver, err := seedStartupData(ctx, runtime.Store, content, logger)
 	if err != nil {
-		pgStore.Close()
 		logger.Error("startup seeding failed", "error", err)
 		return 1
 	}
-	defer pgStore.Close()
 
 	storeLogger := logger.With("component", "store")
 	storeScope := observability.NewScope(storeLogger, "github.com/ArionMiles/expensor/backend/internal/store")
-	instrumentedStore := store.NewInstrumentedStore(pgStore, storeScope, storeLogger)
+	instrumentedStore := store.NewInstrumentedStore(runtime.Store, storeScope, storeLogger)
 	var st httpapi.Storer = instrumentedStore
 
 	llmRegistry := llm.NewRegistry()
@@ -134,10 +124,10 @@ func run() int {
 
 	dm := &daemonManager{}
 	sinkFactory := func(tenant store.Tenant, appCfg *config.App, sinkLogger *slog.Logger) (daemon.TransactionSink, error) {
-		return pgStore.NewTransactionIngestor(store.IngestionConfig{
+		return runtime.Postgres.NewTransactionIngestor(store.IngestionConfig{
 			Tenant:        tenant,
-			BatchSize:     appCfg.Postgres.BatchSize,
-			FlushInterval: time.Duration(appCfg.Postgres.FlushInterval) * time.Second,
+			BatchSize:     appCfg.Database.BatchSize,
+			FlushInterval: time.Duration(appCfg.Database.FlushInterval) * time.Second,
 		}, sinkLogger), nil
 	}
 	dc := &daemonCoordinator{
@@ -167,7 +157,7 @@ func run() int {
 	syncFn := startCommunitySync(ctx, communitySyncDependencies{
 		config:      cfg.Community,
 		store:       instrumentedStore,
-		pgStore:     pgStore,
+		runtime:     instrumentedStore,
 		coordinator: dc,
 		logger:      logger,
 	})

@@ -7,15 +7,15 @@ import (
 // Compile-time checks that the concrete store implementations satisfy the
 // smaller capability interfaces used by API handlers.
 var (
-	_ settingsStore      = (*store.Store)(nil)
-	_ analyticsStore     = (*store.Store)(nil)
-	_ transactionStore   = (*store.Store)(nil)
-	_ muteStore          = (*store.Store)(nil)
-	_ taxonomyStore      = (*store.Store)(nil)
-	_ readerRuntimeStore = (*store.Store)(nil)
-	_ ruleStore          = (*store.Store)(nil)
-	_ syncStore          = (*store.Store)(nil)
-	_ diagnosticStore    = (*store.Store)(nil)
+	_ settingsStore      = (store.Backend)(nil)
+	_ analyticsStore     = (store.Backend)(nil)
+	_ transactionStore   = (store.Backend)(nil)
+	_ muteStore          = (store.Backend)(nil)
+	_ taxonomyStore      = (store.Backend)(nil)
+	_ readerRuntimeStore = (store.Backend)(nil)
+	_ ruleStore          = (store.Backend)(nil)
+	_ syncStore          = (store.Backend)(nil)
+	_ diagnosticStore    = (store.Backend)(nil)
 
 	_ settingsStore      = (*store.InstrumentedStore)(nil)
 	_ analyticsStore     = (*store.InstrumentedStore)(nil)

@@ -1,4 +1,4 @@
-package store_test
+package postgres_test
 
 import (
 	"bytes"
@@ -19,15 +19,16 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
-	"github.com/ArionMiles/expensor/backend/migrations"
+	"github.com/ArionMiles/expensor/backend/internal/store/postgres"
+	"github.com/ArionMiles/expensor/backend/internal/store/postgres/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
-// testStore holds a live *store.Store and the container DSN for teardown.
+// testStore holds a live *postgres.Store and the container DSN for teardown.
 type testStore struct {
-	*store.Store
+	*postgres.Store
 	cleanup func()
 	logs    *bytes.Buffer
 }
@@ -83,7 +84,7 @@ func newTestStoreWithLogger(t *testing.T, logs *bytes.Buffer) *testStore {
 		logger = slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
 
-	st, err := store.NewWithSecurity(cfg, config.Security{SecretKey: bytes.Repeat([]byte{4}, 32)}, logger)
+	st, err := postgres.NewWithSecurity(cfg, config.Security{SecretKey: bytes.Repeat([]byte{4}, 32)}, logger)
 	if err != nil {
 		_ = ctr.Terminate(ctx)
 		t.Fatalf("failed to create store: %v", err)
@@ -106,7 +107,7 @@ func runStoreTestMigrations(ctx context.Context, t *testing.T, cfg config.Postgr
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s pool_max_conns=1",
 		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.SSLMode,
 	)
-	poolCfg, err := store.ParsePoolConfig(connStr)
+	poolCfg, err := postgres.ParsePoolConfig(connStr)
 	if err != nil {
 		_ = ctr.Terminate(ctx)
 		t.Fatalf("parse migration pool config: %v", err)
@@ -127,7 +128,7 @@ func runStoreTestMigrations(ctx context.Context, t *testing.T, cfg config.Postgr
 }
 
 // seedTransaction inserts one transaction and returns its UUID.
-func seedTransaction(ctx context.Context, t *testing.T, st *store.Store, params store.InsertParams) string {
+func seedTransaction(ctx context.Context, t *testing.T, st *postgres.Store, params postgres.InsertParams) string {
 	t.Helper()
 	if params.Timestamp.IsZero() {
 		params.Timestamp = time.Now()

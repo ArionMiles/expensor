@@ -1,4 +1,4 @@
-package store
+package postgres
 
 import (
 	"context"
@@ -155,10 +155,9 @@ func (r *pgRuntimeRepository) ClearActiveLLMProvider(ctx context.Context, tenant
 	return nil
 }
 
-func (r *pgRuntimeRepository) GetActiveLLMProviderRuntime(ctx context.Context, tenant Tenant) (LLMProviderRuntime, bool, error) {
-	var runtime LLMProviderRuntime
+func (r *pgRuntimeRepository) GetActiveLLMProviderRuntime(ctx context.Context, tenant Tenant) (runtime LLMProviderRuntime, found bool, err error) {
 	var credentialsCiphertext []byte
-	err := r.pool.QueryRow(ctx, `
+	err = r.pool.QueryRow(ctx, `
 		SELECT provider, COALESCE(config, '{}'::jsonb), COALESCE(credentials_ciphertext, '\x'::bytea),
 		       credentials_ciphertext IS NOT NULL, active, created_at, updated_at
 		FROM llm_provider_runtime

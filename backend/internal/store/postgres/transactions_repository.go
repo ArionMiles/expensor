@@ -1,4 +1,4 @@
-package store
+package postgres
 
 import (
 	"context"
@@ -31,11 +31,19 @@ func newPGTransactionsRepository(deps repositoryDependencies) *pgTransactionsRep
 	}
 }
 
-func (r *pgTransactionsRepository) ListTransactions(ctx context.Context, tenant Tenant, f ListFilter) ([]Transaction, TransactionListResult, error) {
+func (r *pgTransactionsRepository) ListTransactions(
+	ctx context.Context,
+	tenant Tenant,
+	f ListFilter,
+) (transactions []Transaction, result TransactionListResult, err error) {
 	return r.listTransactionsQuery(ctx, tenant, f)
 }
 
-func (r *pgTransactionsRepository) listTransactionsQuery(ctx context.Context, tenant Tenant, f ListFilter) ([]Transaction, TransactionListResult, error) {
+func (r *pgTransactionsRepository) listTransactionsQuery(
+	ctx context.Context,
+	tenant Tenant,
+	f ListFilter,
+) (transactions []Transaction, result TransactionListResult, err error) {
 	return r.queryTransactions(ctx, transactionQueryRequest{
 		tenant:     tenant,
 		filter:     f,
@@ -47,7 +55,7 @@ func (r *pgTransactionsRepository) listTransactionsQuery(ctx context.Context, te
 func (r *pgTransactionsRepository) queryTransactions(
 	ctx context.Context,
 	request transactionQueryRequest,
-) ([]Transaction, TransactionListResult, error) {
+) (transactions []Transaction, result TransactionListResult, err error) {
 	f := normalizeTransactionListFilter(request.filter)
 	offset, err := transactionOffset(f)
 	if err != nil {
@@ -65,7 +73,7 @@ func (r *pgTransactionsRepository) queryTransactions(
 
 	join := joinLabel(f.Label)
 
-	result, err := r.queryTransactionTotals(ctx, join, where, args)
+	totalResult, err := r.queryTransactionTotals(ctx, join, where, args)
 	if err != nil {
 		return nil, TransactionListResult{}, fmt.Errorf("%s: %w", request.countError, err)
 	}
@@ -100,7 +108,7 @@ func (r *pgTransactionsRepository) queryTransactions(
 		return nil, TransactionListResult{}, err
 	}
 
-	return txns, result, nil
+	return txns, totalResult, nil
 }
 
 func transactionOffset(filter ListFilter) (int, error) {
@@ -300,7 +308,7 @@ func (r *pgTransactionsRepository) SearchTransactions(
 	tenant Tenant,
 	query string,
 	f ListFilter,
-) ([]Transaction, TransactionListResult, error) {
+) (transactions []Transaction, result TransactionListResult, err error) {
 	return r.searchTransactionsQuery(ctx, tenant, query, f)
 }
 
@@ -309,7 +317,7 @@ func (r *pgTransactionsRepository) searchTransactionsQuery(
 	tenant Tenant,
 	query string,
 	f ListFilter,
-) ([]Transaction, TransactionListResult, error) {
+) (transactions []Transaction, result TransactionListResult, err error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return r.listTransactionsQuery(ctx, tenant, f)
