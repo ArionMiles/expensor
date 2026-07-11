@@ -1,4 +1,4 @@
-package migrations
+package migrations_test
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/ArionMiles/expensor/backend/internal/store/postgres"
+	"github.com/ArionMiles/expensor/backend/internal/store/postgres/migrations"
 )
 
 func newMigrationTestPool(t *testing.T) *pgxpool.Pool {
@@ -64,7 +65,7 @@ func TestRunUsesSchemaMigrationsInExpensor(t *testing.T) {
 	ctx := context.Background()
 	pool := newMigrationTestPool(t)
 
-	if err := Run(ctx, pool, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+	if err := migrations.Run(ctx, pool, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 

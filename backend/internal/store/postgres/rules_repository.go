@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
 type rulesRepository struct {
@@ -17,7 +19,7 @@ func newRulesRepository(deps repositoryDependencies) *rulesRepository {
 	}
 }
 
-func primarySender(rule RuleRow) string {
+func primarySender(rule store.RuleRow) string {
 	if rule.SenderEmail != "" {
 		return rule.SenderEmail
 	}
@@ -27,7 +29,7 @@ func primarySender(rule RuleRow) string {
 	return ""
 }
 
-func normalizedRuleSenders(rule RuleRow) []string {
+func normalizedRuleSenders(rule store.RuleRow) []string {
 	if len(rule.SenderEmails) > 0 {
 		return rule.SenderEmails
 	}
@@ -37,14 +39,14 @@ func normalizedRuleSenders(rule RuleRow) []string {
 	return []string{}
 }
 
-func ruleSourceLabel(rule RuleRow) string {
+func ruleSourceLabel(rule store.RuleRow) string {
 	if rule.SourceLabel != "" {
 		return rule.SourceLabel
 	}
 	return rule.TransactionSource
 }
 
-func (r *rulesRepository) ListRules(ctx context.Context, tenant Tenant) ([]RuleRow, error) {
+func (r *rulesRepository) ListRules(ctx context.Context, tenant store.Tenant) ([]store.RuleRow, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+ruleColumns+`
 			 FROM rules
@@ -62,7 +64,7 @@ func (r *rulesRepository) ListRules(ctx context.Context, tenant Tenant) ([]RuleR
 	return result, nil
 }
 
-func (r *rulesRepository) GetRule(ctx context.Context, tenant Tenant, id string) (*RuleRow, error) {
+func (r *rulesRepository) GetRule(ctx context.Context, tenant store.Tenant, id string) (*store.RuleRow, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+ruleColumns+` FROM rules WHERE id = $1 AND (predefined = true OR tenant_id IS NOT DISTINCT FROM $2)`,
 		id, tenantIDParam(tenant))
@@ -80,7 +82,7 @@ func (r *rulesRepository) GetRule(ctx context.Context, tenant Tenant, id string)
 	return &result[0], nil
 }
 
-func (r *rulesRepository) CreateRule(ctx context.Context, tenant Tenant, rule RuleRow) (*RuleRow, error) {
+func (r *rulesRepository) CreateRule(ctx context.Context, tenant store.Tenant, rule store.RuleRow) (*store.RuleRow, error) {
 	rows, err := r.pool.Query(ctx,
 		`INSERT INTO rules (
 				tenant_id, name, sender_email, sender_emails, subject_contains, amount_regex, merchant_regex,
@@ -112,7 +114,7 @@ func (r *rulesRepository) CreateRule(ctx context.Context, tenant Tenant, rule Ru
 	return &result[0], nil
 }
 
-func (r *rulesRepository) UpdateRule(ctx context.Context, tenant Tenant, id string, rule RuleRow) (*RuleRow, error) {
+func (r *rulesRepository) UpdateRule(ctx context.Context, tenant store.Tenant, id string, rule store.RuleRow) (*store.RuleRow, error) {
 	rows, err := r.pool.Query(ctx,
 		`UPDATE rules
 			 SET name=$2, sender_email=$3, sender_emails=$4, subject_contains=$5,
@@ -144,7 +146,7 @@ func (r *rulesRepository) UpdateRule(ctx context.Context, tenant Tenant, id stri
 	return &result[0], nil
 }
 
-func (r *rulesRepository) DeleteRule(ctx context.Context, tenant Tenant, id string) error {
+func (r *rulesRepository) DeleteRule(ctx context.Context, tenant store.Tenant, id string) error {
 	tag, err := r.pool.Exec(ctx,
 		`DELETE FROM rules WHERE id=$1 AND predefined = false AND tenant_id IS NOT DISTINCT FROM $2`,
 		id, tenantIDParam(tenant))
@@ -157,7 +159,7 @@ func (r *rulesRepository) DeleteRule(ctx context.Context, tenant Tenant, id stri
 	return nil
 }
 
-func (r *rulesRepository) SeedPredefinedRules(ctx context.Context, rules []RuleRow) error {
+func (r *rulesRepository) SeedPredefinedRules(ctx context.Context, rules []store.RuleRow) error {
 	for _, rule := range rules {
 		_, err := r.pool.Exec(ctx, `
 				INSERT INTO rules
@@ -176,7 +178,7 @@ func (r *rulesRepository) SeedPredefinedRules(ctx context.Context, rules []RuleR
 	return nil
 }
 
-func (r *rulesRepository) ImportUserRules(ctx context.Context, tenant Tenant, rules []RuleRow) error {
+func (r *rulesRepository) ImportUserRules(ctx context.Context, tenant store.Tenant, rules []store.RuleRow) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("beginning import transaction: %w", err)
@@ -213,7 +215,7 @@ func (r *rulesRepository) ImportUserRules(ctx context.Context, tenant Tenant, ru
 	return tx.Commit(ctx)
 }
 
-func importUserRulesConflictClause(tenant Tenant) string {
+func importUserRulesConflictClause(tenant store.Tenant) string {
 	if tenantIDParam(tenant) == nil {
 		return "ON CONFLICT (name) WHERE tenant_id IS NULL AND predefined = false"
 	}

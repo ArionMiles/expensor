@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
 type scanningRepository struct {
@@ -18,27 +20,27 @@ func newScanningRepository(deps repositoryDependencies) *scanningRepository {
 	return &scanningRepository{pool: deps.pool}
 }
 
-func (r *scanningRepository) GetSchedulerConfig(ctx context.Context) (SchedulerConfig, error) {
-	var cfg SchedulerConfig
+func (r *scanningRepository) GetSchedulerConfig(ctx context.Context) (store.SchedulerConfig, error) {
+	var cfg store.SchedulerConfig
 	err := r.pool.QueryRow(ctx, `
 		SELECT max_concurrent_scans, updated_at
 		FROM scheduler_config
 		WHERE id = true
 	`).Scan(&cfg.MaxConcurrentScans, &cfg.UpdatedAt)
 	if err != nil {
-		return SchedulerConfig{}, fmt.Errorf("getting scheduler config: %w", err)
+		return store.SchedulerConfig{}, fmt.Errorf("getting scheduler config: %w", err)
 	}
 	return cfg, nil
 }
 
-func (r *scanningRepository) PatchSchedulerConfig(ctx context.Context, patch SchedulerConfigPatch) (SchedulerConfig, error) {
+func (r *scanningRepository) PatchSchedulerConfig(ctx context.Context, patch store.SchedulerConfigPatch) (store.SchedulerConfig, error) {
 	if patch.MaxConcurrentScans == nil {
 		return r.GetSchedulerConfig(ctx)
 	}
 	if *patch.MaxConcurrentScans < 1 || *patch.MaxConcurrentScans > 64 {
-		return SchedulerConfig{}, errors.New("max concurrent scans must be between 1 and 64")
+		return store.SchedulerConfig{}, errors.New("max concurrent scans must be between 1 and 64")
 	}
-	var cfg SchedulerConfig
+	var cfg store.SchedulerConfig
 	err := r.pool.QueryRow(ctx, `
 		UPDATE scheduler_config
 		SET max_concurrent_scans = $1, updated_at = now()
@@ -46,12 +48,12 @@ func (r *scanningRepository) PatchSchedulerConfig(ctx context.Context, patch Sch
 		RETURNING max_concurrent_scans, updated_at
 	`, *patch.MaxConcurrentScans).Scan(&cfg.MaxConcurrentScans, &cfg.UpdatedAt)
 	if err != nil {
-		return SchedulerConfig{}, fmt.Errorf("patching scheduler config: %w", err)
+		return store.SchedulerConfig{}, fmt.Errorf("patching scheduler config: %w", err)
 	}
 	return cfg, nil
 }
 
-func (r *scanningRepository) EnsureScanningStateForTenant(ctx context.Context, tenant Tenant) error {
+func (r *scanningRepository) EnsureScanningStateForTenant(ctx context.Context, tenant store.Tenant) error {
 	tenantID, err := requireTenantID(tenant)
 	if err != nil {
 		return err
@@ -69,14 +71,14 @@ func (r *scanningRepository) EnsureScanningStateForTenant(ctx context.Context, t
 	return nil
 }
 
-func (r *scanningRepository) GetScanningState(ctx context.Context, tenant Tenant) (TenantScanningState, error) {
+func (r *scanningRepository) GetScanningState(ctx context.Context, tenant store.Tenant) (store.TenantScanningState, error) {
 	if err := r.EnsureScanningStateForTenant(ctx, tenant); err != nil {
-		return TenantScanningState{}, err
+		return store.TenantScanningState{}, err
 	}
 	return r.fetchScanningState(ctx, tenant)
 }
 
-func (r *scanningRepository) ListRunnableScanningStates(ctx context.Context) ([]TenantScanningState, error) {
+func (r *scanningRepository) ListRunnableScanningStates(ctx context.Context) ([]store.TenantScanningState, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT tenant_id::text, active_reader, enabled, state, reason_code, public_message,
 		       last_started_at, last_stopped_at, last_failed_at, next_retry_at, retry_count, updated_at
@@ -92,7 +94,7 @@ func (r *scanningRepository) ListRunnableScanningStates(ctx context.Context) ([]
 	}
 	defer rows.Close()
 
-	states := make([]TenantScanningState, 0)
+	states := make([]store.TenantScanningState, 0)
 	for rows.Next() {
 		state, err := scanTenantScanningState(rows)
 		if err != nil {
@@ -106,7 +108,7 @@ func (r *scanningRepository) ListRunnableScanningStates(ctx context.Context) ([]
 	return states, nil
 }
 
-func (r *scanningRepository) ListScanningStates(ctx context.Context) ([]TenantScanningState, error) {
+func (r *scanningRepository) ListScanningStates(ctx context.Context) ([]store.TenantScanningState, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT tenant_id::text, active_reader, enabled, state, reason_code, public_message,
 		       last_started_at, last_stopped_at, last_failed_at, next_retry_at, retry_count, updated_at
@@ -118,7 +120,7 @@ func (r *scanningRepository) ListScanningStates(ctx context.Context) ([]TenantSc
 	}
 	defer rows.Close()
 
-	states := make([]TenantScanningState, 0)
+	states := make([]store.TenantScanningState, 0)
 	for rows.Next() {
 		state, err := scanTenantScanningState(rows)
 		if err != nil {
@@ -132,15 +134,15 @@ func (r *scanningRepository) ListScanningStates(ctx context.Context) ([]TenantSc
 	return states, nil
 }
 
-func (r *scanningRepository) SetActiveScanningReader(ctx context.Context, tenant Tenant, reader string) error {
+func (r *scanningRepository) SetActiveScanningReader(ctx context.Context, tenant store.Tenant, reader string) error {
 	tenantID, err := requireTenantID(tenant)
 	if err != nil {
 		return err
 	}
 	reader = strings.TrimSpace(reader)
-	state := ScanningStateQueued
+	state := store.ScanningStateQueued
 	if reader == "" {
-		state = ScanningStateStopped
+		state = store.ScanningStateStopped
 	}
 	_, err = r.pool.Exec(ctx, `
 		INSERT INTO tenant_scanning_state (tenant_id, active_reader, enabled, state, reason_code, public_message, retry_count, next_retry_at)
@@ -161,7 +163,7 @@ func (r *scanningRepository) SetActiveScanningReader(ctx context.Context, tenant
 	return nil
 }
 
-func (r *scanningRepository) ClearActiveScanningReader(ctx context.Context, tenant Tenant) error {
+func (r *scanningRepository) ClearActiveScanningReader(ctx context.Context, tenant store.Tenant) error {
 	tenantID, err := requireTenantID(tenant)
 	if err != nil {
 		return err
@@ -186,7 +188,7 @@ func (r *scanningRepository) ClearActiveScanningReader(ctx context.Context, tena
 	return nil
 }
 
-func (r *scanningRepository) SetScanningEnabled(ctx context.Context, tenant Tenant, enabled bool) error {
+func (r *scanningRepository) SetScanningEnabled(ctx context.Context, tenant store.Tenant, enabled bool) error {
 	tenantID, err := requireTenantID(tenant)
 	if err != nil {
 		return err
@@ -211,7 +213,7 @@ func (r *scanningRepository) SetScanningEnabled(ctx context.Context, tenant Tena
 	return nil
 }
 
-func (r *scanningRepository) UpdateScanningState(ctx context.Context, tenant Tenant, update ScanningStateUpdate) error {
+func (r *scanningRepository) UpdateScanningState(ctx context.Context, tenant store.Tenant, update store.ScanningStateUpdate) error {
 	tenantID, err := requireTenantID(tenant)
 	if err != nil {
 		return err
@@ -242,8 +244,8 @@ func (r *scanningRepository) UpdateScanningState(ctx context.Context, tenant Ten
 	return nil
 }
 
-func (r *scanningRepository) fetchScanningState(ctx context.Context, tenant Tenant) (TenantScanningState, error) {
-	var state TenantScanningState
+func (r *scanningRepository) fetchScanningState(ctx context.Context, tenant store.Tenant) (store.TenantScanningState, error) {
+	var state store.TenantScanningState
 	err := r.pool.QueryRow(ctx, `
 		SELECT tenant_id::text, active_reader, enabled, state, reason_code, public_message,
 		       last_started_at, last_stopped_at, last_failed_at, next_retry_at, retry_count, updated_at
@@ -255,26 +257,26 @@ func (r *scanningRepository) fetchScanningState(ctx context.Context, tenant Tena
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return TenantScanningState{}, notFound("store.scanning.get_state")
+			return store.TenantScanningState{}, notFound("store.scanning.get_state")
 		}
-		return TenantScanningState{}, fmt.Errorf("getting scanning state: %w", err)
+		return store.TenantScanningState{}, fmt.Errorf("getting scanning state: %w", err)
 	}
 	return state, nil
 }
 
-func scanTenantScanningState(row pgx.Row) (TenantScanningState, error) {
-	var state TenantScanningState
+func scanTenantScanningState(row pgx.Row) (store.TenantScanningState, error) {
+	var state store.TenantScanningState
 	err := row.Scan(
 		&state.TenantID, &state.ActiveReader, &state.Enabled, &state.State, &state.ReasonCode, &state.PublicMessage,
 		&state.LastStartedAt, &state.LastStoppedAt, &state.LastFailedAt, &state.NextRetryAt, &state.RetryCount, &state.UpdatedAt,
 	)
 	if err != nil {
-		return TenantScanningState{}, fmt.Errorf("scanning tenant scanning state: %w", err)
+		return store.TenantScanningState{}, fmt.Errorf("scanning tenant scanning state: %w", err)
 	}
 	return state, nil
 }
 
-func requireTenantID(tenant Tenant) (string, error) {
+func requireTenantID(tenant store.Tenant) (string, error) {
 	tenantID := strings.TrimSpace(tenant.ID)
 	if tenantID == "" {
 		return "", errors.New("tenant id is required")

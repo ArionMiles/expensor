@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -62,12 +61,14 @@ func newTestStoreWithLogger(t *testing.T, logs *bytes.Buffer) *testStore {
 	}
 
 	cfg := config.Postgres{
-		Host:        "localhost",
-		Database:    "expensor_test",
-		User:        "expensor",
-		Password:    "expensor",
-		SSLMode:     "disable",
-		MaxPoolSize: 2,
+		Host:           "localhost",
+		Database:       "expensor_test",
+		User:           "expensor",
+		Password:       "expensor",
+		SSLMode:        "disable",
+		MaxPoolSize:    2,
+		ConnectTimeout: 30 * time.Second,
+		RetryInterval:  100 * time.Millisecond,
 	}
 	// Extract the host port from the mapped container port.
 	mappedPort, err := ctr.MappedPort(ctx, "5432")
@@ -76,14 +77,17 @@ func newTestStoreWithLogger(t *testing.T, logs *bytes.Buffer) *testStore {
 		t.Fatalf("failed to get mapped port: %v", err)
 	}
 	cfg.Port = int(mappedPort.Num())
-	runStoreTestMigrations(ctx, t, cfg, ctr)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	if logs != nil {
 		logger = slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
 
-	st, err := NewWithSecurity(cfg, config.Security{SecretKey: bytes.Repeat([]byte{4}, 32)}, logger)
+	st, err := New(ctx, Options{
+		Config:   cfg,
+		Security: config.Security{SecretKey: bytes.Repeat([]byte{4}, 32)},
+		Logger:   logger,
+	})
 	if err != nil {
 		_ = ctr.Terminate(ctx)
 		t.Fatalf("failed to create store: %v", err)
@@ -99,35 +103,8 @@ func newTestStoreWithLogger(t *testing.T, logs *bytes.Buffer) *testStore {
 	}
 }
 
-func runStoreTestMigrations(ctx context.Context, t *testing.T, cfg config.Postgres, ctr testcontainers.Container) {
-	t.Helper()
-
-	connStr := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s pool_max_conns=1",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.SSLMode,
-	)
-	poolCfg, err := ParsePoolConfig(connStr)
-	if err != nil {
-		_ = ctr.Terminate(ctx)
-		t.Fatalf("parse migration pool config: %v", err)
-	}
-	poolCfg.MaxConns = 1
-
-	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
-	if err != nil {
-		_ = ctr.Terminate(ctx)
-		t.Fatalf("open migration pool: %v", err)
-	}
-	defer pool.Close()
-
-	if err := migrations.Run(ctx, pool, slog.Default()); err != nil {
-		_ = ctr.Terminate(ctx)
-		t.Fatalf("run migrations: %v", err)
-	}
-}
-
 // seedTransaction inserts one transaction and returns its UUID.
-func seedTransaction(ctx context.Context, t *testing.T, st *Store, params InsertParams) string {
+func seedTransaction(ctx context.Context, t *testing.T, st *Store, params store.InsertParams) string {
 	t.Helper()
 	if params.Timestamp.IsZero() {
 		params.Timestamp = time.Now()

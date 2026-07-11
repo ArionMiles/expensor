@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ArionMiles/expensor/backend/internal/auth"
+	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
 const (
@@ -34,7 +35,7 @@ func newRuntimeRepository(deps repositoryDependencies) *runtimeRepository {
 	}
 }
 
-func (r *runtimeRepository) GetAppConfig(ctx context.Context, tenant Tenant, key string) (string, error) {
+func (r *runtimeRepository) GetAppConfig(ctx context.Context, tenant store.Tenant, key string) (string, error) {
 	var value string
 	if err := r.pool.QueryRow(ctx,
 		`SELECT value FROM app_config WHERE tenant_id IS NOT DISTINCT FROM $1 AND key = $2`,
@@ -45,7 +46,7 @@ func (r *runtimeRepository) GetAppConfig(ctx context.Context, tenant Tenant, key
 	return value, nil
 }
 
-func (r *runtimeRepository) SetAppConfig(ctx context.Context, tenant Tenant, key, value string) error {
+func (r *runtimeRepository) SetAppConfig(ctx context.Context, tenant store.Tenant, key, value string) error {
 	_, err := r.pool.Exec(ctx,
 		appConfigUpsertSQL(tenant),
 		tenantIDParam(tenant), key, value,
@@ -56,23 +57,23 @@ func (r *runtimeRepository) SetAppConfig(ctx context.Context, tenant Tenant, key
 	return nil
 }
 
-func (r *runtimeRepository) SetReaderSecret(ctx context.Context, tenant Tenant, reader string, secret []byte) error {
+func (r *runtimeRepository) SetReaderSecret(ctx context.Context, tenant store.Tenant, reader string, secret []byte) error {
 	return r.writeReaderEncryptedJSON(ctx, tenant, reader, readerRuntimeClientSecret, secret)
 }
 
-func (r *runtimeRepository) GetReaderSecret(ctx context.Context, tenant Tenant, reader string) (secret []byte, found bool, err error) {
+func (r *runtimeRepository) GetReaderSecret(ctx context.Context, tenant store.Tenant, reader string) (secret []byte, found bool, err error) {
 	return r.readReaderEncryptedJSON(ctx, tenant, reader, readerRuntimeClientSecret)
 }
 
-func (r *runtimeRepository) SetReaderToken(ctx context.Context, tenant Tenant, reader string, token []byte) error {
+func (r *runtimeRepository) SetReaderToken(ctx context.Context, tenant store.Tenant, reader string, token []byte) error {
 	return r.writeReaderEncryptedJSON(ctx, tenant, reader, readerRuntimeOAuthToken, token)
 }
 
-func (r *runtimeRepository) GetReaderToken(ctx context.Context, tenant Tenant, reader string) (token []byte, found bool, err error) {
+func (r *runtimeRepository) GetReaderToken(ctx context.Context, tenant store.Tenant, reader string) (token []byte, found bool, err error) {
 	return r.readReaderEncryptedJSON(ctx, tenant, reader, readerRuntimeOAuthToken)
 }
 
-func (r *runtimeRepository) DeleteReaderToken(ctx context.Context, tenant Tenant, reader string) error {
+func (r *runtimeRepository) DeleteReaderToken(ctx context.Context, tenant store.Tenant, reader string) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE reader_runtime
 		SET oauth_token = NULL, oauth_token_ciphertext = NULL, updated_at = NOW()
@@ -84,33 +85,33 @@ func (r *runtimeRepository) DeleteReaderToken(ctx context.Context, tenant Tenant
 	return nil
 }
 
-func (r *runtimeRepository) SetReaderConfig(ctx context.Context, tenant Tenant, reader string, readerConfig json.RawMessage) error {
+func (r *runtimeRepository) SetReaderConfig(ctx context.Context, tenant store.Tenant, reader string, readerConfig json.RawMessage) error {
 	return r.writeReaderConfigJSON(ctx, tenant, reader, readerConfig)
 }
 
-func (r *runtimeRepository) GetReaderConfig(ctx context.Context, tenant Tenant, reader string) (json.RawMessage, bool, error) {
+func (r *runtimeRepository) GetReaderConfig(ctx context.Context, tenant store.Tenant, reader string) (json.RawMessage, bool, error) {
 	value, ok, err := r.readReaderConfigJSON(ctx, tenant, reader)
 	return json.RawMessage(value), ok, err
 }
 
-func (r *runtimeRepository) SetLLMProviderConfig(ctx context.Context, tenant Tenant, provider string, config json.RawMessage) error {
+func (r *runtimeRepository) SetLLMProviderConfig(ctx context.Context, tenant store.Tenant, provider string, config json.RawMessage) error {
 	return r.writeLLMProviderConfigJSON(ctx, tenant, provider, config)
 }
 
-func (r *runtimeRepository) GetLLMProviderConfig(ctx context.Context, tenant Tenant, provider string) (json.RawMessage, bool, error) {
+func (r *runtimeRepository) GetLLMProviderConfig(ctx context.Context, tenant store.Tenant, provider string) (json.RawMessage, bool, error) {
 	value, ok, err := r.readLLMProviderConfigJSON(ctx, tenant, provider)
 	return json.RawMessage(value), ok, err
 }
 
-func (r *runtimeRepository) SetLLMProviderCredentials(ctx context.Context, tenant Tenant, provider string, credentials []byte) error {
+func (r *runtimeRepository) SetLLMProviderCredentials(ctx context.Context, tenant store.Tenant, provider string, credentials []byte) error {
 	return r.writeLLMProviderEncryptedJSON(ctx, tenant, provider, credentials)
 }
 
-func (r *runtimeRepository) GetLLMProviderCredentials(ctx context.Context, tenant Tenant, provider string) (credentials []byte, found bool, err error) {
+func (r *runtimeRepository) GetLLMProviderCredentials(ctx context.Context, tenant store.Tenant, provider string) (credentials []byte, found bool, err error) {
 	return r.readLLMProviderEncryptedJSON(ctx, tenant, provider)
 }
 
-func (r *runtimeRepository) DeleteLLMProviderRuntime(ctx context.Context, tenant Tenant, provider string) error {
+func (r *runtimeRepository) DeleteLLMProviderRuntime(ctx context.Context, tenant store.Tenant, provider string) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM llm_provider_runtime WHERE tenant_id IS NOT DISTINCT FROM $1 AND provider = $2`, tenantIDParam(tenant), provider)
 	if err != nil {
 		return fmt.Errorf("deleting llm provider runtime for %q: %w", provider, err)
@@ -118,7 +119,7 @@ func (r *runtimeRepository) DeleteLLMProviderRuntime(ctx context.Context, tenant
 	return nil
 }
 
-func (r *runtimeRepository) SetActiveLLMProvider(ctx context.Context, tenant Tenant, provider string) error {
+func (r *runtimeRepository) SetActiveLLMProvider(ctx context.Context, tenant store.Tenant, provider string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("starting llm provider activation transaction: %w", err)
@@ -144,7 +145,7 @@ func (r *runtimeRepository) SetActiveLLMProvider(ctx context.Context, tenant Ten
 	return nil
 }
 
-func (r *runtimeRepository) ClearActiveLLMProvider(ctx context.Context, tenant Tenant) error {
+func (r *runtimeRepository) ClearActiveLLMProvider(ctx context.Context, tenant store.Tenant) error {
 	_, err := r.pool.Exec(ctx,
 		`UPDATE llm_provider_runtime SET active = false, updated_at = NOW() WHERE tenant_id IS NOT DISTINCT FROM $1 AND active = true`,
 		tenantIDParam(tenant),
@@ -155,7 +156,7 @@ func (r *runtimeRepository) ClearActiveLLMProvider(ctx context.Context, tenant T
 	return nil
 }
 
-func (r *runtimeRepository) GetActiveLLMProviderRuntime(ctx context.Context, tenant Tenant) (runtime LLMProviderRuntime, found bool, err error) {
+func (r *runtimeRepository) GetActiveLLMProviderRuntime(ctx context.Context, tenant store.Tenant) (runtime store.LLMProviderRuntime, found bool, err error) {
 	var credentialsCiphertext []byte
 	err = r.pool.QueryRow(ctx, `
 		SELECT provider, COALESCE(config, '{}'::jsonb), COALESCE(credentials_ciphertext, '\x'::bytea),
@@ -168,24 +169,24 @@ func (r *runtimeRepository) GetActiveLLMProviderRuntime(ctx context.Context, ten
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return LLMProviderRuntime{}, false, nil
+			return store.LLMProviderRuntime{}, false, nil
 		}
-		return LLMProviderRuntime{}, false, fmt.Errorf("getting active llm provider: %w", err)
+		return store.LLMProviderRuntime{}, false, fmt.Errorf("getting active llm provider: %w", err)
 	}
 	if runtime.HasCredentials {
 		if r.secretBox == nil {
-			return LLMProviderRuntime{}, false, errors.New("store secret box is not initialized")
+			return store.LLMProviderRuntime{}, false, errors.New("store secret box is not initialized")
 		}
 		credentials, err := r.secretBox.Open(credentialsCiphertext, llmProviderAssociatedData(tenant, runtime.Provider))
 		if err != nil {
-			return LLMProviderRuntime{}, false, fmt.Errorf("decrypting llm provider %q credentials: %w", runtime.Provider, err)
+			return store.LLMProviderRuntime{}, false, fmt.Errorf("decrypting llm provider %q credentials: %w", runtime.Provider, err)
 		}
 		runtime.Credentials = credentials
 	}
 	return runtime, true, nil
 }
 
-func (r *runtimeRepository) DeleteReaderRuntime(ctx context.Context, tenant Tenant, reader string) error {
+func (r *runtimeRepository) DeleteReaderRuntime(ctx context.Context, tenant store.Tenant, reader string) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM reader_runtime WHERE tenant_id IS NOT DISTINCT FROM $1 AND reader = $2`, tenantIDParam(tenant), reader)
 	if err != nil {
 		return fmt.Errorf("deleting reader runtime for %q: %w", reader, err)
@@ -193,7 +194,7 @@ func (r *runtimeRepository) DeleteReaderRuntime(ctx context.Context, tenant Tena
 	return nil
 }
 
-func (r *runtimeRepository) IsMessageProcessed(ctx context.Context, tenant Tenant, key string) (bool, error) {
+func (r *runtimeRepository) IsMessageProcessed(ctx context.Context, tenant store.Tenant, key string) (bool, error) {
 	if strings.TrimSpace(key) == "" {
 		return false, nil
 	}
@@ -210,7 +211,7 @@ func (r *runtimeRepository) IsMessageProcessed(ctx context.Context, tenant Tenan
 	return exists, nil
 }
 
-func (r *runtimeRepository) MarkMessageProcessed(ctx context.Context, tenant Tenant, key string, at time.Time) error {
+func (r *runtimeRepository) MarkMessageProcessed(ctx context.Context, tenant store.Tenant, key string, at time.Time) error {
 	if strings.TrimSpace(key) == "" {
 		return errors.New("message key cannot be blank")
 	}
@@ -235,56 +236,56 @@ func (r *runtimeRepository) MarkMessageProcessed(ctx context.Context, tenant Ten
 	return nil
 }
 
-func (r *runtimeRepository) GetSyncStatus(ctx context.Context) (SyncStatus, error) {
-	var status SyncStatus
-	val, err := r.readAppConfig(ctx, Tenant{}, "content_sync_status")
+func (r *runtimeRepository) GetSyncStatus(ctx context.Context) (store.SyncStatus, error) {
+	var status store.SyncStatus
+	val, err := r.readAppConfig(ctx, store.Tenant{}, "content_sync_status")
 	if err != nil {
 		return status, nil //nolint:nilerr // key-not-found on first run is expected; zero value means "never synced"
 	}
 	if err := json.Unmarshal([]byte(val), &status); err != nil {
-		return SyncStatus{}, fmt.Errorf("parsing sync status: %w", err)
+		return store.SyncStatus{}, fmt.Errorf("parsing sync status: %w", err)
 	}
 	return status, nil
 }
 
-func (r *runtimeRepository) SetSyncStatus(ctx context.Context, status SyncStatus) error {
+func (r *runtimeRepository) SetSyncStatus(ctx context.Context, status store.SyncStatus) error {
 	b, err := json.Marshal(status)
 	if err != nil {
 		return fmt.Errorf("marshaling sync status: %w", err)
 	}
-	return r.writeAppConfig(ctx, Tenant{}, "content_sync_status", string(b))
+	return r.writeAppConfig(ctx, store.Tenant{}, "content_sync_status", string(b))
 }
 
-func (r *runtimeRepository) GetCommunitySyncSettings(ctx context.Context) (CommunitySyncSettings, error) {
+func (r *runtimeRepository) GetCommunitySyncSettings(ctx context.Context) (store.CommunitySyncSettings, error) {
 	enabled := true
-	value, err := r.readAppConfig(ctx, Tenant{}, "community_auto_sync_enabled")
+	value, err := r.readAppConfig(ctx, store.Tenant{}, "community_auto_sync_enabled")
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return CommunitySyncSettings{AutomaticSyncEnabled: &enabled}, nil
+			return store.CommunitySyncSettings{AutomaticSyncEnabled: &enabled}, nil
 		}
-		return CommunitySyncSettings{}, err
+		return store.CommunitySyncSettings{}, err
 	}
 	parsed, err := strconv.ParseBool(value)
 	if err != nil {
-		return CommunitySyncSettings{}, fmt.Errorf("parsing community auto sync setting: %w", err)
+		return store.CommunitySyncSettings{}, fmt.Errorf("parsing community auto sync setting: %w", err)
 	}
-	return CommunitySyncSettings{AutomaticSyncEnabled: &parsed}, nil
+	return store.CommunitySyncSettings{AutomaticSyncEnabled: &parsed}, nil
 }
 
 func (r *runtimeRepository) PatchCommunitySyncSettings(
 	ctx context.Context,
-	patch CommunitySyncSettingsPatch,
-) (CommunitySyncSettings, error) {
+	patch store.CommunitySyncSettingsPatch,
+) (store.CommunitySyncSettings, error) {
 	if patch.AutomaticSyncEnabled != nil {
-		if err := r.writeAppConfig(ctx, Tenant{}, "community_auto_sync_enabled", strconv.FormatBool(*patch.AutomaticSyncEnabled)); err != nil {
-			return CommunitySyncSettings{}, err
+		if err := r.writeAppConfig(ctx, store.Tenant{}, "community_auto_sync_enabled", strconv.FormatBool(*patch.AutomaticSyncEnabled)); err != nil {
+			return store.CommunitySyncSettings{}, err
 		}
 	}
 	return r.GetCommunitySyncSettings(ctx)
 }
 
 func (r *runtimeRepository) GetCommunityURL(ctx context.Context) (string, error) {
-	url, err := r.readAppConfig(ctx, Tenant{}, "community_content_url")
+	url, err := r.readAppConfig(ctx, store.Tenant{}, "community_content_url")
 	if err != nil {
 		return "", err
 	}
@@ -292,10 +293,10 @@ func (r *runtimeRepository) GetCommunityURL(ctx context.Context) (string, error)
 }
 
 func (r *runtimeRepository) SetCommunityURL(ctx context.Context, url string) error {
-	return r.writeAppConfig(ctx, Tenant{}, "community_content_url", url)
+	return r.writeAppConfig(ctx, store.Tenant{}, "community_content_url", url)
 }
 
-func (r *runtimeRepository) writeReaderEncryptedJSON(ctx context.Context, tenant Tenant, reader, column string, value []byte) error {
+func (r *runtimeRepository) writeReaderEncryptedJSON(ctx context.Context, tenant store.Tenant, reader, column string, value []byte) error {
 	if !json.Valid(value) {
 		return fmt.Errorf("%s for reader %q must be valid JSON", column, reader)
 	}
@@ -321,7 +322,7 @@ func (r *runtimeRepository) writeReaderEncryptedJSON(ctx context.Context, tenant
 	return nil
 }
 
-func (r *runtimeRepository) readReaderEncryptedJSON(ctx context.Context, tenant Tenant, reader, column string) ([]byte, bool, error) {
+func (r *runtimeRepository) readReaderEncryptedJSON(ctx context.Context, tenant store.Tenant, reader, column string) ([]byte, bool, error) {
 	var ciphertext []byte
 	if r.secretBox == nil {
 		return nil, false, errors.New("store secret box is not initialized")
@@ -349,7 +350,7 @@ func (r *runtimeRepository) readReaderEncryptedJSON(ctx context.Context, tenant 
 	return plaintext, true, nil
 }
 
-func (r *runtimeRepository) writeReaderConfigJSON(ctx context.Context, tenant Tenant, reader string, value []byte) error {
+func (r *runtimeRepository) writeReaderConfigJSON(ctx context.Context, tenant store.Tenant, reader string, value []byte) error {
 	if !json.Valid(value) {
 		return fmt.Errorf("%s for reader %q must be valid JSON", readerRuntimeConfig, reader)
 	}
@@ -363,7 +364,7 @@ func (r *runtimeRepository) writeReaderConfigJSON(ctx context.Context, tenant Te
 	return nil
 }
 
-func (r *runtimeRepository) readReaderConfigJSON(ctx context.Context, tenant Tenant, reader string) ([]byte, bool, error) {
+func (r *runtimeRepository) readReaderConfigJSON(ctx context.Context, tenant store.Tenant, reader string) ([]byte, bool, error) {
 	var value []byte
 	err := r.pool.QueryRow(ctx, `
 		SELECT config
@@ -379,7 +380,7 @@ func (r *runtimeRepository) readReaderConfigJSON(ctx context.Context, tenant Ten
 	return value, true, nil
 }
 
-func (r *runtimeRepository) writeLLMProviderConfigJSON(ctx context.Context, tenant Tenant, provider string, value []byte) error {
+func (r *runtimeRepository) writeLLMProviderConfigJSON(ctx context.Context, tenant store.Tenant, provider string, value []byte) error {
 	if !json.Valid(value) {
 		return fmt.Errorf("config for llm provider %q must be valid JSON", provider)
 	}
@@ -393,7 +394,7 @@ func (r *runtimeRepository) writeLLMProviderConfigJSON(ctx context.Context, tena
 	return nil
 }
 
-func (r *runtimeRepository) readLLMProviderConfigJSON(ctx context.Context, tenant Tenant, provider string) ([]byte, bool, error) {
+func (r *runtimeRepository) readLLMProviderConfigJSON(ctx context.Context, tenant store.Tenant, provider string) ([]byte, bool, error) {
 	var value []byte
 	err := r.pool.QueryRow(ctx, `
 		SELECT config
@@ -409,7 +410,7 @@ func (r *runtimeRepository) readLLMProviderConfigJSON(ctx context.Context, tenan
 	return value, true, nil
 }
 
-func (r *runtimeRepository) writeLLMProviderEncryptedJSON(ctx context.Context, tenant Tenant, provider string, value []byte) error {
+func (r *runtimeRepository) writeLLMProviderEncryptedJSON(ctx context.Context, tenant store.Tenant, provider string, value []byte) error {
 	if !json.Valid(value) {
 		return fmt.Errorf("%s for llm provider %q must be valid JSON", llmProviderCredentials, provider)
 	}
@@ -430,7 +431,7 @@ func (r *runtimeRepository) writeLLMProviderEncryptedJSON(ctx context.Context, t
 	return nil
 }
 
-func (r *runtimeRepository) readLLMProviderEncryptedJSON(ctx context.Context, tenant Tenant, provider string) ([]byte, bool, error) {
+func (r *runtimeRepository) readLLMProviderEncryptedJSON(ctx context.Context, tenant store.Tenant, provider string) ([]byte, bool, error) {
 	var ciphertext []byte
 	if r.secretBox == nil {
 		return nil, false, errors.New("store secret box is not initialized")
@@ -453,7 +454,7 @@ func (r *runtimeRepository) readLLMProviderEncryptedJSON(ctx context.Context, te
 	return plaintext, true, nil
 }
 
-func llmProviderAssociatedData(tenant Tenant, provider string) auth.SecretAssociatedData {
+func llmProviderAssociatedData(tenant store.Tenant, provider string) auth.SecretAssociatedData {
 	return auth.SecretAssociatedData{
 		TenantID: strings.TrimSpace(tenant.ID),
 		Scope:    "llm_provider",
@@ -462,7 +463,7 @@ func llmProviderAssociatedData(tenant Tenant, provider string) auth.SecretAssoci
 	}
 }
 
-func (r *runtimeRepository) readAppConfig(ctx context.Context, tenant Tenant, key string) (string, error) {
+func (r *runtimeRepository) readAppConfig(ctx context.Context, tenant store.Tenant, key string) (string, error) {
 	var value string
 	err := r.pool.QueryRow(ctx,
 		`SELECT value FROM app_config WHERE tenant_id IS NOT DISTINCT FROM $1 AND key = $2`,
@@ -474,7 +475,7 @@ func (r *runtimeRepository) readAppConfig(ctx context.Context, tenant Tenant, ke
 	return value, nil
 }
 
-func (r *runtimeRepository) writeAppConfig(ctx context.Context, tenant Tenant, key, value string) error {
+func (r *runtimeRepository) writeAppConfig(ctx context.Context, tenant store.Tenant, key, value string) error {
 	_, err := r.pool.Exec(ctx,
 		appConfigUpsertSQL(tenant),
 		tenantIDParam(tenant), key, value,
@@ -485,7 +486,7 @@ func (r *runtimeRepository) writeAppConfig(ctx context.Context, tenant Tenant, k
 	return nil
 }
 
-func appConfigUpsertSQL(tenant Tenant) string {
+func appConfigUpsertSQL(tenant store.Tenant) string {
 	if tenantIDParam(tenant) == nil {
 		return `INSERT INTO app_config (tenant_id, key, value) VALUES ($1, $2, $3)
 		 ON CONFLICT (key) WHERE tenant_id IS NULL DO UPDATE SET value = EXCLUDED.value`
@@ -494,7 +495,7 @@ func appConfigUpsertSQL(tenant Tenant) string {
 		 ON CONFLICT (tenant_id, key) WHERE tenant_id IS NOT NULL DO UPDATE SET value = EXCLUDED.value`
 }
 
-func runtimeSetReaderSecretQuery(tenant Tenant, column string) (string, error) {
+func runtimeSetReaderSecretQuery(tenant store.Tenant, column string) (string, error) {
 	legacy := strings.TrimSpace(tenant.ID) == ""
 	switch column {
 	case readerRuntimeClientSecret:

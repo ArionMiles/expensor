@@ -7,9 +7,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
-func insertForTest(ctx context.Context, st *Store, p InsertParams) (string, error) {
+func insertForTest(ctx context.Context, st *Store, p store.InsertParams) (string, error) {
 	if p.Currency == "" {
 		p.Currency = defaultTransactionCurrency
 	}

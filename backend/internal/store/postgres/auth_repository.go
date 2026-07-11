@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
 type authRepository struct {
@@ -26,7 +28,7 @@ func (r *authRepository) BootstrapRequired(ctx context.Context) (bool, error) {
 	return !exists, nil
 }
 
-func (r *authRepository) CreateBootstrapAdmin(ctx context.Context, input CreateBootstrapAdminInput) (*User, error) {
+func (r *authRepository) CreateBootstrapAdmin(ctx context.Context, input store.CreateBootstrapAdminInput) (*store.User, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("beginning bootstrap admin transaction: %w", err)
@@ -43,10 +45,10 @@ func (r *authRepository) CreateBootstrapAdmin(ctx context.Context, input CreateB
 		return nil, conflict("store.auth.create_bootstrap_admin", messageBootstrapUnavailable)
 	}
 
-	user, err := insertUser(ctx, tx, CreateUserInput{
+	user, err := insertUser(ctx, tx, store.CreateUserInput{
 		Email:        input.Email,
 		DisplayName:  input.DisplayName,
-		Role:         UserRoleAdmin,
+		Role:         store.UserRoleAdmin,
 		AvatarKey:    input.AvatarKey,
 		PasswordHash: input.PasswordHash,
 	})
@@ -59,7 +61,7 @@ func (r *authRepository) CreateBootstrapAdmin(ctx context.Context, input CreateB
 	return user, nil
 }
 
-func (r *authRepository) CreateUser(ctx context.Context, input CreateUserInput) (*User, error) {
+func (r *authRepository) CreateUser(ctx context.Context, input store.CreateUserInput) (*store.User, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("beginning create user transaction: %w", err)
@@ -78,7 +80,7 @@ func (r *authRepository) CreateUser(ctx context.Context, input CreateUserInput) 
 	return user, nil
 }
 
-func (r *authRepository) ListUsers(ctx context.Context) ([]User, error) {
+func (r *authRepository) ListUsers(ctx context.Context) ([]store.User, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, id AS tenant_id, email, COALESCE(password_hash, ''), display_name, role, avatar_key,
 		       disabled_at, created_at, updated_at
@@ -90,7 +92,7 @@ func (r *authRepository) ListUsers(ctx context.Context) ([]User, error) {
 	}
 	defer rows.Close()
 
-	users := make([]User, 0)
+	users := make([]store.User, 0)
 	for rows.Next() {
 		user, err := scanUser(rows)
 		if err != nil {
@@ -104,7 +106,7 @@ func (r *authRepository) ListUsers(ctx context.Context) ([]User, error) {
 	return users, nil
 }
 
-func (r *authRepository) UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, error) {
+func (r *authRepository) UpdateUser(ctx context.Context, id string, input store.UpdateUserInput) (*store.User, error) {
 	user, err := scanUser(r.pool.QueryRow(ctx, `
 		UPDATE users
 		SET display_name = COALESCE($2, display_name),
@@ -129,7 +131,7 @@ func (r *authRepository) UpdateUser(ctx context.Context, id string, input Update
 	return user, nil
 }
 
-func (r *authRepository) UpdateUserPassword(ctx context.Context, id string, input UpdateUserPasswordInput) error {
+func (r *authRepository) UpdateUserPassword(ctx context.Context, id string, input store.UpdateUserPasswordInput) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE users
 		SET password_hash = $2,
@@ -156,7 +158,7 @@ func (r *authRepository) DeleteUser(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *authRepository) FindUserByEmail(ctx context.Context, email string) (*User, error) {
+func (r *authRepository) FindUserByEmail(ctx context.Context, email string) (*store.User, error) {
 	user, err := scanUser(r.pool.QueryRow(ctx, `
 		SELECT id, id AS tenant_id, email, COALESCE(password_hash, ''), display_name, role, avatar_key,
 		       disabled_at, created_at, updated_at
@@ -172,7 +174,7 @@ func (r *authRepository) FindUserByEmail(ctx context.Context, email string) (*Us
 	return user, nil
 }
 
-func (r *authRepository) FindUserByID(ctx context.Context, id string) (*User, error) {
+func (r *authRepository) FindUserByID(ctx context.Context, id string) (*store.User, error) {
 	user, err := scanUser(r.pool.QueryRow(ctx, `
 		SELECT id, id AS tenant_id, email, COALESCE(password_hash, ''), display_name, role, avatar_key,
 		       disabled_at, created_at, updated_at
@@ -188,7 +190,7 @@ func (r *authRepository) FindUserByID(ctx context.Context, id string) (*User, er
 	return user, nil
 }
 
-func (r *authRepository) CreateSession(ctx context.Context, input CreateSessionInput) (*Session, error) {
+func (r *authRepository) CreateSession(ctx context.Context, input store.CreateSessionInput) (*store.Session, error) {
 	session, err := scanSession(r.pool.QueryRow(ctx, `
 		INSERT INTO sessions (user_id, token_hash, expires_at)
 		VALUES ($1, $2, $3)
@@ -200,7 +202,7 @@ func (r *authRepository) CreateSession(ctx context.Context, input CreateSessionI
 	return session, nil
 }
 
-func (r *authRepository) FindSessionByHash(ctx context.Context, tokenHash string) (*Session, error) {
+func (r *authRepository) FindSessionByHash(ctx context.Context, tokenHash string) (*store.Session, error) {
 	session, err := scanSession(r.pool.QueryRow(ctx, `
 		SELECT id, user_id, token_hash, created_at, expires_at, last_used_at, revoked_at
 		FROM sessions
@@ -226,7 +228,7 @@ func (r *authRepository) RevokeSession(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *authRepository) CreateAccessToken(ctx context.Context, input CreateAccessTokenInput) (*AccessToken, error) {
+func (r *authRepository) CreateAccessToken(ctx context.Context, input store.CreateAccessTokenInput) (*store.AccessToken, error) {
 	token, err := scanAccessToken(r.pool.QueryRow(ctx, `
 		INSERT INTO access_tokens (user_id, name, token_hash, expires_at)
 		VALUES ($1, $2, $3, $4)
@@ -241,7 +243,7 @@ func (r *authRepository) CreateAccessToken(ctx context.Context, input CreateAcce
 	return token, nil
 }
 
-func (r *authRepository) ListAccessTokens(ctx context.Context, userID string) ([]AccessToken, error) {
+func (r *authRepository) ListAccessTokens(ctx context.Context, userID string) ([]store.AccessToken, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, user_id, name, token_hash, created_at, expires_at, last_used_at, revoked_at
 		FROM access_tokens
@@ -253,7 +255,7 @@ func (r *authRepository) ListAccessTokens(ctx context.Context, userID string) ([
 	}
 	defer rows.Close()
 
-	tokens := make([]AccessToken, 0)
+	tokens := make([]store.AccessToken, 0)
 	for rows.Next() {
 		token, err := scanAccessToken(rows)
 		if err != nil {
@@ -267,7 +269,7 @@ func (r *authRepository) ListAccessTokens(ctx context.Context, userID string) ([
 	return tokens, nil
 }
 
-func (r *authRepository) FindAccessTokenByHash(ctx context.Context, tokenHash string) (*AccessToken, error) {
+func (r *authRepository) FindAccessTokenByHash(ctx context.Context, tokenHash string) (*store.AccessToken, error) {
 	token, err := scanAccessToken(r.pool.QueryRow(ctx, `
 		SELECT id, user_id, name, token_hash, created_at, expires_at, last_used_at, revoked_at
 		FROM access_tokens
@@ -293,7 +295,7 @@ func (r *authRepository) RevokeAccessToken(ctx context.Context, id, userID strin
 	return nil
 }
 
-func (r *authRepository) CreateAccountSetupToken(ctx context.Context, input CreateAccountSetupTokenInput) (*AccountSetupToken, error) {
+func (r *authRepository) CreateAccountSetupToken(ctx context.Context, input store.CreateAccountSetupTokenInput) (*store.AccountSetupToken, error) {
 	token, err := scanAccountSetupToken(r.pool.QueryRow(ctx, `
 		INSERT INTO account_setup_tokens (user_id, token_hash, expires_at)
 		VALUES ($1, $2, $3)
@@ -305,7 +307,7 @@ func (r *authRepository) CreateAccountSetupToken(ctx context.Context, input Crea
 	return token, nil
 }
 
-func (r *authRepository) FindAccountSetupTokenByHash(ctx context.Context, tokenHash string) (*AccountSetupToken, error) {
+func (r *authRepository) FindAccountSetupTokenByHash(ctx context.Context, tokenHash string) (*store.AccountSetupToken, error) {
 	token, err := scanAccountSetupToken(r.pool.QueryRow(ctx, `
 		SELECT id, user_id, token_hash, created_at, expires_at, used_at
 		FROM account_setup_tokens
@@ -331,7 +333,7 @@ func (r *authRepository) MarkAccountSetupTokenUsed(ctx context.Context, id strin
 	return nil
 }
 
-func (r *authRepository) CompleteAccountSetup(ctx context.Context, input CompleteAccountSetupInput) (*User, error) {
+func (r *authRepository) CompleteAccountSetup(ctx context.Context, input store.CompleteAccountSetupInput) (*store.User, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("beginning account setup transaction: %w", err)
@@ -375,10 +377,10 @@ func (r *authRepository) CompleteAccountSetup(ctx context.Context, input Complet
 	return user, nil
 }
 
-func insertUser(ctx context.Context, tx pgx.Tx, input CreateUserInput) (*User, error) {
+func insertUser(ctx context.Context, tx pgx.Tx, input store.CreateUserInput) (*store.User, error) {
 	role := input.Role
 	if role == "" {
-		role = UserRoleUser
+		role = store.UserRoleUser
 	}
 	avatarKey := strings.TrimSpace(input.AvatarKey)
 	if avatarKey == "" {
@@ -403,8 +405,8 @@ type scanner interface {
 	Scan(dest ...any) error
 }
 
-func scanUser(row scanner) (*User, error) {
-	var user User
+func scanUser(row scanner) (*store.User, error) {
+	var user store.User
 	if err := row.Scan(
 		&user.ID,
 		&user.TenantID,
@@ -422,8 +424,8 @@ func scanUser(row scanner) (*User, error) {
 	return &user, nil
 }
 
-func scanSession(row scanner) (*Session, error) {
-	var session Session
+func scanSession(row scanner) (*store.Session, error) {
+	var session store.Session
 	if err := row.Scan(
 		&session.ID,
 		&session.UserID,
@@ -438,8 +440,8 @@ func scanSession(row scanner) (*Session, error) {
 	return &session, nil
 }
 
-func scanAccessToken(row scanner) (*AccessToken, error) {
-	var token AccessToken
+func scanAccessToken(row scanner) (*store.AccessToken, error) {
+	var token store.AccessToken
 	if err := row.Scan(
 		&token.ID,
 		&token.UserID,
@@ -455,8 +457,8 @@ func scanAccessToken(row scanner) (*AccessToken, error) {
 	return &token, nil
 }
 
-func scanAccountSetupToken(row scanner) (*AccountSetupToken, error) {
-	var token AccountSetupToken
+func scanAccountSetupToken(row scanner) (*store.AccountSetupToken, error) {
+	var token store.AccountSetupToken
 	if err := row.Scan(
 		&token.ID,
 		&token.UserID,

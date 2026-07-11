@@ -11,10 +11,19 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ArionMiles/expensor/backend/internal/auth"
+	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/internal/store/postgres/migrations"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
-	apperrors "github.com/ArionMiles/expensor/backend/pkg/errors"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
+
+// Options configures the PostgreSQL store.
+type Options struct {
+	Config   config.Postgres
+	Security config.Security
+	Logger   *slog.Logger
+}
 
 // Store wraps a pgxpool.Pool and provides query operations for the API layer.
 type Store struct {
@@ -36,12 +45,29 @@ type Store struct {
 var _ api.DiagnosticSink = (*Store)(nil)
 
 // New creates a Store connected to the PostgreSQL instance described by cfg.
-func New(cfg config.Postgres, logger *slog.Logger) (*Store, error) {
-	return NewWithSecurity(cfg, config.Security{}, logger)
+func New(ctx context.Context, opts Options) (*Store, error) {
+	logger := opts.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	st, err := newStore(ctx, opts.Config, opts.Security, logger)
+	if err != nil {
+		return nil, err
+	}
+	if err := st.waitUntilHealthy(ctx, opts.Config); err != nil {
+		st.Close()
+		return nil, err
+	}
+	if err := migrations.Run(ctx, st.pool, logger); err != nil {
+		st.Close()
+		return nil, err
+	}
+	logger.Info("store connected to PostgreSQL", "host", opts.Config.Host, "database", opts.Config.Database)
+	return st, nil
 }
 
-// NewWithSecurity creates a Store with security dependencies for encrypted runtime state.
-func NewWithSecurity(cfg config.Postgres, security config.Security, logger *slog.Logger) (*Store, error) {
+func newStore(ctx context.Context, cfg config.Postgres, security config.Security, logger *slog.Logger) (*Store, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -53,7 +79,7 @@ func NewWithSecurity(cfg config.Postgres, security config.Security, logger *slog
 
 	poolCfg, err := ParsePoolConfig(connStr)
 	if err != nil {
-		return nil, apperrors.E("postgres.store.open", apperrors.InvalidArgument, "parsing store connection string", err)
+		return nil, errors.E("postgres.store.open", errors.InvalidArgument, "parsing store connection string", err)
 	}
 
 	poolCfg.MaxConns = cfg.MaxPoolSize
@@ -61,17 +87,9 @@ func NewWithSecurity(cfg config.Postgres, security config.Security, logger *slog
 	poolCfg.MaxConnLifetime = 1 * time.Hour
 	poolCfg.MaxConnIdleTime = 30 * time.Minute
 
-	pool, err := pgxpool.NewWithConfig(context.Background(), poolCfg)
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
-		return nil, apperrors.E("postgres.store.open", apperrors.Unavailable, "creating store pool", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, apperrors.E("postgres.store.open", apperrors.Unavailable, "pinging store database", err)
+		return nil, errors.E("postgres.store.open", errors.Unavailable, "creating store pool", err)
 	}
 
 	var secretBox *auth.SecretBox
@@ -79,14 +97,45 @@ func NewWithSecurity(cfg config.Postgres, security config.Security, logger *slog
 		secretBox, err = auth.NewSecretBox(security.SecretKey)
 		if err != nil {
 			pool.Close()
-			return nil, apperrors.E("postgres.store.open", apperrors.InvalidArgument, "creating store secret box", err)
+			return nil, errors.E("postgres.store.open", errors.InvalidArgument, "creating store secret box", err)
 		}
 	}
 
 	s := &Store{pool: pool, logger: logger, now: time.Now, secretBox: secretBox}
 	s.initRepositories()
-	logger.Info("store connected to PostgreSQL", "host", cfg.Host, "database", cfg.Database)
 	return s, nil
+}
+
+// HealthCheck verifies the store can communicate with PostgreSQL.
+func (s *Store) HealthCheck(ctx context.Context) error {
+	if err := s.pool.Ping(ctx); err != nil {
+		return errors.E("postgres.store.health_check", errors.Unavailable, "pinging store database", err)
+	}
+	return nil
+}
+
+func (s *Store) waitUntilHealthy(ctx context.Context, cfg config.Postgres) error {
+	deadline := time.Now().Add(cfg.ConnectTimeout)
+	for attempt := 1; ; attempt++ {
+		attemptCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		err := s.HealthCheck(attemptCtx)
+		cancel()
+		if err == nil {
+			s.logger.Info("postgres is ready", "host", cfg.Host, "port", cfg.Port)
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return errors.E("postgres.store.wait_until_healthy", errors.Unavailable, fmt.Sprintf("postgres not ready after %s", cfg.ConnectTimeout), err)
+		}
+		s.logger.Info("waiting for postgres", "attempt", attempt, "error", err)
+		timer := time.NewTimer(cfg.RetryInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return errors.E("postgres.store.wait_until_healthy", errors.Canceled, "waiting for postgres", ctx.Err())
+		case <-timer.C:
+		}
+	}
 }
 
 func (s *Store) initRepositories() {
@@ -116,23 +165,23 @@ func (s *Store) BootstrapRequired(ctx context.Context) (bool, error) {
 	return s.auth.BootstrapRequired(ctx)
 }
 
-func (s *Store) CreateBootstrapAdmin(ctx context.Context, input CreateBootstrapAdminInput) (*User, error) {
+func (s *Store) CreateBootstrapAdmin(ctx context.Context, input store.CreateBootstrapAdminInput) (*store.User, error) {
 	return s.auth.CreateBootstrapAdmin(ctx, input)
 }
 
-func (s *Store) CreateUser(ctx context.Context, input CreateUserInput) (*User, error) {
+func (s *Store) CreateUser(ctx context.Context, input store.CreateUserInput) (*store.User, error) {
 	return s.auth.CreateUser(ctx, input)
 }
 
-func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
+func (s *Store) ListUsers(ctx context.Context) ([]store.User, error) {
 	return s.auth.ListUsers(ctx)
 }
 
-func (s *Store) UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, error) {
+func (s *Store) UpdateUser(ctx context.Context, id string, input store.UpdateUserInput) (*store.User, error) {
 	return s.auth.UpdateUser(ctx, id, input)
 }
 
-func (s *Store) UpdateUserPassword(ctx context.Context, id string, input UpdateUserPasswordInput) error {
+func (s *Store) UpdateUserPassword(ctx context.Context, id string, input store.UpdateUserPasswordInput) error {
 	return s.auth.UpdateUserPassword(ctx, id, input)
 }
 
@@ -140,19 +189,19 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	return s.auth.DeleteUser(ctx, id)
 }
 
-func (s *Store) FindUserByEmail(ctx context.Context, email string) (*User, error) {
+func (s *Store) FindUserByEmail(ctx context.Context, email string) (*store.User, error) {
 	return s.auth.FindUserByEmail(ctx, email)
 }
 
-func (s *Store) FindUserByID(ctx context.Context, id string) (*User, error) {
+func (s *Store) FindUserByID(ctx context.Context, id string) (*store.User, error) {
 	return s.auth.FindUserByID(ctx, id)
 }
 
-func (s *Store) CreateSession(ctx context.Context, input CreateSessionInput) (*Session, error) {
+func (s *Store) CreateSession(ctx context.Context, input store.CreateSessionInput) (*store.Session, error) {
 	return s.auth.CreateSession(ctx, input)
 }
 
-func (s *Store) FindSessionByHash(ctx context.Context, tokenHash string) (*Session, error) {
+func (s *Store) FindSessionByHash(ctx context.Context, tokenHash string) (*store.Session, error) {
 	return s.auth.FindSessionByHash(ctx, tokenHash)
 }
 
@@ -160,15 +209,15 @@ func (s *Store) RevokeSession(ctx context.Context, id string) error {
 	return s.auth.RevokeSession(ctx, id)
 }
 
-func (s *Store) CreateAccessToken(ctx context.Context, input CreateAccessTokenInput) (*AccessToken, error) {
+func (s *Store) CreateAccessToken(ctx context.Context, input store.CreateAccessTokenInput) (*store.AccessToken, error) {
 	return s.auth.CreateAccessToken(ctx, input)
 }
 
-func (s *Store) ListAccessTokens(ctx context.Context, userID string) ([]AccessToken, error) {
+func (s *Store) ListAccessTokens(ctx context.Context, userID string) ([]store.AccessToken, error) {
 	return s.auth.ListAccessTokens(ctx, userID)
 }
 
-func (s *Store) FindAccessTokenByHash(ctx context.Context, tokenHash string) (*AccessToken, error) {
+func (s *Store) FindAccessTokenByHash(ctx context.Context, tokenHash string) (*store.AccessToken, error) {
 	return s.auth.FindAccessTokenByHash(ctx, tokenHash)
 }
 
@@ -176,11 +225,11 @@ func (s *Store) RevokeAccessToken(ctx context.Context, id, userID string) error 
 	return s.auth.RevokeAccessToken(ctx, id, userID)
 }
 
-func (s *Store) CreateAccountSetupToken(ctx context.Context, input CreateAccountSetupTokenInput) (*AccountSetupToken, error) {
+func (s *Store) CreateAccountSetupToken(ctx context.Context, input store.CreateAccountSetupTokenInput) (*store.AccountSetupToken, error) {
 	return s.auth.CreateAccountSetupToken(ctx, input)
 }
 
-func (s *Store) FindAccountSetupTokenByHash(ctx context.Context, tokenHash string) (*AccountSetupToken, error) {
+func (s *Store) FindAccountSetupTokenByHash(ctx context.Context, tokenHash string) (*store.AccountSetupToken, error) {
 	return s.auth.FindAccountSetupTokenByHash(ctx, tokenHash)
 }
 
@@ -188,7 +237,7 @@ func (s *Store) MarkAccountSetupTokenUsed(ctx context.Context, id string) error 
 	return s.auth.MarkAccountSetupTokenUsed(ctx, id)
 }
 
-func (s *Store) CompleteAccountSetup(ctx context.Context, input CompleteAccountSetupInput) (*User, error) {
+func (s *Store) CompleteAccountSetup(ctx context.Context, input store.CompleteAccountSetupInput) (*store.User, error) {
 	return s.auth.CompleteAccountSetup(ctx, input)
 }
 
@@ -197,244 +246,248 @@ func (s *Store) queryTransactionTotals(
 	join string,
 	where string,
 	args []any,
-) (TransactionListResult, error) {
+) (store.TransactionListResult, error) {
 	return s.txns.queryTransactionTotals(ctx, join, where, args)
 }
 
 // ListTransactions returns a paginated, filtered list of transactions and the total
 // count plus total amount matching the filter (ignoring pagination).
-func (s *Store) ListTransactions(ctx context.Context, tenant Tenant, f ListFilter) (transactions []Transaction, result TransactionListResult, err error) {
+func (s *Store) ListTransactions(
+	ctx context.Context,
+	tenant store.Tenant,
+	f store.ListFilter,
+) (transactions []store.Transaction, result store.TransactionListResult, err error) {
 	return s.txns.ListTransactions(ctx, tenant, f)
 }
 
 // GetTransaction fetches a single transaction by UUID, including its labels.
-func (s *Store) GetTransaction(ctx context.Context, tenant Tenant, id string) (*Transaction, error) {
+func (s *Store) GetTransaction(ctx context.Context, tenant store.Tenant, id string) (*store.Transaction, error) {
 	return s.txns.GetTransaction(ctx, tenant, id)
 }
 
 // UpdateDescription sets the user-provided description on a transaction.
-func (s *Store) UpdateDescription(ctx context.Context, tenant Tenant, id, description string) error {
+func (s *Store) UpdateDescription(ctx context.Context, tenant store.Tenant, id, description string) error {
 	return s.txns.UpdateDescription(ctx, tenant, id, description)
 }
 
 // AddLabel attaches a label to a transaction (idempotent — ignores duplicates).
-func (s *Store) AddLabel(ctx context.Context, tenant Tenant, transactionID, label string) error {
+func (s *Store) AddLabel(ctx context.Context, tenant store.Tenant, transactionID, label string) error {
 	return s.txns.AddLabel(ctx, tenant, transactionID, label)
 }
 
 // AddLabels attaches multiple labels to a transaction in a single round-trip (idempotent).
-func (s *Store) AddLabels(ctx context.Context, tenant Tenant, transactionID string, labels []string) error {
+func (s *Store) AddLabels(ctx context.Context, tenant store.Tenant, transactionID string, labels []string) error {
 	return s.txns.AddLabels(ctx, tenant, transactionID, labels)
 }
 
 // RemoveLabel detaches a label from a transaction.
-func (s *Store) RemoveLabel(ctx context.Context, tenant Tenant, transactionID, label string) error {
+func (s *Store) RemoveLabel(ctx context.Context, tenant store.Tenant, transactionID, label string) error {
 	return s.txns.RemoveLabel(ctx, tenant, transactionID, label)
 }
 
 // SearchTransactions performs a full-text search over merchant_info and description.
 func (s *Store) SearchTransactions(
 	ctx context.Context,
-	tenant Tenant,
+	tenant store.Tenant,
 	query string,
-	f ListFilter,
-) (transactions []Transaction, result TransactionListResult, err error) {
+	f store.ListFilter,
+) (transactions []store.Transaction, result store.TransactionListResult, err error) {
 	return s.txns.SearchTransactions(ctx, tenant, query, f)
 }
 
 // GetStats returns aggregate counts and totals across all transactions.
-func (s *Store) GetStats(ctx context.Context, tenant Tenant, baseCurrency string) (*Stats, error) {
+func (s *Store) GetStats(ctx context.Context, tenant store.Tenant, baseCurrency string) (*store.Stats, error) {
 	return s.analytics.GetStats(ctx, tenant, baseCurrency)
 }
 
 // GetChartData returns time-series and breakdown data for dashboard charts.
 // All chart queries run concurrently.
-func (s *Store) GetChartData(ctx context.Context, tenant Tenant) (*ChartData, error) {
+func (s *Store) GetChartData(ctx context.Context, tenant store.Tenant) (*store.ChartData, error) {
 	return s.analytics.GetChartData(ctx, tenant)
 }
 
 // GetDashboardData returns dashboard data split into current-month and all-time sections.
-func (s *Store) GetDashboardData(ctx context.Context, tenant Tenant) (*DashboardData, error) {
+func (s *Store) GetDashboardData(ctx context.Context, tenant store.Tenant) (*store.DashboardData, error) {
 	return s.analytics.GetDashboardData(ctx, tenant)
 }
 
 // by day-of-month. When from and to are both non-nil, only transactions within
 // [from, to] (inclusive) are included; nil/nil returns all-time data.
-func (s *Store) GetSpendingHeatmap(ctx context.Context, tenant Tenant, from, to *time.Time) (*HeatmapData, error) {
+func (s *Store) GetSpendingHeatmap(ctx context.Context, tenant store.Tenant, from, to *time.Time) (*store.HeatmapData, error) {
 	return s.analytics.GetSpendingHeatmap(ctx, tenant, from, to)
 }
 
 // the year has no transactions.
-func (s *Store) GetAnnualSpend(ctx context.Context, tenant Tenant, year int) ([]DailyBucket, error) {
+func (s *Store) GetAnnualSpend(ctx context.Context, tenant store.Tenant, year int) ([]store.DailyBucket, error) {
 	return s.analytics.GetAnnualSpend(ctx, tenant, year)
 }
 
 // GetSpendingHeatmap. Returns empty string and nil args when both are nil.
 // across all transactions. Used to populate filter dropdowns in the UI.
-func (s *Store) GetFacets(ctx context.Context, tenant Tenant) (*Facets, error) {
+func (s *Store) GetFacets(ctx context.Context, tenant store.Tenant) (*store.Facets, error) {
 	return s.txns.GetFacets(ctx, tenant)
 }
 
 // GetAppConfig retrieves a configuration value by key.
 // Returns an error if the key does not exist.
-func (s *Store) GetAppConfig(ctx context.Context, tenant Tenant, key string) (string, error) {
+func (s *Store) GetAppConfig(ctx context.Context, tenant store.Tenant, key string) (string, error) {
 	return s.runtime.GetAppConfig(ctx, tenant, key)
 }
 
 // SetAppConfig upserts a configuration value.
-func (s *Store) SetAppConfig(ctx context.Context, tenant Tenant, key, value string) error {
+func (s *Store) SetAppConfig(ctx context.Context, tenant store.Tenant, key, value string) error {
 	return s.runtime.SetAppConfig(ctx, tenant, key, value)
 }
 
-func (s *Store) GetSchedulerConfig(ctx context.Context) (SchedulerConfig, error) {
+func (s *Store) GetSchedulerConfig(ctx context.Context) (store.SchedulerConfig, error) {
 	return s.scanning.GetSchedulerConfig(ctx)
 }
 
-func (s *Store) PatchSchedulerConfig(ctx context.Context, patch SchedulerConfigPatch) (SchedulerConfig, error) {
+func (s *Store) PatchSchedulerConfig(ctx context.Context, patch store.SchedulerConfigPatch) (store.SchedulerConfig, error) {
 	return s.scanning.PatchSchedulerConfig(ctx, patch)
 }
 
-func (s *Store) EnsureScanningStateForTenant(ctx context.Context, tenant Tenant) error {
+func (s *Store) EnsureScanningStateForTenant(ctx context.Context, tenant store.Tenant) error {
 	return s.scanning.EnsureScanningStateForTenant(ctx, tenant)
 }
 
-func (s *Store) GetScanningState(ctx context.Context, tenant Tenant) (TenantScanningState, error) {
+func (s *Store) GetScanningState(ctx context.Context, tenant store.Tenant) (store.TenantScanningState, error) {
 	return s.scanning.GetScanningState(ctx, tenant)
 }
 
-func (s *Store) ListRunnableScanningStates(ctx context.Context) ([]TenantScanningState, error) {
+func (s *Store) ListRunnableScanningStates(ctx context.Context) ([]store.TenantScanningState, error) {
 	return s.scanning.ListRunnableScanningStates(ctx)
 }
 
-func (s *Store) ListScanningStates(ctx context.Context) ([]TenantScanningState, error) {
+func (s *Store) ListScanningStates(ctx context.Context) ([]store.TenantScanningState, error) {
 	return s.scanning.ListScanningStates(ctx)
 }
 
-func (s *Store) SetActiveScanningReader(ctx context.Context, tenant Tenant, reader string) error {
+func (s *Store) SetActiveScanningReader(ctx context.Context, tenant store.Tenant, reader string) error {
 	return s.scanning.SetActiveScanningReader(ctx, tenant, reader)
 }
 
-func (s *Store) ClearActiveScanningReader(ctx context.Context, tenant Tenant) error {
+func (s *Store) ClearActiveScanningReader(ctx context.Context, tenant store.Tenant) error {
 	return s.scanning.ClearActiveScanningReader(ctx, tenant)
 }
 
-func (s *Store) SetScanningEnabled(ctx context.Context, tenant Tenant, enabled bool) error {
+func (s *Store) SetScanningEnabled(ctx context.Context, tenant store.Tenant, enabled bool) error {
 	return s.scanning.SetScanningEnabled(ctx, tenant, enabled)
 }
 
-func (s *Store) UpdateScanningState(ctx context.Context, tenant Tenant, update ScanningStateUpdate) error {
+func (s *Store) UpdateScanningState(ctx context.Context, tenant store.Tenant, update store.ScanningStateUpdate) error {
 	return s.scanning.UpdateScanningState(ctx, tenant, update)
 }
 
 // SetReaderSecret stores OAuth client secret JSON for a tenant reader.
-func (s *Store) SetReaderSecret(ctx context.Context, tenant Tenant, reader string, secret []byte) error {
+func (s *Store) SetReaderSecret(ctx context.Context, tenant store.Tenant, reader string, secret []byte) error {
 	return s.runtime.SetReaderSecret(ctx, tenant, reader, secret)
 }
 
 // GetReaderSecret returns OAuth client secret JSON for a tenant reader.
-func (s *Store) GetReaderSecret(ctx context.Context, tenant Tenant, reader string) (secret []byte, found bool, err error) {
+func (s *Store) GetReaderSecret(ctx context.Context, tenant store.Tenant, reader string) (secret []byte, found bool, err error) {
 	return s.runtime.GetReaderSecret(ctx, tenant, reader)
 }
 
 // SetReaderToken stores OAuth token JSON for a tenant reader.
-func (s *Store) SetReaderToken(ctx context.Context, tenant Tenant, reader string, token []byte) error {
+func (s *Store) SetReaderToken(ctx context.Context, tenant store.Tenant, reader string, token []byte) error {
 	return s.runtime.SetReaderToken(ctx, tenant, reader, token)
 }
 
 // GetReaderToken returns OAuth token JSON for a tenant reader.
-func (s *Store) GetReaderToken(ctx context.Context, tenant Tenant, reader string) (token []byte, found bool, err error) {
+func (s *Store) GetReaderToken(ctx context.Context, tenant store.Tenant, reader string) (token []byte, found bool, err error) {
 	return s.runtime.GetReaderToken(ctx, tenant, reader)
 }
 
 // DeleteReaderToken removes the OAuth token JSON for a tenant reader without deleting other reader runtime data.
-func (s *Store) DeleteReaderToken(ctx context.Context, tenant Tenant, reader string) error {
+func (s *Store) DeleteReaderToken(ctx context.Context, tenant store.Tenant, reader string) error {
 	return s.runtime.DeleteReaderToken(ctx, tenant, reader)
 }
 
 // SetReaderConfig stores tenant reader-specific configuration JSON.
-func (s *Store) SetReaderConfig(ctx context.Context, tenant Tenant, reader string, readerConfig json.RawMessage) error {
+func (s *Store) SetReaderConfig(ctx context.Context, tenant store.Tenant, reader string, readerConfig json.RawMessage) error {
 	return s.runtime.SetReaderConfig(ctx, tenant, reader, readerConfig)
 }
 
 // GetReaderConfig returns tenant reader-specific configuration JSON.
-func (s *Store) GetReaderConfig(ctx context.Context, tenant Tenant, reader string) (json.RawMessage, bool, error) {
+func (s *Store) GetReaderConfig(ctx context.Context, tenant store.Tenant, reader string) (json.RawMessage, bool, error) {
 	return s.runtime.GetReaderConfig(ctx, tenant, reader)
 }
 
 // SetLLMProviderConfig stores tenant LLM provider-specific configuration JSON.
-func (s *Store) SetLLMProviderConfig(ctx context.Context, tenant Tenant, provider string, providerConfig json.RawMessage) error {
+func (s *Store) SetLLMProviderConfig(ctx context.Context, tenant store.Tenant, provider string, providerConfig json.RawMessage) error {
 	return s.runtime.SetLLMProviderConfig(ctx, tenant, provider, providerConfig)
 }
 
 // GetLLMProviderConfig returns tenant LLM provider-specific configuration JSON.
-func (s *Store) GetLLMProviderConfig(ctx context.Context, tenant Tenant, provider string) (json.RawMessage, bool, error) {
+func (s *Store) GetLLMProviderConfig(ctx context.Context, tenant store.Tenant, provider string) (json.RawMessage, bool, error) {
 	return s.runtime.GetLLMProviderConfig(ctx, tenant, provider)
 }
 
 // SetLLMProviderCredentials stores encrypted tenant LLM provider credentials.
-func (s *Store) SetLLMProviderCredentials(ctx context.Context, tenant Tenant, provider string, credentials []byte) error {
+func (s *Store) SetLLMProviderCredentials(ctx context.Context, tenant store.Tenant, provider string, credentials []byte) error {
 	return s.runtime.SetLLMProviderCredentials(ctx, tenant, provider, credentials)
 }
 
 // GetLLMProviderCredentials returns decrypted tenant LLM provider credentials.
-func (s *Store) GetLLMProviderCredentials(ctx context.Context, tenant Tenant, provider string) (credentials []byte, found bool, err error) {
+func (s *Store) GetLLMProviderCredentials(ctx context.Context, tenant store.Tenant, provider string) (credentials []byte, found bool, err error) {
 	return s.runtime.GetLLMProviderCredentials(ctx, tenant, provider)
 }
 
 // DeleteLLMProviderRuntime removes all runtime data for a tenant LLM provider.
-func (s *Store) DeleteLLMProviderRuntime(ctx context.Context, tenant Tenant, provider string) error {
+func (s *Store) DeleteLLMProviderRuntime(ctx context.Context, tenant store.Tenant, provider string) error {
 	return s.runtime.DeleteLLMProviderRuntime(ctx, tenant, provider)
 }
 
 // SetActiveLLMProvider marks one LLM provider active for a tenant.
-func (s *Store) SetActiveLLMProvider(ctx context.Context, tenant Tenant, provider string) error {
+func (s *Store) SetActiveLLMProvider(ctx context.Context, tenant store.Tenant, provider string) error {
 	return s.runtime.SetActiveLLMProvider(ctx, tenant, provider)
 }
 
 // ClearActiveLLMProvider clears the active LLM provider for a tenant.
-func (s *Store) ClearActiveLLMProvider(ctx context.Context, tenant Tenant) error {
+func (s *Store) ClearActiveLLMProvider(ctx context.Context, tenant store.Tenant) error {
 	return s.runtime.ClearActiveLLMProvider(ctx, tenant)
 }
 
 // GetActiveLLMProviderRuntime returns the active tenant LLM provider runtime state.
-func (s *Store) GetActiveLLMProviderRuntime(ctx context.Context, tenant Tenant) (runtime LLMProviderRuntime, found bool, err error) {
+func (s *Store) GetActiveLLMProviderRuntime(ctx context.Context, tenant store.Tenant) (runtime store.LLMProviderRuntime, found bool, err error) {
 	return s.runtime.GetActiveLLMProviderRuntime(ctx, tenant)
 }
 
 // DeleteReaderRuntime removes all runtime data for a tenant reader.
-func (s *Store) DeleteReaderRuntime(ctx context.Context, tenant Tenant, reader string) error {
+func (s *Store) DeleteReaderRuntime(ctx context.Context, tenant store.Tenant, reader string) error {
 	return s.runtime.DeleteReaderRuntime(ctx, tenant, reader)
 }
 
 // IsMessageProcessed reports whether a tenant message key has already been processed.
-func (s *Store) IsMessageProcessed(ctx context.Context, tenant Tenant, key string) (bool, error) {
+func (s *Store) IsMessageProcessed(ctx context.Context, tenant store.Tenant, key string) (bool, error) {
 	return s.runtime.IsMessageProcessed(ctx, tenant, key)
 }
 
 // MarkMessageProcessed records a tenant processed message key at the supplied time.
-func (s *Store) MarkMessageProcessed(ctx context.Context, tenant Tenant, key string, at time.Time) error {
+func (s *Store) MarkMessageProcessed(ctx context.Context, tenant store.Tenant, key string, at time.Time) error {
 	return s.runtime.MarkMessageProcessed(ctx, tenant, key, at)
 }
 
 // --- Labels ---
 
 // ListLabels returns all labels ordered by name.
-func (s *Store) ListLabels(ctx context.Context, tenant Tenant) ([]Label, error) {
+func (s *Store) ListLabels(ctx context.Context, tenant store.Tenant) ([]store.Label, error) {
 	return s.taxonomy.ListLabels(ctx, tenant)
 }
 
 // CreateLabel inserts a new label. Silently ignores duplicate names.
-func (s *Store) CreateLabel(ctx context.Context, tenant Tenant, name, color string) error {
+func (s *Store) CreateLabel(ctx context.Context, tenant store.Tenant, name, color string) error {
 	return s.taxonomy.CreateLabel(ctx, tenant, name, color)
 }
 
 // UpdateLabel changes the color of an existing label. Returns a NotFound error kind if no row matched.
-func (s *Store) UpdateLabel(ctx context.Context, tenant Tenant, name, color string) error {
+func (s *Store) UpdateLabel(ctx context.Context, tenant store.Tenant, name, color string) error {
 	return s.taxonomy.UpdateLabel(ctx, tenant, name, color)
 }
 
 // DeleteLabel removes a label by name.
-func (s *Store) DeleteLabel(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
+func (s *Store) DeleteLabel(ctx context.Context, tenant store.Tenant, name string, removeFromTransactions bool) error {
 	return s.taxonomy.DeleteLabel(ctx, tenant, name, removeFromTransactions)
 }
 
@@ -442,91 +495,91 @@ func (s *Store) DeleteLabel(ctx context.Context, tenant Tenant, name string, rem
 // merchant_info matches the given pattern (case-insensitive contains), and
 // persists the mapping for future auto-apply.
 // Returns the number of transaction-label rows inserted.
-func (s *Store) ApplyLabelByMerchant(ctx context.Context, tenant Tenant, label, pattern string) (int64, error) {
+func (s *Store) ApplyLabelByMerchant(ctx context.Context, tenant store.Tenant, label, pattern string) (int64, error) {
 	return s.taxonomy.ApplyLabelByMerchant(ctx, tenant, label, pattern)
 }
 
 // RemoveLabelByMerchant removes a label from all transactions whose
 // merchant_info matches the pattern (case-insensitive contains), and removes
 // the persisted merchant mapping.
-func (s *Store) RemoveLabelByMerchant(ctx context.Context, tenant Tenant, label, pattern string) (int64, error) {
+func (s *Store) RemoveLabelByMerchant(ctx context.Context, tenant store.Tenant, label, pattern string) (int64, error) {
 	return s.taxonomy.RemoveLabelByMerchant(ctx, tenant, label, pattern)
 }
 
 // GetMonthlyBreakdownSpend returns a 12-month spend series for labels, categories, or buckets.
 // Muted transactions are excluded. Months are emitted in the configured app timezone.
-func (s *Store) GetMonthlyBreakdownSpend(ctx context.Context, tenant Tenant, dimension string, months int) (*MonthlyBreakdownData, error) {
+func (s *Store) GetMonthlyBreakdownSpend(ctx context.Context, tenant store.Tenant, dimension string, months int) (*store.MonthlyBreakdownData, error) {
 	return s.analytics.GetMonthlyBreakdownSpend(ctx, tenant, dimension, months)
 }
 
 // GetLabelMappings returns persisted merchant patterns for each label.
-func (s *Store) GetLabelMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
+func (s *Store) GetLabelMappings(ctx context.Context, tenant store.Tenant) (map[string][]string, error) {
 	return s.taxonomy.GetLabelMappings(ctx, tenant)
 }
 
 // --- Categories ---
 
 // ListCategories returns all categories ordered by name.
-func (s *Store) ListCategories(ctx context.Context, tenant Tenant) ([]Category, error) {
+func (s *Store) ListCategories(ctx context.Context, tenant store.Tenant) ([]store.Category, error) {
 	return s.taxonomy.ListCategories(ctx, tenant)
 }
 
 // CreateCategory inserts a new category. Silently ignores duplicate names.
-func (s *Store) CreateCategory(ctx context.Context, tenant Tenant, name, description string) error {
+func (s *Store) CreateCategory(ctx context.Context, tenant store.Tenant, name, description string) error {
 	return s.taxonomy.CreateCategory(ctx, tenant, name, description)
 }
 
 // DeleteCategory removes a category by name. Returns a NotFound error kind if it does not exist.
 // Returns an error if the category is a default one.
-func (s *Store) DeleteCategory(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
+func (s *Store) DeleteCategory(ctx context.Context, tenant store.Tenant, name string, removeFromTransactions bool) error {
 	return s.taxonomy.DeleteCategory(ctx, tenant, name, removeFromTransactions)
 }
 
 // GetCategoryMappings returns persisted merchant patterns for each category.
-func (s *Store) GetCategoryMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
+func (s *Store) GetCategoryMappings(ctx context.Context, tenant store.Tenant) (map[string][]string, error) {
 	return s.community.GetCategoryMappings(ctx, tenant)
 }
 
 // ApplyCategoryByMerchant updates matching transactions and future category auto-apply rules.
-func (s *Store) ApplyCategoryByMerchant(ctx context.Context, tenant Tenant, category, pattern string) (int64, error) {
+func (s *Store) ApplyCategoryByMerchant(ctx context.Context, tenant store.Tenant, category, pattern string) (int64, error) {
 	return s.community.ApplyCategoryByMerchant(ctx, tenant, category, pattern)
 }
 
 // RemoveCategoryByMerchant removes a merchant category auto-apply rule.
-func (s *Store) RemoveCategoryByMerchant(ctx context.Context, tenant Tenant, category, pattern string) (int64, error) {
+func (s *Store) RemoveCategoryByMerchant(ctx context.Context, tenant store.Tenant, category, pattern string) (int64, error) {
 	return s.community.RemoveCategoryByMerchant(ctx, tenant, category, pattern)
 }
 
 // --- Buckets ---
 
 // ListBuckets returns all buckets ordered by name.
-func (s *Store) ListBuckets(ctx context.Context, tenant Tenant) ([]Bucket, error) {
+func (s *Store) ListBuckets(ctx context.Context, tenant store.Tenant) ([]store.Bucket, error) {
 	return s.taxonomy.ListBuckets(ctx, tenant)
 }
 
 // CreateBucket inserts a new bucket. Silently ignores duplicate names.
-func (s *Store) CreateBucket(ctx context.Context, tenant Tenant, name, description string) error {
+func (s *Store) CreateBucket(ctx context.Context, tenant store.Tenant, name, description string) error {
 	return s.taxonomy.CreateBucket(ctx, tenant, name, description)
 }
 
 // DeleteBucket removes a bucket by name. Returns a NotFound error kind if it does not exist.
 // Returns an error if the bucket is a default one.
-func (s *Store) DeleteBucket(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
+func (s *Store) DeleteBucket(ctx context.Context, tenant store.Tenant, name string, removeFromTransactions bool) error {
 	return s.taxonomy.DeleteBucket(ctx, tenant, name, removeFromTransactions)
 }
 
 // GetBucketMappings returns persisted merchant patterns for each bucket.
-func (s *Store) GetBucketMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
+func (s *Store) GetBucketMappings(ctx context.Context, tenant store.Tenant) (map[string][]string, error) {
 	return s.community.GetBucketMappings(ctx, tenant)
 }
 
 // ApplyBucketByMerchant updates matching transactions and future bucket auto-apply rules.
-func (s *Store) ApplyBucketByMerchant(ctx context.Context, tenant Tenant, bucket, pattern string) (int64, error) {
+func (s *Store) ApplyBucketByMerchant(ctx context.Context, tenant store.Tenant, bucket, pattern string) (int64, error) {
 	return s.community.ApplyBucketByMerchant(ctx, tenant, bucket, pattern)
 }
 
 // RemoveBucketByMerchant removes a merchant bucket auto-apply rule.
-func (s *Store) RemoveBucketByMerchant(ctx context.Context, tenant Tenant, bucket, pattern string) (int64, error) {
+func (s *Store) RemoveBucketByMerchant(ctx context.Context, tenant store.Tenant, bucket, pattern string) (int64, error) {
 	return s.community.RemoveBucketByMerchant(ctx, tenant, bucket, pattern)
 }
 
@@ -534,72 +587,72 @@ func (s *Store) RemoveBucketByMerchant(ctx context.Context, tenant Tenant, bucke
 
 // UpdateTransaction updates one or more optional fields on a transaction.
 // Only non-nil pointer fields are written. Returns a NotFound error kind if no row matched.
-func (s *Store) UpdateTransaction(ctx context.Context, tenant Tenant, id string, u TransactionUpdate) error {
+func (s *Store) UpdateTransaction(ctx context.Context, tenant store.Tenant, id string, u store.TransactionUpdate) error {
 	return s.txns.UpdateTransaction(ctx, tenant, id, u)
 }
 
 // --- helpers ---
 
 // ListRules returns all rules ordered by user rules first, then predefined rules, both by name.
-func (s *Store) ListRules(ctx context.Context, tenant Tenant) ([]RuleRow, error) {
+func (s *Store) ListRules(ctx context.Context, tenant store.Tenant) ([]store.RuleRow, error) {
 	return s.rules.ListRules(ctx, tenant)
 }
 
 // GetRule fetches a single rule by UUID. Returns a NotFound error kind if no row matched.
-func (s *Store) GetRule(ctx context.Context, tenant Tenant, id string) (*RuleRow, error) {
+func (s *Store) GetRule(ctx context.Context, tenant store.Tenant, id string) (*store.RuleRow, error) {
 	return s.rules.GetRule(ctx, tenant, id)
 }
 
 // CreateRule inserts a new user rule and returns the created row.
-func (s *Store) CreateRule(ctx context.Context, tenant Tenant, r RuleRow) (*RuleRow, error) {
+func (s *Store) CreateRule(ctx context.Context, tenant store.Tenant, r store.RuleRow) (*store.RuleRow, error) {
 	return s.rules.CreateRule(ctx, tenant, r)
 }
 
 // UpdateRule updates any rule by ID. All rules (predefined and user-created) are editable.
 // Returns a NotFound error kind if no row matched.
-func (s *Store) UpdateRule(ctx context.Context, tenant Tenant, id string, r RuleRow) (*RuleRow, error) {
+func (s *Store) UpdateRule(ctx context.Context, tenant store.Tenant, id string, r store.RuleRow) (*store.RuleRow, error) {
 	return s.rules.UpdateRule(ctx, tenant, id, r)
 }
 
 // DeleteRule removes a non-predefined rule by ID. Returns a NotFound error kind if no row matched.
 // Predefined rules cannot be deleted.
-func (s *Store) DeleteRule(ctx context.Context, tenant Tenant, id string) error {
+func (s *Store) DeleteRule(ctx context.Context, tenant store.Tenant, id string) error {
 	return s.rules.DeleteRule(ctx, tenant, id)
 }
 
 // SeedPredefinedRules inserts predefined rules from the embedded rules.json.
 // Uses ON CONFLICT DO NOTHING so user edits to predefined rules are never overwritten.
-func (s *Store) SeedPredefinedRules(ctx context.Context, rules []RuleRow) error {
+func (s *Store) SeedPredefinedRules(ctx context.Context, rules []store.RuleRow) error {
 	return s.rules.SeedPredefinedRules(ctx, rules)
 }
 
 // RecordExtractionDiagnostic persists a failed extraction attempt for the temporary legacy tenant.
 func (s *Store) RecordExtractionDiagnostic(ctx context.Context, diagnostic api.ExtractionDiagnostic) error {
-	return s.diag.RecordExtractionDiagnostic(ctx, Tenant{}, diagnostic)
+	return s.diag.RecordExtractionDiagnostic(ctx, store.Tenant{}, diagnostic)
 }
 
 // RecordTenantExtractionDiagnostic persists a failed extraction attempt for a tenant.
-func (s *Store) RecordTenantExtractionDiagnostic(ctx context.Context, tenant Tenant, diagnostic api.ExtractionDiagnostic) error {
+func (s *Store) RecordTenantExtractionDiagnostic(ctx context.Context, tenant store.Tenant, diagnostic api.ExtractionDiagnostic) error {
 	return s.diag.RecordExtractionDiagnostic(ctx, tenant, diagnostic)
 }
 
 // ListExtractionDiagnostics returns diagnostics matching the supplied status filter.
-func (s *Store) ListExtractionDiagnostics(ctx context.Context, tenant Tenant, f DiagnosticFilter) ([]ExtractionDiagnosticRow, error) {
+func (s *Store) ListExtractionDiagnostics(ctx context.Context, tenant store.Tenant, f store.DiagnosticFilter) ([]store.ExtractionDiagnosticRow, error) {
 	return s.diag.ListExtractionDiagnostics(ctx, tenant, f)
 }
 
 // GetExtractionDiagnostic fetches one diagnostic by UUID.
-func (s *Store) GetExtractionDiagnostic(ctx context.Context, tenant Tenant, id string) (*ExtractionDiagnosticRow, error) {
+func (s *Store) GetExtractionDiagnostic(ctx context.Context, tenant store.Tenant, id string) (*store.ExtractionDiagnosticRow, error) {
 	return s.diag.GetExtractionDiagnostic(ctx, tenant, id)
 }
 
 // UpdateExtractionDiagnosticStatus changes a diagnostic status and returns the updated row.
-func (s *Store) UpdateExtractionDiagnosticStatus(ctx context.Context, tenant Tenant, id, status string) (*ExtractionDiagnosticRow, error) {
+func (s *Store) UpdateExtractionDiagnosticStatus(ctx context.Context, tenant store.Tenant, id, status string) (*store.ExtractionDiagnosticRow, error) {
 	return s.diag.UpdateExtractionDiagnosticStatus(ctx, tenant, id, status)
 }
 
 // ImportUserRules upserts user-supplied rules inside a transaction. Idempotent per name.
-func (s *Store) ImportUserRules(ctx context.Context, tenant Tenant, rules []RuleRow) error {
+func (s *Store) ImportUserRules(ctx context.Context, tenant store.Tenant, rules []store.RuleRow) error {
 	return s.rules.ImportUserRules(ctx, tenant, rules)
 }
 
@@ -608,80 +661,80 @@ func (s *Store) ImportUserRules(ctx context.Context, tenant Tenant, rules []Rule
 
 // MuteTransaction sets or clears the muted flag on a single transaction.
 // reason is optional; pass empty string to leave it unchanged when muted=false.
-func (s *Store) MuteTransaction(ctx context.Context, tenant Tenant, id string, muted bool, reason string) error {
+func (s *Store) MuteTransaction(ctx context.Context, tenant store.Tenant, id string, muted bool, reason string) error {
 	return s.txns.MuteTransaction(ctx, tenant, id, muted, reason)
 }
 
 // UpdateMuteReason updates the mute_reason on an individually muted transaction.
-func (s *Store) UpdateMuteReason(ctx context.Context, tenant Tenant, id, reason string) error {
+func (s *Store) UpdateMuteReason(ctx context.Context, tenant store.Tenant, id, reason string) error {
 	return s.txns.UpdateMuteReason(ctx, tenant, id, reason)
 }
 
 // UpdateMerchantReason updates the reason on a muted_merchants entry.
-func (s *Store) UpdateMerchantReason(ctx context.Context, tenant Tenant, id, reason string) error {
+func (s *Store) UpdateMerchantReason(ctx context.Context, tenant store.Tenant, id, reason string) error {
 	return s.txns.UpdateMerchantReason(ctx, tenant, id, reason)
 }
 
 // MuteByMerchant mutes all matching transactions (muted_by_merchant=true) and
 // stores the pattern in muted_merchants for future auto-muting.
-func (s *Store) MuteByMerchant(ctx context.Context, tenant Tenant, pattern, reason string) error {
+func (s *Store) MuteByMerchant(ctx context.Context, tenant store.Tenant, pattern, reason string) error {
 	return s.txns.MuteByMerchant(ctx, tenant, pattern, reason)
 }
 
 // CategorizeMerchant atomically updates all transactions with the given merchant_info
 // (exact case-sensitive equality match, not substring) and upserts a user_locked entry
 // in merchant_categories for future scans. Returns the number of transaction rows updated.
-func (s *Store) CategorizeMerchant(ctx context.Context, tenant Tenant, merchant, category, bucket string) (int64, error) {
+func (s *Store) CategorizeMerchant(ctx context.Context, tenant store.Tenant, merchant, category, bucket string) (int64, error) {
 	return s.community.CategorizeMerchant(ctx, tenant, merchant, category, bucket)
 }
 
 // ListMutedMerchants returns all muted merchant patterns ordered by creation time.
-func (s *Store) ListMutedMerchants(ctx context.Context, tenant Tenant) ([]MutedMerchant, error) {
+func (s *Store) ListMutedMerchants(ctx context.Context, tenant store.Tenant) ([]store.MutedMerchant, error) {
 	return s.txns.ListMutedMerchants(ctx, tenant)
 }
 
 // GetMutedMerchantsWithCount returns each muted merchant with the count of
 // transactions currently muted by that merchant-wide rule.
-func (s *Store) GetMutedMerchantsWithCount(ctx context.Context, tenant Tenant) ([]MutedMerchantWithCount, error) {
+func (s *Store) GetMutedMerchantsWithCount(ctx context.Context, tenant store.Tenant) ([]store.MutedMerchantWithCount, error) {
 	return s.txns.GetMutedMerchantsWithCount(ctx, tenant)
 }
 
 // DeleteMutedMerchant removes a muted merchant pattern by ID.
-func (s *Store) DeleteMutedMerchant(ctx context.Context, tenant Tenant, id string) error {
+func (s *Store) DeleteMutedMerchant(ctx context.Context, tenant store.Tenant, id string) error {
 	return s.txns.DeleteMutedMerchant(ctx, tenant, id)
 }
 
 // UnmuteByPattern sets muted=false on all transactions whose merchant_info
 // matches the pattern (ILIKE contains). Used when removing a merchant-wide rule.
-func (s *Store) UnmuteByPattern(ctx context.Context, tenant Tenant, pattern string) error {
+func (s *Store) UnmuteByPattern(ctx context.Context, tenant store.Tenant, pattern string) error {
 	return s.txns.UnmuteByPattern(ctx, tenant, pattern)
 }
 
 // DeleteMutedMerchantAndUnmute atomically deletes the merchant pattern and
 // sets muted=false on all matching transactions in a single transaction.
 // Returns a NotFound error kind if no row matched the id.
-func (s *Store) DeleteMutedMerchantAndUnmute(ctx context.Context, tenant Tenant, id string) error {
+func (s *Store) DeleteMutedMerchantAndUnmute(ctx context.Context, tenant store.Tenant, id string) error {
 	return s.txns.DeleteMutedMerchantAndUnmute(ctx, tenant, id)
 }
 
 // GetMutedMerchantPatterns returns all active ILIKE patterns used for auto-muting at write time.
-func (s *Store) GetMutedMerchantPatterns(ctx context.Context, tenant Tenant) ([]string, error) {
+func (s *Store) GetMutedMerchantPatterns(ctx context.Context, tenant store.Tenant) ([]string, error) {
 	return s.txns.GetMutedMerchantPatterns(ctx, tenant)
 }
 
-func (s *Store) loadLabels(ctx context.Context, txns []Transaction) error {
+func (s *Store) loadLabels(ctx context.Context, txns []store.Transaction) error {
 	return s.txns.loadLabels(ctx, txns)
 }
 
 // SeedMCCCodes upserts all MCC codes. Community content is authoritative for
 // MCC definitions; this always overwrites existing rows.
-func (s *Store) SeedMCCCodes(ctx context.Context, entries []MCCEntry) error {
+func (s *Store) SeedMCCCodes(ctx context.Context, entries []store.MCCEntry) error {
 	return s.community.SeedMCCCodes(ctx, entries)
 }
 
 // SeedMerchantCategories upserts community merchant fragment mappings, skipping
 // rows where user_locked = true (user has explicitly modified the entry).
-func (s *Store) SeedMerchantCategories(ctx context.Context, entries []MerchantCategoryEntry) (int64, error) {
+func (s *Store) SeedMerchantCategories(ctx context.Context, entries []store.MerchantCategoryEntry) (int64, error) {
 	return s.community.SeedMerchantCategories(ctx, entries)
 }
 
@@ -700,22 +753,22 @@ func (s *Store) SeedMCCCategories(ctx context.Context, names []string) error {
 
 // GetSyncStatus reads the community content sync status from app_config.
 // Returns a zero-value SyncStatus (LastSyncedAt = nil) if never synced.
-func (s *Store) GetSyncStatus(ctx context.Context) (SyncStatus, error) {
+func (s *Store) GetSyncStatus(ctx context.Context) (store.SyncStatus, error) {
 	return s.runtime.GetSyncStatus(ctx)
 }
 
 // SetSyncStatus stores the community content sync status in app_config.
-func (s *Store) SetSyncStatus(ctx context.Context, status SyncStatus) error {
+func (s *Store) SetSyncStatus(ctx context.Context, status store.SyncStatus) error {
 	return s.runtime.SetSyncStatus(ctx, status)
 }
 
 // GetCommunitySyncSettings reads process-wide community sync settings from app_config.
-func (s *Store) GetCommunitySyncSettings(ctx context.Context) (CommunitySyncSettings, error) {
+func (s *Store) GetCommunitySyncSettings(ctx context.Context) (store.CommunitySyncSettings, error) {
 	return s.runtime.GetCommunitySyncSettings(ctx)
 }
 
 // PatchCommunitySyncSettings updates process-wide community sync settings in app_config.
-func (s *Store) PatchCommunitySyncSettings(ctx context.Context, patch CommunitySyncSettingsPatch) (CommunitySyncSettings, error) {
+func (s *Store) PatchCommunitySyncSettings(ctx context.Context, patch store.CommunitySyncSettingsPatch) (store.CommunitySyncSettings, error) {
 	return s.runtime.PatchCommunitySyncSettings(ctx, patch)
 }
 

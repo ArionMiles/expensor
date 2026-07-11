@@ -3,9 +3,11 @@ package postgres
 import (
 	"fmt"
 	"strings"
+
+	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
-func tenantIDParam(tenant Tenant) any {
+func tenantIDParam(tenant store.Tenant) any {
 	tenantID := strings.TrimSpace(tenant.ID)
 	if tenantID == "" {
 		return nil

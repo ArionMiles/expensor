@@ -4,7 +4,7 @@ package migrations
 import (
 	"context"
 	"embed"
-	"errors"
+	stderrors "errors"
 	"log/slog"
 
 	migrate "github.com/golang-migrate/migrate/v4"
@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 
-	apperrors "github.com/ArionMiles/expensor/backend/pkg/errors"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // FS contains every migration file in this directory.
@@ -38,15 +38,15 @@ func Run(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger) error {
 	defer closeMigrator(m)
 
 	logger.Debug("running embedded migrations")
-	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return apperrors.E("postgres.migrations.run", apperrors.Internal, "applying migrations", err)
+	if err := m.Up(); err != nil && !stderrors.Is(err, migrate.ErrNoChange) {
+		return errors.E("postgres.migrations.run", errors.Internal, "applying migrations", err)
 	}
 	return nil
 }
 
 func ensureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	if _, err := pool.Exec(ctx, `CREATE SCHEMA IF NOT EXISTS expensor`); err != nil {
-		return apperrors.E("postgres.migrations.ensure_schema", apperrors.Internal, "creating expensor schema", err)
+		return errors.E("postgres.migrations.ensure_schema", errors.Internal, "creating expensor schema", err)
 	}
 	return nil
 }
@@ -56,7 +56,7 @@ func newMigrator(pool *pgxpool.Pool) (*migrate.Migrate, error) {
 	source, err := iofs.New(FS, ".")
 	if err != nil {
 		_ = db.Close()
-		return nil, apperrors.E("postgres.migrations.new", apperrors.Internal, "creating embedded migration source", err)
+		return nil, errors.E("postgres.migrations.new", errors.Internal, "creating embedded migration source", err)
 	}
 
 	driver, err := pgdriver.WithInstance(db, &pgdriver.Config{
@@ -64,13 +64,13 @@ func newMigrator(pool *pgxpool.Pool) (*migrate.Migrate, error) {
 	})
 	if err != nil {
 		_ = db.Close()
-		return nil, apperrors.E("postgres.migrations.new", apperrors.Internal, "creating postgres migration driver", err)
+		return nil, errors.E("postgres.migrations.new", errors.Internal, "creating postgres migration driver", err)
 	}
 
 	m, err := migrate.NewWithInstance("iofs", source, "pgx5", driver)
 	if err != nil {
 		_ = db.Close()
-		return nil, apperrors.E("postgres.migrations.new", apperrors.Internal, "initializing migrate", err)
+		return nil, errors.E("postgres.migrations.new", errors.Internal, "initializing migrate", err)
 	}
 	return m, nil
 }

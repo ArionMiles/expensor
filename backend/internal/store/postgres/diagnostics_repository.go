@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
@@ -19,7 +20,7 @@ func newDiagnosticsRepository(deps repositoryDependencies) *diagnosticsRepositor
 	}
 }
 
-func (r *diagnosticsRepository) RecordExtractionDiagnostic(ctx context.Context, tenant Tenant, diagnostic api.ExtractionDiagnostic) error {
+func (r *diagnosticsRepository) RecordExtractionDiagnostic(ctx context.Context, tenant store.Tenant, diagnostic api.ExtractionDiagnostic) error {
 	q := diagnosticUpsertSQL(tenant)
 
 	_, err := r.pool.Exec(ctx, q,
@@ -46,7 +47,7 @@ func (r *diagnosticsRepository) RecordExtractionDiagnostic(ctx context.Context, 
 	return nil
 }
 
-func diagnosticUpsertSQL(tenant Tenant) string {
+func diagnosticUpsertSQL(tenant store.Tenant) string {
 	conflict := "ON CONFLICT (tenant_id, reader, message_id, rule_name) WHERE tenant_id IS NOT NULL AND status = 'open' AND message_id IS NOT NULL"
 	if tenantIDParam(tenant) == nil {
 		conflict = "ON CONFLICT (reader, message_id, rule_name) WHERE tenant_id IS NULL AND status = 'open' AND message_id IS NOT NULL"
@@ -75,15 +76,19 @@ func diagnosticUpsertSQL(tenant Tenant) string {
 		`
 }
 
-func (r *diagnosticsRepository) ListExtractionDiagnostics(ctx context.Context, tenant Tenant, f DiagnosticFilter) ([]ExtractionDiagnosticRow, error) {
-	if err := ValidateDiagnosticFilterStatus(f.Status); err != nil {
+func (r *diagnosticsRepository) ListExtractionDiagnostics(
+	ctx context.Context,
+	tenant store.Tenant,
+	f store.DiagnosticFilter,
+) ([]store.ExtractionDiagnosticRow, error) {
+	if err := store.ValidateDiagnosticFilterStatus(f.Status); err != nil {
 		return nil, err
 	}
 
 	query := `SELECT ` + diagnosticColumns + ` FROM extraction_diagnostics`
 	args := []any{tenantIDParam(tenant)}
 	query += ` WHERE tenant_id IS NOT DISTINCT FROM $1`
-	if f.Status != DiagnosticStatusAll {
+	if f.Status != store.DiagnosticStatusAll {
 		query += ` AND status = $2`
 		args = append(args, f.Status)
 	}
@@ -105,7 +110,7 @@ func (r *diagnosticsRepository) ListExtractionDiagnostics(ctx context.Context, t
 	return result, nil
 }
 
-func (r *diagnosticsRepository) GetExtractionDiagnostic(ctx context.Context, tenant Tenant, id string) (*ExtractionDiagnosticRow, error) {
+func (r *diagnosticsRepository) GetExtractionDiagnostic(ctx context.Context, tenant store.Tenant, id string) (*store.ExtractionDiagnosticRow, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+diagnosticColumns+` FROM extraction_diagnostics WHERE id = $1 AND tenant_id IS NOT DISTINCT FROM $2`,
 		id, tenantIDParam(tenant),
@@ -126,11 +131,11 @@ func (r *diagnosticsRepository) GetExtractionDiagnostic(ctx context.Context, ten
 
 func (r *diagnosticsRepository) UpdateExtractionDiagnosticStatus(
 	ctx context.Context,
-	tenant Tenant,
+	tenant store.Tenant,
 	id string,
 	status string,
-) (*ExtractionDiagnosticRow, error) {
-	if err := validateDiagnosticRowStatus(status); err != nil {
+) (*store.ExtractionDiagnosticRow, error) {
+	if err := store.ValidateDiagnosticUpdateStatus(status); err != nil {
 		return nil, err
 	}
 

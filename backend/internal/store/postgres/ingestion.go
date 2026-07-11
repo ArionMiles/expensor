@@ -10,13 +10,14 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/ArionMiles/expensor/backend/internal/observability"
+	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
 // TransactionIngestor writes extracted daemon transactions to the application store.
 type TransactionIngestor struct {
 	pool          poolBeginner
-	tenant        Tenant
+	tenant        store.Tenant
 	logger        *slog.Logger
 	batchSize     int
 	flushInterval time.Duration
@@ -26,7 +27,7 @@ type TransactionIngestor struct {
 const defaultTransactionCurrency = "INR"
 
 // NewTransactionIngestor creates a transaction ingestor backed by the store pool.
-func (s *Store) NewTransactionIngestor(cfg IngestionConfig, logger *slog.Logger) *TransactionIngestor {
+func (s *Store) NewTransactionIngestor(cfg store.IngestionConfig, logger *slog.Logger) *TransactionIngestor {
 	if logger == nil {
 		logger = s.logger
 	}

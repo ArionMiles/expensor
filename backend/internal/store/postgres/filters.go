@@ -3,6 +3,8 @@ package postgres
 import (
 	"fmt"
 	"strings"
+
+	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
 func joinLabel(label string) string {
@@ -14,7 +16,7 @@ func joinLabel(label string) string {
 
 // buildListWhere builds the WHERE clause and argument list for ListTransactions / SearchTransactions.
 // args is grown in-place; the first placeholder index is len(existingArgs)+1.
-func buildListWhere(f ListFilter) (string, []any) {
+func buildListWhere(f store.ListFilter) (string, []any) {
 	var conds []string
 	var args []any
 
@@ -97,7 +99,7 @@ func buildListWhere(f ListFilter) (string, []any) {
 	return " WHERE " + strings.Join(conds, " AND "), args
 }
 
-func appendTaxonomyListWhere(conds []string, f ListFilter, next func(any) string) []string {
+func appendTaxonomyListWhere(conds []string, f store.ListFilter, next func(any) string) []string {
 	if f.Category != "" {
 		conds = append(conds, fmt.Sprintf("t.category ILIKE %s", next("%"+f.Category+"%")))
 	}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
@@ -26,31 +27,31 @@ func newCommunityRepository(deps repositoryDependencies) *communityRepository {
 	}
 }
 
-func (r *communityRepository) ApplyCategoryByMerchant(ctx context.Context, tenant Tenant, category, merchant string) (int64, error) {
+func (r *communityRepository) ApplyCategoryByMerchant(ctx context.Context, tenant store.Tenant, category, merchant string) (int64, error) {
 	return r.applyTaxonomyByMerchant(ctx, tenant, merchant, "category", category)
 }
 
-func (r *communityRepository) ApplyBucketByMerchant(ctx context.Context, tenant Tenant, bucket, merchant string) (int64, error) {
+func (r *communityRepository) ApplyBucketByMerchant(ctx context.Context, tenant store.Tenant, bucket, merchant string) (int64, error) {
 	return r.applyTaxonomyByMerchant(ctx, tenant, merchant, "bucket", bucket)
 }
 
-func (r *communityRepository) RemoveCategoryByMerchant(ctx context.Context, tenant Tenant, category, merchant string) (int64, error) {
+func (r *communityRepository) RemoveCategoryByMerchant(ctx context.Context, tenant store.Tenant, category, merchant string) (int64, error) {
 	return r.removeTaxonomyByMerchant(ctx, tenant, merchant, "category", category)
 }
 
-func (r *communityRepository) RemoveBucketByMerchant(ctx context.Context, tenant Tenant, bucket, merchant string) (int64, error) {
+func (r *communityRepository) RemoveBucketByMerchant(ctx context.Context, tenant store.Tenant, bucket, merchant string) (int64, error) {
 	return r.removeTaxonomyByMerchant(ctx, tenant, merchant, "bucket", bucket)
 }
 
-func (r *communityRepository) GetCategoryMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
+func (r *communityRepository) GetCategoryMappings(ctx context.Context, tenant store.Tenant) (map[string][]string, error) {
 	return r.getTaxonomyMappings(ctx, tenant, "category")
 }
 
-func (r *communityRepository) GetBucketMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
+func (r *communityRepository) GetBucketMappings(ctx context.Context, tenant store.Tenant) (map[string][]string, error) {
 	return r.getTaxonomyMappings(ctx, tenant, "bucket")
 }
 
-func (r *communityRepository) CategorizeMerchant(ctx context.Context, tenant Tenant, merchant, category, bucket string) (int64, error) {
+func (r *communityRepository) CategorizeMerchant(ctx context.Context, tenant store.Tenant, merchant, category, bucket string) (int64, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("beginning categorize-merchant transaction: %w", err)
@@ -88,7 +89,7 @@ func (r *communityRepository) CategorizeMerchant(ctx context.Context, tenant Ten
 	return rowsUpdated, nil
 }
 
-func merchantCategoryConflict(tenant Tenant) string {
+func merchantCategoryConflict(tenant store.Tenant) string {
 	if tenantIDParam(tenant) == nil {
 		return "ON CONFLICT (fragment) WHERE tenant_id IS NULL"
 	}
@@ -97,7 +98,7 @@ func merchantCategoryConflict(tenant Tenant) string {
 
 func (r *communityRepository) applyTaxonomyByMerchant(
 	ctx context.Context,
-	tenant Tenant,
+	tenant store.Tenant,
 	merchant string,
 	column string,
 	value string,
@@ -138,7 +139,7 @@ func (r *communityRepository) applyTaxonomyByMerchant(
 
 func (r *communityRepository) removeTaxonomyByMerchant(
 	ctx context.Context,
-	tenant Tenant,
+	tenant store.Tenant,
 	merchant string,
 	column string,
 	value string,
@@ -163,7 +164,7 @@ func (r *communityRepository) removeTaxonomyByMerchant(
 	return rowsUpdated, nil
 }
 
-func (r *communityRepository) getTaxonomyMappings(ctx context.Context, tenant Tenant, column string) (map[string][]string, error) {
+func (r *communityRepository) getTaxonomyMappings(ctx context.Context, tenant store.Tenant, column string) (map[string][]string, error) {
 	mappings := map[string][]string{}
 	rows, err := r.pool.Query(ctx, fmt.Sprintf(
 		`SELECT %s, fragment FROM merchant_categories WHERE tenant_id IS NOT DISTINCT FROM $1 AND %s IS NOT NULL ORDER BY %s, fragment`,
@@ -186,7 +187,7 @@ func (r *communityRepository) getTaxonomyMappings(ctx context.Context, tenant Te
 	return mappings, rows.Err()
 }
 
-func (r *communityRepository) SeedMCCCodes(ctx context.Context, entries []MCCEntry) error {
+func (r *communityRepository) SeedMCCCodes(ctx context.Context, entries []store.MCCEntry) error {
 	for _, entry := range entries {
 		_, err := r.pool.Exec(ctx, `
 			INSERT INTO mcc_codes (code, description, category, bucket, updated_at)
@@ -204,7 +205,7 @@ func (r *communityRepository) SeedMCCCodes(ctx context.Context, entries []MCCEnt
 	return nil
 }
 
-func (r *communityRepository) SeedMerchantCategories(ctx context.Context, entries []MerchantCategoryEntry) (int64, error) {
+func (r *communityRepository) SeedMerchantCategories(ctx context.Context, entries []store.MerchantCategoryEntry) (int64, error) {
 	var updated int64
 	for _, entry := range entries {
 		tag, err := r.pool.Exec(ctx, `

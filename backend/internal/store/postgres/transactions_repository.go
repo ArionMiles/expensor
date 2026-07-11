@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
@@ -18,8 +19,8 @@ type transactionsRepository struct {
 }
 
 type transactionQueryRequest struct {
-	tenant     Tenant
-	filter     ListFilter
+	tenant     store.Tenant
+	filter     store.ListFilter
 	search     string
 	countError string
 	dataError  string
@@ -33,17 +34,17 @@ func newTransactionsRepository(deps repositoryDependencies) *transactionsReposit
 
 func (r *transactionsRepository) ListTransactions(
 	ctx context.Context,
-	tenant Tenant,
-	f ListFilter,
-) (transactions []Transaction, result TransactionListResult, err error) {
+	tenant store.Tenant,
+	f store.ListFilter,
+) (transactions []store.Transaction, result store.TransactionListResult, err error) {
 	return r.listTransactionsQuery(ctx, tenant, f)
 }
 
 func (r *transactionsRepository) listTransactionsQuery(
 	ctx context.Context,
-	tenant Tenant,
-	f ListFilter,
-) (transactions []Transaction, result TransactionListResult, err error) {
+	tenant store.Tenant,
+	f store.ListFilter,
+) (transactions []store.Transaction, result store.TransactionListResult, err error) {
 	return r.queryTransactions(ctx, transactionQueryRequest{
 		tenant:     tenant,
 		filter:     f,
@@ -55,11 +56,11 @@ func (r *transactionsRepository) listTransactionsQuery(
 func (r *transactionsRepository) queryTransactions(
 	ctx context.Context,
 	request transactionQueryRequest,
-) (transactions []Transaction, result TransactionListResult, err error) {
+) (transactions []store.Transaction, result store.TransactionListResult, err error) {
 	f := normalizeTransactionListFilter(request.filter)
 	offset, err := transactionOffset(f)
 	if err != nil {
-		return nil, TransactionListResult{}, err
+		return nil, store.TransactionListResult{}, err
 	}
 	query := strings.TrimSpace(request.search)
 
@@ -75,7 +76,7 @@ func (r *transactionsRepository) queryTransactions(
 
 	totalResult, err := r.queryTransactionTotals(ctx, join, where, args)
 	if err != nil {
-		return nil, TransactionListResult{}, fmt.Errorf("%s: %w", request.countError, err)
+		return nil, store.TransactionListResult{}, fmt.Errorf("%s: %w", request.countError, err)
 	}
 
 	args = append(args, f.PageSize, offset)
@@ -95,23 +96,23 @@ func (r *transactionsRepository) queryTransactions(
 
 	rows, err := r.pool.Query(ctx, dataSQL, args...)
 	if err != nil {
-		return nil, TransactionListResult{}, fmt.Errorf("%s: %w", request.dataError, err)
+		return nil, store.TransactionListResult{}, fmt.Errorf("%s: %w", request.dataError, err)
 	}
 	defer rows.Close()
 
 	txns, err := scanTransactions(rows)
 	if err != nil {
-		return nil, TransactionListResult{}, err
+		return nil, store.TransactionListResult{}, err
 	}
 
 	if err := r.loadLabels(ctx, txns); err != nil {
-		return nil, TransactionListResult{}, err
+		return nil, store.TransactionListResult{}, err
 	}
 
 	return txns, totalResult, nil
 }
 
-func transactionOffset(filter ListFilter) (int, error) {
+func transactionOffset(filter store.ListFilter) (int, error) {
 	if filter.Page-1 > math.MaxInt/filter.PageSize {
 		return 0, errors.E(
 			"store.transactions.list",
@@ -122,7 +123,7 @@ func transactionOffset(filter ListFilter) (int, error) {
 	return (filter.Page - 1) * filter.PageSize, nil
 }
 
-func normalizeTransactionListFilter(f ListFilter) ListFilter {
+func normalizeTransactionListFilter(f store.ListFilter) store.ListFilter {
 	if f.Page < 1 {
 		f.Page = 1
 	}
@@ -132,18 +133,18 @@ func normalizeTransactionListFilter(f ListFilter) ListFilter {
 	return f
 }
 
-func transactionOrderClause(f ListFilter) string {
+func transactionOrderClause(f store.ListFilter) string {
 	if strings.ToLower(f.SortDir) == "asc" {
 		return "t.timestamp ASC"
 	}
 	return "t.timestamp DESC"
 }
 
-func (r *transactionsRepository) GetTransaction(ctx context.Context, tenant Tenant, id string) (*Transaction, error) {
+func (r *transactionsRepository) GetTransaction(ctx context.Context, tenant store.Tenant, id string) (*store.Transaction, error) {
 	return r.getTransactionQuery(ctx, tenant, id)
 }
 
-func (r *transactionsRepository) getTransactionQuery(ctx context.Context, tenant Tenant, id string) (*Transaction, error) {
+func (r *transactionsRepository) getTransactionQuery(ctx context.Context, tenant store.Tenant, id string) (*store.Transaction, error) {
 	const q = `
 		SELECT t.id, t.message_id, t.amount, t.currency,
 		       t.original_amount, t.original_currency, t.exchange_rate,
@@ -174,7 +175,7 @@ func (r *transactionsRepository) getTransactionQuery(ctx context.Context, tenant
 	return &txns[0], nil
 }
 
-func (r *transactionsRepository) UpdateDescription(ctx context.Context, tenant Tenant, id, description string) error {
+func (r *transactionsRepository) UpdateDescription(ctx context.Context, tenant store.Tenant, id, description string) error {
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE transactions SET description = $1 WHERE id = $2 AND tenant_id IS NOT DISTINCT FROM $3`,
 		description, id, tenantIDParam(tenant),
@@ -188,7 +189,7 @@ func (r *transactionsRepository) UpdateDescription(ctx context.Context, tenant T
 	return nil
 }
 
-func (r *transactionsRepository) AddLabel(ctx context.Context, tenant Tenant, transactionID, label string) error {
+func (r *transactionsRepository) AddLabel(ctx context.Context, tenant store.Tenant, transactionID, label string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("beginning add-label transaction: %w", err)
@@ -223,7 +224,7 @@ func (r *transactionsRepository) AddLabel(ctx context.Context, tenant Tenant, tr
 	return nil
 }
 
-func (r *transactionsRepository) AddLabels(ctx context.Context, tenant Tenant, transactionID string, labels []string) error {
+func (r *transactionsRepository) AddLabels(ctx context.Context, tenant store.Tenant, transactionID string, labels []string) error {
 	if len(labels) == 0 {
 		return nil
 	}
@@ -262,7 +263,7 @@ func (r *transactionsRepository) AddLabels(ctx context.Context, tenant Tenant, t
 	return nil
 }
 
-func (r *transactionsRepository) RemoveLabel(ctx context.Context, tenant Tenant, transactionID, label string) error {
+func (r *transactionsRepository) RemoveLabel(ctx context.Context, tenant store.Tenant, transactionID, label string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("beginning remove-label transaction: %w", err)
@@ -305,19 +306,19 @@ func (r *transactionsRepository) RemoveLabel(ctx context.Context, tenant Tenant,
 
 func (r *transactionsRepository) SearchTransactions(
 	ctx context.Context,
-	tenant Tenant,
+	tenant store.Tenant,
 	query string,
-	f ListFilter,
-) (transactions []Transaction, result TransactionListResult, err error) {
+	f store.ListFilter,
+) (transactions []store.Transaction, result store.TransactionListResult, err error) {
 	return r.searchTransactionsQuery(ctx, tenant, query, f)
 }
 
 func (r *transactionsRepository) searchTransactionsQuery(
 	ctx context.Context,
-	tenant Tenant,
+	tenant store.Tenant,
 	query string,
-	f ListFilter,
-) (transactions []Transaction, result TransactionListResult, err error) {
+	f store.ListFilter,
+) (transactions []store.Transaction, result store.TransactionListResult, err error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return r.listTransactionsQuery(ctx, tenant, f)
@@ -331,12 +332,12 @@ func (r *transactionsRepository) searchTransactionsQuery(
 	})
 }
 
-func (r *transactionsRepository) GetFacets(ctx context.Context, tenant Tenant) (*Facets, error) {
+func (r *transactionsRepository) GetFacets(ctx context.Context, tenant store.Tenant) (*store.Facets, error) {
 	return r.getFacetsQuery(ctx, tenant)
 }
 
-func (r *transactionsRepository) getFacetsQuery(ctx context.Context, tenant Tenant) (*Facets, error) {
-	var f Facets
+func (r *transactionsRepository) getFacetsQuery(ctx context.Context, tenant store.Tenant) (*store.Facets, error) {
+	var f store.Facets
 	if err := r.loadFacetValues(ctx, tenant, &f); err != nil {
 		return nil, err
 	}
@@ -351,7 +352,7 @@ func (r *transactionsRepository) getFacetsQuery(ctx context.Context, tenant Tena
 	return &f, nil
 }
 
-func (r *transactionsRepository) loadFacetValues(ctx context.Context, tenant Tenant, f *Facets) error {
+func (r *transactionsRepository) loadFacetValues(ctx context.Context, tenant store.Tenant, f *store.Facets) error {
 	queries := []struct {
 		sql  string
 		dest *[]string
@@ -430,7 +431,7 @@ func (r *transactionsRepository) loadFacetValues(ctx context.Context, tenant Ten
 	return nil
 }
 
-func (r *transactionsRepository) loadFacetCounts(ctx context.Context, tenant Tenant, f *Facets) error {
+func (r *transactionsRepository) loadFacetCounts(ctx context.Context, tenant store.Tenant, f *store.Facets) error {
 	if err := r.scanFacetCountMap(ctx, `
 		SELECT tl.label, COUNT(*)::int
 		FROM transaction_labels tl
@@ -495,7 +496,7 @@ func (r *transactionsRepository) scanFacetCountMap(ctx context.Context, sql, nam
 	return nil
 }
 
-func normalizeFacetSlices(f *Facets) {
+func normalizeFacetSlices(f *store.Facets) {
 	if f.Sources == nil {
 		f.Sources = []string{}
 	}
@@ -522,7 +523,7 @@ func normalizeFacetSlices(f *Facets) {
 	}
 }
 
-func (r *transactionsRepository) UpdateTransaction(ctx context.Context, tenant Tenant, id string, u TransactionUpdate) error {
+func (r *transactionsRepository) UpdateTransaction(ctx context.Context, tenant store.Tenant, id string, u store.TransactionUpdate) error {
 	if u.Description == nil && u.Category == nil && u.Bucket == nil {
 		return nil
 	}
@@ -556,7 +557,7 @@ func (r *transactionsRepository) UpdateTransaction(ctx context.Context, tenant T
 	return nil
 }
 
-func (r *transactionsRepository) MuteTransaction(ctx context.Context, tenant Tenant, id string, muted bool, reason string) error {
+func (r *transactionsRepository) MuteTransaction(ctx context.Context, tenant store.Tenant, id string, muted bool, reason string) error {
 	var tag pgconn.CommandTag
 	var err error
 	if muted {
@@ -581,7 +582,7 @@ func (r *transactionsRepository) MuteTransaction(ctx context.Context, tenant Ten
 	return nil
 }
 
-func (r *transactionsRepository) UpdateMuteReason(ctx context.Context, tenant Tenant, id, reason string) error {
+func (r *transactionsRepository) UpdateMuteReason(ctx context.Context, tenant store.Tenant, id, reason string) error {
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE transactions SET mute_reason=NULLIF($2,''), updated_at=NOW()
 		 WHERE id=$1 AND muted=true AND tenant_id IS NOT DISTINCT FROM $3`,
@@ -596,7 +597,7 @@ func (r *transactionsRepository) UpdateMuteReason(ctx context.Context, tenant Te
 	return nil
 }
 
-func (r *transactionsRepository) UpdateMerchantReason(ctx context.Context, tenant Tenant, id, reason string) error {
+func (r *transactionsRepository) UpdateMerchantReason(ctx context.Context, tenant store.Tenant, id, reason string) error {
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE muted_merchants SET reason=NULLIF($2,'') WHERE id=$1 AND tenant_id IS NOT DISTINCT FROM $3`,
 		id, reason, tenantIDParam(tenant),
@@ -610,7 +611,7 @@ func (r *transactionsRepository) UpdateMerchantReason(ctx context.Context, tenan
 	return nil
 }
 
-func (r *transactionsRepository) MuteByMerchant(ctx context.Context, tenant Tenant, pattern, reason string) error {
+func (r *transactionsRepository) MuteByMerchant(ctx context.Context, tenant store.Tenant, pattern, reason string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("beginning mute-by-merchant transaction: %w", err)
@@ -638,7 +639,7 @@ func (r *transactionsRepository) MuteByMerchant(ctx context.Context, tenant Tena
 	return tx.Commit(ctx)
 }
 
-func mutedMerchantUpsertSQL(tenant Tenant) string {
+func mutedMerchantUpsertSQL(tenant store.Tenant) string {
 	if tenantIDParam(tenant) == nil {
 		return `INSERT INTO muted_merchants (tenant_id, pattern, reason)
 			 VALUES ($1, $2, NULLIF($3,''))
@@ -651,11 +652,11 @@ func mutedMerchantUpsertSQL(tenant Tenant) string {
 			 DO UPDATE SET reason=EXCLUDED.reason`
 }
 
-func (r *transactionsRepository) ListMutedMerchants(ctx context.Context, tenant Tenant) ([]MutedMerchant, error) {
+func (r *transactionsRepository) ListMutedMerchants(ctx context.Context, tenant store.Tenant) ([]store.MutedMerchant, error) {
 	return r.listMutedMerchantsQuery(ctx, tenant)
 }
 
-func (r *transactionsRepository) listMutedMerchantsQuery(ctx context.Context, tenant Tenant) ([]MutedMerchant, error) {
+func (r *transactionsRepository) listMutedMerchantsQuery(ctx context.Context, tenant store.Tenant) ([]store.MutedMerchant, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT id, pattern, COALESCE(reason,''), created_at
 		 FROM muted_merchants
@@ -666,25 +667,25 @@ func (r *transactionsRepository) listMutedMerchantsQuery(ctx context.Context, te
 		return nil, fmt.Errorf("listing muted merchants: %w", err)
 	}
 	defer rows.Close()
-	var result []MutedMerchant
+	var result []store.MutedMerchant
 	for rows.Next() {
-		var m MutedMerchant
+		var m store.MutedMerchant
 		if err := rows.Scan(&m.ID, &m.Pattern, &m.Reason, &m.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scanning muted merchant: %w", err)
 		}
 		result = append(result, m)
 	}
 	if result == nil {
-		result = []MutedMerchant{}
+		result = []store.MutedMerchant{}
 	}
 	return result, rows.Err()
 }
 
-func (r *transactionsRepository) GetMutedMerchantsWithCount(ctx context.Context, tenant Tenant) ([]MutedMerchantWithCount, error) {
+func (r *transactionsRepository) GetMutedMerchantsWithCount(ctx context.Context, tenant store.Tenant) ([]store.MutedMerchantWithCount, error) {
 	return r.getMutedMerchantsWithCountQuery(ctx, tenant)
 }
 
-func (r *transactionsRepository) getMutedMerchantsWithCountQuery(ctx context.Context, tenant Tenant) ([]MutedMerchantWithCount, error) {
+func (r *transactionsRepository) getMutedMerchantsWithCountQuery(ctx context.Context, tenant store.Tenant) ([]store.MutedMerchantWithCount, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT mm.id, mm.pattern, COALESCE(mm.reason,''), mm.created_at,
 		       COUNT(t.id) AS muted_count
@@ -701,21 +702,21 @@ func (r *transactionsRepository) getMutedMerchantsWithCountQuery(ctx context.Con
 		return nil, fmt.Errorf("listing muted merchants with count: %w", err)
 	}
 	defer rows.Close()
-	var result []MutedMerchantWithCount
+	var result []store.MutedMerchantWithCount
 	for rows.Next() {
-		var m MutedMerchantWithCount
+		var m store.MutedMerchantWithCount
 		if err := rows.Scan(&m.ID, &m.Pattern, &m.Reason, &m.CreatedAt, &m.MutedCount); err != nil {
 			return nil, fmt.Errorf("scanning muted merchant with count: %w", err)
 		}
 		result = append(result, m)
 	}
 	if result == nil {
-		result = []MutedMerchantWithCount{}
+		result = []store.MutedMerchantWithCount{}
 	}
 	return result, rows.Err()
 }
 
-func (r *transactionsRepository) DeleteMutedMerchant(ctx context.Context, tenant Tenant, id string) error {
+func (r *transactionsRepository) DeleteMutedMerchant(ctx context.Context, tenant store.Tenant, id string) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM muted_merchants WHERE id=$1 AND tenant_id IS NOT DISTINCT FROM $2`, id, tenantIDParam(tenant))
 	if err != nil {
 		return fmt.Errorf("deleting muted merchant: %w", err)
@@ -726,7 +727,7 @@ func (r *transactionsRepository) DeleteMutedMerchant(ctx context.Context, tenant
 	return nil
 }
 
-func (r *transactionsRepository) UnmuteByPattern(ctx context.Context, tenant Tenant, pattern string) error {
+func (r *transactionsRepository) UnmuteByPattern(ctx context.Context, tenant store.Tenant, pattern string) error {
 	_, err := r.pool.Exec(ctx,
 		`UPDATE transactions SET muted=false, muted_by_merchant=false, mute_reason=NULL, updated_at=NOW()
 			 WHERE merchant_info ILIKE $1 AND tenant_id IS NOT DISTINCT FROM $2`,
@@ -738,7 +739,7 @@ func (r *transactionsRepository) UnmuteByPattern(ctx context.Context, tenant Ten
 	return nil
 }
 
-func (r *transactionsRepository) DeleteMutedMerchantAndUnmute(ctx context.Context, tenant Tenant, id string) error {
+func (r *transactionsRepository) DeleteMutedMerchantAndUnmute(ctx context.Context, tenant store.Tenant, id string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("beginning transaction: %w", err)
@@ -767,7 +768,7 @@ func (r *transactionsRepository) DeleteMutedMerchantAndUnmute(ctx context.Contex
 	return tx.Commit(ctx)
 }
 
-func (r *transactionsRepository) GetMutedMerchantPatterns(ctx context.Context, tenant Tenant) ([]string, error) {
+func (r *transactionsRepository) GetMutedMerchantPatterns(ctx context.Context, tenant store.Tenant) ([]string, error) {
 	var patterns []string
 	rows, err := r.pool.Query(ctx, `SELECT pattern FROM muted_merchants WHERE tenant_id IS NOT DISTINCT FROM $1`, tenantIDParam(tenant))
 	if err != nil {
@@ -789,7 +790,7 @@ func (r *transactionsRepository) queryTransactionTotals(
 	join string,
 	where string,
 	args []any,
-) (TransactionListResult, error) {
+) (store.TransactionListResult, error) {
 	aggregateSQL := `
 		SELECT COUNT(*), COALESCE(SUM(filtered.amount), 0)
 		FROM (
@@ -798,15 +799,15 @@ func (r *transactionsRepository) queryTransactionTotals(
 		) AS filtered
 	`
 
-	var result TransactionListResult
+	var result store.TransactionListResult
 	if err := r.pool.QueryRow(ctx, aggregateSQL, args...).Scan(&result.Total, &result.TotalAmount); err != nil {
-		return TransactionListResult{}, err
+		return store.TransactionListResult{}, err
 	}
 
 	return result, nil
 }
 
-func (r *transactionsRepository) loadLabels(ctx context.Context, txns []Transaction) error {
+func (r *transactionsRepository) loadLabels(ctx context.Context, txns []store.Transaction) error {
 	if len(txns) == 0 {
 		return nil
 	}

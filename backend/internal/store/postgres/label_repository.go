@@ -6,6 +6,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
 type taxonomyRepository struct {
@@ -24,8 +26,8 @@ func newTaxonomyRepository(deps repositoryDependencies) *taxonomyRepository {
 	}
 }
 
-func (r *taxonomyRepository) ListLabels(ctx context.Context, tenant Tenant) ([]Label, error) {
-	labels := []Label{}
+func (r *taxonomyRepository) ListLabels(ctx context.Context, tenant store.Tenant) ([]store.Label, error) {
+	labels := []store.Label{}
 	rows, err := r.pool.Query(ctx,
 		`SELECT name, color, created_at FROM labels WHERE tenant_id IS NOT DISTINCT FROM $1 ORDER BY name`,
 		tenantIDParam(tenant),
@@ -36,7 +38,7 @@ func (r *taxonomyRepository) ListLabels(ctx context.Context, tenant Tenant) ([]L
 	defer rows.Close()
 
 	for rows.Next() {
-		var label Label
+		var label store.Label
 		if err := rows.Scan(&label.Name, &label.Color, &label.CreatedAt); err != nil {
 			return nil, fmt.Errorf("listing labels: scanning label: %w", err)
 		}
@@ -48,7 +50,7 @@ func (r *taxonomyRepository) ListLabels(ctx context.Context, tenant Tenant) ([]L
 	return labels, nil
 }
 
-func (r *taxonomyRepository) CreateLabel(ctx context.Context, tenant Tenant, name, color string) error {
+func (r *taxonomyRepository) CreateLabel(ctx context.Context, tenant store.Tenant, name, color string) error {
 	_, err := r.pool.Exec(ctx,
 		labelUpsertSQL(tenant),
 		tenantIDParam(tenant), name, color,
@@ -59,7 +61,7 @@ func (r *taxonomyRepository) CreateLabel(ctx context.Context, tenant Tenant, nam
 	return nil
 }
 
-func labelUpsertSQL(tenant Tenant) string {
+func labelUpsertSQL(tenant store.Tenant) string {
 	if tenantIDParam(tenant) == nil {
 		return `INSERT INTO labels (tenant_id, name, color) VALUES ($1, $2, $3)
 			ON CONFLICT (name) WHERE tenant_id IS NULL DO NOTHING`
@@ -68,7 +70,7 @@ func labelUpsertSQL(tenant Tenant) string {
 			ON CONFLICT (tenant_id, name) WHERE tenant_id IS NOT NULL DO NOTHING`
 }
 
-func (r *taxonomyRepository) UpdateLabel(ctx context.Context, tenant Tenant, name, color string) error {
+func (r *taxonomyRepository) UpdateLabel(ctx context.Context, tenant store.Tenant, name, color string) error {
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE labels SET color = $1 WHERE name = $2 AND tenant_id IS NOT DISTINCT FROM $3`,
 		color, name, tenantIDParam(tenant),
@@ -82,7 +84,7 @@ func (r *taxonomyRepository) UpdateLabel(ctx context.Context, tenant Tenant, nam
 	return nil
 }
 
-func (r *taxonomyRepository) DeleteLabel(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
+func (r *taxonomyRepository) DeleteLabel(ctx context.Context, tenant store.Tenant, name string, removeFromTransactions bool) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("deleting label: beginning delete-label transaction: %w", err)
@@ -118,7 +120,7 @@ func (r *taxonomyRepository) DeleteLabel(ctx context.Context, tenant Tenant, nam
 	return nil
 }
 
-func (r *taxonomyRepository) ApplyLabelByMerchant(ctx context.Context, tenant Tenant, label, pattern string) (int64, error) {
+func (r *taxonomyRepository) ApplyLabelByMerchant(ctx context.Context, tenant store.Tenant, label, pattern string) (int64, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("beginning apply-label-by-merchant transaction: %w", err)
@@ -163,7 +165,7 @@ func (r *taxonomyRepository) ApplyLabelByMerchant(ctx context.Context, tenant Te
 	return tag.RowsAffected(), nil
 }
 
-func labelMerchantUpsertSQL(tenant Tenant) string {
+func labelMerchantUpsertSQL(tenant store.Tenant) string {
 	if tenantIDParam(tenant) == nil {
 		return `INSERT INTO label_merchants (tenant_id, label, merchant_pattern)
 		 VALUES ($1, $2, $3)
@@ -174,7 +176,7 @@ func labelMerchantUpsertSQL(tenant Tenant) string {
 		 ON CONFLICT (tenant_id, label, merchant_pattern) WHERE tenant_id IS NOT NULL DO NOTHING`
 }
 
-func (r *taxonomyRepository) RemoveLabelByMerchant(ctx context.Context, tenant Tenant, label, pattern string) (int64, error) {
+func (r *taxonomyRepository) RemoveLabelByMerchant(ctx context.Context, tenant store.Tenant, label, pattern string) (int64, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("beginning remove-label-by-merchant transaction: %w", err)
@@ -218,7 +220,7 @@ func (r *taxonomyRepository) RemoveLabelByMerchant(ctx context.Context, tenant T
 	return removed, nil
 }
 
-func loadMerchantLabelTransactionIDs(ctx context.Context, tx pgx.Tx, tenant Tenant, label, pattern string) ([]string, error) {
+func loadMerchantLabelTransactionIDs(ctx context.Context, tx pgx.Tx, tenant store.Tenant, label, pattern string) ([]string, error) {
 	rows, err := tx.Query(ctx, `
 		SELECT DISTINCT tls.transaction_id
 		FROM transaction_label_sources tls
@@ -284,7 +286,7 @@ func transactionLabelHasSources(ctx context.Context, tx pgx.Tx, transactionID, l
 	return remaining > 0, nil
 }
 
-func (r *taxonomyRepository) GetLabelMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
+func (r *taxonomyRepository) GetLabelMappings(ctx context.Context, tenant store.Tenant) (map[string][]string, error) {
 	result := make(map[string][]string)
 	rows, err := r.pool.Query(ctx, `
 			SELECT label, merchant_pattern
@@ -307,7 +309,7 @@ func (r *taxonomyRepository) GetLabelMappings(ctx context.Context, tenant Tenant
 	return result, rows.Err()
 }
 
-func (r *taxonomyRepository) listTaxonomyItems(ctx context.Context, tenant Tenant, query, itemName string) ([]taxonomyItem, error) {
+func (r *taxonomyRepository) listTaxonomyItems(ctx context.Context, tenant store.Tenant, query, itemName string) ([]taxonomyItem, error) {
 	items := []taxonomyItem{}
 	rows, err := r.pool.Query(ctx, query, tenantIDParam(tenant))
 	if err != nil {
@@ -325,7 +327,7 @@ func (r *taxonomyRepository) listTaxonomyItems(ctx context.Context, tenant Tenan
 	return items, rows.Err()
 }
 
-func (r *taxonomyRepository) ListCategories(ctx context.Context, tenant Tenant) ([]Category, error) {
+func (r *taxonomyRepository) ListCategories(ctx context.Context, tenant store.Tenant) ([]store.Category, error) {
 	items, err := r.listTaxonomyItems(
 		ctx,
 		tenant,
@@ -335,14 +337,14 @@ func (r *taxonomyRepository) ListCategories(ctx context.Context, tenant Tenant) 
 	if err != nil {
 		return nil, err
 	}
-	cats := make([]Category, 0, len(items))
+	cats := make([]store.Category, 0, len(items))
 	for _, item := range items {
-		cats = append(cats, Category(item))
+		cats = append(cats, store.Category(item))
 	}
 	return cats, nil
 }
 
-func (r *taxonomyRepository) CreateCategory(ctx context.Context, tenant Tenant, name, description string) error {
+func (r *taxonomyRepository) CreateCategory(ctx context.Context, tenant store.Tenant, name, description string) error {
 	_, err := r.pool.Exec(ctx,
 		taxonomyItemUpsertSQL(tenant, "categories"),
 		tenantIDParam(tenant), name, description,
@@ -353,7 +355,7 @@ func (r *taxonomyRepository) CreateCategory(ctx context.Context, tenant Tenant, 
 	return nil
 }
 
-func (r *taxonomyRepository) DeleteCategory(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
+func (r *taxonomyRepository) DeleteCategory(ctx context.Context, tenant store.Tenant, name string, removeFromTransactions bool) error {
 	return r.deleteNamedTaxonomy(ctx, taxonomyDeleteInput{
 		tenant:                 tenant,
 		name:                   name,
@@ -369,7 +371,7 @@ func (r *taxonomyRepository) DeleteCategory(ctx context.Context, tenant Tenant, 
 	})
 }
 
-func (r *taxonomyRepository) ListBuckets(ctx context.Context, tenant Tenant) ([]Bucket, error) {
+func (r *taxonomyRepository) ListBuckets(ctx context.Context, tenant store.Tenant) ([]store.Bucket, error) {
 	items, err := r.listTaxonomyItems(
 		ctx,
 		tenant,
@@ -379,14 +381,14 @@ func (r *taxonomyRepository) ListBuckets(ctx context.Context, tenant Tenant) ([]
 	if err != nil {
 		return nil, err
 	}
-	buckets := make([]Bucket, 0, len(items))
+	buckets := make([]store.Bucket, 0, len(items))
 	for _, item := range items {
-		buckets = append(buckets, Bucket(item))
+		buckets = append(buckets, store.Bucket(item))
 	}
 	return buckets, nil
 }
 
-func (r *taxonomyRepository) CreateBucket(ctx context.Context, tenant Tenant, name, description string) error {
+func (r *taxonomyRepository) CreateBucket(ctx context.Context, tenant store.Tenant, name, description string) error {
 	_, err := r.pool.Exec(ctx,
 		taxonomyItemUpsertSQL(tenant, "buckets"),
 		tenantIDParam(tenant), name, description,
@@ -397,7 +399,7 @@ func (r *taxonomyRepository) CreateBucket(ctx context.Context, tenant Tenant, na
 	return nil
 }
 
-func (r *taxonomyRepository) DeleteBucket(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
+func (r *taxonomyRepository) DeleteBucket(ctx context.Context, tenant store.Tenant, name string, removeFromTransactions bool) error {
 	return r.deleteNamedTaxonomy(ctx, taxonomyDeleteInput{
 		tenant:                 tenant,
 		name:                   name,
@@ -413,7 +415,7 @@ func (r *taxonomyRepository) DeleteBucket(ctx context.Context, tenant Tenant, na
 	})
 }
 
-func taxonomyItemUpsertSQL(tenant Tenant, table string) string {
+func taxonomyItemUpsertSQL(tenant store.Tenant, table string) string {
 	if tenantIDParam(tenant) == nil {
 		return fmt.Sprintf(`INSERT INTO %s (tenant_id, name, description) VALUES ($1, $2, NULLIF($3,''))
 		 ON CONFLICT (name) WHERE tenant_id IS NULL DO NOTHING`, table)
@@ -441,7 +443,7 @@ type taxonomyDeleteSpec struct {
 }
 
 type taxonomyDeleteInput struct {
-	tenant                 Tenant
+	tenant                 store.Tenant
 	name                   string
 	removeFromTransactions bool
 	spec                   taxonomyDeleteSpec
@@ -469,7 +471,7 @@ func (r *taxonomyRepository) deleteNamedTaxonomy(
 	return nil
 }
 
-func ensureTaxonomyCanBeDeleted(ctx context.Context, tx pgx.Tx, tenant Tenant, name string, spec taxonomyDeleteSpec) error {
+func ensureTaxonomyCanBeDeleted(ctx context.Context, tx pgx.Tx, tenant store.Tenant, name string, spec taxonomyDeleteSpec) error {
 	var isDefault bool
 	err := tx.QueryRow(ctx, spec.selectDefaultSQL, name, tenantIDParam(tenant)).Scan(&isDefault)
 	if err != nil {

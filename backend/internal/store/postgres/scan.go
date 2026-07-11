@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
@@ -36,10 +37,10 @@ func diagnosticSender(diagnostic api.ExtractionDiagnostic) string {
 	return diagnostic.SenderEmail
 }
 
-func scanDiagnosticRows(rows pgx.Rows) ([]ExtractionDiagnosticRow, error) {
-	var result []ExtractionDiagnosticRow
+func scanDiagnosticRows(rows pgx.Rows) ([]store.ExtractionDiagnosticRow, error) {
+	var result []store.ExtractionDiagnosticRow
 	for rows.Next() {
-		var row ExtractionDiagnosticRow
+		var row store.ExtractionDiagnosticRow
 		var ruleID pgtype.Text
 		var receivedAt pgtype.Timestamptz
 		var resolvedAt pgtype.Timestamptz
@@ -84,15 +85,15 @@ func scanDiagnosticRows(rows pgx.Rows) ([]ExtractionDiagnosticRow, error) {
 		return nil, err
 	}
 	if result == nil {
-		result = []ExtractionDiagnosticRow{}
+		result = []store.ExtractionDiagnosticRow{}
 	}
 	return result, nil
 }
 
-func scanTransactions(rows pgx.Rows) ([]Transaction, error) {
-	var txns []Transaction
+func scanTransactions(rows pgx.Rows) ([]store.Transaction, error) {
+	var txns []store.Transaction
 	for rows.Next() {
-		var t Transaction
+		var t store.Transaction
 		var legacySource, sourceType, sourceLabel, bank string
 		if err := rows.Scan(
 			&t.ID, &t.MessageID, &t.Amount, &t.Currency,
@@ -121,10 +122,10 @@ func scanTransactions(rows pgx.Rows) ([]Transaction, error) {
 const ruleColumns = `id, name, sender_email, sender_emails, subject_contains, amount_regex, merchant_regex,
 	currency_regex, transaction_source, source_type, source_label, bank, predefined, created_at, updated_at`
 
-func scanRuleRows(rows pgx.Rows) ([]RuleRow, error) {
-	var result []RuleRow
+func scanRuleRows(rows pgx.Rows) ([]store.RuleRow, error) {
+	var result []store.RuleRow
 	for rows.Next() {
-		var r RuleRow
+		var r store.RuleRow
 		if err := rows.Scan(
 			&r.ID, &r.Name, &r.SenderEmail, &r.SenderEmails, &r.SubjectContains,
 			&r.AmountRegex, &r.MerchantRegex, &r.CurrencyRegex,
@@ -136,7 +137,7 @@ func scanRuleRows(rows pgx.Rows) ([]RuleRow, error) {
 		result = append(result, r)
 	}
 	if result == nil {
-		result = []RuleRow{}
+		result = []store.RuleRow{}
 	}
 	return result, rows.Err()
 }
