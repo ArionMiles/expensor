@@ -3,6 +3,8 @@ package httpapi
 import (
 	"fmt"
 	"net/http"
+
+	"github.com/ArionMiles/expensor/backend/internal/daemon"
 )
 
 // --- daemon control ---
@@ -22,7 +24,7 @@ import (
 // @Failure 501 {object} ErrorResponse
 // @Router /daemon/start [post]
 func (h *Handlers) StartDaemon(w http.ResponseWriter, r *http.Request) {
-	if h.startFn == nil {
+	if h.daemon == nil {
 		writeError(w, http.StatusNotImplemented, "daemon start not configured")
 		return
 	}
@@ -37,7 +39,7 @@ func (h *Handlers) StartDaemon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.logger.Info("daemon start requested", "reader", body.Reader)
-	h.startFn(DaemonRunRequest{Tenant: requestTenant(r), Reader: body.Reader})
+	h.daemon.Start(daemon.RunRequest{Tenant: requestTenant(r), Reader: body.Reader})
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "starting"})
 }
 
@@ -65,10 +67,10 @@ func (h *Handlers) Rescan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.rescanFn == nil {
+	if h.daemon == nil {
 		writeError(w, http.StatusNotImplemented, "rescan not configured")
 		return
 	}
-	h.rescanFn(DaemonRunRequest{Tenant: requestTenant(r), Reader: body.Reader})
+	h.daemon.Rescan(daemon.RunRequest{Tenant: requestTenant(r), Reader: body.Reader})
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "rescanning"})
 }

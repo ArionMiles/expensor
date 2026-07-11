@@ -11,6 +11,7 @@ import (
 	"github.com/go-playground/validator/v10"
 
 	"github.com/ArionMiles/expensor/backend/internal/assistant"
+	"github.com/ArionMiles/expensor/backend/internal/daemon"
 	"github.com/ArionMiles/expensor/backend/internal/llm"
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
@@ -37,15 +38,18 @@ type DaemonStatus struct {
 	LastError string     `json:"last_error,omitempty"`
 }
 
-// DaemonStatusProvider is implemented by the daemon manager in main.go.
-type DaemonStatusProvider interface {
-	Status() DaemonStatus
+// DaemonController owns interactive daemon control at the HTTP consumer boundary.
+type DaemonController interface {
+	Start(daemon.RunRequest)
+	Stop()
+	Rescan(daemon.RunRequest)
+	Restart(daemon.RunRequest)
+	Status() daemon.Status
 }
 
-// DaemonRunRequest identifies the authenticated tenant and reader for one daemon action.
-type DaemonRunRequest struct {
-	Tenant store.Tenant
-	Reader string
+// CommunitySyncer triggers a manual community content sync.
+type CommunitySyncer interface {
+	Trigger()
 }
 
 // Handlers holds all dependencies for HTTP endpoint handlers.
@@ -66,18 +70,14 @@ type Handlers struct {
 	ruleStore          ruleStore
 	syncStore          syncStore
 	diagnosticStore    diagnosticStore
-	daemon             DaemonStatusProvider
+	daemon             DaemonController
+	community          CommunitySyncer
 	version            string // set at build time via ldflags
 	baseURL            string // e.g. "http://localhost:8080"
 	frontendURL        string // e.g. "http://localhost:5173" — used for OAuth redirects
 	thunderbirdDataDir string
-	scanInterval       int                    // default scan interval in seconds
-	lookbackDays       int                    // default lookback in days
-	startFn            func(DaemonRunRequest) // called by POST /api/daemon/start; may be nil
-	stopFn             func()                 // called when active reader runtime is removed; may be nil
-	rescanFn           func(DaemonRunRequest) // called by POST /api/daemon/rescan; may be nil
-	restartFn          func(DaemonRunRequest) // called after checkpoint clear to reload from DB; may be nil
-	syncFn             func()                 // called by POST /api/config/sync; may be nil
+	scanInterval       int // default scan interval in seconds
+	lookbackDays       int // default lookback in days
 	banksData          []byte
 	logger             *slog.Logger
 	llmScope           *observability.Scope
@@ -98,25 +98,21 @@ type HandlersConfig struct {
 	RuleDrafts         assistant.RuleDrafter
 	LLMScope           *observability.Scope
 	Store              Storer
-	Daemon             DaemonStatusProvider
+	Daemon             DaemonController
+	Community          CommunitySyncer
 	Version            string
 	BaseURL            string
 	FrontendURL        string
 	ThunderbirdDataDir string
 	ScanInterval       int
 	LookbackDays       int
-	StartFn            func(DaemonRunRequest)
-	StopFn             func()
-	RescanFn           func(DaemonRunRequest)
-	RestartFn          func(DaemonRunRequest)
-	SyncFn             func()
 	BanksData          []byte
 	Logger             *slog.Logger
 	LogLevel           *slog.LevelVar
 }
 
 // NewHandlers creates a Handlers instance.
-// Pass nil StartFn to disable the daemon start endpoint.
+// Pass a nil Daemon to disable interactive daemon control endpoints.
 func NewHandlers(cfg HandlersConfig) *Handlers {
 	if cfg.FrontendURL == "" {
 		cfg.FrontendURL = cfg.BaseURL
@@ -155,17 +151,13 @@ func NewHandlers(cfg HandlersConfig) *Handlers {
 		syncStore:          cfg.Store,
 		diagnosticStore:    cfg.Store,
 		daemon:             cfg.Daemon,
+		community:          cfg.Community,
 		version:            cfg.Version,
 		baseURL:            strings.TrimRight(cfg.BaseURL, "/"),
 		frontendURL:        strings.TrimRight(cfg.FrontendURL, "/"),
 		thunderbirdDataDir: cfg.ThunderbirdDataDir,
 		scanInterval:       cfg.ScanInterval,
 		lookbackDays:       cfg.LookbackDays,
-		startFn:            cfg.StartFn,
-		stopFn:             cfg.StopFn,
-		rescanFn:           cfg.RescanFn,
-		restartFn:          cfg.RestartFn,
-		syncFn:             cfg.SyncFn,
 		banksData:          cfg.BanksData,
 		logger:             cfg.Logger,
 		llmScope:           cfg.LLMScope,
@@ -205,7 +197,7 @@ func (h *Handlers) Version(w http.ResponseWriter, _ *http.Request) {
 // @Success 200 {object} StatusResponse
 // @Router /status [get]
 func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
-	ds := h.daemon.Status()
+	ds := daemonStatusResponse(h.daemon.Status())
 
 	type statusResponse struct {
 		Daemon DaemonStatus `json:"daemon"`
@@ -223,4 +215,8 @@ func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 	resp.Stats = stats
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func daemonStatusResponse(status daemon.Status) DaemonStatus {
+	return DaemonStatus{Running: status.Running, StartedAt: status.StartedAt, LastError: status.LastError}
 }

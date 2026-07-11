@@ -21,6 +21,7 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/assistant"
 	"github.com/ArionMiles/expensor/backend/internal/auth"
+	"github.com/ArionMiles/expensor/backend/internal/daemon"
 	"github.com/ArionMiles/expensor/backend/internal/llm"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
@@ -46,10 +47,40 @@ var (
 // --- mocks ---
 
 type mockDaemon struct {
-	status DaemonStatus
+	status    DaemonStatus
+	startFn   func(daemon.RunRequest)
+	stopFn    func()
+	rescanFn  func(daemon.RunRequest)
+	restartFn func(daemon.RunRequest)
 }
 
-func (m *mockDaemon) Status() DaemonStatus { return m.status }
+func (m *mockDaemon) Start(request daemon.RunRequest) {
+	if m.startFn != nil {
+		m.startFn(request)
+	}
+}
+
+func (m *mockDaemon) Stop() {
+	if m.stopFn != nil {
+		m.stopFn()
+	}
+}
+
+func (m *mockDaemon) Rescan(request daemon.RunRequest) {
+	if m.rescanFn != nil {
+		m.rescanFn(request)
+	}
+}
+
+func (m *mockDaemon) Restart(request daemon.RunRequest) {
+	if m.restartFn != nil {
+		m.restartFn(request)
+	}
+}
+
+func (m *mockDaemon) Status() daemon.Status {
+	return daemon.Status{Running: m.status.Running, StartedAt: m.status.StartedAt, LastError: m.status.LastError}
+}
 
 func mockStoreErr(op string, err error) error {
 	if err == nil {
@@ -986,7 +1017,7 @@ func (m *mockStore) UpdateExtractionDiagnosticStatus(
 
 // newTestHandlers returns a Handlers wired with a real (minimal) plugin registry,
 // the given store mock, and a mock daemon.
-func newTestHandlers(t *testing.T, st Storer, dm DaemonStatusProvider, banksData ...[]byte) *Handlers {
+func newTestHandlers(t *testing.T, st Storer, dm DaemonController, banksData ...[]byte) *Handlers {
 	t.Helper()
 	registry := plugins.NewRegistry()
 	_ = registry.RegisterProvider((&testProvider{name: "gmail", authType: plugins.AuthTypeOAuth, requiresCreds: true}).provider())
@@ -2005,7 +2036,7 @@ func TestDisconnectReader_StopsDaemonWhenActiveReaderIsRemoved(t *testing.T) {
 	}
 	var stopCalls int
 	h := newTestHandlers(t, ms, &mockDaemon{status: DaemonStatus{Running: true}})
-	h.stopFn = func() { stopCalls++ }
+	h.daemon.(*mockDaemon).stopFn = func() { stopCalls++ }
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
 	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/api/providers/gmail", nil)
 	req.SetPathValue("name", "gmail")
@@ -2033,7 +2064,7 @@ func TestDisconnectReader_DoesNotStopDaemonWhenInactiveReaderIsRemoved(t *testin
 	}
 	var stopCalls int
 	h := newTestHandlers(t, ms, &mockDaemon{status: DaemonStatus{Running: true}})
-	h.stopFn = func() { stopCalls++ }
+	h.daemon.(*mockDaemon).stopFn = func() { stopCalls++ }
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
 	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/api/providers/thunderbird", nil)
 	req.SetPathValue("name", "thunderbird")
@@ -3970,8 +4001,8 @@ func TestCreateRule_ClearsActiveReaderCheckpoint(t *testing.T) {
 	}
 	dm := &mockDaemon{}
 	h := newTestHandlers(t, ms, dm)
-	var restarted DaemonRunRequest
-	h.restartFn = func(req DaemonRunRequest) { restarted = req }
+	var restarted daemon.RunRequest
+	h.daemon.(*mockDaemon).restartFn = func(req daemon.RunRequest) { restarted = req }
 
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/rules", strings.NewReader(validRuleBody))
@@ -3997,8 +4028,8 @@ func TestCreateRule_RestartsRunningDaemonAfterCheckpointClear(t *testing.T) {
 	}
 	dm := &mockDaemon{status: DaemonStatus{Running: true}}
 	h := newTestHandlers(t, ms, dm)
-	var restarted DaemonRunRequest
-	h.restartFn = func(req DaemonRunRequest) { restarted = req }
+	var restarted daemon.RunRequest
+	h.daemon.(*mockDaemon).restartFn = func(req daemon.RunRequest) { restarted = req }
 
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/rules", strings.NewReader(validRuleBody))
@@ -4358,11 +4389,11 @@ func TestGetProviderGuide_ReturnsMetadataGuide(t *testing.T) {
 // --- rescan ---
 
 func TestStartDaemon_DaemonRunning_CallsStartFnWithRequestedReader(t *testing.T) {
-	var started DaemonRunRequest
+	var started daemon.RunRequest
 	ms := &mockStore{}
 	dm := &mockDaemon{status: DaemonStatus{Running: true}}
 	h := newTestHandlers(t, ms, dm)
-	h.startFn = func(req DaemonRunRequest) { started = req }
+	h.daemon.(*mockDaemon).startFn = func(req daemon.RunRequest) { started = req }
 
 	body := `{"reader":"thunderbird"}`
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
@@ -4383,7 +4414,7 @@ func TestStartDaemon_DaemonRunning_CallsStartFnWithRequestedReader(t *testing.T)
 
 func TestStartDaemon_RejectsMissingReader(t *testing.T) {
 	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
-	h.startFn = func(DaemonRunRequest) {}
+	h.daemon.(*mockDaemon).startFn = func(daemon.RunRequest) {}
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/daemon/start", strings.NewReader(`{}`))
 	rr := httptest.NewRecorder()
 	h.StartDaemon(rr, req)
@@ -4391,12 +4422,33 @@ func TestStartDaemon_RejectsMissingReader(t *testing.T) {
 	assertValidationError(t, rr, "reader", "body", "is required")
 }
 
+func TestStartDaemonWithoutControllerReturns501(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	h.daemon = nil
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/daemon/start", strings.NewReader(`{"reader":"gmail"}`))
+	rr := httptest.NewRecorder()
+	h.StartDaemon(rr, req)
+	if rr.Code != http.StatusNotImplemented {
+		t.Fatalf("status = %d, want 501", rr.Code)
+	}
+}
+
+func TestTriggerSyncWithoutServiceReturns503(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/config/sync", nil)
+	rr := httptest.NewRecorder()
+	h.TriggerSync(rr, req)
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rr.Code)
+	}
+}
+
 func TestRescan_DaemonRunning_Returns202Rescanning(t *testing.T) {
-	var rescan DaemonRunRequest
+	var rescan daemon.RunRequest
 	ms := &mockStore{}
 	dm := &mockDaemon{status: DaemonStatus{Running: true}}
 	h := newTestHandlers(t, ms, dm)
-	h.rescanFn = func(req DaemonRunRequest) { rescan = req }
+	h.daemon.(*mockDaemon).rescanFn = func(req daemon.RunRequest) { rescan = req }
 
 	body := `{"reader":"gmail"}`
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
@@ -4421,11 +4473,11 @@ func TestRescan_DaemonRunning_Returns202Rescanning(t *testing.T) {
 }
 
 func TestRescan_DaemonNotRunning_Returns202Rescanning(t *testing.T) {
-	var rescan DaemonRunRequest
+	var rescan daemon.RunRequest
 	ms := &mockStore{}
 	dm := &mockDaemon{status: DaemonStatus{Running: false}}
 	h := newTestHandlers(t, ms, dm)
-	h.rescanFn = func(req DaemonRunRequest) { rescan = req }
+	h.daemon.(*mockDaemon).rescanFn = func(req daemon.RunRequest) { rescan = req }
 
 	body := `{"reader":"gmail"}`
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
@@ -4598,8 +4650,8 @@ func TestAuthExchange_RestartsRunningDaemonAfterTokenSaved(t *testing.T) {
 	st := &mockStore{readerSecrets: map[string][]byte{"tenant-a/gmail": []byte(secretJSON)}}
 	dm := &mockDaemon{status: DaemonStatus{Running: true}}
 	h := newTestHandlers(t, st, dm)
-	var restarted DaemonRunRequest
-	h.restartFn = func(req DaemonRunRequest) { restarted = req }
+	var restarted daemon.RunRequest
+	h.daemon.(*mockDaemon).restartFn = func(req daemon.RunRequest) { restarted = req }
 
 	state := "reader:gmail:validtoken"
 	h.mu.Lock()

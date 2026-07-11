@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ArionMiles/expensor/backend/internal/daemon"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
@@ -215,8 +216,8 @@ func (h *Handlers) ClearReaderCheckpoint(w http.ResponseWriter, r *http.Request)
 	// Restart the running daemon so it reloads the (now-absent) checkpoint and
 	// immediately starts a full-lookback scan rather than continuing from the
 	// stale in-memory value.
-	if h.daemon.Status().Running && h.restartFn != nil {
-		h.restartFn(DaemonRunRequest{Tenant: requestTenant(r), Reader: name})
+	if h.daemon != nil && h.daemon.Status().Running {
+		h.daemon.Restart(daemon.RunRequest{Tenant: requestTenant(r), Reader: name})
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

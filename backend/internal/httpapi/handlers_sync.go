@@ -16,11 +16,11 @@ import (
 // @Failure 503 {object} ErrorResponse
 // @Router /config/sync [post]
 func (h *Handlers) TriggerSync(w http.ResponseWriter, r *http.Request) {
-	if h.syncFn == nil {
+	if h.community == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "sync not configured"})
 		return
 	}
-	go h.syncFn()
+	go h.community.Trigger()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
