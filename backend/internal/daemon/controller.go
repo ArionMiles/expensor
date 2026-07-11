@@ -42,12 +42,12 @@ type ControllerDependencies struct {
 
 // Controller owns interactive daemon start, stop, restart, rescan, and status behavior.
 type Controller struct {
-	actionMu sync.Mutex
-	mu       sync.RWMutex
-	ctx      context.Context
-	scanner  scanExecutor
-	store    activeReaderStore
-	logger   *slog.Logger
+	mu      sync.RWMutex
+	actions chan struct{}
+	ctx     context.Context
+	scanner scanExecutor
+	store   activeReaderStore
+	logger  *slog.Logger
 
 	cancel       context.CancelFunc
 	done         chan struct{}
@@ -67,14 +67,25 @@ func NewController(deps ControllerDependencies) (*Controller, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Controller{ctx: deps.Context, scanner: deps.Scanner, store: deps.Store, logger: logger}, nil
+	controller := &Controller{
+		ctx: deps.Context, scanner: deps.Scanner, store: deps.Store, logger: logger,
+		actions: make(chan struct{}, 1),
+	}
+	controller.actions <- struct{}{}
+	return controller, nil
 }
 
 // Start launches a continuous scan, switching readers when necessary.
 func (c *Controller) Start(request RunRequest) {
-	c.actionMu.Lock()
-	defer c.actionMu.Unlock()
+	go func() {
+		_ = c.withAction(context.Background(), func() error {
+			c.transitionStart(request)
+			return nil
+		})
+	}()
+}
 
+func (c *Controller) transitionStart(request RunRequest) {
 	c.mu.RLock()
 	sameRun := c.running && c.activeReader == request.Reader && c.activeTenant.ID == request.Tenant.ID
 	running := c.running
@@ -91,8 +102,15 @@ func (c *Controller) Start(request RunRequest) {
 
 // Stop cancels and waits for the active daemon run.
 func (c *Controller) Stop() {
-	c.actionMu.Lock()
-	defer c.actionMu.Unlock()
+	go func() {
+		_ = c.withAction(context.Background(), func() error {
+			c.transitionStop()
+			return nil
+		})
+	}()
+}
+
+func (c *Controller) transitionStop() {
 	_ = c.stopCurrent(context.Background())
 	c.mu.Lock()
 	c.activeReader = ""
@@ -102,8 +120,15 @@ func (c *Controller) Stop() {
 
 // Rescan cancels the active run and launches a full-lookback scan without deduplication.
 func (c *Controller) Rescan(request RunRequest) {
-	c.actionMu.Lock()
-	defer c.actionMu.Unlock()
+	go func() {
+		_ = c.withAction(context.Background(), func() error {
+			c.transitionRescan(request)
+			return nil
+		})
+	}()
+}
+
+func (c *Controller) transitionRescan(request RunRequest) {
 	_ = c.stopCurrent(context.Background())
 	c.persistActiveReader(request)
 	c.launch(request, ScanRescan)
@@ -111,16 +136,21 @@ func (c *Controller) Rescan(request RunRequest) {
 
 // Restart reloads persisted scan state and launches a normal continuous scan.
 func (c *Controller) Restart(request RunRequest) {
-	c.actionMu.Lock()
-	defer c.actionMu.Unlock()
+	go func() {
+		_ = c.withAction(context.Background(), func() error {
+			c.transitionRestart(request)
+			return nil
+		})
+	}()
+}
+
+func (c *Controller) transitionRestart(request RunRequest) {
 	_ = c.stopCurrent(context.Background())
 	c.launch(request, ScanContinuous)
 }
 
 // RefreshResolver reloads the category resolver and restarts an active daemon.
 func (c *Controller) RefreshResolver(ctx context.Context) {
-	c.actionMu.Lock()
-	defer c.actionMu.Unlock()
 	if err := c.scanner.RefreshResolver(ctx); err != nil {
 		c.logger.Warn("failed to reload category snapshot after sync", "error", err)
 		return
@@ -131,8 +161,7 @@ func (c *Controller) RefreshResolver(ctx context.Context) {
 	c.mu.RUnlock()
 	if running && request.Reader != "" {
 		c.logger.Info("restarting daemon to apply updated category resolver")
-		_ = c.stopCurrent(context.Background())
-		c.launch(request, ScanContinuous)
+		c.Restart(request)
 	}
 }
 
@@ -145,9 +174,7 @@ func (c *Controller) Status() Status {
 
 // Close cancels active work and waits until it stops or ctx expires.
 func (c *Controller) Close(ctx context.Context) error {
-	c.actionMu.Lock()
-	defer c.actionMu.Unlock()
-	if err := c.stopCurrent(ctx); err != nil {
+	if err := c.withAction(ctx, func() error { return c.stopCurrent(ctx) }); err != nil {
 		return errors.E("daemon.controller.close", err)
 	}
 	return nil
@@ -206,4 +233,14 @@ func (c *Controller) persistActiveReader(request RunRequest) {
 	if err := c.store.SetActiveScanningReader(c.ctx, request.Tenant, request.Reader); err != nil {
 		c.logger.Warn("failed to persist active reader", "error", err)
 	}
+}
+
+func (c *Controller) withAction(ctx context.Context, action func() error) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.actions:
+	}
+	defer func() { c.actions <- struct{}{} }()
+	return action()
 }

@@ -197,7 +197,10 @@ func (h *Handlers) Version(w http.ResponseWriter, _ *http.Request) {
 // @Success 200 {object} StatusResponse
 // @Router /status [get]
 func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
-	ds := daemonStatusResponse(h.daemon.Status())
+	var ds DaemonStatus
+	if h.daemon != nil {
+		ds = daemonStatusResponse(h.daemon.Status())
+	}
 
 	type statusResponse struct {
 		Daemon DaemonStatus `json:"daemon"`
