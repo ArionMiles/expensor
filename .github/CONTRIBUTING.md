@@ -170,11 +170,11 @@ Use the Rule editor to create or fix extraction rules. It gives you a live workb
 6. Click **Save Rule** and choose **Export & Continue** when the contribution prompt appears.
 7. Fork the repository, create a branch, add the exported files as described below, and submit a pull request.
 
-`backend/cmd/server/content/rules.json` is the source of truth for contributed bundled rules. Backend-owned content lives under `backend/cmd/server/content/`; frontend-owned assets live under `frontend/content/`.
+`backend/internal/catalog/content/rules.json` is the source of truth for contributed bundled rules. Backend-owned content lives under `backend/internal/catalog/content/`; frontend-owned assets live under `frontend/content/`.
 
 The export downloads one contribution zip file containing:
 
-- `<rule-name>.rule.json`: copy its rule entry into the `rules` array in `backend/cmd/server/content/rules.json`. If it includes a new source type or bank, copy that value into the matching `presets.source_types` or `presets.banks` list too.
+- `<rule-name>.rule.json`: copy its rule entry into the `rules` array in `backend/internal/catalog/content/rules.json`. If it includes a new source type or bank, copy that value into the matching `presets.source_types` or `presets.banks` list too.
 - One `<bank>_<source-type>_<case>.rule.fixture` file per populated workbench sample: copy these files into `tests/data/rule-emails`.
 
 Rule email fixtures are self-contained `.rule.fixture` files with YAML front matter and the raw email body below the closing `---`. They must not duplicate regexes from `rules.json`. The test runner automatically discovers fixtures under `tests/data/rule-emails`, loads the named rule from the real rules document, and asserts sender/subject matching plus amount, merchant, and currency extraction.

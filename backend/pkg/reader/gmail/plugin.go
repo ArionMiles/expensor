@@ -16,8 +16,8 @@ type Plugin struct {
 	guideData []byte
 }
 
-// SetGuideData injects the setup guide content. Called by main.go after loading
-// the backend-owned content/readers/gmail/guide.json via go:embed.
+// SetGuideData injects the setup guide content. Application composition calls it
+// after loading backend/internal/catalog/content/readers/gmail/guide.json via go:embed.
 func (p *Plugin) SetGuideData(data []byte) { p.guideData = data }
 
 // Provider returns the Gmail provider registration.
