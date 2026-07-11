@@ -9,19 +9,12 @@ import (
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/app"
-	"github.com/ArionMiles/expensor/backend/internal/assistant"
-	"github.com/ArionMiles/expensor/backend/internal/catalog"
-	"github.com/ArionMiles/expensor/backend/internal/community"
-	"github.com/ArionMiles/expensor/backend/internal/daemon"
-	"github.com/ArionMiles/expensor/backend/internal/daemon/scheduler"
-	"github.com/ArionMiles/expensor/backend/internal/httpapi"
-	"github.com/ArionMiles/expensor/backend/internal/llm"
-	openaiProvider "github.com/ArionMiles/expensor/backend/internal/llm/openai"
 	"github.com/ArionMiles/expensor/backend/internal/observability"
-	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
+
+const shutdownTimeout = 10 * time.Second
 
 func main() {
 	os.Exit(run())
@@ -41,142 +34,29 @@ func run() int {
 	}
 	logger := observabilityRuntime.Logger
 	defer func() {
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer shutdownCancel()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 		if err := observabilityRuntime.Shutdown(shutdownCtx); err != nil {
 			logger.Warn("failed to shutdown observability", "error", err)
 		}
 	}()
 
-	content, err := catalog.Load()
+	ctx, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stopSignals()
+	application, err := app.New(ctx, app.Options{Config: cfg, Logger: logger, LogLevel: observabilityRuntime.LogLevel})
 	if err != nil {
-		logger.Error("failed to load embedded content", "error", err)
+		logger.Error("failed to initialize application", "error", err)
 		return 1
 	}
 
-	registry := plugins.NewRegistry()
-	if err := registerPlugins(registry, content.ReaderGuides); err != nil {
-		logger.Error("failed to register plugins", "error", err)
-		return 1
+	runErr := application.Run(ctx)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if err := application.Close(shutdownCtx); err != nil {
+		logger.Warn("application shutdown incomplete", "error", err)
 	}
-	logger.Info("plugins registered",
-		"providers", len(registry.ListProviders()),
-	)
-
-	logger.Info("loaded embedded content", "rules", len(content.SystemRules), "mcc_codes", len(content.Seed.MCCEntries),
-		"merchant_categories", len(content.Seed.MerchantCategories))
-	logger.Info("loaded llm prompt catalog", "prompts", content.PromptCatalog.Len())
-
-	ctx, cancel := context.WithCancel(context.Background())
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		sig := <-sigChan
-		logger.Info("received shutdown signal", "signal", sig)
-		cancel()
-	}()
-
-	storeRuntime, storeErr := app.NewStore(ctx, app.StoreOptions{
-		Database: cfg.Database,
-		Security: cfg.Security,
-		Logger:   logger,
-	})
-	if storeErr != nil {
-		logger.Error("failed to connect store", "error", storeErr)
-		return 1
-	}
-	defer storeRuntime.Close()
-
-	resolver, err := storeRuntime.Seed(ctx, content.Seed)
-	if err != nil {
-		logger.Error("startup seeding failed", "error", err)
-		return 1
-	}
-
-	instrumentedStore := storeRuntime.Store
-	var st httpapi.Storer = instrumentedStore
-
-	llmRegistry := llm.NewRegistry()
-	if err := llmRegistry.RegisterProvider(openaiProvider.Provider(content.OpenAIModelOptions)); err != nil {
-		logger.Error("failed to register llm provider", "error", err)
-		return 1
-	}
-	llmLogger := logger.With("component", "llm")
-	llmScope := observability.NewScope(llmLogger, "github.com/ArionMiles/expensor/backend/internal/llm")
-	llmRouter := llm.NewRouter(llm.RouterConfig{
-		Registry: llmRegistry,
-		Runtime:  instrumentedStore,
-		Prompts:  content.PromptCatalog,
-		Scope:    llmScope,
-		Logger:   llmLogger,
-	})
-	assistantLogger := logger.With("component", "assistant")
-	assistantScope := observability.NewScope(assistantLogger, "github.com/ArionMiles/expensor/backend/internal/assistant")
-	ruleDrafts := assistant.NewInstrumentedRuleDrafter(assistant.NewRuleDraftService(llmRouter), assistantScope, assistantLogger)
-	logger.Info("LLM router initialized", "providers", len(llmRegistry.ListProviders()), "prompts", llmRouter.PromptCatalog().Len())
-
-	scanService, err := daemon.NewScanService(daemon.ScanDependencies{
-		Registry: registry, Config: cfg, SystemRules: content.SystemRules, Resolver: resolver,
-		Store: instrumentedStore, Diagnostics: instrumentedStore, TransactionWriter: storeRuntime.Ingestion, Logger: logger,
-	})
-	if err != nil {
-		logger.Error("failed to initialize scan service", "error", err)
-		return 1
-	}
-	dc, err := daemon.NewController(daemon.ControllerDependencies{Context: ctx, Scanner: scanService, Store: instrumentedStore, Logger: logger})
-	if err != nil {
-		logger.Error("failed to initialize daemon controller", "error", err)
-		return 1
-	}
-
-	schedulerScope := observability.NewScope(logger.With("component", "scheduler"), "github.com/ArionMiles/expensor/backend/internal/daemon/scheduler")
-	sched := scheduler.New(scheduler.Config{
-		Store:  instrumentedStore,
-		Runner: scheduler.NewInstrumentedRunner(scheduler.NewScanRunner(scanService), schedulerScope),
-		Logger: logger.With("component", "scheduler"),
-	})
-	go func() {
-		if err := sched.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			logger.Error("scheduler stopped with error", "error", err)
-		}
-	}()
-	logger.Info("multi-tenant scanning scheduler started")
-
-	communityService, err := community.New(ctx, community.Dependencies{
-		Config: cfg.Community, Store: instrumentedStore, Runtime: instrumentedStore, Resolver: dc, Logger: logger,
-	})
-	if err != nil {
-		logger.Error("failed to initialize community sync", "error", err)
-		return 1
-	}
-	go func() {
-		if err := communityService.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			logger.Error("community sync stopped with error", "error", err)
-		}
-	}()
-	handlers := httpapi.NewHandlers(httpapi.HandlersConfig{
-		Registry:           registry,
-		LLMRegistry:        llmRegistry,
-		LLMRouter:          llmRouter,
-		RuleDrafts:         ruleDrafts,
-		LLMScope:           llmScope,
-		Store:              st,
-		Daemon:             dc,
-		Community:          communityService,
-		Version:            config.Version,
-		BaseURL:            cfg.BaseURL,
-		FrontendURL:        cfg.FrontendURL,
-		ThunderbirdDataDir: cfg.Thunderbird.DataDir,
-		ScanInterval:       cfg.ScanInterval,
-		LookbackDays:       cfg.LookbackDays,
-		BanksData:          content.BanksJSON,
-		Logger:             logger.With("component", "api"),
-		LogLevel:           observabilityRuntime.LogLevel,
-	})
-	server := httpapi.NewServer(cfg.Port, handlers, cfg.StaticDir, logger.With("component", "http"))
-
-	if err := server.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		logger.Error("HTTP server error", "error", err)
+	if runErr != nil && !errors.Is(runErr, context.Canceled) {
+		logger.Error("application stopped with error", "error", runErr)
 		return 1
 	}
 	logger.Info("shutdown complete")
