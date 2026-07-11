@@ -18,12 +18,6 @@ type TransactionBatchWriter struct {
 }
 
 func NewTransactionBatchWriter(next store.TransactionBatchWriter, scope *observability.Scope, logger *slog.Logger) *TransactionBatchWriter {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	if scope == nil {
-		scope = observability.NewScope(logger, "store")
-	}
 	return &TransactionBatchWriter{
 		next:  next,
 		scope: scope,

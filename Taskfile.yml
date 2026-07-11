@@ -406,7 +406,6 @@ tasks:
       - task: run:backend
 
   run:backend:
-    internal: true
     dir: backend
     vars:
       DEV_DB_BACKEND: '{{default "postgres" .DB_BACKEND}}'
