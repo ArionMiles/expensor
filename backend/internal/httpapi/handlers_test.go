@@ -1265,6 +1265,22 @@ func TestStatus_StatsError(t *testing.T) {
 	}
 }
 
+func TestStatusWithoutControllerReturnsStoppedStatus(t *testing.T) {
+	h := newTestHandlers(t, &mockStore{}, &mockDaemon{})
+	h.daemon = nil
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/status", nil)
+	rr := httptest.NewRecorder()
+	h.Status(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	var response StatusResponse
+	decodeJSON(t, rr.Body.String(), &response)
+	if response.Daemon.Running {
+		t.Fatal("daemon status = running, want stopped")
+	}
+}
+
 // --- plugin listing ---
 
 func TestListProviders(t *testing.T) {

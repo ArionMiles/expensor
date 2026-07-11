@@ -97,15 +97,21 @@ func TestControllerCanceledRunDoesNotSetLastError(t *testing.T) {
 	controller.Start(RunRequest{Tenant: store.Tenant{ID: "tenant-a"}, Reader: "gmail"})
 	<-started
 	controller.Stop()
+	waitForStopped(t, controller)
 	if status := controller.Status(); status.Running || status.LastError != "" {
 		t.Fatalf("status = %#v", status)
 	}
 }
 
 func TestControllerRecordsRunError(t *testing.T) {
-	scanner := &controllerScannerStub{run: func(context.Context, ScanRequest) error { return errors.New("reader failed") }}
+	started := make(chan struct{})
+	scanner := &controllerScannerStub{run: func(context.Context, ScanRequest) error {
+		close(started)
+		return errors.New("reader failed")
+	}}
 	controller := newTestController(t, scanner, &activeReaderStoreStub{})
 	controller.Start(RunRequest{Tenant: store.Tenant{ID: "tenant-a"}, Reader: "gmail"})
+	<-started
 	waitForStopped(t, controller)
 	if status := controller.Status(); status.LastError != "reader failed" {
 		t.Fatalf("last error = %q", status.LastError)
