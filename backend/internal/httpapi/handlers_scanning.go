@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/ArionMiles/expensor/backend/internal/daemon"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
@@ -111,11 +112,11 @@ func (h *Handlers) CreateScanningRescan(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("reader %q not found", body.Reader))
 		return
 	}
-	if h.rescanFn == nil {
+	if h.daemon == nil {
 		writeError(w, http.StatusNotImplemented, "rescan not configured")
 		return
 	}
-	h.rescanFn(DaemonRunRequest{Tenant: requestTenant(r), Reader: body.Reader})
+	h.daemon.Rescan(daemon.RunRequest{Tenant: requestTenant(r), Reader: body.Reader})
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "rescanning"})
 }
 

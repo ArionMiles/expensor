@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ArionMiles/expensor/backend/internal/daemon"
 	"github.com/ArionMiles/expensor/backend/internal/rules"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
@@ -274,8 +275,8 @@ func (h *Handlers) clearActiveReaderCheckpointForNewRule(ctx context.Context, te
 		h.logger.Warn("failed to clear checkpoint after rule creation", "reader", reader, "error", err)
 		return
 	}
-	if h.daemon.Status().Running && h.restartFn != nil {
-		h.restartFn(DaemonRunRequest{Tenant: tenant, Reader: reader})
+	if h.daemon != nil && h.daemon.Status().Running {
+		h.daemon.Restart(daemon.RunRequest{Tenant: tenant, Reader: reader})
 	}
 }
 

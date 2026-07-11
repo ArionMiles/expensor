@@ -12,6 +12,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/assistant"
 	"github.com/ArionMiles/expensor/backend/internal/catalog"
 	"github.com/ArionMiles/expensor/backend/internal/community"
+	"github.com/ArionMiles/expensor/backend/internal/daemon"
 	"github.com/ArionMiles/expensor/backend/internal/daemon/scheduler"
 	"github.com/ArionMiles/expensor/backend/internal/httpapi"
 	"github.com/ArionMiles/expensor/backend/internal/llm"
@@ -114,22 +115,24 @@ func run() int {
 	ruleDrafts := assistant.NewInstrumentedRuleDrafter(assistant.NewRuleDraftService(llmRouter), assistantScope, assistantLogger)
 	logger.Info("LLM router initialized", "providers", len(llmRegistry.ListProviders()), "prompts", llmRouter.PromptCatalog().Len())
 
-	dm := &daemonManager{}
-	dc := &daemonCoordinator{
-		ctx: ctx, registry: registry, cfg: cfg,
-		systemRules: content.SystemRules, resolver: resolver,
-		st: st, runtimeStore: instrumentedStore, resolverStore: instrumentedStore,
-		diagnostics: instrumentedStore, transactionWriter: storeRuntime.Ingestion, dm: dm, logger: logger,
+	scanService, err := daemon.NewScanService(daemon.ScanDependencies{
+		Registry: registry, Config: cfg, SystemRules: content.SystemRules, Resolver: resolver,
+		Store: instrumentedStore, Diagnostics: instrumentedStore, TransactionWriter: storeRuntime.Ingestion, Logger: logger,
+	})
+	if err != nil {
+		logger.Error("failed to initialize scan service", "error", err)
+		return 1
+	}
+	dc, err := daemon.NewController(daemon.ControllerDependencies{Context: ctx, Scanner: scanService, Store: instrumentedStore, Logger: logger})
+	if err != nil {
+		logger.Error("failed to initialize daemon controller", "error", err)
+		return 1
 	}
 
 	schedulerScope := observability.NewScope(logger.With("component", "scheduler"), "github.com/ArionMiles/expensor/backend/internal/daemon/scheduler")
-	scanRunner := &scheduledScanRunner{
-		registry: registry, cfg: cfg, systemRules: content.SystemRules, resolver: resolver,
-		st: st, runtimeStore: instrumentedStore, diagnostics: instrumentedStore, transactionWriter: storeRuntime.Ingestion, logger: logger,
-	}
 	sched := scheduler.New(scheduler.Config{
 		Store:  instrumentedStore,
-		Runner: scheduler.NewInstrumentedRunner(scanRunner, schedulerScope),
+		Runner: scheduler.NewInstrumentedRunner(scheduler.NewScanRunner(scanService), schedulerScope),
 		Logger: logger.With("component", "scheduler"),
 	})
 	go func() {
@@ -158,18 +161,14 @@ func run() int {
 		RuleDrafts:         ruleDrafts,
 		LLMScope:           llmScope,
 		Store:              st,
-		Daemon:             dm,
+		Daemon:             dc,
+		Community:          communityService,
 		Version:            config.Version,
 		BaseURL:            cfg.BaseURL,
 		FrontendURL:        cfg.FrontendURL,
 		ThunderbirdDataDir: cfg.Thunderbird.DataDir,
 		ScanInterval:       cfg.ScanInterval,
 		LookbackDays:       cfg.LookbackDays,
-		StartFn:            dc.start,
-		StopFn:             dc.stop,
-		RescanFn:           dc.rescan,
-		RestartFn:          dc.restart,
-		SyncFn:             communityService.Trigger,
 		BanksData:          content.BanksJSON,
 		Logger:             logger.With("component", "api"),
 		LogLevel:           observabilityRuntime.LogLevel,

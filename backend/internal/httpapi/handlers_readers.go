@@ -16,6 +16,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/ArionMiles/expensor/backend/internal/auth"
+	"github.com/ArionMiles/expensor/backend/internal/daemon"
 	"github.com/ArionMiles/expensor/backend/internal/oauth"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
@@ -408,8 +409,8 @@ func (h *Handlers) exchangeAndSaveToken(ctx context.Context, tenant store.Tenant
 }
 
 func (h *Handlers) restartReaderDaemonAfterAuth(tenant store.Tenant, name string) {
-	if h.daemon.Status().Running && h.restartFn != nil {
-		h.restartFn(DaemonRunRequest{Tenant: tenant, Reader: name})
+	if h.daemon != nil && h.daemon.Status().Running {
+		h.daemon.Restart(daemon.RunRequest{Tenant: tenant, Reader: name})
 	}
 }
 
@@ -722,8 +723,8 @@ func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
 			return
 		}
-		if h.daemon.Status().Running && h.stopFn != nil {
-			h.stopFn()
+		if h.daemon != nil && h.daemon.Status().Running {
+			h.daemon.Stop()
 		}
 	}
 
