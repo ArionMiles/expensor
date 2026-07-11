@@ -315,14 +315,14 @@ tasks:
   openapi:generate:
     summary: Generate the committed OpenAPI baseline for the backend.
     desc: >-
-      Runs the pinned Swaggo v1.16.4 generator from backend/ against the server
-      entrypoint and API handlers, writes YAML into api/openapi, and renames
+      Runs the pinned Swaggo v1.16.4 generator from backend/ against the HTTP
+      package, writes YAML into api/openapi, and renames
       the generated swagger.yaml artifact to api/openapi/expensor.openapi.yaml.
       Re-run whenever OpenAPI annotations or route shapes change.
     dir: backend
     cmd: |
       mkdir -p ../api/openapi
-      go run github.com/swaggo/swag/cmd/swag@v1.16.4 init -g openapi.go -d ./cmd/server,./internal/httpapi --output ../api/openapi --outputTypes yaml
+      go run github.com/swaggo/swag/cmd/swag@v1.16.4 init -g openapi.go -d ./internal/httpapi --output ../api/openapi --outputTypes yaml
       mv -f ../api/openapi/swagger.yaml ../api/openapi/expensor.openapi.yaml
 
   openapi:check:
