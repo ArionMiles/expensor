@@ -9,6 +9,7 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/internal/store/instrumented"
 )
 
 func TestStoreEmitsRepresentativeDebugInstrumentation(t *testing.T) {
@@ -24,7 +25,7 @@ func TestStoreEmitsRepresentativeDebugInstrumentation(t *testing.T) {
 }
 
 type instrumentedTestStore struct {
-	*store.InstrumentedStore
+	*instrumented.Store
 	base *testStore
 	logs *bytes.Buffer
 }
@@ -36,7 +37,7 @@ func newInstrumentedTestStore(t *testing.T) *instrumentedTestStore {
 	logger := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	scope := observability.NewScope(logger, "test.store")
 	return &instrumentedTestStore{
-		InstrumentedStore: store.NewInstrumentedStore(store.InstrumentedStoreDeps{
+		Store: instrumented.NewStore(instrumented.StoreDeps{
 			Auth:         ts.Store,
 			Analytics:    ts.Store,
 			Community:    ts.Store,

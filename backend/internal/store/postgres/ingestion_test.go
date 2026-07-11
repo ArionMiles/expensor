@@ -11,8 +11,8 @@ import (
 )
 
 type testIngestor struct {
-	*TransactionIngestor
-	st *Store
+	st     *Store
+	tenant store.Tenant
 }
 
 func newTestIngestor(t *testing.T, overrides store.IngestionConfig) *testIngestor {
@@ -20,8 +20,7 @@ func newTestIngestor(t *testing.T, overrides store.IngestionConfig) *testIngesto
 	ts := newTestStore(t)
 	t.Cleanup(ts.cleanup)
 
-	ingestor := ts.NewTransactionIngestor(overrides, nil)
-	return &testIngestor{TransactionIngestor: ingestor, st: ts.Store}
+	return &testIngestor{st: ts.Store, tenant: overrides.Tenant}
 }
 
 // TestWrite_SingleTransaction verifies a single transaction is written and acknowledged.
@@ -443,50 +442,14 @@ func TestWrite_AutoAppliesMerchantCategoryBucketToFutureTransactions(t *testing.
 	check(txns[1].MessageID, "Food Delivery", "Wants")
 }
 
-// assertWrite sends txns through the ingestor and verifies every message is acknowledged.
+// assertWrite persists txns through the Postgres batch writer.
 func assertWrite(t *testing.T, w *testIngestor, txns []*api.TransactionDetails, timeout time.Duration) {
 	t.Helper()
-
-	in := make(chan *api.TransactionDetails, len(txns))
-	ackChan := make(chan string, len(txns))
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	errCh := make(chan error, 1)
-	go func() { errCh <- w.Write(ctx, in, ackChan) }()
-
-	for _, txn := range txns {
-		in <- txn
-	}
-	close(in)
-
-	expected := make(map[string]bool, len(txns))
-	for _, txn := range txns {
-		expected[txn.MessageID] = false
-	}
-
-	deadline := time.After(timeout - 500*time.Millisecond)
-	for range txns {
-		select {
-		case msgID := <-ackChan:
-			if _, ok := expected[msgID]; !ok {
-				t.Errorf("received ack for unexpected message ID %q", msgID)
-			}
-			expected[msgID] = true
-		case <-deadline:
-			missing := 0
-			for _, acked := range expected {
-				if !acked {
-					missing++
-				}
-			}
-			t.Errorf("timeout: %d/%d transactions not acknowledged", missing, len(txns))
-			return
-		}
-	}
-
-	if err := <-errCh; err != nil {
-		t.Errorf("ingestor returned error: %v", err)
+	if err := w.st.Write(ctx, store.IngestionBatch{Tenant: w.tenant, Transactions: txns}); err != nil {
+		t.Errorf("store Write returned error: %v", err)
 	}
 }

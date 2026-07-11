@@ -11,7 +11,23 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
-func insertForTest(ctx context.Context, st *Store, p store.InsertParams) (string, error) {
+type insertParams struct {
+	Tenant       store.Tenant
+	MessageID    string
+	Amount       float64
+	Currency     string
+	MerchantInfo string
+	Category     string
+	Bucket       string
+	Source       string
+	SourceType   string
+	SourceLabel  string
+	Bank         string
+	Description  string
+	Timestamp    time.Time
+}
+
+func insertForTest(ctx context.Context, st *Store, p insertParams) (string, error) {
 	if p.Currency == "" {
 		p.Currency = defaultTransactionCurrency
 	}

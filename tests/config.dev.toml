@@ -7,7 +7,7 @@ backend = "postgres"
 batch_size = 10
 flush_interval = 30
 
-[postgres]
+[database.postgres]
 host = "localhost"
 port = 5432
 database = "expensor"
@@ -15,7 +15,7 @@ user = "expensor"
 password = "expensor_password"
 sslmode = "disable"
 
-[sqlite]
+[database.sqlite]
 path = "../tests/expensor.dev.db"
 busy_timeout = "5s"
 

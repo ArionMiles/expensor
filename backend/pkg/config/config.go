@@ -24,13 +24,6 @@ const ServiceName = "expensor"
 // Version is set at build time via -ldflags.
 var Version = "dev"
 
-type DatabaseBackend string
-
-const (
-	DatabaseBackendPostgres DatabaseBackend = "postgres"
-	DatabaseBackendSQLite   DatabaseBackend = "sqlite"
-)
-
 // App holds the application configuration loaded from a TOML file and environment variables.
 // Reader plugin selection is driven by the web UI, not env vars.
 type App struct {
@@ -80,8 +73,6 @@ type App struct {
 	Thunderbird Thunderbird `toml:"thunderbird"`
 
 	Database      Database      `toml:"database"`
-	SQLite        SQLite        `toml:"sqlite"`
-	Postgres      Postgres      `toml:"postgres"`
 	Community     Community     `toml:"community"`
 	Persisted     Persisted     `toml:"persisted"`
 	Security      Security      `toml:"security"`
@@ -118,11 +109,19 @@ func (c *Thunderbird) GetMailboxes() []string {
 }
 
 type Database struct {
-	Backend           DatabaseBackend `toml:"backend" env:"EXPENSOR_DB_BACKEND" default:"sqlite" validate:"oneof=sqlite postgres"`
-	BackendConfigured bool            `toml:"-"`
-	BatchSize         int             `toml:"batch_size" env:"EXPENSOR_DB_BATCH_SIZE" default:"10" validate:"gte=0"`
-	FlushInterval     int             `toml:"flush_interval" env:"EXPENSOR_DB_FLUSH_INTERVAL" default:"30" validate:"gte=0"`
+	Backend       DatabaseBackend `toml:"backend" env:"EXPENSOR_DB_BACKEND" validate:"omitempty,oneof=sqlite postgres"`
+	BatchSize     int             `toml:"batch_size" env:"EXPENSOR_DB_BATCH_SIZE" default:"10" validate:"gte=0"`
+	FlushInterval int             `toml:"flush_interval" env:"EXPENSOR_DB_FLUSH_INTERVAL" default:"30" validate:"gte=0"`
+	SQLite        SQLite          `toml:"sqlite"`
+	Postgres      Postgres        `toml:"postgres"`
 }
+
+type DatabaseBackend string
+
+const (
+	DatabaseBackendSQLite   DatabaseBackend = "sqlite"
+	DatabaseBackendPostgres DatabaseBackend = "postgres"
+)
 
 type SQLite struct {
 	Path        string        `toml:"path" env:"EXPENSOR_SQLITE_PATH"`
@@ -142,12 +141,6 @@ type Postgres struct {
 	// Environment variable: POSTGRES_MAX_POOL_SIZE
 	// Default: 10
 	MaxPoolSize int32 `toml:"max_pool_size" env:"POSTGRES_MAX_POOL_SIZE" default:"10" validate:"gte=0"`
-
-	// ConnectTimeout is the maximum time to wait for PostgreSQL at startup.
-	ConnectTimeout time.Duration `toml:"connect_timeout" env:"POSTGRES_CONNECT_TIMEOUT" default:"30s" validate:"gt=0"`
-
-	// RetryInterval is the delay between PostgreSQL startup connection attempts.
-	RetryInterval time.Duration `toml:"retry_interval" env:"POSTGRES_RETRY_INTERVAL" default:"2s" validate:"gt=0"`
 }
 
 // Community controls community content synchronization.
@@ -221,12 +214,8 @@ func loadConfigFile(cfg *App) error {
 		}
 		return errors.E("config.load_file", errors.InvalidArgument, "loading config file", err)
 	}
-	meta, err := toml.DecodeFile(path, cfg)
-	if err != nil {
+	if _, err := toml.DecodeFile(path, cfg); err != nil {
 		return errors.E("config.load_file", errors.InvalidArgument, "loading config file", err)
-	}
-	if meta.IsDefined("database", "backend") {
-		cfg.Database.BackendConfigured = true
 	}
 	return nil
 }
@@ -247,7 +236,7 @@ func configFilePath() (string, bool) {
 }
 
 func applyEnvOverrides(cfg *App) error {
-	if err := walkConfigFields(reflect.ValueOf(cfg).Elem(), func(field reflect.Value, structField reflect.StructField) error {
+	return walkConfigFields(reflect.ValueOf(cfg).Elem(), func(field reflect.Value, structField reflect.StructField) error {
 		key := structField.Tag.Get("env")
 		if key == "" {
 			return nil
@@ -260,13 +249,7 @@ func applyEnvOverrides(cfg *App) error {
 			return errors.E("config.env", errors.InvalidArgument, fmt.Sprintf("parsing %s", key), err)
 		}
 		return nil
-	}); err != nil {
-		return err
-	}
-	if _, ok := os.LookupEnv("EXPENSOR_DB_BACKEND"); ok {
-		cfg.Database.BackendConfigured = true
-	}
-	return nil
+	})
 }
 
 func applyDefaults(cfg *App) error {
@@ -360,13 +343,13 @@ func validate(cfg *App) error {
 		return errors.E("config.validate", errors.InvalidArgument, validationMessage(cfg, err), err)
 	}
 	if cfg.Database.Backend == DatabaseBackendPostgres {
-		if strings.TrimSpace(cfg.Postgres.Host) == "" {
+		if strings.TrimSpace(cfg.Database.Postgres.Host) == "" {
 			return errors.E("config.validate", errors.InvalidArgument, "POSTGRES_HOST is required when EXPENSOR_DB_BACKEND=postgres")
 		}
-		if strings.TrimSpace(cfg.Postgres.Database) == "" {
+		if strings.TrimSpace(cfg.Database.Postgres.Database) == "" {
 			return errors.E("config.validate", errors.InvalidArgument, "POSTGRES_DB is required when EXPENSOR_DB_BACKEND=postgres")
 		}
-		if strings.TrimSpace(cfg.Postgres.User) == "" {
+		if strings.TrimSpace(cfg.Database.Postgres.User) == "" {
 			return errors.E("config.validate", errors.InvalidArgument, "POSTGRES_USER is required when EXPENSOR_DB_BACKEND=postgres")
 		}
 	}

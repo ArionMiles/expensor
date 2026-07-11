@@ -1,4 +1,4 @@
-package store
+package instrumented
 
 import (
 	"context"
@@ -7,45 +7,46 @@ import (
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/observability"
+	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
-// InstrumentedStore records telemetry around the full store surface.
-type InstrumentedStore struct {
-	auth         instrumentedAuthStore
-	analytics    instrumentedAnalyticsStore
-	community    instrumentedCommunityStore
-	diagnostics  instrumentedDiagnosticStore
-	rules        instrumentedRuleStore
-	runtime      instrumentedRuntimeStore
-	scanning     instrumentedScanningStore
-	taxonomy     instrumentedTaxonomyStore
-	transactions instrumentedTransactionStore
+// Store records telemetry around the full store surface.
+type Store struct {
+	auth         store.AuthStore
+	analytics    store.AnalyticsStore
+	community    store.CommunityStore
+	diagnostics  store.DiagnosticStore
+	rules        store.RuleStore
+	runtime      store.RuntimeStore
+	scanning     store.ScanningStore
+	taxonomy     store.TaxonomyStore
+	transactions store.TransactionStore
 	scope        *observability.Scope
 }
 
-// InstrumentedStoreDeps groups backend capabilities by the behavior boundaries
+// StoreDeps groups backend capabilities by the behavior boundaries
 // that the instrumentation wrapper decorates.
-type InstrumentedStoreDeps struct {
-	Auth         instrumentedAuthStore
-	Analytics    instrumentedAnalyticsStore
-	Community    instrumentedCommunityStore
-	Diagnostics  instrumentedDiagnosticStore
-	Rules        instrumentedRuleStore
-	Runtime      instrumentedRuntimeStore
-	Scanning     instrumentedScanningStore
-	Taxonomy     instrumentedTaxonomyStore
-	Transactions instrumentedTransactionStore
+type StoreDeps struct {
+	Auth         store.AuthStore
+	Analytics    store.AnalyticsStore
+	Community    store.CommunityStore
+	Diagnostics  store.DiagnosticStore
+	Rules        store.RuleStore
+	Runtime      store.RuntimeStore
+	Scanning     store.ScanningStore
+	Taxonomy     store.TaxonomyStore
+	Transactions store.TransactionStore
 }
 
-func NewInstrumentedStore(deps InstrumentedStoreDeps, scope *observability.Scope, logger *slog.Logger) *InstrumentedStore {
+func NewStore(deps StoreDeps, scope *observability.Scope, logger *slog.Logger) *Store {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	if scope == nil {
 		scope = observability.NewScope(logger, "store")
 	}
-	return &InstrumentedStore{
+	return &Store{
 		auth:         deps.Auth,
 		analytics:    deps.Analytics,
 		community:    deps.Community,
@@ -59,151 +60,7 @@ func NewInstrumentedStore(deps InstrumentedStoreDeps, scope *observability.Scope
 	}
 }
 
-type instrumentedAuthStore interface {
-	BootstrapRequired(ctx context.Context) (bool, error)
-	CreateBootstrapAdmin(ctx context.Context, input CreateBootstrapAdminInput) (*User, error)
-	CreateUser(ctx context.Context, input CreateUserInput) (*User, error)
-	ListUsers(ctx context.Context) ([]User, error)
-	UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, error)
-	UpdateUserPassword(ctx context.Context, id string, input UpdateUserPasswordInput) error
-	DeleteUser(ctx context.Context, id string) error
-	FindUserByEmail(ctx context.Context, email string) (*User, error)
-	FindUserByID(ctx context.Context, id string) (*User, error)
-	CreateSession(ctx context.Context, input CreateSessionInput) (*Session, error)
-	FindSessionByHash(ctx context.Context, tokenHash string) (*Session, error)
-	RevokeSession(ctx context.Context, id string) error
-	CreateAccessToken(ctx context.Context, input CreateAccessTokenInput) (*AccessToken, error)
-	ListAccessTokens(ctx context.Context, userID string) ([]AccessToken, error)
-	FindAccessTokenByHash(ctx context.Context, tokenHash string) (*AccessToken, error)
-	RevokeAccessToken(ctx context.Context, id, userID string) error
-	CreateAccountSetupToken(ctx context.Context, input CreateAccountSetupTokenInput) (*AccountSetupToken, error)
-	FindAccountSetupTokenByHash(ctx context.Context, tokenHash string) (*AccountSetupToken, error)
-	MarkAccountSetupTokenUsed(ctx context.Context, id string) error
-	CompleteAccountSetup(ctx context.Context, input CompleteAccountSetupInput) (*User, error)
-}
-
-type instrumentedAnalyticsStore interface {
-	GetStats(ctx context.Context, tenant Tenant, baseCurrency string) (*Stats, error)
-	GetChartData(ctx context.Context, tenant Tenant) (*ChartData, error)
-	GetDashboardData(ctx context.Context, tenant Tenant) (*DashboardData, error)
-	GetSpendingHeatmap(ctx context.Context, tenant Tenant, from, to *time.Time) (*HeatmapData, error)
-	GetAnnualSpend(ctx context.Context, tenant Tenant, year int) ([]DailyBucket, error)
-	GetMonthlyBreakdownSpend(ctx context.Context, tenant Tenant, dimension string, months int) (*MonthlyBreakdownData, error)
-}
-
-type instrumentedCommunityStore interface {
-	SeedMCCCodes(ctx context.Context, entries []MCCEntry) error
-	SeedMerchantCategories(ctx context.Context, entries []MerchantCategoryEntry) (int64, error)
-	LoadCategorySnapshot(ctx context.Context) (api.CategoryResolver, error)
-	SeedMCCCategories(ctx context.Context, names []string) error
-	CategorizeMerchant(ctx context.Context, tenant Tenant, merchant, category, bucket string) (int64, error)
-}
-
-type instrumentedDiagnosticStore interface {
-	ListExtractionDiagnostics(ctx context.Context, tenant Tenant, filter DiagnosticFilter) ([]ExtractionDiagnosticRow, error)
-	GetExtractionDiagnostic(ctx context.Context, tenant Tenant, id string) (*ExtractionDiagnosticRow, error)
-	UpdateExtractionDiagnosticStatus(ctx context.Context, tenant Tenant, id, status string) (*ExtractionDiagnosticRow, error)
-	RecordExtractionDiagnostic(ctx context.Context, diagnostic api.ExtractionDiagnostic) error
-	RecordTenantExtractionDiagnostic(ctx context.Context, tenant Tenant, diagnostic api.ExtractionDiagnostic) error
-}
-
-type instrumentedRuleStore interface {
-	ListRules(ctx context.Context, tenant Tenant) ([]RuleRow, error)
-	GetRule(ctx context.Context, tenant Tenant, id string) (*RuleRow, error)
-	CreateRule(ctx context.Context, tenant Tenant, r RuleRow) (*RuleRow, error)
-	UpdateRule(ctx context.Context, tenant Tenant, id string, r RuleRow) (*RuleRow, error)
-	DeleteRule(ctx context.Context, tenant Tenant, id string) error
-	SeedPredefinedRules(ctx context.Context, rules []RuleRow) error
-	ImportUserRules(ctx context.Context, tenant Tenant, rules []RuleRow) error
-}
-
-type instrumentedRuntimeStore interface {
-	GetAppConfig(ctx context.Context, tenant Tenant, key string) (string, error)
-	SetAppConfig(ctx context.Context, tenant Tenant, key, value string) error
-	IsMessageProcessed(ctx context.Context, tenant Tenant, key string) (bool, error)
-	MarkMessageProcessed(ctx context.Context, tenant Tenant, key string, at time.Time) error
-	SetReaderSecret(ctx context.Context, tenant Tenant, reader string, secret []byte) error
-	GetReaderSecret(ctx context.Context, tenant Tenant, reader string) ([]byte, bool, error)
-	SetReaderToken(ctx context.Context, tenant Tenant, reader string, token []byte) error
-	GetReaderToken(ctx context.Context, tenant Tenant, reader string) ([]byte, bool, error)
-	DeleteReaderToken(ctx context.Context, tenant Tenant, reader string) error
-	SetReaderConfig(ctx context.Context, tenant Tenant, reader string, config json.RawMessage) error
-	GetReaderConfig(ctx context.Context, tenant Tenant, reader string) (json.RawMessage, bool, error)
-	DeleteReaderRuntime(ctx context.Context, tenant Tenant, reader string) error
-	SetLLMProviderConfig(ctx context.Context, tenant Tenant, provider string, config json.RawMessage) error
-	GetLLMProviderConfig(ctx context.Context, tenant Tenant, provider string) (json.RawMessage, bool, error)
-	SetLLMProviderCredentials(ctx context.Context, tenant Tenant, provider string, credentials []byte) error
-	GetLLMProviderCredentials(ctx context.Context, tenant Tenant, provider string) ([]byte, bool, error)
-	DeleteLLMProviderRuntime(ctx context.Context, tenant Tenant, provider string) error
-	SetActiveLLMProvider(ctx context.Context, tenant Tenant, provider string) error
-	ClearActiveLLMProvider(ctx context.Context, tenant Tenant) error
-	GetActiveLLMProviderRuntime(ctx context.Context, tenant Tenant) (LLMProviderRuntime, bool, error)
-	GetCommunityURL(ctx context.Context) (string, error)
-	SetCommunityURL(ctx context.Context, url string) error
-	GetSyncStatus(ctx context.Context) (SyncStatus, error)
-	SetSyncStatus(ctx context.Context, status SyncStatus) error
-	GetCommunitySyncSettings(ctx context.Context) (CommunitySyncSettings, error)
-	PatchCommunitySyncSettings(ctx context.Context, patch CommunitySyncSettingsPatch) (CommunitySyncSettings, error)
-}
-
-type instrumentedScanningStore interface {
-	GetSchedulerConfig(ctx context.Context) (SchedulerConfig, error)
-	PatchSchedulerConfig(ctx context.Context, patch SchedulerConfigPatch) (SchedulerConfig, error)
-	EnsureScanningStateForTenant(ctx context.Context, tenant Tenant) error
-	GetScanningState(ctx context.Context, tenant Tenant) (TenantScanningState, error)
-	ListRunnableScanningStates(ctx context.Context) ([]TenantScanningState, error)
-	ListScanningStates(ctx context.Context) ([]TenantScanningState, error)
-	SetActiveScanningReader(ctx context.Context, tenant Tenant, reader string) error
-	ClearActiveScanningReader(ctx context.Context, tenant Tenant) error
-	SetScanningEnabled(ctx context.Context, tenant Tenant, enabled bool) error
-	UpdateScanningState(ctx context.Context, tenant Tenant, update ScanningStateUpdate) error
-}
-
-type instrumentedTaxonomyStore interface {
-	ListLabels(ctx context.Context, tenant Tenant) ([]Label, error)
-	CreateLabel(ctx context.Context, tenant Tenant, name, color string) error
-	UpdateLabel(ctx context.Context, tenant Tenant, name, color string) error
-	DeleteLabel(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error
-	ApplyLabelByMerchant(ctx context.Context, tenant Tenant, label, pattern string) (int64, error)
-	RemoveLabelByMerchant(ctx context.Context, tenant Tenant, label, pattern string) (int64, error)
-	GetLabelMappings(ctx context.Context, tenant Tenant) (map[string][]string, error)
-	ListCategories(ctx context.Context, tenant Tenant) ([]Category, error)
-	CreateCategory(ctx context.Context, tenant Tenant, name, description string) error
-	DeleteCategory(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error
-	ApplyCategoryByMerchant(ctx context.Context, tenant Tenant, category, pattern string) (int64, error)
-	RemoveCategoryByMerchant(ctx context.Context, tenant Tenant, category, pattern string) (int64, error)
-	GetCategoryMappings(ctx context.Context, tenant Tenant) (map[string][]string, error)
-	ListBuckets(ctx context.Context, tenant Tenant) ([]Bucket, error)
-	CreateBucket(ctx context.Context, tenant Tenant, name, description string) error
-	DeleteBucket(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error
-	ApplyBucketByMerchant(ctx context.Context, tenant Tenant, bucket, pattern string) (int64, error)
-	RemoveBucketByMerchant(ctx context.Context, tenant Tenant, bucket, pattern string) (int64, error)
-	GetBucketMappings(ctx context.Context, tenant Tenant) (map[string][]string, error)
-}
-
-type instrumentedTransactionStore interface {
-	ListTransactions(ctx context.Context, tenant Tenant, f ListFilter) ([]Transaction, TransactionListResult, error)
-	GetTransaction(ctx context.Context, tenant Tenant, id string) (*Transaction, error)
-	UpdateDescription(ctx context.Context, tenant Tenant, id, description string) error
-	AddLabel(ctx context.Context, tenant Tenant, transactionID, label string) error
-	AddLabels(ctx context.Context, tenant Tenant, transactionID string, labels []string) error
-	RemoveLabel(ctx context.Context, tenant Tenant, transactionID, label string) error
-	SearchTransactions(ctx context.Context, tenant Tenant, query string, f ListFilter) ([]Transaction, TransactionListResult, error)
-	GetFacets(ctx context.Context, tenant Tenant) (*Facets, error)
-	UpdateTransaction(ctx context.Context, tenant Tenant, id string, u TransactionUpdate) error
-	MuteTransaction(ctx context.Context, tenant Tenant, id string, muted bool, reason string) error
-	UpdateMuteReason(ctx context.Context, tenant Tenant, id, reason string) error
-	UpdateMerchantReason(ctx context.Context, tenant Tenant, id, reason string) error
-	MuteByMerchant(ctx context.Context, tenant Tenant, pattern, reason string) error
-	ListMutedMerchants(ctx context.Context, tenant Tenant) ([]MutedMerchant, error)
-	GetMutedMerchantsWithCount(ctx context.Context, tenant Tenant) ([]MutedMerchantWithCount, error)
-	DeleteMutedMerchant(ctx context.Context, tenant Tenant, id string) error
-	UnmuteByPattern(ctx context.Context, tenant Tenant, pattern string) error
-	DeleteMutedMerchantAndUnmute(ctx context.Context, tenant Tenant, id string) error
-	GetMutedMerchantPatterns(ctx context.Context, tenant Tenant) ([]string, error)
-}
-
-func (s *InstrumentedStore) recordOperation(ctx context.Context, name string, err error) {
+func (s *Store) recordOperation(ctx context.Context, name string, err error) {
 	s.scope.RecordOperation(ctx, observability.Operation{
 		Namespace: "store",
 		Name:      name,
@@ -211,7 +68,7 @@ func (s *InstrumentedStore) recordOperation(ctx context.Context, name string, er
 	})
 }
 
-func (s *InstrumentedStore) BootstrapRequired(ctx context.Context) (bool, error) {
+func (s *Store) BootstrapRequired(ctx context.Context) (bool, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.bootstrap_required")
 	defer span.End()
 
@@ -220,7 +77,7 @@ func (s *InstrumentedStore) BootstrapRequired(ctx context.Context) (bool, error)
 	return required, err
 }
 
-func (s *InstrumentedStore) CreateBootstrapAdmin(ctx context.Context, input CreateBootstrapAdminInput) (*User, error) {
+func (s *Store) CreateBootstrapAdmin(ctx context.Context, input store.CreateBootstrapAdminInput) (*store.User, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.create_bootstrap_admin")
 	defer span.End()
 
@@ -229,7 +86,7 @@ func (s *InstrumentedStore) CreateBootstrapAdmin(ctx context.Context, input Crea
 	return user, err
 }
 
-func (s *InstrumentedStore) CreateUser(ctx context.Context, input CreateUserInput) (*User, error) {
+func (s *Store) CreateUser(ctx context.Context, input store.CreateUserInput) (*store.User, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.create_user")
 	defer span.End()
 
@@ -238,7 +95,7 @@ func (s *InstrumentedStore) CreateUser(ctx context.Context, input CreateUserInpu
 	return user, err
 }
 
-func (s *InstrumentedStore) ListUsers(ctx context.Context) ([]User, error) {
+func (s *Store) ListUsers(ctx context.Context) ([]store.User, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.list_users")
 	defer span.End()
 
@@ -247,7 +104,7 @@ func (s *InstrumentedStore) ListUsers(ctx context.Context) ([]User, error) {
 	return users, err
 }
 
-func (s *InstrumentedStore) UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, error) {
+func (s *Store) UpdateUser(ctx context.Context, id string, input store.UpdateUserInput) (*store.User, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.update_user")
 	defer span.End()
 
@@ -256,7 +113,7 @@ func (s *InstrumentedStore) UpdateUser(ctx context.Context, id string, input Upd
 	return user, err
 }
 
-func (s *InstrumentedStore) UpdateUserPassword(ctx context.Context, id string, input UpdateUserPasswordInput) error {
+func (s *Store) UpdateUserPassword(ctx context.Context, id string, input store.UpdateUserPasswordInput) error {
 	ctx, span := s.scope.Start(ctx, "store.auth.update_user_password")
 	defer span.End()
 
@@ -265,7 +122,7 @@ func (s *InstrumentedStore) UpdateUserPassword(ctx context.Context, id string, i
 	return err
 }
 
-func (s *InstrumentedStore) DeleteUser(ctx context.Context, id string) error {
+func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	ctx, span := s.scope.Start(ctx, "store.auth.delete_user")
 	defer span.End()
 
@@ -274,7 +131,7 @@ func (s *InstrumentedStore) DeleteUser(ctx context.Context, id string) error {
 	return err
 }
 
-func (s *InstrumentedStore) FindUserByEmail(ctx context.Context, email string) (*User, error) {
+func (s *Store) FindUserByEmail(ctx context.Context, email string) (*store.User, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.find_user_by_email")
 	defer span.End()
 
@@ -283,7 +140,7 @@ func (s *InstrumentedStore) FindUserByEmail(ctx context.Context, email string) (
 	return user, err
 }
 
-func (s *InstrumentedStore) FindUserByID(ctx context.Context, id string) (*User, error) {
+func (s *Store) FindUserByID(ctx context.Context, id string) (*store.User, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.find_user_by_id")
 	defer span.End()
 
@@ -292,7 +149,7 @@ func (s *InstrumentedStore) FindUserByID(ctx context.Context, id string) (*User,
 	return user, err
 }
 
-func (s *InstrumentedStore) CreateSession(ctx context.Context, input CreateSessionInput) (*Session, error) {
+func (s *Store) CreateSession(ctx context.Context, input store.CreateSessionInput) (*store.Session, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.create_session")
 	defer span.End()
 
@@ -301,7 +158,7 @@ func (s *InstrumentedStore) CreateSession(ctx context.Context, input CreateSessi
 	return session, err
 }
 
-func (s *InstrumentedStore) FindSessionByHash(ctx context.Context, tokenHash string) (*Session, error) {
+func (s *Store) FindSessionByHash(ctx context.Context, tokenHash string) (*store.Session, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.find_session_by_hash")
 	defer span.End()
 
@@ -310,7 +167,7 @@ func (s *InstrumentedStore) FindSessionByHash(ctx context.Context, tokenHash str
 	return session, err
 }
 
-func (s *InstrumentedStore) RevokeSession(ctx context.Context, id string) error {
+func (s *Store) RevokeSession(ctx context.Context, id string) error {
 	ctx, span := s.scope.Start(ctx, "store.auth.revoke_session")
 	defer span.End()
 
@@ -319,7 +176,7 @@ func (s *InstrumentedStore) RevokeSession(ctx context.Context, id string) error 
 	return err
 }
 
-func (s *InstrumentedStore) CreateAccessToken(ctx context.Context, input CreateAccessTokenInput) (*AccessToken, error) {
+func (s *Store) CreateAccessToken(ctx context.Context, input store.CreateAccessTokenInput) (*store.AccessToken, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.create_access_token")
 	defer span.End()
 
@@ -328,7 +185,7 @@ func (s *InstrumentedStore) CreateAccessToken(ctx context.Context, input CreateA
 	return token, err
 }
 
-func (s *InstrumentedStore) ListAccessTokens(ctx context.Context, userID string) ([]AccessToken, error) {
+func (s *Store) ListAccessTokens(ctx context.Context, userID string) ([]store.AccessToken, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.list_access_tokens")
 	defer span.End()
 
@@ -337,7 +194,7 @@ func (s *InstrumentedStore) ListAccessTokens(ctx context.Context, userID string)
 	return tokens, err
 }
 
-func (s *InstrumentedStore) FindAccessTokenByHash(ctx context.Context, tokenHash string) (*AccessToken, error) {
+func (s *Store) FindAccessTokenByHash(ctx context.Context, tokenHash string) (*store.AccessToken, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.find_access_token_by_hash")
 	defer span.End()
 
@@ -346,7 +203,7 @@ func (s *InstrumentedStore) FindAccessTokenByHash(ctx context.Context, tokenHash
 	return token, err
 }
 
-func (s *InstrumentedStore) RevokeAccessToken(ctx context.Context, id, userID string) error {
+func (s *Store) RevokeAccessToken(ctx context.Context, id, userID string) error {
 	ctx, span := s.scope.Start(ctx, "store.auth.revoke_access_token")
 	defer span.End()
 
@@ -355,7 +212,7 @@ func (s *InstrumentedStore) RevokeAccessToken(ctx context.Context, id, userID st
 	return err
 }
 
-func (s *InstrumentedStore) CreateAccountSetupToken(ctx context.Context, input CreateAccountSetupTokenInput) (*AccountSetupToken, error) {
+func (s *Store) CreateAccountSetupToken(ctx context.Context, input store.CreateAccountSetupTokenInput) (*store.AccountSetupToken, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.create_account_setup_token")
 	defer span.End()
 
@@ -364,7 +221,7 @@ func (s *InstrumentedStore) CreateAccountSetupToken(ctx context.Context, input C
 	return token, err
 }
 
-func (s *InstrumentedStore) FindAccountSetupTokenByHash(ctx context.Context, tokenHash string) (*AccountSetupToken, error) {
+func (s *Store) FindAccountSetupTokenByHash(ctx context.Context, tokenHash string) (*store.AccountSetupToken, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.find_account_setup_token_by_hash")
 	defer span.End()
 
@@ -373,7 +230,7 @@ func (s *InstrumentedStore) FindAccountSetupTokenByHash(ctx context.Context, tok
 	return token, err
 }
 
-func (s *InstrumentedStore) MarkAccountSetupTokenUsed(ctx context.Context, id string) error {
+func (s *Store) MarkAccountSetupTokenUsed(ctx context.Context, id string) error {
 	ctx, span := s.scope.Start(ctx, "store.auth.mark_account_setup_token_used")
 	defer span.End()
 
@@ -382,7 +239,7 @@ func (s *InstrumentedStore) MarkAccountSetupTokenUsed(ctx context.Context, id st
 	return err
 }
 
-func (s *InstrumentedStore) CompleteAccountSetup(ctx context.Context, input CompleteAccountSetupInput) (*User, error) {
+func (s *Store) CompleteAccountSetup(ctx context.Context, input store.CompleteAccountSetupInput) (*store.User, error) {
 	ctx, span := s.scope.Start(ctx, "store.auth.complete_account_setup")
 	defer span.End()
 
@@ -391,7 +248,7 @@ func (s *InstrumentedStore) CompleteAccountSetup(ctx context.Context, input Comp
 	return user, err
 }
 
-func (s *InstrumentedStore) ListTransactions(ctx context.Context, tenant Tenant, f ListFilter) ([]Transaction, TransactionListResult, error) {
+func (s *Store) ListTransactions(ctx context.Context, tenant store.Tenant, f store.ListFilter) ([]store.Transaction, store.TransactionListResult, error) {
 	ctx, span := s.scope.Start(ctx, "store.transactions.list")
 	defer span.End()
 
@@ -400,7 +257,7 @@ func (s *InstrumentedStore) ListTransactions(ctx context.Context, tenant Tenant,
 	return rows, result, err
 }
 
-func (s *InstrumentedStore) GetTransaction(ctx context.Context, tenant Tenant, id string) (*Transaction, error) {
+func (s *Store) GetTransaction(ctx context.Context, tenant store.Tenant, id string) (*store.Transaction, error) {
 	ctx, span := s.scope.Start(ctx, "store.transactions.get")
 	defer span.End()
 
@@ -409,7 +266,7 @@ func (s *InstrumentedStore) GetTransaction(ctx context.Context, tenant Tenant, i
 	return transaction, err
 }
 
-func (s *InstrumentedStore) UpdateDescription(ctx context.Context, tenant Tenant, id, description string) error {
+func (s *Store) UpdateDescription(ctx context.Context, tenant store.Tenant, id, description string) error {
 	ctx, span := s.scope.Start(ctx, "store.transactions.update_description")
 	defer span.End()
 
@@ -418,7 +275,7 @@ func (s *InstrumentedStore) UpdateDescription(ctx context.Context, tenant Tenant
 	return err
 }
 
-func (s *InstrumentedStore) AddLabel(ctx context.Context, tenant Tenant, transactionID, label string) error {
+func (s *Store) AddLabel(ctx context.Context, tenant store.Tenant, transactionID, label string) error {
 	ctx, span := s.scope.Start(ctx, "store.transactions.add_label")
 	defer span.End()
 
@@ -427,7 +284,7 @@ func (s *InstrumentedStore) AddLabel(ctx context.Context, tenant Tenant, transac
 	return err
 }
 
-func (s *InstrumentedStore) AddLabels(ctx context.Context, tenant Tenant, transactionID string, labels []string) error {
+func (s *Store) AddLabels(ctx context.Context, tenant store.Tenant, transactionID string, labels []string) error {
 	ctx, span := s.scope.Start(ctx, "store.transactions.add_labels")
 	defer span.End()
 
@@ -436,7 +293,7 @@ func (s *InstrumentedStore) AddLabels(ctx context.Context, tenant Tenant, transa
 	return err
 }
 
-func (s *InstrumentedStore) RemoveLabel(ctx context.Context, tenant Tenant, transactionID, label string) error {
+func (s *Store) RemoveLabel(ctx context.Context, tenant store.Tenant, transactionID, label string) error {
 	ctx, span := s.scope.Start(ctx, "store.transactions.remove_label")
 	defer span.End()
 
@@ -445,7 +302,12 @@ func (s *InstrumentedStore) RemoveLabel(ctx context.Context, tenant Tenant, tran
 	return err
 }
 
-func (s *InstrumentedStore) SearchTransactions(ctx context.Context, tenant Tenant, query string, f ListFilter) ([]Transaction, TransactionListResult, error) {
+func (s *Store) SearchTransactions(
+	ctx context.Context,
+	tenant store.Tenant,
+	query string,
+	f store.ListFilter,
+) ([]store.Transaction, store.TransactionListResult, error) {
 	ctx, span := s.scope.Start(ctx, "store.transactions.search")
 	defer span.End()
 
@@ -454,7 +316,7 @@ func (s *InstrumentedStore) SearchTransactions(ctx context.Context, tenant Tenan
 	return rows, result, err
 }
 
-func (s *InstrumentedStore) GetStats(ctx context.Context, tenant Tenant, baseCurrency string) (*Stats, error) {
+func (s *Store) GetStats(ctx context.Context, tenant store.Tenant, baseCurrency string) (*store.Stats, error) {
 	ctx, span := s.scope.Start(ctx, "store.read_model.get_stats")
 	defer span.End()
 
@@ -463,7 +325,7 @@ func (s *InstrumentedStore) GetStats(ctx context.Context, tenant Tenant, baseCur
 	return stats, err
 }
 
-func (s *InstrumentedStore) GetChartData(ctx context.Context, tenant Tenant) (*ChartData, error) {
+func (s *Store) GetChartData(ctx context.Context, tenant store.Tenant) (*store.ChartData, error) {
 	ctx, span := s.scope.Start(ctx, "store.read_model.get_chart_data")
 	defer span.End()
 
@@ -472,7 +334,7 @@ func (s *InstrumentedStore) GetChartData(ctx context.Context, tenant Tenant) (*C
 	return data, err
 }
 
-func (s *InstrumentedStore) GetDashboardData(ctx context.Context, tenant Tenant) (*DashboardData, error) {
+func (s *Store) GetDashboardData(ctx context.Context, tenant store.Tenant) (*store.DashboardData, error) {
 	ctx, span := s.scope.Start(ctx, "store.read_model.get_dashboard_data")
 	defer span.End()
 
@@ -481,7 +343,7 @@ func (s *InstrumentedStore) GetDashboardData(ctx context.Context, tenant Tenant)
 	return data, err
 }
 
-func (s *InstrumentedStore) GetSpendingHeatmap(ctx context.Context, tenant Tenant, from, to *time.Time) (*HeatmapData, error) {
+func (s *Store) GetSpendingHeatmap(ctx context.Context, tenant store.Tenant, from, to *time.Time) (*store.HeatmapData, error) {
 	ctx, span := s.scope.Start(ctx, "store.read_model.get_spending_heatmap")
 	defer span.End()
 
@@ -490,7 +352,7 @@ func (s *InstrumentedStore) GetSpendingHeatmap(ctx context.Context, tenant Tenan
 	return data, err
 }
 
-func (s *InstrumentedStore) GetAnnualSpend(ctx context.Context, tenant Tenant, year int) ([]DailyBucket, error) {
+func (s *Store) GetAnnualSpend(ctx context.Context, tenant store.Tenant, year int) ([]store.DailyBucket, error) {
 	ctx, span := s.scope.Start(ctx, "store.read_model.get_annual_spend")
 	defer span.End()
 
@@ -499,7 +361,7 @@ func (s *InstrumentedStore) GetAnnualSpend(ctx context.Context, tenant Tenant, y
 	return buckets, err
 }
 
-func (s *InstrumentedStore) GetAppConfig(ctx context.Context, tenant Tenant, key string) (string, error) {
+func (s *Store) GetAppConfig(ctx context.Context, tenant store.Tenant, key string) (string, error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.get_app_config")
 	defer span.End()
 
@@ -508,7 +370,7 @@ func (s *InstrumentedStore) GetAppConfig(ctx context.Context, tenant Tenant, key
 	return value, err
 }
 
-func (s *InstrumentedStore) SetAppConfig(ctx context.Context, tenant Tenant, key, value string) error {
+func (s *Store) SetAppConfig(ctx context.Context, tenant store.Tenant, key, value string) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.set_app_config")
 	defer span.End()
 
@@ -517,7 +379,7 @@ func (s *InstrumentedStore) SetAppConfig(ctx context.Context, tenant Tenant, key
 	return err
 }
 
-func (s *InstrumentedStore) IsMessageProcessed(ctx context.Context, tenant Tenant, key string) (bool, error) {
+func (s *Store) IsMessageProcessed(ctx context.Context, tenant store.Tenant, key string) (bool, error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.is_message_processed")
 	defer span.End()
 
@@ -526,7 +388,7 @@ func (s *InstrumentedStore) IsMessageProcessed(ctx context.Context, tenant Tenan
 	return processed, err
 }
 
-func (s *InstrumentedStore) MarkMessageProcessed(ctx context.Context, tenant Tenant, key string, at time.Time) error {
+func (s *Store) MarkMessageProcessed(ctx context.Context, tenant store.Tenant, key string, at time.Time) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.mark_message_processed")
 	defer span.End()
 
@@ -535,7 +397,7 @@ func (s *InstrumentedStore) MarkMessageProcessed(ctx context.Context, tenant Ten
 	return err
 }
 
-func (s *InstrumentedStore) GetSchedulerConfig(ctx context.Context) (SchedulerConfig, error) {
+func (s *Store) GetSchedulerConfig(ctx context.Context) (store.SchedulerConfig, error) {
 	ctx, span := s.scope.Start(ctx, "store.scanning.get_scheduler_config")
 	defer span.End()
 
@@ -544,7 +406,7 @@ func (s *InstrumentedStore) GetSchedulerConfig(ctx context.Context) (SchedulerCo
 	return cfg, err
 }
 
-func (s *InstrumentedStore) PatchSchedulerConfig(ctx context.Context, patch SchedulerConfigPatch) (SchedulerConfig, error) {
+func (s *Store) PatchSchedulerConfig(ctx context.Context, patch store.SchedulerConfigPatch) (store.SchedulerConfig, error) {
 	ctx, span := s.scope.Start(ctx, "store.scanning.patch_scheduler_config")
 	defer span.End()
 
@@ -553,7 +415,7 @@ func (s *InstrumentedStore) PatchSchedulerConfig(ctx context.Context, patch Sche
 	return cfg, err
 }
 
-func (s *InstrumentedStore) EnsureScanningStateForTenant(ctx context.Context, tenant Tenant) error {
+func (s *Store) EnsureScanningStateForTenant(ctx context.Context, tenant store.Tenant) error {
 	ctx, span := s.scope.Start(ctx, "store.scanning.ensure_tenant_state")
 	defer span.End()
 
@@ -562,7 +424,7 @@ func (s *InstrumentedStore) EnsureScanningStateForTenant(ctx context.Context, te
 	return err
 }
 
-func (s *InstrumentedStore) GetScanningState(ctx context.Context, tenant Tenant) (TenantScanningState, error) {
+func (s *Store) GetScanningState(ctx context.Context, tenant store.Tenant) (store.TenantScanningState, error) {
 	ctx, span := s.scope.Start(ctx, "store.scanning.get_state")
 	defer span.End()
 
@@ -571,7 +433,7 @@ func (s *InstrumentedStore) GetScanningState(ctx context.Context, tenant Tenant)
 	return state, err
 }
 
-func (s *InstrumentedStore) ListRunnableScanningStates(ctx context.Context) ([]TenantScanningState, error) {
+func (s *Store) ListRunnableScanningStates(ctx context.Context) ([]store.TenantScanningState, error) {
 	ctx, span := s.scope.Start(ctx, "store.scanning.list_runnable_states")
 	defer span.End()
 
@@ -580,7 +442,7 @@ func (s *InstrumentedStore) ListRunnableScanningStates(ctx context.Context) ([]T
 	return states, err
 }
 
-func (s *InstrumentedStore) ListScanningStates(ctx context.Context) ([]TenantScanningState, error) {
+func (s *Store) ListScanningStates(ctx context.Context) ([]store.TenantScanningState, error) {
 	ctx, span := s.scope.Start(ctx, "store.scanning.list_states")
 	defer span.End()
 
@@ -589,7 +451,7 @@ func (s *InstrumentedStore) ListScanningStates(ctx context.Context) ([]TenantSca
 	return states, err
 }
 
-func (s *InstrumentedStore) SetActiveScanningReader(ctx context.Context, tenant Tenant, reader string) error {
+func (s *Store) SetActiveScanningReader(ctx context.Context, tenant store.Tenant, reader string) error {
 	ctx, span := s.scope.Start(ctx, "store.scanning.set_active_reader")
 	defer span.End()
 
@@ -598,7 +460,7 @@ func (s *InstrumentedStore) SetActiveScanningReader(ctx context.Context, tenant 
 	return err
 }
 
-func (s *InstrumentedStore) ClearActiveScanningReader(ctx context.Context, tenant Tenant) error {
+func (s *Store) ClearActiveScanningReader(ctx context.Context, tenant store.Tenant) error {
 	ctx, span := s.scope.Start(ctx, "store.scanning.clear_active_reader")
 	defer span.End()
 
@@ -607,7 +469,7 @@ func (s *InstrumentedStore) ClearActiveScanningReader(ctx context.Context, tenan
 	return err
 }
 
-func (s *InstrumentedStore) SetScanningEnabled(ctx context.Context, tenant Tenant, enabled bool) error {
+func (s *Store) SetScanningEnabled(ctx context.Context, tenant store.Tenant, enabled bool) error {
 	ctx, span := s.scope.Start(ctx, "store.scanning.set_enabled")
 	defer span.End()
 
@@ -616,7 +478,7 @@ func (s *InstrumentedStore) SetScanningEnabled(ctx context.Context, tenant Tenan
 	return err
 }
 
-func (s *InstrumentedStore) UpdateScanningState(ctx context.Context, tenant Tenant, update ScanningStateUpdate) error {
+func (s *Store) UpdateScanningState(ctx context.Context, tenant store.Tenant, update store.ScanningStateUpdate) error {
 	ctx, span := s.scope.Start(ctx, "store.scanning.update_state")
 	defer span.End()
 
@@ -625,7 +487,7 @@ func (s *InstrumentedStore) UpdateScanningState(ctx context.Context, tenant Tena
 	return err
 }
 
-func (s *InstrumentedStore) SetReaderSecret(ctx context.Context, tenant Tenant, reader string, secret []byte) error {
+func (s *Store) SetReaderSecret(ctx context.Context, tenant store.Tenant, reader string, secret []byte) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.set_reader_secret")
 	defer span.End()
 
@@ -634,7 +496,7 @@ func (s *InstrumentedStore) SetReaderSecret(ctx context.Context, tenant Tenant, 
 	return err
 }
 
-func (s *InstrumentedStore) GetReaderSecret(ctx context.Context, tenant Tenant, reader string) (secret []byte, found bool, err error) {
+func (s *Store) GetReaderSecret(ctx context.Context, tenant store.Tenant, reader string) (secret []byte, found bool, err error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.get_reader_secret")
 	defer span.End()
 
@@ -643,7 +505,7 @@ func (s *InstrumentedStore) GetReaderSecret(ctx context.Context, tenant Tenant, 
 	return secret, found, err
 }
 
-func (s *InstrumentedStore) SetReaderToken(ctx context.Context, tenant Tenant, reader string, token []byte) error {
+func (s *Store) SetReaderToken(ctx context.Context, tenant store.Tenant, reader string, token []byte) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.set_reader_token")
 	defer span.End()
 
@@ -652,7 +514,7 @@ func (s *InstrumentedStore) SetReaderToken(ctx context.Context, tenant Tenant, r
 	return err
 }
 
-func (s *InstrumentedStore) GetReaderToken(ctx context.Context, tenant Tenant, reader string) (token []byte, found bool, err error) {
+func (s *Store) GetReaderToken(ctx context.Context, tenant store.Tenant, reader string) (token []byte, found bool, err error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.get_reader_token")
 	defer span.End()
 
@@ -661,7 +523,7 @@ func (s *InstrumentedStore) GetReaderToken(ctx context.Context, tenant Tenant, r
 	return token, found, err
 }
 
-func (s *InstrumentedStore) DeleteReaderToken(ctx context.Context, tenant Tenant, reader string) error {
+func (s *Store) DeleteReaderToken(ctx context.Context, tenant store.Tenant, reader string) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.delete_reader_token")
 	defer span.End()
 
@@ -670,7 +532,7 @@ func (s *InstrumentedStore) DeleteReaderToken(ctx context.Context, tenant Tenant
 	return err
 }
 
-func (s *InstrumentedStore) SetReaderConfig(ctx context.Context, tenant Tenant, reader string, config json.RawMessage) error {
+func (s *Store) SetReaderConfig(ctx context.Context, tenant store.Tenant, reader string, config json.RawMessage) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.set_reader_config")
 	defer span.End()
 
@@ -679,7 +541,7 @@ func (s *InstrumentedStore) SetReaderConfig(ctx context.Context, tenant Tenant, 
 	return err
 }
 
-func (s *InstrumentedStore) GetReaderConfig(ctx context.Context, tenant Tenant, reader string) (json.RawMessage, bool, error) {
+func (s *Store) GetReaderConfig(ctx context.Context, tenant store.Tenant, reader string) (json.RawMessage, bool, error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.get_reader_config")
 	defer span.End()
 
@@ -688,7 +550,7 @@ func (s *InstrumentedStore) GetReaderConfig(ctx context.Context, tenant Tenant, 
 	return config, found, err
 }
 
-func (s *InstrumentedStore) SetLLMProviderConfig(ctx context.Context, tenant Tenant, provider string, config json.RawMessage) error {
+func (s *Store) SetLLMProviderConfig(ctx context.Context, tenant store.Tenant, provider string, config json.RawMessage) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.set_llm_provider_config")
 	defer span.End()
 
@@ -697,7 +559,7 @@ func (s *InstrumentedStore) SetLLMProviderConfig(ctx context.Context, tenant Ten
 	return err
 }
 
-func (s *InstrumentedStore) GetLLMProviderConfig(ctx context.Context, tenant Tenant, provider string) (json.RawMessage, bool, error) {
+func (s *Store) GetLLMProviderConfig(ctx context.Context, tenant store.Tenant, provider string) (json.RawMessage, bool, error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.get_llm_provider_config")
 	defer span.End()
 
@@ -706,7 +568,7 @@ func (s *InstrumentedStore) GetLLMProviderConfig(ctx context.Context, tenant Ten
 	return config, found, err
 }
 
-func (s *InstrumentedStore) SetLLMProviderCredentials(ctx context.Context, tenant Tenant, provider string, credentials []byte) error {
+func (s *Store) SetLLMProviderCredentials(ctx context.Context, tenant store.Tenant, provider string, credentials []byte) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.set_llm_provider_credentials")
 	defer span.End()
 
@@ -715,9 +577,9 @@ func (s *InstrumentedStore) SetLLMProviderCredentials(ctx context.Context, tenan
 	return err
 }
 
-func (s *InstrumentedStore) GetLLMProviderCredentials(
+func (s *Store) GetLLMProviderCredentials(
 	ctx context.Context,
-	tenant Tenant,
+	tenant store.Tenant,
 	provider string,
 ) (credentials []byte, found bool, err error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.get_llm_provider_credentials")
@@ -728,7 +590,7 @@ func (s *InstrumentedStore) GetLLMProviderCredentials(
 	return credentials, found, err
 }
 
-func (s *InstrumentedStore) DeleteLLMProviderRuntime(ctx context.Context, tenant Tenant, provider string) error {
+func (s *Store) DeleteLLMProviderRuntime(ctx context.Context, tenant store.Tenant, provider string) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.delete_llm_provider_runtime")
 	defer span.End()
 
@@ -737,7 +599,7 @@ func (s *InstrumentedStore) DeleteLLMProviderRuntime(ctx context.Context, tenant
 	return err
 }
 
-func (s *InstrumentedStore) SetActiveLLMProvider(ctx context.Context, tenant Tenant, provider string) error {
+func (s *Store) SetActiveLLMProvider(ctx context.Context, tenant store.Tenant, provider string) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.set_active_llm_provider")
 	defer span.End()
 
@@ -746,7 +608,7 @@ func (s *InstrumentedStore) SetActiveLLMProvider(ctx context.Context, tenant Ten
 	return err
 }
 
-func (s *InstrumentedStore) ClearActiveLLMProvider(ctx context.Context, tenant Tenant) error {
+func (s *Store) ClearActiveLLMProvider(ctx context.Context, tenant store.Tenant) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.clear_active_llm_provider")
 	defer span.End()
 
@@ -755,7 +617,7 @@ func (s *InstrumentedStore) ClearActiveLLMProvider(ctx context.Context, tenant T
 	return err
 }
 
-func (s *InstrumentedStore) GetActiveLLMProviderRuntime(ctx context.Context, tenant Tenant) (LLMProviderRuntime, bool, error) {
+func (s *Store) GetActiveLLMProviderRuntime(ctx context.Context, tenant store.Tenant) (store.LLMProviderRuntime, bool, error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.get_active_llm_provider")
 	defer span.End()
 
@@ -764,7 +626,7 @@ func (s *InstrumentedStore) GetActiveLLMProviderRuntime(ctx context.Context, ten
 	return runtime, found, err
 }
 
-func (s *InstrumentedStore) DeleteReaderRuntime(ctx context.Context, tenant Tenant, reader string) error {
+func (s *Store) DeleteReaderRuntime(ctx context.Context, tenant store.Tenant, reader string) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.delete_reader_runtime")
 	defer span.End()
 
@@ -773,7 +635,7 @@ func (s *InstrumentedStore) DeleteReaderRuntime(ctx context.Context, tenant Tena
 	return err
 }
 
-func (s *InstrumentedStore) GetCommunityURL(ctx context.Context) (string, error) {
+func (s *Store) GetCommunityURL(ctx context.Context) (string, error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.get_community_url")
 	defer span.End()
 
@@ -782,7 +644,7 @@ func (s *InstrumentedStore) GetCommunityURL(ctx context.Context) (string, error)
 	return url, err
 }
 
-func (s *InstrumentedStore) SetCommunityURL(ctx context.Context, url string) error {
+func (s *Store) SetCommunityURL(ctx context.Context, url string) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.set_community_url")
 	defer span.End()
 
@@ -791,7 +653,7 @@ func (s *InstrumentedStore) SetCommunityURL(ctx context.Context, url string) err
 	return err
 }
 
-func (s *InstrumentedStore) GetFacets(ctx context.Context, tenant Tenant) (*Facets, error) {
+func (s *Store) GetFacets(ctx context.Context, tenant store.Tenant) (*store.Facets, error) {
 	ctx, span := s.scope.Start(ctx, "store.transactions.get_facets")
 	defer span.End()
 
@@ -800,7 +662,7 @@ func (s *InstrumentedStore) GetFacets(ctx context.Context, tenant Tenant) (*Face
 	return facets, err
 }
 
-func (s *InstrumentedStore) ListLabels(ctx context.Context, tenant Tenant) ([]Label, error) {
+func (s *Store) ListLabels(ctx context.Context, tenant store.Tenant) ([]store.Label, error) {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.list_labels")
 	defer span.End()
 
@@ -809,7 +671,7 @@ func (s *InstrumentedStore) ListLabels(ctx context.Context, tenant Tenant) ([]La
 	return labels, err
 }
 
-func (s *InstrumentedStore) CreateLabel(ctx context.Context, tenant Tenant, name, color string) error {
+func (s *Store) CreateLabel(ctx context.Context, tenant store.Tenant, name, color string) error {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.create_label")
 	defer span.End()
 
@@ -818,7 +680,7 @@ func (s *InstrumentedStore) CreateLabel(ctx context.Context, tenant Tenant, name
 	return err
 }
 
-func (s *InstrumentedStore) UpdateLabel(ctx context.Context, tenant Tenant, name, color string) error {
+func (s *Store) UpdateLabel(ctx context.Context, tenant store.Tenant, name, color string) error {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.update_label")
 	defer span.End()
 
@@ -827,7 +689,7 @@ func (s *InstrumentedStore) UpdateLabel(ctx context.Context, tenant Tenant, name
 	return err
 }
 
-func (s *InstrumentedStore) DeleteLabel(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
+func (s *Store) DeleteLabel(ctx context.Context, tenant store.Tenant, name string, removeFromTransactions bool) error {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.delete_label")
 	defer span.End()
 
@@ -836,7 +698,7 @@ func (s *InstrumentedStore) DeleteLabel(ctx context.Context, tenant Tenant, name
 	return err
 }
 
-func (s *InstrumentedStore) ApplyLabelByMerchant(ctx context.Context, tenant Tenant, label, pattern string) (int64, error) {
+func (s *Store) ApplyLabelByMerchant(ctx context.Context, tenant store.Tenant, label, pattern string) (int64, error) {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.apply_label_by_merchant")
 	defer span.End()
 
@@ -845,7 +707,7 @@ func (s *InstrumentedStore) ApplyLabelByMerchant(ctx context.Context, tenant Ten
 	return affected, err
 }
 
-func (s *InstrumentedStore) RemoveLabelByMerchant(ctx context.Context, tenant Tenant, label, pattern string) (int64, error) {
+func (s *Store) RemoveLabelByMerchant(ctx context.Context, tenant store.Tenant, label, pattern string) (int64, error) {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.remove_label_by_merchant")
 	defer span.End()
 
@@ -854,7 +716,7 @@ func (s *InstrumentedStore) RemoveLabelByMerchant(ctx context.Context, tenant Te
 	return removed, err
 }
 
-func (s *InstrumentedStore) GetLabelMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
+func (s *Store) GetLabelMappings(ctx context.Context, tenant store.Tenant) (map[string][]string, error) {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.get_label_mappings")
 	defer span.End()
 
@@ -863,7 +725,7 @@ func (s *InstrumentedStore) GetLabelMappings(ctx context.Context, tenant Tenant)
 	return mappings, err
 }
 
-func (s *InstrumentedStore) GetMonthlyBreakdownSpend(ctx context.Context, tenant Tenant, dimension string, months int) (*MonthlyBreakdownData, error) {
+func (s *Store) GetMonthlyBreakdownSpend(ctx context.Context, tenant store.Tenant, dimension string, months int) (*store.MonthlyBreakdownData, error) {
 	ctx, span := s.scope.Start(ctx, "store.read_model.get_monthly_breakdown_spend")
 	defer span.End()
 
@@ -872,7 +734,7 @@ func (s *InstrumentedStore) GetMonthlyBreakdownSpend(ctx context.Context, tenant
 	return data, err
 }
 
-func (s *InstrumentedStore) ListCategories(ctx context.Context, tenant Tenant) ([]Category, error) {
+func (s *Store) ListCategories(ctx context.Context, tenant store.Tenant) ([]store.Category, error) {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.list_categories")
 	defer span.End()
 
@@ -881,7 +743,7 @@ func (s *InstrumentedStore) ListCategories(ctx context.Context, tenant Tenant) (
 	return categories, err
 }
 
-func (s *InstrumentedStore) CreateCategory(ctx context.Context, tenant Tenant, name, description string) error {
+func (s *Store) CreateCategory(ctx context.Context, tenant store.Tenant, name, description string) error {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.create_category")
 	defer span.End()
 
@@ -890,7 +752,7 @@ func (s *InstrumentedStore) CreateCategory(ctx context.Context, tenant Tenant, n
 	return err
 }
 
-func (s *InstrumentedStore) DeleteCategory(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
+func (s *Store) DeleteCategory(ctx context.Context, tenant store.Tenant, name string, removeFromTransactions bool) error {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.delete_category")
 	defer span.End()
 
@@ -899,7 +761,7 @@ func (s *InstrumentedStore) DeleteCategory(ctx context.Context, tenant Tenant, n
 	return err
 }
 
-func (s *InstrumentedStore) ApplyCategoryByMerchant(ctx context.Context, tenant Tenant, category, pattern string) (int64, error) {
+func (s *Store) ApplyCategoryByMerchant(ctx context.Context, tenant store.Tenant, category, pattern string) (int64, error) {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.apply_category_by_merchant")
 	defer span.End()
 
@@ -908,7 +770,7 @@ func (s *InstrumentedStore) ApplyCategoryByMerchant(ctx context.Context, tenant 
 	return affected, err
 }
 
-func (s *InstrumentedStore) RemoveCategoryByMerchant(ctx context.Context, tenant Tenant, category, pattern string) (int64, error) {
+func (s *Store) RemoveCategoryByMerchant(ctx context.Context, tenant store.Tenant, category, pattern string) (int64, error) {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.remove_category_by_merchant")
 	defer span.End()
 
@@ -917,7 +779,7 @@ func (s *InstrumentedStore) RemoveCategoryByMerchant(ctx context.Context, tenant
 	return removed, err
 }
 
-func (s *InstrumentedStore) GetCategoryMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
+func (s *Store) GetCategoryMappings(ctx context.Context, tenant store.Tenant) (map[string][]string, error) {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.get_category_mappings")
 	defer span.End()
 
@@ -926,7 +788,7 @@ func (s *InstrumentedStore) GetCategoryMappings(ctx context.Context, tenant Tena
 	return mappings, err
 }
 
-func (s *InstrumentedStore) ListBuckets(ctx context.Context, tenant Tenant) ([]Bucket, error) {
+func (s *Store) ListBuckets(ctx context.Context, tenant store.Tenant) ([]store.Bucket, error) {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.list_buckets")
 	defer span.End()
 
@@ -935,7 +797,7 @@ func (s *InstrumentedStore) ListBuckets(ctx context.Context, tenant Tenant) ([]B
 	return buckets, err
 }
 
-func (s *InstrumentedStore) CreateBucket(ctx context.Context, tenant Tenant, name, description string) error {
+func (s *Store) CreateBucket(ctx context.Context, tenant store.Tenant, name, description string) error {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.create_bucket")
 	defer span.End()
 
@@ -944,7 +806,7 @@ func (s *InstrumentedStore) CreateBucket(ctx context.Context, tenant Tenant, nam
 	return err
 }
 
-func (s *InstrumentedStore) DeleteBucket(ctx context.Context, tenant Tenant, name string, removeFromTransactions bool) error {
+func (s *Store) DeleteBucket(ctx context.Context, tenant store.Tenant, name string, removeFromTransactions bool) error {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.delete_bucket")
 	defer span.End()
 
@@ -953,7 +815,7 @@ func (s *InstrumentedStore) DeleteBucket(ctx context.Context, tenant Tenant, nam
 	return err
 }
 
-func (s *InstrumentedStore) ApplyBucketByMerchant(ctx context.Context, tenant Tenant, bucket, pattern string) (int64, error) {
+func (s *Store) ApplyBucketByMerchant(ctx context.Context, tenant store.Tenant, bucket, pattern string) (int64, error) {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.apply_bucket_by_merchant")
 	defer span.End()
 
@@ -962,7 +824,7 @@ func (s *InstrumentedStore) ApplyBucketByMerchant(ctx context.Context, tenant Te
 	return affected, err
 }
 
-func (s *InstrumentedStore) RemoveBucketByMerchant(ctx context.Context, tenant Tenant, bucket, pattern string) (int64, error) {
+func (s *Store) RemoveBucketByMerchant(ctx context.Context, tenant store.Tenant, bucket, pattern string) (int64, error) {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.remove_bucket_by_merchant")
 	defer span.End()
 
@@ -971,7 +833,7 @@ func (s *InstrumentedStore) RemoveBucketByMerchant(ctx context.Context, tenant T
 	return removed, err
 }
 
-func (s *InstrumentedStore) GetBucketMappings(ctx context.Context, tenant Tenant) (map[string][]string, error) {
+func (s *Store) GetBucketMappings(ctx context.Context, tenant store.Tenant) (map[string][]string, error) {
 	ctx, span := s.scope.Start(ctx, "store.taxonomy.get_bucket_mappings")
 	defer span.End()
 
@@ -980,7 +842,7 @@ func (s *InstrumentedStore) GetBucketMappings(ctx context.Context, tenant Tenant
 	return mappings, err
 }
 
-func (s *InstrumentedStore) UpdateTransaction(ctx context.Context, tenant Tenant, id string, u TransactionUpdate) error {
+func (s *Store) UpdateTransaction(ctx context.Context, tenant store.Tenant, id string, u store.TransactionUpdate) error {
 	ctx, span := s.scope.Start(ctx, "store.transactions.update")
 	defer span.End()
 
@@ -989,7 +851,7 @@ func (s *InstrumentedStore) UpdateTransaction(ctx context.Context, tenant Tenant
 	return err
 }
 
-func (s *InstrumentedStore) MuteTransaction(ctx context.Context, tenant Tenant, id string, muted bool, reason string) error {
+func (s *Store) MuteTransaction(ctx context.Context, tenant store.Tenant, id string, muted bool, reason string) error {
 	ctx, span := s.scope.Start(ctx, "store.transactions.mute")
 	defer span.End()
 
@@ -998,7 +860,7 @@ func (s *InstrumentedStore) MuteTransaction(ctx context.Context, tenant Tenant, 
 	return err
 }
 
-func (s *InstrumentedStore) UpdateMuteReason(ctx context.Context, tenant Tenant, id, reason string) error {
+func (s *Store) UpdateMuteReason(ctx context.Context, tenant store.Tenant, id, reason string) error {
 	ctx, span := s.scope.Start(ctx, "store.transactions.update_mute_reason")
 	defer span.End()
 
@@ -1007,7 +869,7 @@ func (s *InstrumentedStore) UpdateMuteReason(ctx context.Context, tenant Tenant,
 	return err
 }
 
-func (s *InstrumentedStore) UpdateMerchantReason(ctx context.Context, tenant Tenant, id, reason string) error {
+func (s *Store) UpdateMerchantReason(ctx context.Context, tenant store.Tenant, id, reason string) error {
 	ctx, span := s.scope.Start(ctx, "store.transactions.update_merchant_reason")
 	defer span.End()
 
@@ -1016,7 +878,7 @@ func (s *InstrumentedStore) UpdateMerchantReason(ctx context.Context, tenant Ten
 	return err
 }
 
-func (s *InstrumentedStore) MuteByMerchant(ctx context.Context, tenant Tenant, pattern, reason string) error {
+func (s *Store) MuteByMerchant(ctx context.Context, tenant store.Tenant, pattern, reason string) error {
 	ctx, span := s.scope.Start(ctx, "store.transactions.mute_by_merchant")
 	defer span.End()
 
@@ -1025,7 +887,7 @@ func (s *InstrumentedStore) MuteByMerchant(ctx context.Context, tenant Tenant, p
 	return err
 }
 
-func (s *InstrumentedStore) ListMutedMerchants(ctx context.Context, tenant Tenant) ([]MutedMerchant, error) {
+func (s *Store) ListMutedMerchants(ctx context.Context, tenant store.Tenant) ([]store.MutedMerchant, error) {
 	ctx, span := s.scope.Start(ctx, "store.transactions.list_muted_merchants")
 	defer span.End()
 
@@ -1034,7 +896,7 @@ func (s *InstrumentedStore) ListMutedMerchants(ctx context.Context, tenant Tenan
 	return merchants, err
 }
 
-func (s *InstrumentedStore) GetMutedMerchantsWithCount(ctx context.Context, tenant Tenant) ([]MutedMerchantWithCount, error) {
+func (s *Store) GetMutedMerchantsWithCount(ctx context.Context, tenant store.Tenant) ([]store.MutedMerchantWithCount, error) {
 	ctx, span := s.scope.Start(ctx, "store.transactions.get_muted_merchants_with_count")
 	defer span.End()
 
@@ -1043,7 +905,7 @@ func (s *InstrumentedStore) GetMutedMerchantsWithCount(ctx context.Context, tena
 	return merchants, err
 }
 
-func (s *InstrumentedStore) DeleteMutedMerchant(ctx context.Context, tenant Tenant, id string) error {
+func (s *Store) DeleteMutedMerchant(ctx context.Context, tenant store.Tenant, id string) error {
 	ctx, span := s.scope.Start(ctx, "store.transactions.delete_muted_merchant")
 	defer span.End()
 
@@ -1052,7 +914,7 @@ func (s *InstrumentedStore) DeleteMutedMerchant(ctx context.Context, tenant Tena
 	return err
 }
 
-func (s *InstrumentedStore) UnmuteByPattern(ctx context.Context, tenant Tenant, pattern string) error {
+func (s *Store) UnmuteByPattern(ctx context.Context, tenant store.Tenant, pattern string) error {
 	ctx, span := s.scope.Start(ctx, "store.transactions.unmute_by_pattern")
 	defer span.End()
 
@@ -1061,7 +923,7 @@ func (s *InstrumentedStore) UnmuteByPattern(ctx context.Context, tenant Tenant, 
 	return err
 }
 
-func (s *InstrumentedStore) DeleteMutedMerchantAndUnmute(ctx context.Context, tenant Tenant, id string) error {
+func (s *Store) DeleteMutedMerchantAndUnmute(ctx context.Context, tenant store.Tenant, id string) error {
 	ctx, span := s.scope.Start(ctx, "store.transactions.delete_muted_merchant_and_unmute")
 	defer span.End()
 
@@ -1070,7 +932,7 @@ func (s *InstrumentedStore) DeleteMutedMerchantAndUnmute(ctx context.Context, te
 	return err
 }
 
-func (s *InstrumentedStore) GetMutedMerchantPatterns(ctx context.Context, tenant Tenant) ([]string, error) {
+func (s *Store) GetMutedMerchantPatterns(ctx context.Context, tenant store.Tenant) ([]string, error) {
 	ctx, span := s.scope.Start(ctx, "store.transactions.get_muted_merchant_patterns")
 	defer span.End()
 
@@ -1079,7 +941,7 @@ func (s *InstrumentedStore) GetMutedMerchantPatterns(ctx context.Context, tenant
 	return patterns, err
 }
 
-func (s *InstrumentedStore) CategorizeMerchant(ctx context.Context, tenant Tenant, merchant, category, bucket string) (int64, error) {
+func (s *Store) CategorizeMerchant(ctx context.Context, tenant store.Tenant, merchant, category, bucket string) (int64, error) {
 	ctx, span := s.scope.Start(ctx, "store.community.categorize_merchant")
 	defer span.End()
 
@@ -1088,7 +950,7 @@ func (s *InstrumentedStore) CategorizeMerchant(ctx context.Context, tenant Tenan
 	return updated, err
 }
 
-func (s *InstrumentedStore) ListRules(ctx context.Context, tenant Tenant) ([]RuleRow, error) {
+func (s *Store) ListRules(ctx context.Context, tenant store.Tenant) ([]store.RuleRow, error) {
 	ctx, span := s.scope.Start(ctx, "store.rules.list")
 	defer span.End()
 
@@ -1097,7 +959,7 @@ func (s *InstrumentedStore) ListRules(ctx context.Context, tenant Tenant) ([]Rul
 	return rules, err
 }
 
-func (s *InstrumentedStore) GetRule(ctx context.Context, tenant Tenant, id string) (*RuleRow, error) {
+func (s *Store) GetRule(ctx context.Context, tenant store.Tenant, id string) (*store.RuleRow, error) {
 	ctx, span := s.scope.Start(ctx, "store.rules.get")
 	defer span.End()
 
@@ -1106,7 +968,7 @@ func (s *InstrumentedStore) GetRule(ctx context.Context, tenant Tenant, id strin
 	return rule, err
 }
 
-func (s *InstrumentedStore) CreateRule(ctx context.Context, tenant Tenant, r RuleRow) (*RuleRow, error) {
+func (s *Store) CreateRule(ctx context.Context, tenant store.Tenant, r store.RuleRow) (*store.RuleRow, error) {
 	ctx, span := s.scope.Start(ctx, "store.rules.create")
 	defer span.End()
 
@@ -1115,7 +977,7 @@ func (s *InstrumentedStore) CreateRule(ctx context.Context, tenant Tenant, r Rul
 	return rule, err
 }
 
-func (s *InstrumentedStore) UpdateRule(ctx context.Context, tenant Tenant, id string, r RuleRow) (*RuleRow, error) {
+func (s *Store) UpdateRule(ctx context.Context, tenant store.Tenant, id string, r store.RuleRow) (*store.RuleRow, error) {
 	ctx, span := s.scope.Start(ctx, "store.rules.update")
 	defer span.End()
 
@@ -1124,7 +986,7 @@ func (s *InstrumentedStore) UpdateRule(ctx context.Context, tenant Tenant, id st
 	return rule, err
 }
 
-func (s *InstrumentedStore) DeleteRule(ctx context.Context, tenant Tenant, id string) error {
+func (s *Store) DeleteRule(ctx context.Context, tenant store.Tenant, id string) error {
 	ctx, span := s.scope.Start(ctx, "store.rules.delete")
 	defer span.End()
 
@@ -1133,7 +995,7 @@ func (s *InstrumentedStore) DeleteRule(ctx context.Context, tenant Tenant, id st
 	return err
 }
 
-func (s *InstrumentedStore) SeedPredefinedRules(ctx context.Context, rules []RuleRow) error {
+func (s *Store) SeedPredefinedRules(ctx context.Context, rules []store.RuleRow) error {
 	ctx, span := s.scope.Start(ctx, "store.rules.seed_predefined")
 	defer span.End()
 
@@ -1142,7 +1004,7 @@ func (s *InstrumentedStore) SeedPredefinedRules(ctx context.Context, rules []Rul
 	return err
 }
 
-func (s *InstrumentedStore) ImportUserRules(ctx context.Context, tenant Tenant, rules []RuleRow) error {
+func (s *Store) ImportUserRules(ctx context.Context, tenant store.Tenant, rules []store.RuleRow) error {
 	ctx, span := s.scope.Start(ctx, "store.rules.import_user")
 	defer span.End()
 
@@ -1151,7 +1013,7 @@ func (s *InstrumentedStore) ImportUserRules(ctx context.Context, tenant Tenant, 
 	return err
 }
 
-func (s *InstrumentedStore) SeedMCCCodes(ctx context.Context, entries []MCCEntry) error {
+func (s *Store) SeedMCCCodes(ctx context.Context, entries []store.MCCEntry) error {
 	ctx, span := s.scope.Start(ctx, "store.community.seed_mcc_codes")
 	defer span.End()
 
@@ -1160,7 +1022,7 @@ func (s *InstrumentedStore) SeedMCCCodes(ctx context.Context, entries []MCCEntry
 	return err
 }
 
-func (s *InstrumentedStore) SeedMerchantCategories(ctx context.Context, entries []MerchantCategoryEntry) (int64, error) {
+func (s *Store) SeedMerchantCategories(ctx context.Context, entries []store.MerchantCategoryEntry) (int64, error) {
 	ctx, span := s.scope.Start(ctx, "store.community.seed_merchant_categories")
 	defer span.End()
 
@@ -1169,7 +1031,7 @@ func (s *InstrumentedStore) SeedMerchantCategories(ctx context.Context, entries 
 	return updated, err
 }
 
-func (s *InstrumentedStore) LoadCategorySnapshot(ctx context.Context) (api.CategoryResolver, error) {
+func (s *Store) LoadCategorySnapshot(ctx context.Context) (api.CategoryResolver, error) {
 	ctx, span := s.scope.Start(ctx, "store.community.load_category_snapshot")
 	defer span.End()
 
@@ -1178,7 +1040,7 @@ func (s *InstrumentedStore) LoadCategorySnapshot(ctx context.Context) (api.Categ
 	return resolver, err
 }
 
-func (s *InstrumentedStore) SeedMCCCategories(ctx context.Context, names []string) error {
+func (s *Store) SeedMCCCategories(ctx context.Context, names []string) error {
 	ctx, span := s.scope.Start(ctx, "store.community.seed_mcc_categories")
 	defer span.End()
 
@@ -1187,7 +1049,7 @@ func (s *InstrumentedStore) SeedMCCCategories(ctx context.Context, names []strin
 	return err
 }
 
-func (s *InstrumentedStore) GetSyncStatus(ctx context.Context) (SyncStatus, error) {
+func (s *Store) GetSyncStatus(ctx context.Context) (store.SyncStatus, error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.get_sync_status")
 	defer span.End()
 
@@ -1196,7 +1058,7 @@ func (s *InstrumentedStore) GetSyncStatus(ctx context.Context) (SyncStatus, erro
 	return status, err
 }
 
-func (s *InstrumentedStore) SetSyncStatus(ctx context.Context, status SyncStatus) error {
+func (s *Store) SetSyncStatus(ctx context.Context, status store.SyncStatus) error {
 	ctx, span := s.scope.Start(ctx, "store.runtime.set_sync_status")
 	defer span.End()
 
@@ -1205,7 +1067,7 @@ func (s *InstrumentedStore) SetSyncStatus(ctx context.Context, status SyncStatus
 	return err
 }
 
-func (s *InstrumentedStore) GetCommunitySyncSettings(ctx context.Context) (CommunitySyncSettings, error) {
+func (s *Store) GetCommunitySyncSettings(ctx context.Context) (store.CommunitySyncSettings, error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.get_community_sync_settings")
 	defer span.End()
 
@@ -1214,10 +1076,10 @@ func (s *InstrumentedStore) GetCommunitySyncSettings(ctx context.Context) (Commu
 	return settings, err
 }
 
-func (s *InstrumentedStore) PatchCommunitySyncSettings(
+func (s *Store) PatchCommunitySyncSettings(
 	ctx context.Context,
-	patch CommunitySyncSettingsPatch,
-) (CommunitySyncSettings, error) {
+	patch store.CommunitySyncSettingsPatch,
+) (store.CommunitySyncSettings, error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.patch_community_sync_settings")
 	defer span.End()
 
@@ -1226,7 +1088,7 @@ func (s *InstrumentedStore) PatchCommunitySyncSettings(
 	return settings, err
 }
 
-func (s *InstrumentedStore) ListExtractionDiagnostics(ctx context.Context, tenant Tenant, filter DiagnosticFilter) ([]ExtractionDiagnosticRow, error) {
+func (s *Store) ListExtractionDiagnostics(ctx context.Context, tenant store.Tenant, filter store.DiagnosticFilter) ([]store.ExtractionDiagnosticRow, error) {
 	ctx, span := s.scope.Start(ctx, "store.diagnostics.list_extraction")
 	defer span.End()
 
@@ -1235,7 +1097,7 @@ func (s *InstrumentedStore) ListExtractionDiagnostics(ctx context.Context, tenan
 	return rows, err
 }
 
-func (s *InstrumentedStore) GetExtractionDiagnostic(ctx context.Context, tenant Tenant, id string) (*ExtractionDiagnosticRow, error) {
+func (s *Store) GetExtractionDiagnostic(ctx context.Context, tenant store.Tenant, id string) (*store.ExtractionDiagnosticRow, error) {
 	ctx, span := s.scope.Start(ctx, "store.diagnostics.get_extraction")
 	defer span.End()
 
@@ -1244,7 +1106,7 @@ func (s *InstrumentedStore) GetExtractionDiagnostic(ctx context.Context, tenant 
 	return row, err
 }
 
-func (s *InstrumentedStore) UpdateExtractionDiagnosticStatus(ctx context.Context, tenant Tenant, id, status string) (*ExtractionDiagnosticRow, error) {
+func (s *Store) UpdateExtractionDiagnosticStatus(ctx context.Context, tenant store.Tenant, id, status string) (*store.ExtractionDiagnosticRow, error) {
 	ctx, span := s.scope.Start(ctx, "store.diagnostics.update_extraction_status")
 	defer span.End()
 
@@ -1253,7 +1115,7 @@ func (s *InstrumentedStore) UpdateExtractionDiagnosticStatus(ctx context.Context
 	return row, err
 }
 
-func (s *InstrumentedStore) RecordExtractionDiagnostic(ctx context.Context, diagnostic api.ExtractionDiagnostic) error {
+func (s *Store) RecordExtractionDiagnostic(ctx context.Context, diagnostic api.ExtractionDiagnostic) error {
 	ctx, span := s.scope.Start(ctx, "store.diagnostics.record_extraction")
 	defer span.End()
 
@@ -1262,7 +1124,7 @@ func (s *InstrumentedStore) RecordExtractionDiagnostic(ctx context.Context, diag
 	return err
 }
 
-func (s *InstrumentedStore) RecordTenantExtractionDiagnostic(ctx context.Context, tenant Tenant, diagnostic api.ExtractionDiagnostic) error {
+func (s *Store) RecordTenantExtractionDiagnostic(ctx context.Context, tenant store.Tenant, diagnostic api.ExtractionDiagnostic) error {
 	ctx, span := s.scope.Start(ctx, "store.diagnostics.record_tenant_extraction")
 	defer span.End()
 

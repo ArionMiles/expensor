@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/pkg/api"
@@ -450,6 +451,24 @@ type IngestionConfig struct {
 	BatchSize int
 	// FlushInterval is the time between automatic flushes.
 	FlushInterval time.Duration
+}
+
+// IngestionBatch is a tenant-scoped batch of extracted transactions ready for persistence.
+type IngestionBatch struct {
+	Tenant       Tenant
+	Transactions []*api.TransactionDetails
+}
+
+// TransactionBatchWriter persists tenant-scoped extracted transaction batches.
+type TransactionBatchWriter interface {
+	Write(ctx context.Context, batch IngestionBatch) error
+}
+
+// SeedContent contains parsed startup content that must be persisted by a store backend.
+type SeedContent struct {
+	Rules              []api.Rule
+	MCCEntries         []MCCEntry
+	MerchantCategories []MerchantCategoryEntry
 }
 
 type ScanningState string

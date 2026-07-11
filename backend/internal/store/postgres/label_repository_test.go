@@ -65,11 +65,11 @@ func TestDeleteLabelCanRemoveExistingTransactionLabels(t *testing.T) {
 	defer ts.cleanup()
 	ctx := context.Background()
 
-	preserveID := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+	preserveID := seedTransaction(ctx, t, ts.Store, insertParams{
 		MessageID: "delete-label-preserve", Amount: 300, Currency: "INR", MerchantInfo: "Blinkit", Category: "Food",
 	})
 
-	removeID := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+	removeID := seedTransaction(ctx, t, ts.Store, insertParams{
 		MessageID: "delete-label-remove", Amount: 400, Currency: "INR", MerchantInfo: "Instamart", Category: "Food",
 	})
 

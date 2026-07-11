@@ -83,22 +83,22 @@ func (m *daemonManager) Status() httpapi.DaemonStatus {
 // It exposes start and rescan as plain methods so they can be passed directly
 // to the HTTP handlers without adding closure complexity to main.
 type daemonCoordinator struct {
-	mu            sync.Mutex
-	ctx           context.Context
-	cancelFn      context.CancelFunc // cancels the current daemon run; nil when idle
-	activeReader  string             // reader name currently running or last launched
-	activeTenant  store.Tenant       // tenant currently running or last launched
-	registry      *plugins.Registry
-	cfg           config.App
-	systemRules   []api.Rule
-	resolver      api.CategoryResolver
-	st            daemonStore
-	runtimeStore  daemonRuntimeStore
-	resolverStore categorySnapshotStore
-	diagnostics   api.DiagnosticSink
-	sinkFactory   daemon.TransactionSinkFactory
-	dm            *daemonManager
-	logger        *slog.Logger
+	mu                sync.Mutex
+	ctx               context.Context
+	cancelFn          context.CancelFunc // cancels the current daemon run; nil when idle
+	activeReader      string             // reader name currently running or last launched
+	activeTenant      store.Tenant       // tenant currently running or last launched
+	registry          *plugins.Registry
+	cfg               config.App
+	systemRules       []api.Rule
+	resolver          api.CategoryResolver
+	st                daemonStore
+	runtimeStore      daemonRuntimeStore
+	resolverStore     categorySnapshotStore
+	diagnostics       api.DiagnosticSink
+	transactionWriter store.TransactionBatchWriter
+	dm                *daemonManager
+	logger            *slog.Logger
 }
 
 type daemonRun struct {
@@ -331,7 +331,7 @@ func (c *daemonCoordinator) runDaemon(
 		stateManager = state.NewDBManager(c.runtimeStore, run.tenant, c.logger)
 	}
 
-	runner := daemon.New(c.registry, c.sinkFactory, httpClient, c.logger)
+	runner := daemon.New(c.registry, c.transactionWriter, httpClient, c.logger)
 	runCfg := daemon.RunConfig{
 		ReaderName:     run.readerName,
 		Tenant:         run.tenant,

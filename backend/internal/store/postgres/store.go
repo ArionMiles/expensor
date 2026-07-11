@@ -35,14 +35,19 @@ type Store struct {
 	community *communityRepository
 	diag      *diagnosticsRepository
 	analytics *analyticsRepository
+	ingestion *ingestionRepository
 	rules     *rulesRepository
 	runtime   *runtimeRepository
 	scanning  *scanningRepository
+	seeder    *seederRepository
 	taxonomy  *taxonomyRepository
 	txns      *transactionsRepository
 }
 
-var _ api.DiagnosticSink = (*Store)(nil)
+var (
+	_ api.DiagnosticSink = (*Store)(nil)
+	_ store.Backend      = (*Store)(nil)
+)
 
 // New creates a Store connected to the PostgreSQL instance described by cfg.
 func New(ctx context.Context, opts Options) (*Store, error) {
@@ -120,17 +125,27 @@ func (s *Store) initRepositories() {
 	s.auth = newAuthRepository(deps)
 	s.community = newCommunityRepository(deps)
 	s.diag = newDiagnosticsRepository(deps)
+	s.ingestion = newIngestionRepository(deps)
 	s.rules = newRulesRepository(deps)
 	s.runtime = newRuntimeRepository(deps)
 	s.scanning = newScanningRepository(deps)
 	s.analytics = newAnalyticsRepository(deps, s.runtime)
 	s.taxonomy = newTaxonomyRepository(deps)
 	s.txns = newTransactionsRepository(deps)
+	s.seeder = newSeederRepository(s.rules, s.community, s.logger)
 }
 
 // Close releases the store's connection pool.
 func (s *Store) Close() {
 	s.pool.Close()
+}
+
+func (s *Store) Seed(ctx context.Context, content store.SeedContent) (api.CategoryResolver, error) {
+	return s.seeder.Seed(ctx, content)
+}
+
+func (s *Store) Write(ctx context.Context, batch store.IngestionBatch) error {
+	return s.ingestion.Write(ctx, batch)
 }
 
 func (s *Store) BootstrapRequired(ctx context.Context) (bool, error) {
@@ -211,15 +226,6 @@ func (s *Store) MarkAccountSetupTokenUsed(ctx context.Context, id string) error 
 
 func (s *Store) CompleteAccountSetup(ctx context.Context, input store.CompleteAccountSetupInput) (*store.User, error) {
 	return s.auth.CompleteAccountSetup(ctx, input)
-}
-
-func (s *Store) queryTransactionTotals(
-	ctx context.Context,
-	join string,
-	where string,
-	args []any,
-) (store.TransactionListResult, error) {
-	return s.txns.queryTransactionTotals(ctx, join, where, args)
 }
 
 // ListTransactions returns a paginated, filtered list of transactions and the total

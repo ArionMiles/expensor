@@ -3,14 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/ArionMiles/expensor/backend/internal/app"
 	"github.com/ArionMiles/expensor/backend/internal/assistant"
-	"github.com/ArionMiles/expensor/backend/internal/daemon"
 	"github.com/ArionMiles/expensor/backend/internal/daemon/scheduler"
 	"github.com/ArionMiles/expensor/backend/internal/httpapi"
 	"github.com/ArionMiles/expensor/backend/internal/llm"
@@ -39,7 +38,6 @@ func run() int {
 		return 1
 	}
 	logger := observabilityRuntime.Logger
-	logDatabaseBackend(cfg.Database, logger)
 	defer func() {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
@@ -85,32 +83,28 @@ func run() int {
 		cancel()
 	}()
 
-	runtime, storeErr := openConfiguredStore(ctx, cfg, logger)
+	storeRuntime, storeErr := app.NewStore(ctx, app.StoreOptions{
+		Database: cfg.Database,
+		Security: cfg.Security,
+		Logger:   logger,
+	})
 	if storeErr != nil {
 		logger.Error("failed to connect store", "error", storeErr)
 		return 1
 	}
-	defer runtime.Close()
+	defer storeRuntime.Close()
 
-	resolver, err := seedStartupData(ctx, runtime.Postgres, content, logger)
+	resolver, err := storeRuntime.Seed(ctx, store.SeedContent{
+		Rules:              content.rawRules,
+		MCCEntries:         content.mccEntries,
+		MerchantCategories: content.catEntries,
+	})
 	if err != nil {
 		logger.Error("startup seeding failed", "error", err)
 		return 1
 	}
 
-	storeLogger := logger.With("component", "store")
-	storeScope := observability.NewScope(storeLogger, "github.com/ArionMiles/expensor/backend/internal/store")
-	instrumentedStore := store.NewInstrumentedStore(store.InstrumentedStoreDeps{
-		Auth:         runtime.Postgres,
-		Analytics:    runtime.Postgres,
-		Community:    runtime.Postgres,
-		Diagnostics:  runtime.Postgres,
-		Rules:        runtime.Postgres,
-		Runtime:      runtime.Postgres,
-		Scanning:     runtime.Postgres,
-		Taxonomy:     runtime.Postgres,
-		Transactions: runtime.Postgres,
-	}, storeScope, storeLogger)
+	instrumentedStore := storeRuntime.Store
 	var st httpapi.Storer = instrumentedStore
 
 	llmRegistry := llm.NewRegistry()
@@ -133,24 +127,17 @@ func run() int {
 	logger.Info("LLM router initialized", "providers", len(llmRegistry.ListProviders()), "prompts", llmRouter.PromptCatalog().Len())
 
 	dm := &daemonManager{}
-	sinkFactory := func(tenant store.Tenant, appCfg *config.App, sinkLogger *slog.Logger) (daemon.TransactionSink, error) {
-		return runtime.Postgres.NewTransactionIngestor(store.IngestionConfig{
-			Tenant:        tenant,
-			BatchSize:     appCfg.Database.BatchSize,
-			FlushInterval: time.Duration(appCfg.Database.FlushInterval) * time.Second,
-		}, sinkLogger), nil
-	}
 	dc := &daemonCoordinator{
 		ctx: ctx, registry: registry, cfg: cfg,
 		systemRules: content.rules, resolver: resolver,
 		st: st, runtimeStore: instrumentedStore, resolverStore: instrumentedStore,
-		diagnostics: instrumentedStore, sinkFactory: sinkFactory, dm: dm, logger: logger,
+		diagnostics: instrumentedStore, transactionWriter: storeRuntime.Ingestion, dm: dm, logger: logger,
 	}
 
 	schedulerScope := observability.NewScope(logger.With("component", "scheduler"), "github.com/ArionMiles/expensor/backend/internal/daemon/scheduler")
 	scanRunner := &scheduledScanRunner{
 		registry: registry, cfg: cfg, systemRules: content.rules, resolver: resolver,
-		st: st, runtimeStore: instrumentedStore, diagnostics: instrumentedStore, sinkFactory: sinkFactory, logger: logger,
+		st: st, runtimeStore: instrumentedStore, diagnostics: instrumentedStore, transactionWriter: storeRuntime.Ingestion, logger: logger,
 	}
 	sched := scheduler.New(scheduler.Config{
 		Store:  instrumentedStore,

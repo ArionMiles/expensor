@@ -2,10 +2,8 @@ package observability
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -18,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ArionMiles/expensor/backend/pkg/config"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // Exporter identifies the telemetry exporter backend.
@@ -45,12 +44,12 @@ func Setup(ctx context.Context, cfg config.Observability) (SetupResult, error) {
 	logger := setupLogger(cfg, logLevel)
 	slog.SetDefault(logger)
 
-	exporter := Exporter(strings.ToLower(strings.TrimSpace(cfg.Exporter)))
+	exporter := Exporter(cfg.Exporter)
 	if !cfg.Enabled || exporter == ExporterNone {
 		return SetupResult{Shutdown: noopShutdown, Logger: logger, LogLevel: logLevel}, nil
 	}
 	if exporter != ExporterOTLP {
-		return SetupResult{}, fmt.Errorf("unsupported observability exporter %q", cfg.Exporter)
+		return SetupResult{}, errors.E("observability.setup", errors.InvalidArgument, fmt.Sprintf("unsupported observability exporter %q", cfg.Exporter))
 	}
 
 	res, err := newResource(cfg)

@@ -5,10 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -18,26 +17,27 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
+	apperrors "github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // Runner manages the expense tracking daemon lifecycle.
 type Runner struct {
-	registry    *plugins.Registry
-	sinkFactory TransactionSinkFactory
-	httpClient  *http.Client
-	logger      *slog.Logger
-	scope       *observability.Scope
+	registry          *plugins.Registry
+	transactionWriter store.TransactionBatchWriter
+	httpClient        *http.Client
+	logger            *slog.Logger
+	scope             *observability.Scope
 }
 
 // New creates a new daemon runner.
-func New(registry *plugins.Registry, sinkFactory TransactionSinkFactory, httpClient *http.Client, logger *slog.Logger) *Runner {
-	return NewWithScope(registry, sinkFactory, httpClient, logger, nil)
+func New(registry *plugins.Registry, transactionWriter store.TransactionBatchWriter, httpClient *http.Client, logger *slog.Logger) *Runner {
+	return NewWithScope(registry, transactionWriter, httpClient, logger, nil)
 }
 
 // NewWithScope creates a daemon runner with an explicit observability scope.
 func NewWithScope(
 	registry *plugins.Registry,
-	sinkFactory TransactionSinkFactory,
+	transactionWriter store.TransactionBatchWriter,
 	httpClient *http.Client,
 	logger *slog.Logger,
 	scope *observability.Scope,
@@ -50,11 +50,11 @@ func NewWithScope(
 	}
 
 	return &Runner{
-		registry:    registry,
-		sinkFactory: sinkFactory,
-		httpClient:  httpClient,
-		logger:      logger,
-		scope:       scope,
+		registry:          registry,
+		transactionWriter: transactionWriter,
+		httpClient:        httpClient,
+		logger:            logger,
+		scope:             scope,
 	}
 }
 
@@ -62,9 +62,6 @@ func NewWithScope(
 type TransactionSink interface {
 	Write(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error
 }
-
-// TransactionSinkFactory builds the daemon's transaction sink for one tenant-scoped run.
-type TransactionSinkFactory func(tenant store.Tenant, cfg *config.App, logger *slog.Logger) (TransactionSink, error)
 
 // RunConfig holds the configuration for running the daemon.
 type RunConfig struct {
@@ -111,7 +108,7 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 	provider, err := r.registry.GetProvider(runCfg.ReaderName)
 	if err != nil {
 		runErr = err
-		return fmt.Errorf("creating reader: %w", err)
+		return apperrors.E("daemon.run", apperrors.Internal, "creating reader", err)
 	}
 	reader, err := provider.NewReader(plugins.ProviderInput{
 		HTTPClient:     r.httpClient,
@@ -125,13 +122,18 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 	})
 	if err != nil {
 		runErr = err
-		return fmt.Errorf("creating reader: %w", err)
+		return apperrors.E("daemon.run", apperrors.Internal, "creating reader", err)
 	}
 
-	sink, err := r.sinkFactory(runCfg.Tenant, cfg, r.logger.With("component", "transaction_ingestion"))
+	ingestionCfg := store.IngestionConfig{Tenant: runCfg.Tenant}
+	if cfg != nil {
+		ingestionCfg.BatchSize = cfg.Database.BatchSize
+		ingestionCfg.FlushInterval = time.Duration(cfg.Database.FlushInterval) * time.Second
+	}
+	sink, err := newTransactionSink(r.transactionWriter, ingestionCfg, r.logger.With("component", "transaction_ingestion"))
 	if err != nil {
 		runErr = err
-		return fmt.Errorf("creating transaction sink: %w", err)
+		return apperrors.E("daemon.run", apperrors.Internal, "creating transaction sink", err)
 	}
 
 	// Create transaction and acknowledgment channels
@@ -152,15 +154,6 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 		!errors.Is(err, context.DeadlineExceeded) {
 		runErr = err
 		r.logger.Error("daemon error", "error", err)
-	}
-
-	// Close the sink if it owns resources beyond the application store.
-	if closer, ok := sink.(io.Closer); ok {
-		if err := closer.Close(); err != nil {
-			r.logger.Warn("error closing transaction sink", "error", err)
-		} else {
-			r.logger.Info("closed transaction sink resources")
-		}
 	}
 
 	r.logger.Info("daemon stopped")

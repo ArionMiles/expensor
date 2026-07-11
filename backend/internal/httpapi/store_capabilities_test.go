@@ -1,7 +1,7 @@
 package httpapi
 
 import (
-	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/internal/store/instrumented"
 	"github.com/ArionMiles/expensor/backend/internal/store/postgres"
 )
 
@@ -18,13 +18,13 @@ var (
 	_ syncStore          = (*postgres.Store)(nil)
 	_ diagnosticStore    = (*postgres.Store)(nil)
 
-	_ settingsStore      = (*store.InstrumentedStore)(nil)
-	_ analyticsStore     = (*store.InstrumentedStore)(nil)
-	_ transactionStore   = (*store.InstrumentedStore)(nil)
-	_ muteStore          = (*store.InstrumentedStore)(nil)
-	_ taxonomyStore      = (*store.InstrumentedStore)(nil)
-	_ readerRuntimeStore = (*store.InstrumentedStore)(nil)
-	_ ruleStore          = (*store.InstrumentedStore)(nil)
-	_ syncStore          = (*store.InstrumentedStore)(nil)
-	_ diagnosticStore    = (*store.InstrumentedStore)(nil)
+	_ settingsStore      = (*instrumented.Store)(nil)
+	_ analyticsStore     = (*instrumented.Store)(nil)
+	_ transactionStore   = (*instrumented.Store)(nil)
+	_ muteStore          = (*instrumented.Store)(nil)
+	_ taxonomyStore      = (*instrumented.Store)(nil)
+	_ readerRuntimeStore = (*instrumented.Store)(nil)
+	_ ruleStore          = (*instrumented.Store)(nil)
+	_ syncStore          = (*instrumented.Store)(nil)
+	_ diagnosticStore    = (*instrumented.Store)(nil)
 )

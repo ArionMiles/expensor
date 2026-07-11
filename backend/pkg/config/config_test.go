@@ -13,7 +13,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 )
 
-func TestLoadDefaultsToSQLiteWhenDatabaseBackendIsUnset(t *testing.T) {
+func TestLoadLeavesDatabaseBackendEmptyWhenUnset(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv("EXPENSOR_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)))
 
@@ -22,11 +22,8 @@ func TestLoadDefaultsToSQLiteWhenDatabaseBackendIsUnset(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	if cfg.Database.Backend != config.DatabaseBackendSQLite {
-		t.Fatalf("Database.Backend = %q, want %q", cfg.Database.Backend, config.DatabaseBackendSQLite)
-	}
-	if cfg.Database.BackendConfigured {
-		t.Fatal("Database.BackendConfigured = true, want false")
+	if cfg.Database.Backend != "" {
+		t.Fatalf("Database.Backend = %q, want empty", cfg.Database.Backend)
 	}
 }
 
@@ -59,14 +56,8 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.Database.Backend != config.DatabaseBackendPostgres || cfg.Database.BatchSize != 10 || cfg.Database.FlushInterval != 30 {
 		t.Fatalf("database defaults: %#v", cfg.Database)
 	}
-	if !cfg.Database.BackendConfigured {
-		t.Fatal("Database.BackendConfigured = false, want true")
-	}
-	if cfg.Postgres.Port != 5432 || cfg.Postgres.SSLMode != "disable" || cfg.Postgres.MaxPoolSize != 10 {
-		t.Fatalf("postgres defaults: %#v", cfg.Postgres)
-	}
-	if cfg.Postgres.ConnectTimeout != 30*time.Second || cfg.Postgres.RetryInterval != 2*time.Second {
-		t.Fatalf("postgres timing defaults: %#v", cfg.Postgres)
+	if cfg.Database.Postgres.Port != 5432 || cfg.Database.Postgres.SSLMode != "disable" || cfg.Database.Postgres.MaxPoolSize != 10 {
+		t.Fatalf("postgres defaults: %#v", cfg.Database.Postgres)
 	}
 	if cfg.Community.URL != "https://raw.githubusercontent.com/ArionMiles/expensor/main/backend/cmd/server/content" ||
 		cfg.Community.SyncInterval != 24*time.Hour || cfg.Community.SyncTimeout != 2*time.Minute {
@@ -152,8 +143,6 @@ func TestLoadUsesEnvironmentOverrides(t *testing.T) {
 	t.Setenv("FRONTEND_URL", "https://app.example.com")
 	t.Setenv("EXPENSOR_DB_BATCH_SIZE", "25")
 	t.Setenv("EXPENSOR_DB_FLUSH_INTERVAL", "45")
-	t.Setenv("POSTGRES_CONNECT_TIMEOUT", "45s")
-	t.Setenv("POSTGRES_RETRY_INTERVAL", "5s")
 	t.Setenv("EXPENSOR_COMMUNITY_URL", "https://content.example.com")
 	t.Setenv("EXPENSOR_CONTENT_SYNC_INTERVAL", "12h")
 	t.Setenv("EXPENSOR_CONTENT_SYNC_TIMEOUT", "90s")
@@ -177,9 +166,6 @@ func TestLoadUsesEnvironmentOverrides(t *testing.T) {
 	}
 	if cfg.Database.BatchSize != 25 || cfg.Database.FlushInterval != 45 {
 		t.Fatalf("database overrides: %#v", cfg.Database)
-	}
-	if cfg.Postgres.ConnectTimeout != 45*time.Second || cfg.Postgres.RetryInterval != 5*time.Second {
-		t.Fatalf("postgres timing overrides: %#v", cfg.Postgres)
 	}
 	if cfg.Community.URL != "https://content.example.com" || cfg.Community.SyncInterval != 12*time.Hour ||
 		cfg.Community.SyncTimeout != 90*time.Second {
@@ -250,7 +236,7 @@ backend = "postgres"
 batch_size = 20
 flush_interval = 15
 
-[postgres]
+[database.postgres]
 host = "db"
 database = "expensor_toml"
 user = "toml_user"
@@ -275,9 +261,9 @@ secret_key_file = "` + filepath.ToSlash(keyPath) + `"
 	if cfg.Database.Backend != config.DatabaseBackendPostgres || cfg.Database.BatchSize != 20 || cfg.Database.FlushInterval != 15 {
 		t.Fatalf("database TOML values not applied: %#v", cfg.Database)
 	}
-	if cfg.Postgres.Host != "db" || cfg.Postgres.Database != "expensor_toml" || cfg.Postgres.User != "toml_user" ||
-		cfg.Postgres.Password != "toml_password" {
-		t.Fatalf("postgres TOML values not applied: %#v", cfg.Postgres)
+	if cfg.Database.Postgres.Host != "db" || cfg.Database.Postgres.Database != "expensor_toml" || cfg.Database.Postgres.User != "toml_user" ||
+		cfg.Database.Postgres.Password != "toml_password" {
+		t.Fatalf("postgres TOML values not applied: %#v", cfg.Database.Postgres)
 	}
 }
 
@@ -296,7 +282,7 @@ port = 9091
 backend = "postgres"
 batch_size = 20
 
-[postgres]
+[database.postgres]
 host = "db"
 database = "expensor_toml"
 user = "toml_user"
@@ -323,8 +309,8 @@ secret_key_file = "` + filepath.ToSlash(keyPath) + `"
 	if cfg.Database.BatchSize != 30 {
 		t.Fatalf("Database.BatchSize = %d, want env override 30", cfg.Database.BatchSize)
 	}
-	if cfg.Postgres.Host != "env-db" {
-		t.Fatalf("Postgres.Host = %q, want env override env-db", cfg.Postgres.Host)
+	if cfg.Database.Postgres.Host != "env-db" {
+		t.Fatalf("Postgres.Host = %q, want env override env-db", cfg.Database.Postgres.Host)
 	}
 }
 
@@ -343,7 +329,7 @@ func TestLoadUsesXDGConfigHomeFallback(t *testing.T) {
 [database]
 backend = "postgres"
 
-[postgres]
+[database.postgres]
 host = "xdg-db"
 database = "expensor_xdg"
 user = "xdg_user"
@@ -360,8 +346,8 @@ secret_key_file = "` + filepath.ToSlash(keyPath) + `"
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Postgres.Host != "xdg-db" {
-		t.Fatalf("Postgres.Host = %q, want xdg-db", cfg.Postgres.Host)
+	if cfg.Database.Postgres.Host != "xdg-db" {
+		t.Fatalf("Postgres.Host = %q, want xdg-db", cfg.Database.Postgres.Host)
 	}
 }
 
@@ -447,8 +433,6 @@ func clearConfigEnv(t *testing.T) {
 		"POSTGRES_BATCH_SIZE",
 		"POSTGRES_FLUSH_INTERVAL",
 		"POSTGRES_MAX_POOL_SIZE",
-		"POSTGRES_CONNECT_TIMEOUT",
-		"POSTGRES_RETRY_INTERVAL",
 	} {
 		value, exists := os.LookupEnv(key)
 		if err := os.Unsetenv(key); err != nil {

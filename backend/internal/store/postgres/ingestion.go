@@ -7,44 +7,23 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
+	apperrors "github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
-// TransactionIngestor writes extracted daemon transactions to the application store.
-type TransactionIngestor struct {
-	pool          poolBeginner
-	tenant        store.Tenant
-	logger        *slog.Logger
-	batchSize     int
-	flushInterval time.Duration
-	scope         *observability.Scope
+type ingestionRepository struct {
+	pool   poolBeginner
+	logger *slog.Logger
 }
 
 const defaultTransactionCurrency = "INR"
 
-// NewTransactionIngestor creates a transaction ingestor backed by the store pool.
-func (s *Store) NewTransactionIngestor(cfg store.IngestionConfig, logger *slog.Logger) *TransactionIngestor {
-	if logger == nil {
-		logger = s.logger
-	}
-	if cfg.BatchSize == 0 {
-		cfg.BatchSize = 10
-	}
-	if cfg.FlushInterval == 0 {
-		cfg.FlushInterval = 30 * time.Second
-	}
-
-	return &TransactionIngestor{
-		pool:          s.pool,
-		tenant:        cfg.Tenant,
-		logger:        logger,
-		batchSize:     cfg.BatchSize,
-		flushInterval: cfg.FlushInterval,
-		scope:         observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/internal/store/ingestion"),
+func newIngestionRepository(deps repositoryDependencies) *ingestionRepository {
+	return &ingestionRepository{
+		pool:   deps.pool,
+		logger: deps.logger,
 	}
 }
 
@@ -52,107 +31,30 @@ type poolBeginner interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
-// flushBatch writes the current batch to PostgreSQL and sends acknowledgments.
-// It resets the batch slice to empty on success.
-func (w *TransactionIngestor) flushBatch(ctx context.Context, batch *[]*api.TransactionDetails, ackChan chan<- string) error {
-	if len(*batch) == 0 {
-		return nil
-	}
-
-	if err := w.writeBatch(ctx, *batch); err != nil {
-		return err
-	}
-
-	for _, txn := range *batch {
-		if txn.MessageID == "" {
-			continue
-		}
-		select {
-		case ackChan <- txn.MessageID:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-
-	w.logger.Info("wrote transaction batch", "count", len(*batch))
-	*batch = (*batch)[:0]
-	return nil
-}
-
-// Write consumes transactions from the channel and writes them to PostgreSQL.
-// It implements batch writing with periodic flushes for performance.
-func (w *TransactionIngestor) Write(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error {
-	batch := make([]*api.TransactionDetails, 0, w.batchSize)
-	ticker := time.NewTicker(w.flushInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			if err := w.flushBatch(ctx, &batch, ackChan); err != nil {
-				w.logger.Error("failed to flush final batch", "error", err)
-			}
-			return ctx.Err()
-
-		case txn, ok := <-in:
-			if !ok {
-				return w.flushBatch(ctx, &batch, ackChan)
-			}
-			batch = append(batch, txn)
-			if len(batch) >= w.batchSize {
-				if err := w.flushBatch(ctx, &batch, ackChan); err != nil {
-					return err
-				}
-			}
-
-		case <-ticker.C:
-			if err := w.flushBatch(ctx, &batch, ackChan); err != nil {
-				return err
-			}
-		}
-	}
-}
-
 // writeBatch writes a batch of transactions to the database.
 // Uses INSERT ON CONFLICT to handle duplicate message_id (upsert logic).
-func (w *TransactionIngestor) writeBatch(ctx context.Context, transactions []*api.TransactionDetails) error {
+func (w *ingestionRepository) Write(ctx context.Context, batch store.IngestionBatch) error {
+	transactions := batch.Transactions
 	if len(transactions) == 0 {
 		return nil
 	}
-	ctx, span := w.observabilityScope().Start(ctx, "store_ingestion.batch_write")
-	defer span.End()
-	start := time.Now()
-	span.SetAttributes(attribute.Int("store_ingestion.batch_size", len(transactions)))
-	var writeErr error
-	defer func() {
-		w.observabilityScope().RecordDuration(ctx, observability.DurationOperation{
-			Namespace: "store_ingestion",
-			Name:      "batch_write",
-			Duration:  time.Since(start),
-			Err:       writeErr,
-			Attributes: []attribute.KeyValue{
-				attribute.Int("batch_size", len(transactions)),
-			},
-		})
-	}()
 
 	// Start a transaction
-	tx, err := w.pool.Begin(ctx)
+	tx, err := w.pool.Begin(ctx) // TODO: Can we have a WithTx(...) context manager pattern here?
 	if err != nil {
-		writeErr = err
-		return fmt.Errorf("beginning transaction: %w", err)
+		return apperrors.E("postgres.ingestion.write", apperrors.Internal, "beginning transaction", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Prepare batch insert for transactions
-	batch := &pgx.Batch{}
+	pgBatch := &pgx.Batch{}
 	conflictClause := "ON CONFLICT (tenant_id, message_id) WHERE tenant_id IS NOT NULL"
-	if tenantIDParam(w.tenant) == nil {
+	if tenantIDParam(batch.Tenant) == nil {
 		conflictClause = "ON CONFLICT (message_id) WHERE tenant_id IS NULL"
 	}
 	for _, txn := range transactions {
 		currency, timestamp := w.normalizeWriteInput(txn)
-		batch.Queue(fmt.Sprintf(`
+		pgBatch.Queue(fmt.Sprintf(`
 			INSERT INTO transactions (
 				tenant_id, message_id, amount, currency, original_amount, original_currency,
 				exchange_rate, timestamp, merchant_info, category, bucket, source,
@@ -178,7 +80,7 @@ func (w *TransactionIngestor) writeBatch(ctx context.Context, transactions []*ap
 				updated_at = NOW()
 			RETURNING id
 		`, conflictClause),
-			tenantIDParam(w.tenant),
+			tenantIDParam(batch.Tenant),
 			txn.MessageID,
 			txn.Amount,
 			currency,
@@ -198,64 +100,50 @@ func (w *TransactionIngestor) writeBatch(ctx context.Context, transactions []*ap
 	}
 
 	// Execute batch
-	batchResults := tx.SendBatch(ctx, batch)
+	batchResults := tx.SendBatch(ctx, pgBatch)
 
 	// First: Collect all transaction IDs (fully consume batch results)
 	txnIDs := make([]string, len(transactions))
 	for i := 0; i < len(transactions); i++ {
 		if err := batchResults.QueryRow().Scan(&txnIDs[i]); err != nil {
 			_ = batchResults.Close()
-			writeErr = err
-			return fmt.Errorf("inserting transaction %d: %w", i, err)
+			return apperrors.E("postgres.ingestion.write", apperrors.Internal, fmt.Sprintf("inserting transaction %d", i), err)
 		}
 	}
 
 	// Close batch results before executing more queries on the transaction
 	if err := batchResults.Close(); err != nil {
-		writeErr = err
-		return fmt.Errorf("closing batch results: %w", err)
+		return apperrors.E("postgres.ingestion.write", apperrors.Internal, "closing batch results", err)
 	}
 
 	// Second: Insert labels (now safe to use tx.Exec)
 	for i, txn := range transactions {
 		if len(txn.Labels) > 0 {
 			if err := w.insertLabels(ctx, tx, txnIDs[i], txn.Labels); err != nil {
-				writeErr = err
-				return fmt.Errorf("inserting labels for transaction %s: %w", txnIDs[i], err)
+				return apperrors.E("postgres.ingestion.write", apperrors.Internal, fmt.Sprintf("inserting labels for transaction %s", txnIDs[i]), err)
 			}
 		}
 	}
 
 	if err := w.applyMerchantLabels(ctx, tx, txnIDs); err != nil {
-		writeErr = err
-		return fmt.Errorf("auto-applying merchant labels: %w", err)
+		return apperrors.E("postgres.ingestion.write", apperrors.Internal, "auto-applying merchant labels", err)
 	}
 	if err := w.applyMerchantCategories(ctx, tx, txnIDs); err != nil {
-		writeErr = err
-		return fmt.Errorf("auto-applying merchant categories: %w", err)
+		return apperrors.E("postgres.ingestion.write", apperrors.Internal, "auto-applying merchant categories", err)
 	}
 	if err := w.applyMutedMerchants(ctx, tx, txnIDs); err != nil {
-		writeErr = err
-		return fmt.Errorf("auto-muting transactions: %w", err)
+		return apperrors.E("postgres.ingestion.write", apperrors.Internal, "auto-muting transactions", err)
 	}
 
 	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
-		writeErr = err
-		return fmt.Errorf("committing transaction: %w", err)
+		return apperrors.E("postgres.ingestion.write", apperrors.Internal, "committing transaction", err)
 	}
 
 	return nil
 }
 
-func (w *TransactionIngestor) observabilityScope() *observability.Scope {
-	if w.scope == nil {
-		w.scope = observability.NewScope(w.logger, "github.com/ArionMiles/expensor/backend/internal/store/ingestion")
-	}
-	return w.scope
-}
-
-func (w *TransactionIngestor) normalizeWriteInput(txn *api.TransactionDetails) (string, time.Time) {
+func (w *ingestionRepository) normalizeWriteInput(txn *api.TransactionDetails) (string, time.Time) {
 	currency := txn.Currency
 	if currency == "" {
 		currency = defaultTransactionCurrency
@@ -274,7 +162,7 @@ func (w *TransactionIngestor) normalizeWriteInput(txn *api.TransactionDetails) (
 }
 
 // applyMerchantLabels attaches labels from merchant label mappings to transactions.
-func (w *TransactionIngestor) applyMerchantLabels(ctx context.Context, tx pgx.Tx, txnIDs []string) error {
+func (w *ingestionRepository) applyMerchantLabels(ctx context.Context, tx pgx.Tx, txnIDs []string) error {
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO transaction_label_sources (transaction_id, label, source_type, merchant_pattern)
 		SELECT t.id, lm.label, 'merchant', lm.merchant_pattern
@@ -299,7 +187,7 @@ func (w *TransactionIngestor) applyMerchantLabels(ctx context.Context, tx pgx.Tx
 }
 
 // applyMerchantCategories fills in category and bucket from merchant category mappings.
-func (w *TransactionIngestor) applyMerchantCategories(ctx context.Context, tx pgx.Tx, txnIDs []string) error {
+func (w *ingestionRepository) applyMerchantCategories(ctx context.Context, tx pgx.Tx, txnIDs []string) error {
 	_, err := tx.Exec(ctx, `
 		WITH ranked_matches AS (
 			SELECT
@@ -330,7 +218,7 @@ func (w *TransactionIngestor) applyMerchantCategories(ctx context.Context, tx pg
 }
 
 // applyMutedMerchants marks transactions as muted when they match muted merchant patterns.
-func (w *TransactionIngestor) applyMutedMerchants(ctx context.Context, tx pgx.Tx, txnIDs []string) error {
+func (w *ingestionRepository) applyMutedMerchants(ctx context.Context, tx pgx.Tx, txnIDs []string) error {
 	_, err := tx.Exec(ctx, `
 		UPDATE transactions t
 		SET muted = true,
@@ -346,7 +234,7 @@ func (w *TransactionIngestor) applyMutedMerchants(ctx context.Context, tx pgx.Tx
 }
 
 // insertLabels inserts labels for a transaction.
-func (w *TransactionIngestor) insertLabels(ctx context.Context, tx pgx.Tx, txnID string, labels []string) error {
+func (w *ingestionRepository) insertLabels(ctx context.Context, tx pgx.Tx, txnID string, labels []string) error {
 	if len(labels) == 0 {
 		return nil
 	}
@@ -356,7 +244,7 @@ func (w *TransactionIngestor) insertLabels(ctx context.Context, tx pgx.Tx, txnID
 		SELECT $1, unnest($2::text[]), 'manual', ''
 		ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING
 	`, txnID, labels); err != nil {
-		return fmt.Errorf("executing label source insert: %w", err)
+		return apperrors.E("postgres.ingestion.labels", apperrors.Internal, "executing label source insert", err)
 	}
 
 	if _, err := tx.Exec(ctx, `
@@ -364,7 +252,7 @@ func (w *TransactionIngestor) insertLabels(ctx context.Context, tx pgx.Tx, txnID
 		SELECT $1, unnest($2::text[])
 		ON CONFLICT (transaction_id, label) DO NOTHING
 	`, txnID, labels); err != nil {
-		return fmt.Errorf("executing label insert: %w", err)
+		return apperrors.E("postgres.ingestion.labels", apperrors.Internal, "executing label insert", err)
 	}
 
 	return nil

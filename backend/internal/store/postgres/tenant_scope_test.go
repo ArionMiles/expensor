@@ -18,7 +18,7 @@ func TestTenantScopedTransactionsAndReadModels(t *testing.T) {
 	tenantA := store.Tenant{ID: createRuntimeTestUser(t, ts, "tenant-txn-a@example.com").TenantID}
 	tenantB := store.Tenant{ID: createRuntimeTestUser(t, ts, "tenant-txn-b@example.com").TenantID}
 
-	idA := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+	idA := seedTransaction(ctx, t, ts.Store, insertParams{
 		Tenant:       tenantA,
 		MessageID:    "tenant-a-message",
 		Amount:       10,
@@ -28,7 +28,7 @@ func TestTenantScopedTransactionsAndReadModels(t *testing.T) {
 		Bucket:       "Needs",
 		Timestamp:    time.Date(2026, 1, 2, 10, 0, 0, 0, time.UTC),
 	})
-	idB := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+	idB := seedTransaction(ctx, t, ts.Store, insertParams{
 		Tenant:       tenantB,
 		MessageID:    "tenant-b-message",
 		Amount:       99,
@@ -82,7 +82,7 @@ func TestTenantScopedTaxonomyAndMutedMerchants(t *testing.T) {
 	tenantA := store.Tenant{ID: createRuntimeTestUser(t, ts, "tenant-taxonomy-a@example.com").TenantID}
 	tenantB := store.Tenant{ID: createRuntimeTestUser(t, ts, "tenant-taxonomy-b@example.com").TenantID}
 
-	idA := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+	idA := seedTransaction(ctx, t, ts.Store, insertParams{
 		Tenant:       tenantA,
 		MessageID:    "tenant-a-taxonomy",
 		Amount:       10,
@@ -90,7 +90,7 @@ func TestTenantScopedTaxonomyAndMutedMerchants(t *testing.T) {
 		MerchantInfo: "Shared Merchant",
 		Timestamp:    time.Date(2026, 2, 1, 10, 0, 0, 0, time.UTC),
 	})
-	idB := seedTransaction(ctx, t, ts.Store, store.InsertParams{
+	idB := seedTransaction(ctx, t, ts.Store, insertParams{
 		Tenant:       tenantB,
 		MessageID:    "tenant-b-taxonomy",
 		Amount:       20,
