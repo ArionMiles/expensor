@@ -11,6 +11,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/app"
 	"github.com/ArionMiles/expensor/backend/internal/assistant"
 	"github.com/ArionMiles/expensor/backend/internal/catalog"
+	"github.com/ArionMiles/expensor/backend/internal/community"
 	"github.com/ArionMiles/expensor/backend/internal/daemon/scheduler"
 	"github.com/ArionMiles/expensor/backend/internal/httpapi"
 	"github.com/ArionMiles/expensor/backend/internal/llm"
@@ -138,13 +139,18 @@ func run() int {
 	}()
 	logger.Info("multi-tenant scanning scheduler started")
 
-	syncFn := startCommunitySync(ctx, communitySyncDependencies{
-		config:      cfg.Community,
-		store:       instrumentedStore,
-		runtime:     instrumentedStore,
-		coordinator: dc,
-		logger:      logger,
+	communityService, err := community.New(ctx, community.Dependencies{
+		Config: cfg.Community, Store: instrumentedStore, Runtime: instrumentedStore, Resolver: dc, Logger: logger,
 	})
+	if err != nil {
+		logger.Error("failed to initialize community sync", "error", err)
+		return 1
+	}
+	go func() {
+		if err := communityService.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("community sync stopped with error", "error", err)
+		}
+	}()
 	handlers := httpapi.NewHandlers(httpapi.HandlersConfig{
 		Registry:           registry,
 		LLMRegistry:        llmRegistry,
@@ -163,7 +169,7 @@ func run() int {
 		StopFn:             dc.stop,
 		RescanFn:           dc.rescan,
 		RestartFn:          dc.restart,
-		SyncFn:             syncFn,
+		SyncFn:             communityService.Trigger,
 		BanksData:          content.BanksJSON,
 		Logger:             logger.With("component", "api"),
 		LogLevel:           observabilityRuntime.LogLevel,

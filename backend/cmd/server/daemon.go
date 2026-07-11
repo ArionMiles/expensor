@@ -260,8 +260,8 @@ func (c *daemonCoordinator) restart(req httpapi.DaemonRunRequest) {
 	c.mu.Unlock()
 }
 
-// refreshResolver reloads category mappings and restarts an active daemon.
-func (c *daemonCoordinator) refreshResolver(ctx context.Context) {
+// RefreshResolver reloads category mappings and restarts an active daemon.
+func (c *daemonCoordinator) RefreshResolver(ctx context.Context) {
 	resolver, err := c.resolverStore.LoadCategorySnapshot(ctx)
 	if err != nil {
 		c.logger.Warn("failed to reload category snapshot after sync", "error", err)
