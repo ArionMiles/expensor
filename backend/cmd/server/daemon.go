@@ -136,7 +136,7 @@ func (c *daemonCoordinator) launch(req httpapi.DaemonRunRequest, forceRescan boo
 		}
 	}
 
-	merged := rules.MergeRules(c.systemRules, loadUserRules(c.ctx, c.st, req.Tenant, c.logger))
+	merged := rules.MergeRules(c.systemRules, rules.LoadPersisted(c.ctx, c.st, req.Tenant, c.logger))
 	run := daemonRun{
 		readerName:    req.Reader,
 		tenant:        req.Tenant,

@@ -10,13 +10,13 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/app"
 	"github.com/ArionMiles/expensor/backend/internal/assistant"
+	"github.com/ArionMiles/expensor/backend/internal/catalog"
 	"github.com/ArionMiles/expensor/backend/internal/daemon/scheduler"
 	"github.com/ArionMiles/expensor/backend/internal/httpapi"
 	"github.com/ArionMiles/expensor/backend/internal/llm"
 	openaiProvider "github.com/ArionMiles/expensor/backend/internal/llm/openai"
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
-	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
@@ -46,8 +46,14 @@ func run() int {
 		}
 	}()
 
+	content, err := catalog.Load()
+	if err != nil {
+		logger.Error("failed to load embedded content", "error", err)
+		return 1
+	}
+
 	registry := plugins.NewRegistry()
-	if err := registerPlugins(registry, readersFS, logger); err != nil {
+	if err := registerPlugins(registry, content.ReaderGuides); err != nil {
 		logger.Error("failed to register plugins", "error", err)
 		return 1
 	}
@@ -55,24 +61,9 @@ func run() int {
 		"providers", len(registry.ListProviders()),
 	)
 
-	content, err := parseEmbedded(rulesInput, mccInput, categoriesInput)
-	if err != nil {
-		logger.Error("failed to parse embedded content", "error", err)
-		return 1
-	}
-	logger.Info("loaded embedded content", "rules", len(content.rules), "mcc_codes", len(content.mccEntries), "merchant_categories", len(content.catEntries))
-
-	promptCatalog, err := llm.LoadPromptCatalog(llmContentFS, "content/llm/prompts")
-	if err != nil {
-		logger.Error("failed to load llm prompt catalog", "error", err)
-		return 1
-	}
-	logger.Info("loaded llm prompt catalog", "prompts", promptCatalog.Len())
-	openAIModelOptions, err := loadLLMModelOptions(llmContentFS, openaiProvider.ProviderName)
-	if err != nil {
-		logger.Error("failed to load OpenAI model options", "error", err)
-		return 1
-	}
+	logger.Info("loaded embedded content", "rules", len(content.SystemRules), "mcc_codes", len(content.Seed.MCCEntries),
+		"merchant_categories", len(content.Seed.MerchantCategories))
+	logger.Info("loaded llm prompt catalog", "prompts", content.PromptCatalog.Len())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	sigChan := make(chan os.Signal, 1)
@@ -94,11 +85,7 @@ func run() int {
 	}
 	defer storeRuntime.Close()
 
-	resolver, err := storeRuntime.Seed(ctx, store.SeedContent{
-		Rules:              content.rawRules,
-		MCCEntries:         content.mccEntries,
-		MerchantCategories: content.catEntries,
-	})
+	resolver, err := storeRuntime.Seed(ctx, content.Seed)
 	if err != nil {
 		logger.Error("startup seeding failed", "error", err)
 		return 1
@@ -108,7 +95,7 @@ func run() int {
 	var st httpapi.Storer = instrumentedStore
 
 	llmRegistry := llm.NewRegistry()
-	if err := llmRegistry.RegisterProvider(openaiProvider.Provider(openAIModelOptions)); err != nil {
+	if err := llmRegistry.RegisterProvider(openaiProvider.Provider(content.OpenAIModelOptions)); err != nil {
 		logger.Error("failed to register llm provider", "error", err)
 		return 1
 	}
@@ -117,7 +104,7 @@ func run() int {
 	llmRouter := llm.NewRouter(llm.RouterConfig{
 		Registry: llmRegistry,
 		Runtime:  instrumentedStore,
-		Prompts:  promptCatalog,
+		Prompts:  content.PromptCatalog,
 		Scope:    llmScope,
 		Logger:   llmLogger,
 	})
@@ -129,14 +116,14 @@ func run() int {
 	dm := &daemonManager{}
 	dc := &daemonCoordinator{
 		ctx: ctx, registry: registry, cfg: cfg,
-		systemRules: content.rules, resolver: resolver,
+		systemRules: content.SystemRules, resolver: resolver,
 		st: st, runtimeStore: instrumentedStore, resolverStore: instrumentedStore,
 		diagnostics: instrumentedStore, transactionWriter: storeRuntime.Ingestion, dm: dm, logger: logger,
 	}
 
 	schedulerScope := observability.NewScope(logger.With("component", "scheduler"), "github.com/ArionMiles/expensor/backend/internal/daemon/scheduler")
 	scanRunner := &scheduledScanRunner{
-		registry: registry, cfg: cfg, systemRules: content.rules, resolver: resolver,
+		registry: registry, cfg: cfg, systemRules: content.SystemRules, resolver: resolver,
 		st: st, runtimeStore: instrumentedStore, diagnostics: instrumentedStore, transactionWriter: storeRuntime.Ingestion, logger: logger,
 	}
 	sched := scheduler.New(scheduler.Config{
@@ -177,7 +164,7 @@ func run() int {
 		RescanFn:           dc.rescan,
 		RestartFn:          dc.restart,
 		SyncFn:             syncFn,
-		BanksData:          banksInput,
+		BanksData:          content.BanksJSON,
 		Logger:             logger.With("component", "api"),
 		LogLevel:           observabilityRuntime.LogLevel,
 	})

@@ -62,7 +62,7 @@ func (r *scheduledScanRunner) Run(ctx context.Context, tenant store.Tenant, read
 		ReaderName:     readerName,
 		Tenant:         tenant,
 		Config:         &runCfg,
-		Rules:          rules.MergeRules(r.systemRules, loadUserRules(ctx, r.st, tenant, r.logger)),
+		Rules:          rules.MergeRules(r.systemRules, rules.LoadPersisted(ctx, r.st, tenant, r.logger)),
 		Resolver:       r.resolver,
 		StateManager:   state.NewDBManager(r.runtimeStore, tenant, r.logger),
 		DiagnosticSink: r.diagnostics,
