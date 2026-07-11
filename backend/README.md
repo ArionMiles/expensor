@@ -7,16 +7,16 @@ Daemon that reads expense transactions from email sources and writes them to Pos
 ```
 backend/
 ├── cmd/
-│   ├── server/              # Main daemon entry point
-│   │   ├── main.go
-│   │   └── content/         # Embedded config files
-│   │       ├── rules.json   # Transaction extraction rules
-│   │       ├── mcc.json     # MCC category seed data
-│   │       └── llm/         # Backend-owned LLM prompt catalog
+│   ├── server/              # Process-only daemon entry point
+│   │   └── main.go
 │   └── auth/                # Standalone OAuth flow binary
 │       └── main.go
 ├── internal/
-│   ├── daemon/              # Reader → store ingestion pipeline
+│   ├── app/                 # Application composition and lifecycle
+│   ├── catalog/             # Validated embedded rules, taxonomy, guides, and prompts
+│   ├── community/           # Community content synchronization
+│   ├── daemon/              # Reader → store ingestion pipeline and scan control
+│   ├── httpapi/             # HTTP transport and consumer-owned control interfaces
 │   ├── store/               # Backend-neutral store types and instrumentation
 │   │   └── postgres/        # PostgreSQL persistence, read models, and migrations
 │   └── plugins/             # Reader plugin catalog/registry
@@ -56,7 +56,7 @@ type Provider struct {
 
 1. Implement the reader in `backend/pkg/reader/{name}/`
 2. Add the provider metadata and constructor adapters in `backend/pkg/reader/{name}/plugin.go`
-3. Register in `backend/cmd/server/bootstrap.go`:
+3. Register in `backend/internal/app/readers.go`:
    ```go
    registry.RegisterProvider(newreader.Provider(guideData))
    ```

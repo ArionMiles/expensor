@@ -15,8 +15,8 @@ type Plugin struct {
 	guideData []byte
 }
 
-// SetGuideData injects the setup guide content. Called by main.go after loading
-// the backend-owned content/readers/thunderbird/guide.json via go:embed.
+// SetGuideData injects the setup guide content. Application composition calls it
+// after loading backend/internal/catalog/content/readers/thunderbird/guide.json via go:embed.
 func (p *Plugin) SetGuideData(data []byte) { p.guideData = data }
 
 // Provider returns the Thunderbird provider registration.

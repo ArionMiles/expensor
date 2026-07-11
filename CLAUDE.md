@@ -75,7 +75,7 @@ Validation errors must use the structured `field`, `location`, and `message` det
 HTTP validation improves contracts and error reporting; it is not SQL-injection protection. Continue using parameterized SQL at the repository boundary, and retain domain/store invariants needed by non-HTTP callers or required for data integrity.
 
 ### Plugin system
-Reader plugins implement interfaces in `pkg/api`. Plugins are registered in `cmd/server/main.go` and selected at runtime via the web UI (not env vars). Adding a new reader means implementing `plugins.ReaderPlugin` and registering it in the registry.
+Reader plugins implement interfaces in `pkg/api`. Built-in plugins are registered in `internal/app/readers.go` and selected at runtime via the web UI (not env vars). Adding a new reader means implementing the plugin capabilities and registering the provider in application composition.
 
 ### Storer interface
 `internal/httpapi/store.go` defines `Storer` — a narrow interface over the persistence surface used by HTTP handlers. It is not the concrete Postgres store. When adding a new store method that a handler needs, add it to `Storer` first, then implement it on the concrete backend store and the instrumented wrapper. The compile-time assertions in `store.go` catch mismatches.
@@ -90,7 +90,7 @@ Unit tests in `internal/api/handlers_test.go` use `mockStore` (not a real DB). W
 Postgres SQL files in `backend/internal/store/postgres/migrations/` are embedded into the binary and run automatically on startup. Name new files `NNN_description.sql` (next sequential number). Migrations use `IF NOT EXISTS` and `ON CONFLICT DO NOTHING` — they must be idempotent.
 
 ### Rules and fixtures
-Bundled extraction rules live in `backend/cmd/server/content/rules.json` as a versioned v2 document. Treat this as the source of truth for rule edits and contributions. Rules use exact sender matching with `sender_emails`; add every supported sender address explicitly. Rule source is structured as `source.type`, `source.label`, and `source.bank`. When bundled rules introduce a new type or bank, update the matching `presets.source_types` or `presets.banks` entry too.
+Bundled extraction rules live in `backend/internal/catalog/content/rules.json` as a versioned v2 document. Treat this as the source of truth for rule edits and contributions. Rules use exact sender matching with `sender_emails`; add every supported sender address explicitly. Rule source is structured as `source.type`, `source.label`, and `source.bank`. When bundled rules introduce a new type or bank, update the matching `presets.source_types` or `presets.banks` entry too.
 
 Rule email tests live under `tests/data/rule-emails` as self-contained `.rule.fixture` files with YAML front matter plus the raw email body below the closing `---`. Use one email per file and name each file `<bank>_<source-type>_<case>.rule.fixture`, with lowercase slug segments such as `hdfc_credit-card_classic-spend.rule.fixture`. Fixtures must not include regexes or timestamps; the table-driven runner loads the named rule from `rules.json`, uses the fixture filename as the subtest name, and asserts sender/subject matching plus amount, merchant, and currency extraction.
 
