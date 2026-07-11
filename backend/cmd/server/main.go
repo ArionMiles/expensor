@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,7 +11,7 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/assistant"
 	"github.com/ArionMiles/expensor/backend/internal/daemon"
-	scanscheduler "github.com/ArionMiles/expensor/backend/internal/daemon/scheduler"
+	"github.com/ArionMiles/expensor/backend/internal/daemon/scheduler"
 	"github.com/ArionMiles/expensor/backend/internal/httpapi"
 	"github.com/ArionMiles/expensor/backend/internal/llm"
 	openaiProvider "github.com/ArionMiles/expensor/backend/internal/llm/openai"
@@ -20,6 +19,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 func main() {
@@ -152,13 +152,13 @@ func run() int {
 		registry: registry, cfg: cfg, systemRules: content.rules, resolver: resolver,
 		st: st, runtimeStore: instrumentedStore, diagnostics: instrumentedStore, sinkFactory: sinkFactory, logger: logger,
 	}
-	scanScheduler := scanscheduler.New(scanscheduler.Config{
+	sched := scheduler.New(scheduler.Config{
 		Store:  instrumentedStore,
-		Runner: scanscheduler.NewInstrumentedRunner(scanRunner, schedulerScope),
+		Runner: scheduler.NewInstrumentedRunner(scanRunner, schedulerScope),
 		Logger: logger.With("component", "scheduler"),
 	})
 	go func() {
-		if err := scanScheduler.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		if err := sched.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("scheduler stopped with error", "error", err)
 		}
 	}()

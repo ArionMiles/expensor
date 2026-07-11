@@ -4,7 +4,6 @@ package migrations
 import (
 	"context"
 	"embed"
-	stderrors "errors"
 	"log/slog"
 
 	migrate "github.com/golang-migrate/migrate/v4"
@@ -38,7 +37,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger) error {
 	defer closeMigrator(m)
 
 	logger.Debug("running embedded migrations")
-	if err := m.Up(); err != nil && !stderrors.Is(err, migrate.ErrNoChange) {
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return errors.E("postgres.migrations.run", errors.Internal, "applying migrations", err)
 	}
 	return nil

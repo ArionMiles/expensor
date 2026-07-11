@@ -174,7 +174,7 @@ type Security struct {
 // Observability controls application logging and telemetry export.
 type Observability struct {
 	LogLevel     slog.Level `toml:"log_level" env:"LOG_LEVEL" default:"INFO"`
-	LogJSON      bool       `toml:"log_json" env:"LOG_JSON"`
+	LogJSON      bool       `toml:"log_json" env:"LOG_JSON" default:"false"`
 	Enabled      bool       `toml:"enabled" env:"EXPENSOR_OBSERVABILITY_ENABLED"`
 	Exporter     string     `toml:"exporter" env:"EXPENSOR_OBSERVABILITY_EXPORTER" default:"none" validate:"oneof=none otlp"`
 	OTLPEndpoint string     `toml:"otlp_endpoint" env:"EXPENSOR_OBSERVABILITY_OTLP_ENDPOINT"`

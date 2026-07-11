@@ -36,3 +36,4 @@ exporter = "otlp"
 otlp_endpoint = "localhost:4317"
 otlp_insecure = true
 log_level = "INFO"
+log_json = false
