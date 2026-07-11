@@ -146,7 +146,7 @@ type Postgres struct {
 // Community controls community content synchronization.
 type Community struct {
 	//nolint:lll // default content URL is intentionally explicit in the config tag.
-	URL          string        `toml:"url" env:"EXPENSOR_COMMUNITY_URL" default:"https://raw.githubusercontent.com/ArionMiles/expensor/main/backend/cmd/server/content"`
+	URL          string        `toml:"url" env:"EXPENSOR_COMMUNITY_URL" default:"https://raw.githubusercontent.com/ArionMiles/expensor/main/backend/internal/catalog/content"`
 	SyncInterval time.Duration `toml:"sync_interval" env:"EXPENSOR_CONTENT_SYNC_INTERVAL" default:"24h" validate:"gt=0"`
 	SyncTimeout  time.Duration `toml:"sync_timeout" env:"EXPENSOR_CONTENT_SYNC_TIMEOUT" default:"2m" validate:"gt=0"`
 }

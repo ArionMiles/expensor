@@ -59,7 +59,7 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.Database.Postgres.Port != 5432 || cfg.Database.Postgres.SSLMode != "disable" || cfg.Database.Postgres.MaxPoolSize != 10 {
 		t.Fatalf("postgres defaults: %#v", cfg.Database.Postgres)
 	}
-	if cfg.Community.URL != "https://raw.githubusercontent.com/ArionMiles/expensor/main/backend/cmd/server/content" ||
+	if cfg.Community.URL != "https://raw.githubusercontent.com/ArionMiles/expensor/main/backend/internal/catalog/content" ||
 		cfg.Community.SyncInterval != 24*time.Hour || cfg.Community.SyncTimeout != 2*time.Minute {
 		t.Fatalf("community defaults: %#v", cfg.Community)
 	}
