@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"strings"
 
@@ -15,7 +14,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/semconv/v1.40.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ArionMiles/expensor/backend/pkg/config"
@@ -94,10 +93,6 @@ func setupLogger(cfg config.Observability, logLevel *slog.LevelVar) *slog.Logger
 		return slog.New(slog.NewJSONHandler(cfg.Output, opts))
 	}
 	return slog.New(slog.NewTextHandler(cfg.Output, opts))
-}
-
-func discardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 func noopShutdown(context.Context) error {

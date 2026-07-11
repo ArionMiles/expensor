@@ -55,7 +55,7 @@ func New(ctx context.Context, opts Options) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := st.waitUntilHealthy(ctx, opts.Config); err != nil {
+	if err := st.HealthCheck(ctx); err != nil {
 		st.Close()
 		return nil, err
 	}
@@ -68,10 +68,6 @@ func New(ctx context.Context, opts Options) (*Store, error) {
 }
 
 func newStore(ctx context.Context, cfg config.Postgres, security config.Security, logger *slog.Logger) (*Store, error) {
-	if logger == nil {
-		logger = slog.Default()
-	}
-
 	connStr := fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.SSLMode,
@@ -112,30 +108,6 @@ func (s *Store) HealthCheck(ctx context.Context) error {
 		return errors.E("postgres.store.health_check", errors.Unavailable, "pinging store database", err)
 	}
 	return nil
-}
-
-func (s *Store) waitUntilHealthy(ctx context.Context, cfg config.Postgres) error {
-	deadline := time.Now().Add(cfg.ConnectTimeout)
-	for attempt := 1; ; attempt++ {
-		attemptCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		err := s.HealthCheck(attemptCtx)
-		cancel()
-		if err == nil {
-			s.logger.Info("postgres is ready", "host", cfg.Host, "port", cfg.Port)
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return errors.E("postgres.store.wait_until_healthy", errors.Unavailable, fmt.Sprintf("postgres not ready after %s", cfg.ConnectTimeout), err)
-		}
-		s.logger.Info("waiting for postgres", "attempt", attempt, "error", err)
-		timer := time.NewTimer(cfg.RetryInterval)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return errors.E("postgres.store.wait_until_healthy", errors.Canceled, "waiting for postgres", ctx.Err())
-		case <-timer.C:
-		}
-	}
 }
 
 func (s *Store) initRepositories() {
