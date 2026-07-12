@@ -43,13 +43,21 @@ type ControllerDependencies struct {
 // Controller owns interactive daemon start, stop, restart, rescan, and status behavior.
 type Controller struct {
 	mu      sync.RWMutex
-	actions chan struct{}
 	ctx     context.Context
+	cancel  context.CancelFunc
 	scanner scanExecutor
 	store   activeReaderStore
 	logger  *slog.Logger
 
-	cancel       context.CancelFunc
+	queueMu       sync.Mutex
+	queue         []func(context.Context)
+	wake          chan struct{}
+	workerOnce    sync.Once
+	workerStarted bool
+	workerDone    chan struct{}
+	closed        bool
+
+	runCancel    context.CancelFunc
 	done         chan struct{}
 	activeReader string
 	activeTenant store.Tenant
@@ -67,25 +75,20 @@ func NewController(deps ControllerDependencies) (*Controller, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	controllerCtx, cancel := context.WithCancel(deps.Context)
 	controller := &Controller{
-		ctx: deps.Context, scanner: deps.Scanner, store: deps.Store, logger: logger,
-		actions: make(chan struct{}, 1),
+		ctx: controllerCtx, cancel: cancel, scanner: deps.Scanner, store: deps.Store, logger: logger,
+		wake: make(chan struct{}, 1), workerDone: make(chan struct{}),
 	}
-	controller.actions <- struct{}{}
 	return controller, nil
 }
 
 // Start launches a continuous scan, switching readers when necessary.
 func (c *Controller) Start(request RunRequest) {
-	go func() {
-		_ = c.withAction(context.Background(), func() error {
-			c.transitionStart(request)
-			return nil
-		})
-	}()
+	_ = c.enqueue(func(ctx context.Context) { c.transitionStart(ctx, request) })
 }
 
-func (c *Controller) transitionStart(request RunRequest) {
+func (c *Controller) transitionStart(ctx context.Context, request RunRequest) {
 	c.mu.RLock()
 	sameRun := c.running && c.activeReader == request.Reader && c.activeTenant.ID == request.Tenant.ID
 	running := c.running
@@ -94,24 +97,36 @@ func (c *Controller) transitionStart(request RunRequest) {
 		return
 	}
 	if running {
-		_ = c.stopCurrent(context.Background())
+		if err := c.stopCurrent(ctx); err != nil {
+			return
+		}
 	}
-	c.persistActiveReader(request)
+	if ctx.Err() != nil {
+		return
+	}
+	c.persistActiveReader(ctx, request)
 	c.launch(request, ScanContinuous)
 }
 
 // Stop cancels and waits for the active daemon run.
 func (c *Controller) Stop() {
-	go func() {
-		_ = c.withAction(context.Background(), func() error {
-			c.transitionStop()
-			return nil
-		})
-	}()
+	done := make(chan struct{})
+	if !c.enqueue(func(ctx context.Context) {
+		c.transitionStop(ctx)
+		close(done)
+	}) {
+		return
+	}
+	select {
+	case <-done:
+	case <-c.ctx.Done():
+	}
 }
 
-func (c *Controller) transitionStop() {
-	_ = c.stopCurrent(context.Background())
+func (c *Controller) transitionStop(ctx context.Context) {
+	if err := c.stopCurrent(ctx); err != nil {
+		return
+	}
 	c.mu.Lock()
 	c.activeReader = ""
 	c.activeTenant = store.Tenant{}
@@ -120,37 +135,37 @@ func (c *Controller) transitionStop() {
 
 // Rescan cancels the active run and launches a full-lookback scan without deduplication.
 func (c *Controller) Rescan(request RunRequest) {
-	go func() {
-		_ = c.withAction(context.Background(), func() error {
-			c.transitionRescan(request)
-			return nil
-		})
-	}()
+	_ = c.enqueue(func(ctx context.Context) { c.transitionRescan(ctx, request) })
 }
 
-func (c *Controller) transitionRescan(request RunRequest) {
-	_ = c.stopCurrent(context.Background())
-	c.persistActiveReader(request)
+func (c *Controller) transitionRescan(ctx context.Context, request RunRequest) {
+	if err := c.stopCurrent(ctx); err != nil || ctx.Err() != nil {
+		return
+	}
+	c.persistActiveReader(ctx, request)
 	c.launch(request, ScanRescan)
 }
 
 // Restart reloads persisted scan state and launches a normal continuous scan.
 func (c *Controller) Restart(request RunRequest) {
-	go func() {
-		_ = c.withAction(context.Background(), func() error {
-			c.transitionRestart(request)
-			return nil
-		})
-	}()
+	_ = c.enqueue(func(ctx context.Context) { c.transitionRestart(ctx, request) })
 }
 
-func (c *Controller) transitionRestart(request RunRequest) {
-	_ = c.stopCurrent(context.Background())
+func (c *Controller) transitionRestart(ctx context.Context, request RunRequest) {
+	if err := c.stopCurrent(ctx); err != nil || ctx.Err() != nil {
+		return
+	}
 	c.launch(request, ScanContinuous)
 }
 
 // RefreshResolver reloads the category resolver and restarts an active daemon.
 func (c *Controller) RefreshResolver(ctx context.Context) {
+	c.queueMu.Lock()
+	closed := c.closed
+	c.queueMu.Unlock()
+	if closed {
+		return
+	}
 	if err := c.scanner.RefreshResolver(ctx); err != nil {
 		c.logger.Warn("failed to reload category snapshot after sync", "error", err)
 		return
@@ -174,7 +189,24 @@ func (c *Controller) Status() Status {
 
 // Close cancels active work and waits until it stops or ctx expires.
 func (c *Controller) Close(ctx context.Context) error {
-	if err := c.withAction(ctx, func() error { return c.stopCurrent(ctx) }); err != nil {
+	c.queueMu.Lock()
+	if !c.closed {
+		c.closed = true
+		c.queue = nil
+		c.cancel()
+	}
+	workerStarted := c.workerStarted
+	c.queueMu.Unlock()
+	c.signalWorker()
+
+	if workerStarted {
+		select {
+		case <-c.workerDone:
+		case <-ctx.Done():
+			return errors.E("daemon.controller.close", ctx.Err())
+		}
+	}
+	if err := c.stopCurrent(ctx); err != nil {
 		return errors.E("daemon.controller.close", err)
 	}
 	return nil
@@ -185,7 +217,7 @@ func (c *Controller) launch(request RunRequest, mode ScanMode) {
 	done := make(chan struct{})
 	startedAt := time.Now()
 	c.mu.Lock()
-	c.cancel = cancel
+	c.runCancel = cancel
 	c.done = done
 	c.activeReader = request.Reader
 	c.activeTenant = request.Tenant
@@ -202,7 +234,7 @@ func (c *Controller) launch(request RunRequest, mode ScanMode) {
 		c.mu.Lock()
 		if c.done == done {
 			c.running = false
-			c.cancel = nil
+			c.runCancel = nil
 			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 				c.lastError = err.Error()
 			}
@@ -214,7 +246,7 @@ func (c *Controller) launch(request RunRequest, mode ScanMode) {
 
 func (c *Controller) stopCurrent(ctx context.Context) error {
 	c.mu.RLock()
-	cancel := c.cancel
+	cancel := c.runCancel
 	done := c.done
 	c.mu.RUnlock()
 	if cancel == nil || done == nil {
@@ -229,18 +261,54 @@ func (c *Controller) stopCurrent(ctx context.Context) error {
 	}
 }
 
-func (c *Controller) persistActiveReader(request RunRequest) {
-	if err := c.store.SetActiveScanningReader(c.ctx, request.Tenant, request.Reader); err != nil {
+func (c *Controller) persistActiveReader(ctx context.Context, request RunRequest) {
+	if err := c.store.SetActiveScanningReader(ctx, request.Tenant, request.Reader); err != nil {
 		c.logger.Warn("failed to persist active reader", "error", err)
 	}
 }
 
-func (c *Controller) withAction(ctx context.Context, action func() error) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-c.actions:
+func (c *Controller) enqueue(action func(context.Context)) bool {
+	c.queueMu.Lock()
+	if c.closed {
+		c.queueMu.Unlock()
+		return false
 	}
-	defer func() { c.actions <- struct{}{} }()
-	return action()
+	c.workerOnce.Do(func() {
+		c.workerStarted = true
+		go c.runActions()
+	})
+	c.queue = append(c.queue, action)
+	c.queueMu.Unlock()
+	c.signalWorker()
+	return true
+}
+
+func (c *Controller) runActions() {
+	defer close(c.workerDone)
+	for {
+		c.queueMu.Lock()
+		if len(c.queue) > 0 {
+			action := c.queue[0]
+			c.queue = c.queue[1:]
+			c.queueMu.Unlock()
+			action(c.ctx)
+			continue
+		}
+		closed := c.closed
+		c.queueMu.Unlock()
+		if closed || c.ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-c.ctx.Done():
+		case <-c.wake:
+		}
+	}
+}
+
+func (c *Controller) signalWorker() {
+	select {
+	case c.wake <- struct{}{}:
+	default:
+	}
 }

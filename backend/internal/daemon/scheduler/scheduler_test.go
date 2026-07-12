@@ -83,6 +83,29 @@ func TestRunTenantBacksOffUnknownFailures(t *testing.T) {
 	}
 }
 
+func TestStartWaitsForCanceledTenantRuns(t *testing.T) {
+	fakeStore := newFakeStore([]store.TenantScanningState{
+		{TenantID: "tenant-a", ActiveReader: "gmail", Enabled: true, State: store.ScanningStateQueued},
+	})
+	runner := &cancelGateRunner{started: make(chan struct{}), canceled: make(chan struct{}), release: make(chan struct{})}
+	scheduler := New(Config{Store: fakeStore, Runner: runner, PollInterval: time.Hour})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- scheduler.Start(ctx) }()
+	<-runner.started
+	cancel()
+	<-runner.canceled
+	select {
+	case err := <-done:
+		t.Fatalf("Start returned before tenant scan exited: %v", err)
+	default:
+	}
+	close(runner.release)
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("Start() error = %v, want context.Canceled", err)
+	}
+}
+
 type fixedClock struct {
 	now time.Time
 }
@@ -240,6 +263,20 @@ func (r *blockingRunner) release() {
 
 type staticRunner struct {
 	err error
+}
+
+type cancelGateRunner struct {
+	started  chan struct{}
+	canceled chan struct{}
+	release  chan struct{}
+}
+
+func (r *cancelGateRunner) Run(ctx context.Context, _ store.Tenant, _ string) error {
+	close(r.started)
+	<-ctx.Done()
+	close(r.canceled)
+	<-r.release
+	return ctx.Err()
 }
 
 func (r *staticRunner) Run(context.Context, store.Tenant, string) error {

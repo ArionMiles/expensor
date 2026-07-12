@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -49,7 +50,7 @@ func TestRunCancelsWorkers(t *testing.T) {
 }
 
 func TestRunLogsWorkerFailureWhileHTTPContinues(t *testing.T) {
-	var logs bytes.Buffer
+	var logs lockedBuffer
 	logger := slog.New(slog.NewTextHandler(&logs, nil))
 	serverStarted := make(chan struct{})
 	application := &App{
@@ -89,9 +90,11 @@ func TestRunPropagatesHTTPFailure(t *testing.T) {
 
 func TestCloseIsIdempotent(t *testing.T) {
 	var controllerCloses atomic.Int32
+	var communityCloses atomic.Int32
 	var storeCloses atomic.Int32
 	application := &App{
 		controllerClose: func(context.Context) error { controllerCloses.Add(1); return nil },
+		communityClose:  func(context.Context) error { communityCloses.Add(1); return nil },
 		storeClose:      func() { storeCloses.Add(1) },
 	}
 	if err := application.Close(context.Background()); err != nil {
@@ -100,8 +103,9 @@ func TestCloseIsIdempotent(t *testing.T) {
 	if err := application.Close(context.Background()); err != nil {
 		t.Fatalf("second Close() error = %v", err)
 	}
-	if controllerCloses.Load() != 1 || storeCloses.Load() != 1 {
-		t.Fatalf("controller closes = %d, store closes = %d", controllerCloses.Load(), storeCloses.Load())
+	if controllerCloses.Load() != 1 || communityCloses.Load() != 1 || storeCloses.Load() != 1 {
+		t.Fatalf("controller closes = %d, community closes = %d, store closes = %d",
+			controllerCloses.Load(), communityCloses.Load(), storeCloses.Load())
 	}
 }
 
@@ -123,4 +127,21 @@ func TestCloseHonorsContextAndStillClosesStore(t *testing.T) {
 
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+}
+
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(data []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.Write(data)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.String()
 }
