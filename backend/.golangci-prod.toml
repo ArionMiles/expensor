@@ -7,10 +7,12 @@ modules-download-mode = 'readonly'
 default = 'none'
 enable = [
   'bodyclose',
+	'depguard',
   'dupl',
   'errcheck',
   'errname',
   'errorlint',
+	'forbidigo',
   'gocheckcompilerdirectives',
   'gochecknoinits',
   'gocognit',
@@ -43,6 +45,22 @@ enable = [
 [linters.settings]
 [linters.settings.errcheck]
 check-type-assertions = true
+
+[linters.settings.depguard]
+[linters.settings.depguard.rules.no-stdlib-errors]
+files = [
+  '!$test',
+  '!**/pkg/errors/*.go'
+]
+deny = [
+  { pkg = 'errors$', desc = 'use github.com/ArionMiles/expensor/backend/pkg/errors' }
+]
+
+[linters.settings.forbidigo]
+analyze-types = true
+forbid = [
+  { pattern = '^fmt\.Errorf$', pkg = '^fmt$', msg = 'use pkg/errors.E' }
+]
 
 [linters.settings.gocognit]
 min-complexity = 20
@@ -321,6 +339,12 @@ linters = [
   'goconst'
 ]
 path = '(.+)_test\.go'
+
+[[linters.exclusions.rules]]
+linters = [
+  'forbidigo'
+]
+path = '(^|/)(pkg/errors/.*|.*_test\.go)$'
 
 [issues]
 uniq-by-line = true

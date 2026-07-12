@@ -5,8 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"fmt"
 	"strings"
+
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 const opaqueTokenBytes = 32
@@ -15,12 +16,12 @@ const opaqueTokenBytes = 32
 func NewOpaqueToken(prefix string) (raw, hash string, err error) {
 	prefix = strings.TrimSpace(prefix)
 	if prefix == "" {
-		return "", "", fmt.Errorf("token prefix cannot be blank")
+		return "", "", errors.E(errors.InvalidInput, "token prefix cannot be blank")
 	}
 
 	random := make([]byte, opaqueTokenBytes)
 	if _, err := rand.Read(random); err != nil {
-		return "", "", fmt.Errorf("generating token: %w", err)
+		return "", "", errors.E("auth.tokens.new_opaque_token", "generating token", err)
 	}
 
 	raw = prefix + "_" + base64.RawURLEncoding.EncodeToString(random)

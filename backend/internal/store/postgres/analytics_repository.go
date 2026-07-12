@@ -11,6 +11,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 type analyticsRepository struct {
@@ -84,7 +85,7 @@ func (r *analyticsRepository) statsReadModel(ctx context.Context, tenant store.T
 	var st store.Stats
 	st.BaseCurrency = baseCurrency
 	if err := r.pool.QueryRow(ctx, mainQ, baseCurrency, tenant.ID).Scan(&st.TotalCount, &st.TotalBase); err != nil {
-		return nil, fmt.Errorf("fetching stats: %w", err)
+		return nil, errors.E("postgres.analytics.stats_read_model", "fetching stats", err)
 	}
 
 	const catQ = `
@@ -96,7 +97,7 @@ func (r *analyticsRepository) statsReadModel(ctx context.Context, tenant store.T
 	`
 	rows, err := r.pool.Query(ctx, catQ, tenant.ID)
 	if err != nil {
-		return nil, fmt.Errorf("fetching category stats: %w", err)
+		return nil, errors.E("postgres.analytics.stats_read_model", "fetching category stats", err)
 	}
 	defer rows.Close()
 
@@ -107,13 +108,13 @@ func (r *analyticsRepository) statsReadModel(ctx context.Context, tenant store.T
 		var amt float64
 		var cnt int
 		if err := rows.Scan(&cat, &amt, &cnt); err != nil {
-			return nil, fmt.Errorf("scanning category row: %w", err)
+			return nil, errors.E("postgres.analytics.stats_read_model", "scanning category row", err)
 		}
 		st.TotalByCategory[cat] = amt
 		st.TotalCategoryCount[cat] = cnt
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating category rows: %w", err)
+		return nil, errors.E("postgres.analytics.stats_read_model", "iterating category rows", err)
 	}
 
 	return &st, nil
@@ -233,20 +234,20 @@ func (r *analyticsRepository) dashboardDataReadModel(ctx context.Context, tenant
 
 	currentStats, err := r.getStatsBetween(ctx, tenant, baseCurrency, window.startUTC, window.endUTC)
 	if err != nil {
-		return nil, fmt.Errorf("fetching current-month stats: %w", err)
+		return nil, errors.E("postgres.analytics.dashboard_data_read_model", "fetching current-month stats", err)
 	}
 	currentCharts, err := r.getChartDataBetween(ctx, tenant, window.loc, window.startUTC, window.endUTC)
 	if err != nil {
-		return nil, fmt.Errorf("fetching current-month charts: %w", err)
+		return nil, errors.E("postgres.analytics.dashboard_data_read_model", "fetching current-month charts", err)
 	}
 
 	allTimeStats, err := r.GetStats(ctx, tenant, baseCurrency)
 	if err != nil {
-		return nil, fmt.Errorf("fetching all-time stats: %w", err)
+		return nil, errors.E("postgres.analytics.dashboard_data_read_model", "fetching all-time stats", err)
 	}
 	allTimeCharts, err := r.getChartDataAt(ctx, tenant, now)
 	if err != nil {
-		return nil, fmt.Errorf("fetching all-time charts: %w", err)
+		return nil, errors.E("postgres.analytics.dashboard_data_read_model", "fetching all-time charts", err)
 	}
 
 	return &store.DashboardData{
@@ -277,7 +278,7 @@ func (r *analyticsRepository) getStatsBetween(ctx context.Context, tenant store.
 		TotalCategoryCount: make(map[string]int),
 	}
 	if err := r.pool.QueryRow(ctx, mainQ, baseCurrency, startUTC, endUTC, tenant.ID).Scan(&st.TotalCount, &st.TotalBase); err != nil {
-		return nil, fmt.Errorf("fetching range stats: %w", err)
+		return nil, errors.E("postgres.analytics.get_stats_between", "fetching range stats", err)
 	}
 
 	const catQ = `
@@ -289,7 +290,7 @@ func (r *analyticsRepository) getStatsBetween(ctx context.Context, tenant store.
 	`
 	rows, err := r.pool.Query(ctx, catQ, startUTC, endUTC, tenant.ID)
 	if err != nil {
-		return nil, fmt.Errorf("fetching range category stats: %w", err)
+		return nil, errors.E("postgres.analytics.get_stats_between", "fetching range category stats", err)
 	}
 	defer rows.Close()
 
@@ -298,13 +299,13 @@ func (r *analyticsRepository) getStatsBetween(ctx context.Context, tenant store.
 		var amt float64
 		var cnt int
 		if err := rows.Scan(&cat, &amt, &cnt); err != nil {
-			return nil, fmt.Errorf("scanning range category row: %w", err)
+			return nil, errors.E("postgres.analytics.get_stats_between", "scanning range category row", err)
 		}
 		st.TotalByCategory[cat] = amt
 		st.TotalCategoryCount[cat] = cnt
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating range category rows: %w", err)
+		return nil, errors.E("postgres.analytics.get_stats_between", "iterating range category rows", err)
 	}
 
 	return st, nil
@@ -458,7 +459,7 @@ func (r *analyticsRepository) queryCategoryMonthlyBetween(
 	`
 	rows, err := r.pool.Query(ctx, q, startUTC, endUTC, priorStartUTC, tenant.ID)
 	if err != nil {
-		return nil, fmt.Errorf("fetching category monthly data: %w", err)
+		return nil, errors.E("postgres.analytics.query_category_monthly_between", "fetching category monthly data", err)
 	}
 	defer rows.Close()
 
@@ -467,7 +468,7 @@ func (r *analyticsRepository) queryCategoryMonthlyBetween(
 		var cat string
 		var entry store.CategoryMonthlyEntry
 		if err := rows.Scan(&cat, &entry.Current, &entry.Prior); err != nil {
-			return nil, fmt.Errorf("scanning category monthly row: %w", err)
+			return nil, errors.E("postgres.analytics.query_category_monthly_between", "scanning category monthly row", err)
 		}
 		m[cat] = entry
 	}
@@ -506,18 +507,18 @@ func (r *analyticsRepository) spendingHeatmapReadModel(ctx context.Context, tena
 	`, tzArg, tzArg, where)
 	wdhRows, err := r.pool.Query(ctx, wdhQuery, argsWithTZ...)
 	if err != nil {
-		return nil, fmt.Errorf("fetching weekday/hour heatmap: %w", err)
+		return nil, errors.E("postgres.analytics.spending_heatmap_read_model", "fetching weekday/hour heatmap", err)
 	}
 	defer wdhRows.Close()
 	for wdhRows.Next() {
 		var b store.WeekdayHourBucket
 		if err := wdhRows.Scan(&b.Weekday, &b.Hour, &b.Amount, &b.Count); err != nil {
-			return nil, fmt.Errorf("scanning weekday/hour bucket: %w", err)
+			return nil, errors.E("postgres.analytics.spending_heatmap_read_model", "scanning weekday/hour bucket", err)
 		}
 		hd.ByWeekdayHour = append(hd.ByWeekdayHour, b)
 	}
 	if err := wdhRows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating weekday/hour rows: %w", err)
+		return nil, errors.E("postgres.analytics.spending_heatmap_read_model", "iterating weekday/hour rows", err)
 	}
 	wdhRows.Close() // release connection before opening second query
 
@@ -533,18 +534,18 @@ func (r *analyticsRepository) spendingHeatmapReadModel(ctx context.Context, tena
 	`, tzArg, where)
 	domRows, err := r.pool.Query(ctx, domQuery, argsWithTZ...)
 	if err != nil {
-		return nil, fmt.Errorf("fetching day-of-month heatmap: %w", err)
+		return nil, errors.E("postgres.analytics.spending_heatmap_read_model", "fetching day-of-month heatmap", err)
 	}
 	defer domRows.Close()
 	for domRows.Next() {
 		var b store.DayOfMonthBucket
 		if err := domRows.Scan(&b.Day, &b.Amount, &b.Count); err != nil {
-			return nil, fmt.Errorf("scanning day-of-month bucket: %w", err)
+			return nil, errors.E("postgres.analytics.spending_heatmap_read_model", "scanning day-of-month bucket", err)
 		}
 		hd.ByDayOfMonth = append(hd.ByDayOfMonth, b)
 	}
 	if err := domRows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating day-of-month rows: %w", err)
+		return nil, errors.E("postgres.analytics.spending_heatmap_read_model", "iterating day-of-month rows", err)
 	}
 
 	return hd, nil
@@ -567,18 +568,18 @@ func (r *analyticsRepository) annualSpendReadModel(ctx context.Context, tenant s
 		ORDER BY date
 	`, year, tz, tenant.ID)
 	if err != nil {
-		return nil, fmt.Errorf("fetching annual spend for %d: %w", year, err)
+		return nil, errors.E("postgres.analytics.annual_spend_read_model", fmt.Sprintf("fetching annual spend for %d", year), err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var b store.DailyBucket
 		if err := rows.Scan(&b.Date, &b.Amount, &b.Count); err != nil {
-			return nil, fmt.Errorf("scanning daily bucket: %w", err)
+			return nil, errors.E("postgres.analytics.annual_spend_read_model", "scanning daily bucket", err)
 		}
 		buckets = append(buckets, b)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating annual spend rows: %w", err)
+		return nil, errors.E("postgres.analytics.annual_spend_read_model", "iterating annual spend rows", err)
 	}
 
 	return buckets, nil
@@ -643,7 +644,7 @@ func (r *analyticsRepository) loadChartData(ctx context.Context, request chartDa
 	g.Go(func() error {
 		buckets, err := r.queryTimeBuckets(groupCtx, request.Monthly.Query, request.Monthly.Args...)
 		if err != nil {
-			return fmt.Errorf("fetching %s: %w", request.Monthly.Label, err)
+			return errors.E("postgres.analytics.load_chart_data", fmt.Sprintf("fetching %s", request.Monthly.Label), err)
 		}
 		cd.MonthlySpend = buckets
 		return nil
@@ -652,7 +653,7 @@ func (r *analyticsRepository) loadChartData(ctx context.Context, request chartDa
 	g.Go(func() error {
 		buckets, err := r.queryTimeBuckets(groupCtx, request.Daily.Query, request.Daily.Args...)
 		if err != nil {
-			return fmt.Errorf("fetching %s: %w", request.Daily.Label, err)
+			return errors.E("postgres.analytics.load_chart_data", fmt.Sprintf("fetching %s", request.Daily.Label), err)
 		}
 		cd.DailySpend = buckets
 		return nil
@@ -661,7 +662,7 @@ func (r *analyticsRepository) loadChartData(ctx context.Context, request chartDa
 	loadStringFloat := func(request chartQueryRequest, dest map[string]float64) {
 		g.Go(func() error {
 			if err := r.queryStringFloat(groupCtx, request.Query, dest, request.Args...); err != nil {
-				return fmt.Errorf("fetching %s: %w", request.Label, err)
+				return errors.E("postgres.analytics.load_chart_data", fmt.Sprintf("fetching %s", request.Label), err)
 			}
 			return nil
 		})
@@ -788,12 +789,15 @@ func (r *analyticsRepository) monthlyBreakdownSpendReadModel(
 		`
 		args = []any{tz, startUTC, tenant.ID}
 	default:
-		return nil, fmt.Errorf("unsupported monthly breakdown dimension %q", dimension)
+		return nil, errors.E(
+			errors.InvalidInput,
+			fmt.Sprintf("unsupported monthly breakdown dimension %q", dimension),
+		)
 	}
 
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("fetching %s monthly spend: %w", dimension, err)
+		return nil, errors.E("postgres.analytics.monthly_breakdown_spend_read_model", fmt.Sprintf("fetching %s monthly spend", dimension), err)
 	}
 	defer rows.Close()
 
@@ -802,7 +806,7 @@ func (r *analyticsRepository) monthlyBreakdownSpendReadModel(
 	for rows.Next() {
 		var bucket monthlyBreakdownBucket
 		if err := rows.Scan(&bucket.Label, &bucket.Month, &bucket.Amount); err != nil {
-			return nil, fmt.Errorf("scanning %s monthly bucket: %w", dimension, err)
+			return nil, errors.E("postgres.analytics.monthly_breakdown_spend_read_model", fmt.Sprintf("scanning %s monthly bucket", dimension), err)
 		}
 		if lookup[bucket.Label] == nil {
 			lookup[bucket.Label] = make(map[string]float64)

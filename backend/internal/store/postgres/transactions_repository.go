@@ -76,7 +76,7 @@ func (r *transactionsRepository) queryTransactions(
 
 	totalResult, err := r.queryTransactionTotals(ctx, join, where, args)
 	if err != nil {
-		return nil, store.TransactionListResult{}, fmt.Errorf("%s: %w", request.countError, err)
+		return nil, store.TransactionListResult{}, errors.E("postgres.transactions.query_transactions", request.countError, err)
 	}
 
 	args = append(args, f.PageSize, offset)
@@ -96,7 +96,7 @@ func (r *transactionsRepository) queryTransactions(
 
 	rows, err := r.pool.Query(ctx, dataSQL, args...)
 	if err != nil {
-		return nil, store.TransactionListResult{}, fmt.Errorf("%s: %w", request.dataError, err)
+		return nil, store.TransactionListResult{}, errors.E("postgres.transactions.query_transactions", request.dataError, err)
 	}
 	defer rows.Close()
 
@@ -157,7 +157,7 @@ func (r *transactionsRepository) getTransactionQuery(ctx context.Context, tenant
 	`
 	rows, err := r.pool.Query(ctx, q, id, tenant.ID)
 	if err != nil {
-		return nil, fmt.Errorf("fetching transaction: %w", err)
+		return nil, errors.E("postgres.transactions.get_transaction_query", "fetching transaction", err)
 	}
 	defer rows.Close()
 
@@ -181,7 +181,7 @@ func (r *transactionsRepository) UpdateDescription(ctx context.Context, tenant s
 		description, id, tenant.ID,
 	)
 	if err != nil {
-		return fmt.Errorf("updating description: %w", err)
+		return errors.E("postgres.transactions.update_description", "updating description", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return notFound("store.transactions.update_description")
@@ -192,7 +192,7 @@ func (r *transactionsRepository) UpdateDescription(ctx context.Context, tenant s
 func (r *transactionsRepository) AddLabel(ctx context.Context, tenant store.Tenant, transactionID, label string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("beginning add-label transaction: %w", err)
+		return errors.E("postgres.transactions.add_label", "beginning add-label transaction", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -204,7 +204,7 @@ func (r *transactionsRepository) AddLabel(ctx context.Context, tenant store.Tena
 			 ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING`,
 		transactionID, label, tenant.ID,
 	); err != nil {
-		return fmt.Errorf("adding label source: %w", err)
+		return errors.E("postgres.transactions.add_label", "adding label source", err)
 	}
 
 	if _, err := tx.Exec(ctx,
@@ -215,11 +215,11 @@ func (r *transactionsRepository) AddLabel(ctx context.Context, tenant store.Tena
 			 ON CONFLICT (transaction_id, label) DO NOTHING`,
 		transactionID, label, tenant.ID,
 	); err != nil {
-		return fmt.Errorf("adding label: %w", err)
+		return errors.E("postgres.transactions.add_label", "adding label", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("committing add-label transaction: %w", err)
+		return errors.E("postgres.transactions.add_label", "committing add-label transaction", err)
 	}
 	return nil
 }
@@ -231,7 +231,7 @@ func (r *transactionsRepository) AddLabels(ctx context.Context, tenant store.Ten
 
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("beginning add-labels transaction: %w", err)
+		return errors.E("postgres.transactions.add_labels", "beginning add-labels transaction", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -243,7 +243,7 @@ func (r *transactionsRepository) AddLabels(ctx context.Context, tenant store.Ten
 			 ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING`,
 		transactionID, labels, tenant.ID,
 	); err != nil {
-		return fmt.Errorf("adding label sources: %w", err)
+		return errors.E("postgres.transactions.add_labels", "adding label sources", err)
 	}
 
 	if _, err := tx.Exec(ctx,
@@ -254,11 +254,11 @@ func (r *transactionsRepository) AddLabels(ctx context.Context, tenant store.Ten
 			 ON CONFLICT (transaction_id, label) DO NOTHING`,
 		transactionID, labels, tenant.ID,
 	); err != nil {
-		return fmt.Errorf("adding labels: %w", err)
+		return errors.E("postgres.transactions.add_labels", "adding labels", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("committing add-labels transaction: %w", err)
+		return errors.E("postgres.transactions.add_labels", "committing add-labels transaction", err)
 	}
 	return nil
 }
@@ -266,7 +266,7 @@ func (r *transactionsRepository) AddLabels(ctx context.Context, tenant store.Ten
 func (r *transactionsRepository) RemoveLabel(ctx context.Context, tenant store.Tenant, transactionID, label string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("beginning remove-label transaction: %w", err)
+		return errors.E("postgres.transactions.remove_label", "beginning remove-label transaction", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -279,7 +279,7 @@ func (r *transactionsRepository) RemoveLabel(ctx context.Context, tenant store.T
 		   AND t.tenant_id = $3`,
 		transactionID, label, tenant.ID,
 	); err != nil {
-		return fmt.Errorf("removing label sources: %w", err)
+		return errors.E("postgres.transactions.remove_label", "removing label sources", err)
 	}
 
 	tag, err := tx.Exec(ctx,
@@ -292,14 +292,14 @@ func (r *transactionsRepository) RemoveLabel(ctx context.Context, tenant store.T
 		transactionID, label, tenant.ID,
 	)
 	if err != nil {
-		return fmt.Errorf("removing label: %w", err)
+		return errors.E("postgres.transactions.remove_label", "removing label", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return notFound("store.transactions.remove_label")
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("committing remove-label transaction: %w", err)
+		return errors.E("postgres.transactions.remove_label", "committing remove-label transaction", err)
 	}
 	return nil
 }
@@ -411,20 +411,20 @@ func (r *transactionsRepository) loadFacetValues(ctx context.Context, tenant sto
 	for _, q := range queries {
 		rows, err := r.pool.Query(ctx, q.sql, tenant.ID)
 		if err != nil {
-			return fmt.Errorf("fetching facets: %w", err)
+			return errors.E("postgres.transactions.load_facet_values", "fetching facets", err)
 		}
 		var vals []string
 		for rows.Next() {
 			var v string
 			if err := rows.Scan(&v); err != nil {
 				rows.Close()
-				return fmt.Errorf("scanning facet value: %w", err)
+				return errors.E("postgres.transactions.load_facet_values", "scanning facet value", err)
 			}
 			vals = append(vals, v)
 		}
 		rows.Close()
 		if err := rows.Err(); err != nil {
-			return fmt.Errorf("iterating facet rows: %w", err)
+			return errors.E("postgres.transactions.load_facet_values", "iterating facet rows", err)
 		}
 		*q.dest = vals
 	}
@@ -478,7 +478,7 @@ func (r *transactionsRepository) loadFacetCounts(ctx context.Context, tenant sto
 func (r *transactionsRepository) scanFacetCountMap(ctx context.Context, sql, name string, dest map[string]int, args ...any) error {
 	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
-		return fmt.Errorf("fetching %s counts: %w", name, err)
+		return errors.E("postgres.transactions.scan_facet_count_map", fmt.Sprintf("fetching %s counts", name), err)
 	}
 	defer rows.Close()
 
@@ -486,12 +486,12 @@ func (r *transactionsRepository) scanFacetCountMap(ctx context.Context, sql, nam
 		var label string
 		var count int
 		if err := rows.Scan(&label, &count); err != nil {
-			return fmt.Errorf("scanning %s count: %w", name, err)
+			return errors.E("postgres.transactions.scan_facet_count_map", fmt.Sprintf("scanning %s count", name), err)
 		}
 		dest[label] = count
 	}
 	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterating %s counts: %w", name, err)
+		return errors.E("postgres.transactions.scan_facet_count_map", fmt.Sprintf("iterating %s counts", name), err)
 	}
 	return nil
 }
@@ -549,7 +549,7 @@ func (r *transactionsRepository) UpdateTransaction(ctx context.Context, tenant s
 	)
 	tag, err := r.pool.Exec(ctx, q, args...)
 	if err != nil {
-		return fmt.Errorf("updating transaction: %w", err)
+		return errors.E("postgres.transactions.update_transaction", "updating transaction", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return notFound("store.transactions.update")
@@ -574,7 +574,7 @@ func (r *transactionsRepository) MuteTransaction(ctx context.Context, tenant sto
 		)
 	}
 	if err != nil {
-		return fmt.Errorf("muting transaction: %w", err)
+		return errors.E("postgres.transactions.mute_transaction", "muting transaction", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return notFound("store.transactions.mute")
@@ -589,7 +589,7 @@ func (r *transactionsRepository) UpdateMuteReason(ctx context.Context, tenant st
 		id, reason, tenant.ID,
 	)
 	if err != nil {
-		return fmt.Errorf("updating mute reason: %w", err)
+		return errors.E("postgres.transactions.update_mute_reason", "updating mute reason", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return notFound("store.transactions.update_mute_reason")
@@ -603,7 +603,7 @@ func (r *transactionsRepository) UpdateMerchantReason(ctx context.Context, tenan
 		id, reason, tenant.ID,
 	)
 	if err != nil {
-		return fmt.Errorf("updating merchant reason: %w", err)
+		return errors.E("postgres.transactions.update_merchant_reason", "updating merchant reason", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return notFound("store.transactions.update_merchant_reason")
@@ -614,7 +614,7 @@ func (r *transactionsRepository) UpdateMerchantReason(ctx context.Context, tenan
 func (r *transactionsRepository) MuteByMerchant(ctx context.Context, tenant store.Tenant, pattern, reason string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("beginning mute-by-merchant transaction: %w", err)
+		return errors.E("postgres.transactions.mute_by_merchant", "beginning mute-by-merchant transaction", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -623,7 +623,7 @@ func (r *transactionsRepository) MuteByMerchant(ctx context.Context, tenant stor
 		tenant.ID, pattern, reason,
 	)
 	if err != nil {
-		return fmt.Errorf("storing muted merchant pattern: %w", err)
+		return errors.E("postgres.transactions.mute_by_merchant", "storing muted merchant pattern", err)
 	}
 
 	_, err = tx.Exec(ctx,
@@ -633,7 +633,7 @@ func (r *transactionsRepository) MuteByMerchant(ctx context.Context, tenant stor
 		"%"+pattern+"%", reason, tenant.ID,
 	)
 	if err != nil {
-		return fmt.Errorf("muting transactions by merchant: %w", err)
+		return errors.E("postgres.transactions.mute_by_merchant", "muting transactions by merchant", err)
 	}
 
 	return tx.Commit(ctx)
@@ -658,14 +658,14 @@ func (r *transactionsRepository) listMutedMerchantsQuery(ctx context.Context, te
 		 ORDER BY created_at DESC`,
 		tenant.ID)
 	if err != nil {
-		return nil, fmt.Errorf("listing muted merchants: %w", err)
+		return nil, errors.E("postgres.transactions.list_muted_merchants_query", "listing muted merchants", err)
 	}
 	defer rows.Close()
 	var result []store.MutedMerchant
 	for rows.Next() {
 		var m store.MutedMerchant
 		if err := rows.Scan(&m.ID, &m.Pattern, &m.Reason, &m.CreatedAt); err != nil {
-			return nil, fmt.Errorf("scanning muted merchant: %w", err)
+			return nil, errors.E("postgres.transactions.list_muted_merchants_query", "scanning muted merchant", err)
 		}
 		result = append(result, m)
 	}
@@ -693,14 +693,14 @@ func (r *transactionsRepository) getMutedMerchantsWithCountQuery(ctx context.Con
 		ORDER BY mm.created_at DESC
 	`, tenant.ID)
 	if err != nil {
-		return nil, fmt.Errorf("listing muted merchants with count: %w", err)
+		return nil, errors.E("postgres.transactions.get_muted_merchants_with_count_query", "listing muted merchants with count", err)
 	}
 	defer rows.Close()
 	var result []store.MutedMerchantWithCount
 	for rows.Next() {
 		var m store.MutedMerchantWithCount
 		if err := rows.Scan(&m.ID, &m.Pattern, &m.Reason, &m.CreatedAt, &m.MutedCount); err != nil {
-			return nil, fmt.Errorf("scanning muted merchant with count: %w", err)
+			return nil, errors.E("postgres.transactions.get_muted_merchants_with_count_query", "scanning muted merchant with count", err)
 		}
 		result = append(result, m)
 	}
@@ -713,7 +713,7 @@ func (r *transactionsRepository) getMutedMerchantsWithCountQuery(ctx context.Con
 func (r *transactionsRepository) DeleteMutedMerchant(ctx context.Context, tenant store.Tenant, id string) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM muted_merchants WHERE id=$1 AND tenant_id = $2`, id, tenant.ID)
 	if err != nil {
-		return fmt.Errorf("deleting muted merchant: %w", err)
+		return errors.E("postgres.transactions.delete_muted_merchant", "deleting muted merchant", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return notFound("store.transactions.delete_muted_merchant")
@@ -728,7 +728,7 @@ func (r *transactionsRepository) UnmuteByPattern(ctx context.Context, tenant sto
 		"%"+pattern+"%", tenant.ID,
 	)
 	if err != nil {
-		return fmt.Errorf("unmuting by pattern: %w", err)
+		return errors.E("postgres.transactions.unmute_by_pattern", "unmuting by pattern", err)
 	}
 	return nil
 }
@@ -736,7 +736,7 @@ func (r *transactionsRepository) UnmuteByPattern(ctx context.Context, tenant sto
 func (r *transactionsRepository) DeleteMutedMerchantAndUnmute(ctx context.Context, tenant store.Tenant, id string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("beginning transaction: %w", err)
+		return errors.E("postgres.transactions.delete_muted_merchant_and_unmute", "beginning transaction", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -747,7 +747,7 @@ func (r *transactionsRepository) DeleteMutedMerchantAndUnmute(ctx context.Contex
 		if errorsIsNoRows(err) {
 			return notFound("store.transactions.delete_muted_merchant_and_unmute")
 		}
-		return fmt.Errorf("deleting muted merchant: %w", err)
+		return errors.E("postgres.transactions.delete_muted_merchant_and_unmute", "deleting muted merchant", err)
 	}
 
 	if _, err := tx.Exec(ctx,
@@ -756,7 +756,7 @@ func (r *transactionsRepository) DeleteMutedMerchantAndUnmute(ctx context.Contex
 			 WHERE merchant_info ILIKE $1 AND tenant_id = $2`,
 		"%"+pattern+"%", tenant.ID,
 	); err != nil {
-		return fmt.Errorf("unmuting transactions: %w", err)
+		return errors.E("postgres.transactions.delete_muted_merchant_and_unmute", "unmuting transactions", err)
 	}
 
 	return tx.Commit(ctx)
@@ -766,13 +766,13 @@ func (r *transactionsRepository) GetMutedMerchantPatterns(ctx context.Context, t
 	var patterns []string
 	rows, err := r.pool.Query(ctx, `SELECT pattern FROM muted_merchants WHERE tenant_id = $1`, tenant.ID)
 	if err != nil {
-		return nil, fmt.Errorf("fetching muted merchant patterns: %w", err)
+		return nil, errors.E("postgres.transactions.get_muted_merchant_patterns", "fetching muted merchant patterns", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var p string
 		if err := rows.Scan(&p); err != nil {
-			return nil, fmt.Errorf("scanning pattern: %w", err)
+			return nil, errors.E("postgres.transactions.get_muted_merchant_patterns", "scanning pattern", err)
 		}
 		patterns = append(patterns, p)
 	}
@@ -818,14 +818,14 @@ func (r *transactionsRepository) loadLabels(ctx context.Context, txns []store.Tr
 		ids,
 	)
 	if err != nil {
-		return fmt.Errorf("fetching labels: %w", err)
+		return errors.E("postgres.transactions.load_labels", "fetching labels", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var tid, label string
 		if err := rows.Scan(&tid, &label); err != nil {
-			return fmt.Errorf("scanning label row: %w", err)
+			return errors.E("postgres.transactions.load_labels", "scanning label row", err)
 		}
 		if i, ok := idx[tid]; ok {
 			txns[i].Labels = append(txns[i].Labels, label)

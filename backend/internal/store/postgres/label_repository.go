@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 type taxonomyRepository struct {
@@ -33,19 +34,19 @@ func (r *taxonomyRepository) ListLabels(ctx context.Context, tenant store.Tenant
 		tenant.ID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("listing labels: querying labels: %w", err)
+		return nil, errors.E("postgres.label.list_labels", "listing labels: querying labels", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var label store.Label
 		if err := rows.Scan(&label.Name, &label.Color, &label.CreatedAt); err != nil {
-			return nil, fmt.Errorf("listing labels: scanning label: %w", err)
+			return nil, errors.E("postgres.label.list_labels", "listing labels: scanning label", err)
 		}
 		labels = append(labels, label)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("listing labels: iterating labels: %w", err)
+		return nil, errors.E("postgres.label.list_labels", "listing labels: iterating labels", err)
 	}
 	return labels, nil
 }
@@ -56,7 +57,7 @@ func (r *taxonomyRepository) CreateLabel(ctx context.Context, tenant store.Tenan
 		tenant.ID, name, color,
 	)
 	if err != nil {
-		return fmt.Errorf("creating label: executing label insert: %w", err)
+		return errors.E("postgres.label.create_label", "creating label: executing label insert", err)
 	}
 	return nil
 }
@@ -74,10 +75,10 @@ func (r *taxonomyRepository) UpdateLabel(ctx context.Context, tenant store.Tenan
 		color, name, tenant.ID,
 	)
 	if err != nil {
-		return fmt.Errorf("updating label: executing label update: %w", err)
+		return errors.E("postgres.label.update_label", "updating label: executing label update", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return notFound("store.taxonomy.update_label")
+		return errors.E("store.taxonomy.update_label", errors.NotFound, errors.User("label not found"))
 	}
 	return nil
 }
@@ -85,7 +86,7 @@ func (r *taxonomyRepository) UpdateLabel(ctx context.Context, tenant store.Tenan
 func (r *taxonomyRepository) DeleteLabel(ctx context.Context, tenant store.Tenant, name string, removeFromTransactions bool) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("deleting label: beginning delete-label transaction: %w", err)
+		return errors.E("postgres.label.delete_label", "deleting label: beginning delete-label transaction", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -95,25 +96,25 @@ func (r *taxonomyRepository) DeleteLabel(ctx context.Context, tenant store.Tenan
 			USING transactions t
 			WHERE tls.transaction_id = t.id AND tls.label = $1 AND t.tenant_id = $2
 		`, name, tenant.ID); err != nil {
-			return fmt.Errorf("deleting label: deleting label sources: %w", err)
+			return errors.E("postgres.label.delete_label", "deleting label: deleting label sources", err)
 		}
 		if _, err := tx.Exec(ctx, `
 			DELETE FROM transaction_labels tl
 			USING transactions t
 			WHERE tl.transaction_id = t.id AND tl.label = $1 AND t.tenant_id = $2
 		`, name, tenant.ID); err != nil {
-			return fmt.Errorf("deleting label: deleting transaction labels: %w", err)
+			return errors.E("postgres.label.delete_label", "deleting label: deleting transaction labels", err)
 		}
 	}
 
 	if _, err := tx.Exec(ctx, `DELETE FROM label_merchants WHERE label = $1 AND tenant_id = $2`, name, tenant.ID); err != nil {
-		return fmt.Errorf("deleting label: deleting merchant mappings: %w", err)
+		return errors.E("postgres.label.delete_label", "deleting label: deleting merchant mappings", err)
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM labels WHERE name = $1 AND tenant_id = $2`, name, tenant.ID); err != nil {
-		return fmt.Errorf("deleting label: executing label delete: %w", err)
+		return errors.E("postgres.label.delete_label", "deleting label: executing label delete", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("deleting label: committing delete-label transaction: %w", err)
+		return errors.E("postgres.label.delete_label", "deleting label: committing delete-label transaction", err)
 	}
 	return nil
 }
@@ -121,7 +122,7 @@ func (r *taxonomyRepository) DeleteLabel(ctx context.Context, tenant store.Tenan
 func (r *taxonomyRepository) ApplyLabelByMerchant(ctx context.Context, tenant store.Tenant, label, pattern string) (int64, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("beginning apply-label-by-merchant transaction: %w", err)
+		return 0, errors.E("postgres.label.apply_label_by_merchant", "beginning apply-label-by-merchant transaction", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -130,7 +131,7 @@ func (r *taxonomyRepository) ApplyLabelByMerchant(ctx context.Context, tenant st
 		tenant.ID, label, pattern,
 	)
 	if err != nil {
-		return 0, fmt.Errorf("storing label merchant mapping: %w", err)
+		return 0, errors.E("postgres.label.apply_label_by_merchant", "storing label merchant mapping", err)
 	}
 
 	if _, err := tx.Exec(ctx,
@@ -142,7 +143,7 @@ func (r *taxonomyRepository) ApplyLabelByMerchant(ctx context.Context, tenant st
 		 ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING`,
 		label, pattern, tenant.ID,
 	); err != nil {
-		return 0, fmt.Errorf("storing merchant label sources: %w", err)
+		return 0, errors.E("postgres.label.apply_label_by_merchant", "storing merchant label sources", err)
 	}
 
 	tag, err := tx.Exec(ctx,
@@ -154,11 +155,11 @@ func (r *taxonomyRepository) ApplyLabelByMerchant(ctx context.Context, tenant st
 		label, pattern, tenant.ID,
 	)
 	if err != nil {
-		return 0, fmt.Errorf("applying label by merchant: %w", err)
+		return 0, errors.E("postgres.label.apply_label_by_merchant", "applying label by merchant", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("committing apply-label-by-merchant transaction: %w", err)
+		return 0, errors.E("postgres.label.apply_label_by_merchant", "committing apply-label-by-merchant transaction", err)
 	}
 	return tag.RowsAffected(), nil
 }
@@ -173,7 +174,7 @@ const labelMerchantUpsertSQL = `
 func (r *taxonomyRepository) RemoveLabelByMerchant(ctx context.Context, tenant store.Tenant, label, pattern string) (int64, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("beginning remove-label-by-merchant transaction: %w", err)
+		return 0, errors.E("postgres.label.remove_label_by_merchant", "beginning remove-label-by-merchant transaction", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -182,7 +183,7 @@ func (r *taxonomyRepository) RemoveLabelByMerchant(ctx context.Context, tenant s
 		 WHERE label = $1 AND merchant_pattern = $2 AND tenant_id = $3`,
 		label, pattern, tenant.ID,
 	); err != nil {
-		return 0, fmt.Errorf("removing merchant label mapping: %w", err)
+		return 0, errors.E("postgres.label.remove_label_by_merchant", "removing merchant label mapping", err)
 	}
 
 	affectedTxnIDs, err := loadMerchantLabelTransactionIDs(ctx, tx, tenant, label, pattern)
@@ -200,7 +201,7 @@ func (r *taxonomyRepository) RemoveLabelByMerchant(ctx context.Context, tenant s
 		   AND t.tenant_id = $3`,
 		label, pattern, tenant.ID,
 	); err != nil {
-		return 0, fmt.Errorf("removing merchant label sources: %w", err)
+		return 0, errors.E("postgres.label.remove_label_by_merchant", "removing merchant label sources", err)
 	}
 
 	removed, err := removeOrphanedTransactionLabels(ctx, tx, affectedTxnIDs, label)
@@ -209,7 +210,7 @@ func (r *taxonomyRepository) RemoveLabelByMerchant(ctx context.Context, tenant s
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("committing remove-label-by-merchant transaction: %w", err)
+		return 0, errors.E("postgres.label.remove_label_by_merchant", "committing remove-label-by-merchant transaction", err)
 	}
 	return removed, nil
 }
@@ -225,7 +226,7 @@ func loadMerchantLabelTransactionIDs(ctx context.Context, tx pgx.Tx, tenant stor
 		  AND t.tenant_id = $3
 	`, label, pattern, tenant.ID)
 	if err != nil {
-		return nil, fmt.Errorf("loading affected transactions: %w", err)
+		return nil, errors.E("postgres.label.load_merchant_label_transaction_i_ds", "loading affected transactions", err)
 	}
 	defer rows.Close()
 
@@ -233,12 +234,12 @@ func loadMerchantLabelTransactionIDs(ctx context.Context, tx pgx.Tx, tenant stor
 	for rows.Next() {
 		var transactionID string
 		if err := rows.Scan(&transactionID); err != nil {
-			return nil, fmt.Errorf("scanning affected transaction: %w", err)
+			return nil, errors.E("postgres.label.load_merchant_label_transaction_i_ds", "scanning affected transaction", err)
 		}
 		transactionIDs = append(transactionIDs, transactionID)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating affected transactions: %w", err)
+		return nil, errors.E("postgres.label.load_merchant_label_transaction_i_ds", "iterating affected transactions", err)
 	}
 	return transactionIDs, nil
 }
@@ -260,7 +261,7 @@ func removeOrphanedTransactionLabels(ctx context.Context, tx pgx.Tx, transaction
 			transactionID, label,
 		)
 		if err != nil {
-			return 0, fmt.Errorf("removing orphaned transaction label: %w", err)
+			return 0, errors.E("postgres.label.remove_orphaned_transaction_labels", "removing orphaned transaction label", err)
 		}
 		removed += tag.RowsAffected()
 	}
@@ -275,7 +276,7 @@ func transactionLabelHasSources(ctx context.Context, tx pgx.Tx, transactionID, l
 		 WHERE transaction_id = $1 AND label = $2`,
 		transactionID, label,
 	).Scan(&remaining); err != nil {
-		return false, fmt.Errorf("counting remaining label sources: %w", err)
+		return false, errors.E("postgres.label.transaction_label_has_sources", "counting remaining label sources", err)
 	}
 	return remaining > 0, nil
 }
@@ -289,14 +290,14 @@ func (r *taxonomyRepository) GetLabelMappings(ctx context.Context, tenant store.
 			ORDER BY label, merchant_pattern
 		`, tenant.ID)
 	if err != nil {
-		return nil, fmt.Errorf("fetching label mappings: %w", err)
+		return nil, errors.E("postgres.label.get_label_mappings", "fetching label mappings", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var label, merchantPattern string
 		if err := rows.Scan(&label, &merchantPattern); err != nil {
-			return nil, fmt.Errorf("scanning label mapping: %w", err)
+			return nil, errors.E("postgres.label.get_label_mappings", "scanning label mapping", err)
 		}
 		result[label] = append(result[label], merchantPattern)
 	}
@@ -307,14 +308,14 @@ func (r *taxonomyRepository) listTaxonomyItems(ctx context.Context, tenant store
 	items := []taxonomyItem{}
 	rows, err := r.pool.Query(ctx, query, tenant.ID)
 	if err != nil {
-		return nil, fmt.Errorf("listing %ss: %w", itemName, err)
+		return nil, errors.E("postgres.label.list_taxonomy_items", fmt.Sprintf("listing %ss", itemName), err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var item taxonomyItem
 		if err := rows.Scan(&item.Name, &item.Description, &item.IsDefault); err != nil {
-			return nil, fmt.Errorf("scanning %s: %w", itemName, err)
+			return nil, errors.E("postgres.label.list_taxonomy_items", fmt.Sprintf("scanning %s", itemName), err)
 		}
 		items = append(items, item)
 	}
@@ -344,7 +345,7 @@ func (r *taxonomyRepository) CreateCategory(ctx context.Context, tenant store.Te
 		tenant.ID, name, description,
 	)
 	if err != nil {
-		return fmt.Errorf("creating category: %w", err)
+		return errors.E("postgres.label.create_category", "creating category", err)
 	}
 	return nil
 }
@@ -388,7 +389,7 @@ func (r *taxonomyRepository) CreateBucket(ctx context.Context, tenant store.Tena
 		tenant.ID, name, description,
 	)
 	if err != nil {
-		return fmt.Errorf("creating bucket: %w", err)
+		return errors.E("postgres.label.create_bucket", "creating bucket", err)
 	}
 	return nil
 }
@@ -445,7 +446,7 @@ func (r *taxonomyRepository) deleteNamedTaxonomy(
 ) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("beginning delete %s transaction: %w", input.spec.kind, err)
+		return errors.E("postgres.label.delete_named_taxonomy", fmt.Sprintf("beginning delete %s transaction", input.spec.kind), err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -456,7 +457,7 @@ func (r *taxonomyRepository) deleteNamedTaxonomy(
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("committing delete %s transaction: %w", input.spec.kind, err)
+		return errors.E("postgres.label.delete_named_taxonomy", fmt.Sprintf("committing delete %s transaction", input.spec.kind), err)
 	}
 	return nil
 }
@@ -465,10 +466,20 @@ func ensureTaxonomyCanBeDeleted(ctx context.Context, tx pgx.Tx, tenant store.Ten
 	var isDefault bool
 	err := tx.QueryRow(ctx, spec.selectDefaultSQL, name, tenant.ID).Scan(&isDefault)
 	if err != nil {
-		return notFound("store.taxonomy.delete_" + spec.kind)
+		return errors.E(
+			"store.taxonomy.delete_"+spec.kind,
+			errors.NotFound,
+			errors.User(spec.kind+" not found"),
+			err,
+		)
 	}
 	if isDefault {
-		return fmt.Errorf("cannot delete default %s %q", spec.kind, name)
+		return errors.E(
+			"store.taxonomy.delete_"+spec.kind,
+			errors.Conflict,
+			errors.User("The default "+spec.kind+" cannot be deleted."),
+			fmt.Sprintf("cannot delete default %s %q", spec.kind, name),
+		)
 	}
 	return nil
 }
@@ -478,18 +489,18 @@ func execTaxonomyDelete(ctx context.Context, tx pgx.Tx, input taxonomyDeleteInpu
 	name := input.name
 	spec := input.spec
 	if _, err := tx.Exec(ctx, spec.deleteEmptyMappingsSQL, name, tenantParam); err != nil {
-		return fmt.Errorf("deleting %s merchant mappings: %w", spec.kind, err)
+		return errors.E("postgres.label.exec_taxonomy_delete", fmt.Sprintf("deleting %s merchant mappings", spec.kind), err)
 	}
 	if _, err := tx.Exec(ctx, spec.clearMappingsSQL, name, tenantParam); err != nil {
-		return fmt.Errorf("clearing %s merchant mappings: %w", spec.kind, err)
+		return errors.E("postgres.label.exec_taxonomy_delete", fmt.Sprintf("clearing %s merchant mappings", spec.kind), err)
 	}
 	if input.removeFromTransactions {
 		if _, err := tx.Exec(ctx, spec.clearTransactionsSQL, name, tenantParam); err != nil {
-			return fmt.Errorf("clearing %s from transactions: %w", spec.kind, err)
+			return errors.E("postgres.label.exec_taxonomy_delete", fmt.Sprintf("clearing %s from transactions", spec.kind), err)
 		}
 	}
 	if _, err := tx.Exec(ctx, spec.deleteSQL, name, tenantParam); err != nil {
-		return fmt.Errorf("deleting %s: %w", spec.kind, err)
+		return errors.E("postgres.label.exec_taxonomy_delete", fmt.Sprintf("deleting %s", spec.kind), err)
 	}
 	return nil
 }

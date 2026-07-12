@@ -1,13 +1,12 @@
 package postgres
 
 import (
-	"fmt"
-
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 func nullableString(value string) any {
@@ -60,7 +59,7 @@ func scanDiagnosticRows(rows pgx.Rows) ([]store.ExtractionDiagnosticRow, error) 
 			&row.UpdatedAt,
 			&resolvedAt,
 		); err != nil {
-			return nil, fmt.Errorf("scanning extraction diagnostic: %w", err)
+			return nil, errors.E("postgres.scan.scan_diagnostic_rows", "scanning extraction diagnostic", err)
 		}
 		if ruleID.Valid {
 			row.RuleID = &ruleID.String
@@ -96,7 +95,7 @@ func scanTransactions(rows pgx.Rows) ([]store.Transaction, error) {
 			&legacySource, &sourceType, &sourceLabel, &bank,
 			&t.Description, &t.Muted, &t.MutedByMerchant, &t.MuteReason, &t.CreatedAt, &t.UpdatedAt,
 		); err != nil {
-			return nil, fmt.Errorf("scanning transaction row: %w", err)
+			return nil, errors.E("postgres.scan.scan_transactions", "scanning transaction row", err)
 		}
 		if sourceLabel == "" {
 			sourceLabel = legacySource
@@ -106,7 +105,7 @@ func scanTransactions(rows pgx.Rows) ([]store.Transaction, error) {
 		txns = append(txns, t)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating transaction rows: %w", err)
+		return nil, errors.E("postgres.scan.scan_transactions", "iterating transaction rows", err)
 	}
 	return txns, nil
 }
@@ -126,7 +125,7 @@ func scanRuleRows(rows pgx.Rows) ([]store.RuleRow, error) {
 			&r.TransactionSource, &r.SourceType, &r.SourceLabel, &r.Bank, &r.Predefined,
 			&r.CreatedAt, &r.UpdatedAt,
 		); err != nil {
-			return nil, fmt.Errorf("scanning rule row: %w", err)
+			return nil, errors.E("postgres.scan.scan_rule_rows", "scanning rule row", err)
 		}
 		result = append(result, r)
 	}

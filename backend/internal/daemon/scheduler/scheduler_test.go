@@ -8,7 +8,38 @@ import (
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	apperrors "github.com/ArionMiles/expensor/backend/pkg/errors"
 )
+
+func TestStartRequiresDependencies(t *testing.T) {
+	tests := []struct {
+		name      string
+		scheduler *Scheduler
+		message   string
+	}{
+		{
+			name:      "store",
+			scheduler: New(Config{Runner: &staticRunner{}}),
+			message:   "scheduler store is nil",
+		},
+		{
+			name:      "runner",
+			scheduler: New(Config{Store: newFakeStore(nil)}),
+			message:   "scheduler runner is nil",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.scheduler.Start(context.Background())
+			if err == nil || err.Error() != tc.message {
+				t.Fatalf("Start() error = %v, want %q", err, tc.message)
+			}
+			if got := apperrors.WhatKind(err); got != apperrors.FailedPrecondition {
+				t.Fatalf("WhatKind() = %#v, want %#v", got, apperrors.FailedPrecondition)
+			}
+		})
+	}
+}
 
 func TestReconcileStartsRunnableTenantsUpToLimit(t *testing.T) {
 	ctx := context.Background()

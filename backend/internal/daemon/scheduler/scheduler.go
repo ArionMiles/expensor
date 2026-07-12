@@ -2,12 +2,12 @@ package scheduler
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 const (
@@ -89,10 +89,10 @@ func New(cfg Config) *Scheduler {
 // Start runs the scheduler loop until ctx is canceled.
 func (s *Scheduler) Start(ctx context.Context) error {
 	if s.store == nil {
-		return errors.New("scheduler store is nil")
+		return errors.E(errors.FailedPrecondition, "scheduler store is nil")
 	}
 	if s.runner == nil {
-		return errors.New("scheduler runner is nil")
+		return errors.E(errors.FailedPrecondition, "scheduler runner is nil")
 	}
 	if err := s.Reconcile(ctx); err != nil {
 		s.logger.Error("initial scheduler reconcile failed", "error", err)

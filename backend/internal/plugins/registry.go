@@ -11,6 +11,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/state"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // AuthType describes how a provider authenticates.
@@ -117,19 +118,19 @@ func NewRegistry() *Registry {
 func (r *Registry) RegisterProvider(provider Provider) error {
 	name := provider.Metadata.Name
 	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("provider name is required")
+		return errors.E(errors.InvalidInput, "provider name is required")
 	}
 	if provider.NewReader == nil {
-		return fmt.Errorf("provider %q reader factory is required", name)
+		return errors.E(errors.InvalidInput, fmt.Sprintf("provider %q reader factory is required", name))
 	}
 	if provider.NewEmailSearcher == nil {
-		return fmt.Errorf("provider %q email searcher factory is required", name)
+		return errors.E(errors.InvalidInput, fmt.Sprintf("provider %q email searcher factory is required", name))
 	}
 	if len(provider.Metadata.SetupGuide) > 0 && !json.Valid(provider.Metadata.SetupGuide) {
-		return fmt.Errorf("provider %q setup guide must be valid JSON", name)
+		return errors.E(errors.InvalidInput, fmt.Sprintf("provider %q setup guide must be valid JSON", name))
 	}
 	if _, exists := r.providers[name]; exists {
-		return fmt.Errorf("provider %q already registered", name)
+		return errors.E(errors.Conflict, fmt.Sprintf("provider %q already registered", name))
 	}
 	r.providers[name] = provider
 	return nil
@@ -139,7 +140,7 @@ func (r *Registry) RegisterProvider(provider Provider) error {
 func (r *Registry) GetProvider(name string) (Provider, error) {
 	provider, exists := r.providers[name]
 	if !exists {
-		return Provider{}, fmt.Errorf("provider %q not found", name)
+		return Provider{}, errors.E(errors.NotFound, fmt.Sprintf("provider %q not found", name))
 	}
 	return provider, nil
 }

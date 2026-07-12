@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 const currentDocumentVersion = 2
@@ -61,7 +62,7 @@ func ParseDocument(body []byte) (*Document, error) {
 	if strings.HasPrefix(trimmed, "[") {
 		var raw []rawRule
 		if err := json.Unmarshal(body, &raw); err != nil {
-			return nil, fmt.Errorf("parsing legacy rules: %w", err)
+			return nil, errors.E("rules.document.parse_document", "parsing legacy rules", err)
 		}
 		rules, err := compileRules(raw)
 		if err != nil {
@@ -72,10 +73,10 @@ func ParseDocument(body []byte) (*Document, error) {
 
 	var raw rawDocument
 	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, fmt.Errorf("parsing rule document: %w", err)
+		return nil, errors.E("rules.document.parse_document", "parsing rule document", err)
 	}
 	if raw.Version != currentDocumentVersion {
-		return nil, fmt.Errorf("unsupported rule document version %d", raw.Version)
+		return nil, errors.E(errors.InvalidInput, fmt.Sprintf("unsupported rule document version %d", raw.Version))
 	}
 	rules, err := compileRules(raw.Rules)
 	if err != nil {
@@ -103,7 +104,7 @@ func compileRules(rawRules []rawRule) ([]api.Rule, error) {
 func compileRule(raw rawRule) (api.Rule, error) {
 	name := strings.TrimSpace(raw.Name)
 	if name == "" {
-		return api.Rule{}, fmt.Errorf("rule name is required")
+		return api.Rule{}, errors.E(errors.InvalidInput, "rule name is required")
 	}
 	senders := normalizeSenderList(raw.SenderEmails)
 	for _, sender := range []string{raw.SenderEmail, raw.SenderEmailSnake} {
@@ -112,7 +113,7 @@ func compileRule(raw rawRule) (api.Rule, error) {
 		}
 	}
 	if len(senders) == 0 {
-		return api.Rule{}, fmt.Errorf("rule %q requires at least one sender email", name)
+		return api.Rule{}, errors.E(errors.InvalidInput, fmt.Sprintf("rule %q requires at least one sender email", name))
 	}
 
 	amountRegex := firstNonEmpty(raw.AmountRegex, raw.AmountSnake)
@@ -133,7 +134,7 @@ func compileRule(raw rawRule) (api.Rule, error) {
 
 	source, err := parseSource(raw.Source)
 	if err != nil {
-		return api.Rule{}, fmt.Errorf("rule %q invalid source: %w", name, err)
+		return api.Rule{}, errors.E("rules.document.compile_rule", fmt.Sprintf("rule %q invalid source", name), err)
 	}
 	if source == (api.Source{}) {
 		source = splitLegacySource(firstNonEmpty(raw.LegacySource, raw.SourceText, raw.TransactionSource))
@@ -168,11 +169,11 @@ func parseSource(raw json.RawMessage) (api.Source, error) {
 
 func compileNamedRegex(ruleName, field, pattern string) (*regexp.Regexp, error) {
 	if strings.TrimSpace(pattern) == "" {
-		return nil, fmt.Errorf("rule %q requires %s", ruleName, field)
+		return nil, errors.E(errors.InvalidInput, fmt.Sprintf("rule %q requires %s", ruleName, field))
 	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		return nil, fmt.Errorf("rule %q invalid %s: %w", ruleName, field, err)
+		return nil, errors.E("rules.document.compile_named_regex", fmt.Sprintf("rule %q invalid %s", ruleName, field), err)
 	}
 	return re, nil
 }
@@ -183,7 +184,7 @@ func compileOptionalRegex(ruleName, field, pattern string) (*regexp.Regexp, erro
 	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		return nil, fmt.Errorf("rule %q invalid %s: %w", ruleName, field, err)
+		return nil, errors.E("rules.document.compile_optional_regex", fmt.Sprintf("rule %q invalid %s", ruleName, field), err)
 	}
 	return re, nil
 }
