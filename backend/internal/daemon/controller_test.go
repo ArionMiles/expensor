@@ -162,6 +162,49 @@ func TestControllerRefreshesResolverAndRestartsActiveRun(t *testing.T) {
 	closeController(t, controller)
 }
 
+func TestControllerPreservesSubmittedActionOrder(t *testing.T) {
+	started := make(chan struct{})
+	stopped := make(chan struct{})
+	scanner := &controllerScannerStub{run: func(ctx context.Context, _ ScanRequest) error {
+		close(started)
+		<-ctx.Done()
+		close(stopped)
+		return ctx.Err()
+	}}
+	controller := newTestController(t, scanner, &activeReaderStoreStub{})
+	controller.Start(RunRequest{Tenant: store.Tenant{ID: "tenant-a"}, Reader: "gmail"})
+	controller.Stop()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("start action did not run")
+	}
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("stop action ran before start and left the scan active")
+	}
+	closeController(t, controller)
+}
+
+func TestControllerRejectsActionsAfterClose(t *testing.T) {
+	started := make(chan struct{}, 1)
+	scanner := &controllerScannerStub{run: func(context.Context, ScanRequest) error {
+		started <- struct{}{}
+		return nil
+	}}
+	controller := newTestController(t, scanner, &activeReaderStoreStub{})
+	closeController(t, controller)
+	controller.Start(RunRequest{Tenant: store.Tenant{ID: "tenant-a"}, Reader: "gmail"})
+
+	select {
+	case <-started:
+		t.Fatal("controller accepted an action after Close")
+	case <-time.After(20 * time.Millisecond):
+	}
+}
+
 func newTestController(t *testing.T, scanner scanExecutor, st activeReaderStore) *Controller {
 	t.Helper()
 	controller, err := NewController(ControllerDependencies{

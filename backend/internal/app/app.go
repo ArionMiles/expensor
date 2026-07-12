@@ -31,6 +31,7 @@ type App struct {
 	communityRun    func(context.Context) error
 	serverRun       func(context.Context) error
 	controllerClose func(context.Context) error
+	communityClose  func(context.Context) error
 	storeClose      func()
 
 	runMu      sync.Mutex
@@ -116,6 +117,7 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 		communityRun:    communityService.Run,
 		serverRun:       server.Start,
 		controllerClose: controller.Close,
+		communityClose:  communityService.Close,
 		storeClose:      storeRuntime.Close,
 	}
 	constructed = true
@@ -154,6 +156,9 @@ func (a *App) Close(ctx context.Context) error {
 		}
 		a.runMu.Unlock()
 
+		if a.communityClose != nil {
+			a.closeErr = errors.Join(a.closeErr, a.communityClose(ctx))
+		}
 		if a.controllerClose != nil {
 			a.closeErr = errors.Join(a.closeErr, a.controllerClose(ctx))
 		}

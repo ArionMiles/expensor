@@ -51,6 +51,7 @@ type Scheduler struct {
 
 	mu      sync.Mutex
 	running map[string]context.CancelFunc
+	runs    sync.WaitGroup
 }
 
 // Config contains Scheduler dependencies.
@@ -103,6 +104,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			s.Stop()
+			s.runs.Wait()
 			return ctx.Err()
 		case <-ticker.C:
 			if err := s.Reconcile(ctx); err != nil {
@@ -202,7 +204,11 @@ func (s *Scheduler) startTenant(ctx context.Context, state store.TenantScanningS
 	s.running[state.TenantID] = cancel
 	s.mu.Unlock()
 
-	go s.runTenant(runCtx, state, cancel)
+	s.runs.Add(1)
+	go func() {
+		defer s.runs.Done()
+		s.runTenant(runCtx, state, cancel)
+	}()
 	return nil
 }
 

@@ -188,6 +188,39 @@ func TestTriggerSyncsAndRefreshesResolver(t *testing.T) {
 	}
 }
 
+func TestCloseCancelsAndWaitsForManualSync(t *testing.T) {
+	requestStarted := make(chan struct{})
+	requestCanceled := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		close(requestStarted)
+		<-r.Context().Done()
+		close(requestCanceled)
+	}))
+	defer server.Close()
+	service := newTestService(t, server.URL, &fakeStore{}, nil)
+	triggerDone := make(chan struct{})
+	go func() {
+		service.Trigger()
+		close(triggerDone)
+	}()
+	<-requestStarted
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := service.Close(ctx); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	select {
+	case <-requestCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("manual sync request was not canceled")
+	}
+	select {
+	case <-triggerDone:
+	default:
+		t.Fatal("Close returned before the manual sync exited")
+	}
+}
+
 type fakeTicker struct{ ticks chan time.Time }
 
 func (t *fakeTicker) C() <-chan time.Time { return t.ticks }

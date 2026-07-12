@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/observability"
@@ -46,6 +47,7 @@ type Dependencies struct {
 // Service owns automatic, periodic, and manually triggered community syncs.
 type Service struct {
 	rootCtx   context.Context
+	cancel    context.CancelFunc
 	config    config.Community
 	client    *http.Client
 	store     syncStore
@@ -53,6 +55,9 @@ type Service struct {
 	logger    *slog.Logger
 	scope     *observability.Scope
 	newTicker func(time.Duration) serviceTicker
+	manualMu  sync.Mutex
+	manual    sync.WaitGroup
+	closed    bool
 }
 
 type serviceTicker interface {
@@ -87,8 +92,10 @@ func New(ctx context.Context, deps Dependencies) (*Service, error) {
 			logger.Warn("failed to seed default community URL", "error", setErr)
 		}
 	}
+	serviceCtx, cancel := context.WithCancel(ctx)
 	return &Service{
-		rootCtx:  ctx,
+		rootCtx:  serviceCtx,
+		cancel:   cancel,
 		config:   deps.Config,
 		client:   client,
 		store:    deps.Store,
@@ -121,10 +128,41 @@ func (s *Service) Run(ctx context.Context) error {
 
 // Trigger performs a manual sync using the application lifetime context.
 func (s *Service) Trigger() {
+	s.manualMu.Lock()
+	if s.closed {
+		s.manualMu.Unlock()
+		return
+	}
+	s.manual.Add(1)
+	s.manualMu.Unlock()
+	defer s.manual.Done()
+
 	syncCtx, cancel := context.WithTimeout(s.rootCtx, s.config.SyncTimeout)
 	defer cancel()
 	s.sync(syncCtx)
 	s.refresh(syncCtx)
+}
+
+// Close cancels and waits for active manual syncs.
+func (s *Service) Close(ctx context.Context) error {
+	s.manualMu.Lock()
+	if !s.closed {
+		s.closed = true
+		s.cancel()
+	}
+	s.manualMu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		s.manual.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (s *Service) syncAutomaticWithTimeout(ctx context.Context) {
