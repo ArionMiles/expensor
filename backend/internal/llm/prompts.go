@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"path"
@@ -9,6 +8,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // PromptVariable describes a template variable accepted by a prompt.
@@ -49,7 +50,7 @@ func LoadPromptCatalog(fsys fs.FS, dir string) (*PromptCatalog, error) {
 		if errors.Is(err, fs.ErrNotExist) {
 			return catalog, nil
 		}
-		return nil, fmt.Errorf("reading prompt catalog %q: %w", dir, err)
+		return nil, errors.E("llm.prompts.load_prompt_catalog", fmt.Sprintf("reading prompt catalog %q", dir), err)
 	}
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -61,18 +62,21 @@ func LoadPromptCatalog(fsys fs.FS, dir string) (*PromptCatalog, error) {
 		}
 		body, err := fs.ReadFile(fsys, path.Join(dir, name))
 		if err != nil {
-			return nil, fmt.Errorf("reading prompt %q: %w", name, err)
+			return nil, errors.E("llm.prompts.load_prompt_catalog", fmt.Sprintf("reading prompt %q", name), err)
 		}
 		var prompt PromptDefinition
 		if err := yaml.Unmarshal(body, &prompt); err != nil {
-			return nil, fmt.Errorf("parsing prompt %q: %w", name, err)
+			return nil, errors.E("llm.prompts.load_prompt_catalog", fmt.Sprintf("parsing prompt %q", name), err)
 		}
 		if err := prompt.validate(name); err != nil {
 			return nil, err
 		}
 		key := promptKey{workflow: prompt.Workflow, purpose: prompt.Purpose}
 		if existing, ok := catalog.prompts[key]; ok {
-			return nil, fmt.Errorf("duplicate prompt for workflow %q purpose %q: %s and %s", key.workflow, key.purpose, existing.ID, prompt.ID)
+			return nil, errors.E(
+				errors.InvalidInput,
+				fmt.Sprintf("duplicate prompt for workflow %q purpose %q: %s and %s", key.workflow, key.purpose, existing.ID, prompt.ID),
+			)
 		}
 		catalog.prompts[key] = prompt
 	}
@@ -116,19 +120,19 @@ func (c *PromptCatalog) List() []PromptDefinition {
 
 func (p PromptDefinition) validate(filename string) error {
 	if strings.TrimSpace(p.ID) == "" {
-		return fmt.Errorf("prompt %q id is required", filename)
+		return errors.E(errors.InvalidInput, fmt.Sprintf("prompt %q id is required", filename))
 	}
 	if p.Version <= 0 {
-		return fmt.Errorf("prompt %q version must be positive", filename)
+		return errors.E(errors.InvalidInput, fmt.Sprintf("prompt %q version must be positive", filename))
 	}
 	if strings.TrimSpace(p.Workflow) == "" {
-		return fmt.Errorf("prompt %q workflow is required", filename)
+		return errors.E(errors.InvalidInput, fmt.Sprintf("prompt %q workflow is required", filename))
 	}
 	if strings.TrimSpace(p.Purpose) == "" {
-		return fmt.Errorf("prompt %q purpose is required", filename)
+		return errors.E(errors.InvalidInput, fmt.Sprintf("prompt %q purpose is required", filename))
 	}
 	if len(p.Messages) == 0 {
-		return fmt.Errorf("prompt %q requires at least one message", filename)
+		return errors.E(errors.InvalidInput, fmt.Sprintf("prompt %q requires at least one message", filename))
 	}
 	return nil
 }

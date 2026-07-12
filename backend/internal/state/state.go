@@ -5,11 +5,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // Manager tracks processed messages to avoid reprocessing.
@@ -63,10 +63,10 @@ func (m *Manager) IsProcessed(ctx context.Context, msgKey string) bool {
 // MarkProcessed marks a message as processed.
 func (m *Manager) MarkProcessed(ctx context.Context, msgKey string) error {
 	if m.store == nil {
-		return fmt.Errorf("processed message state store is nil")
+		return errors.E(errors.FailedPrecondition, "processed message state store is nil")
 	}
 	if err := m.store.MarkMessageProcessed(ctx, m.tenant, msgKey, time.Now()); err != nil {
-		return fmt.Errorf("marking message processed in DB: %w", err)
+		return errors.E("state.mark_processed", "marking message processed in DB", err)
 	}
 	return nil
 }

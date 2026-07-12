@@ -4,7 +4,6 @@ package gmail
 import (
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -24,6 +23,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/state"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // Reader reads transactions from Gmail messages.
@@ -86,7 +86,7 @@ func New(httpClient *http.Client, cfg Config, logger *slog.Logger) (*Reader, err
 	// The actual API calls later use the context passed to Read()
 	client, err := gmail.NewService(context.Background(), option.WithHTTPClient(httpClient))
 	if err != nil {
-		return nil, fmt.Errorf("creating gmail service: %w", err)
+		return nil, errors.E("gmail.new", "creating gmail service", err)
 	}
 
 	interval := cfg.Interval
@@ -421,7 +421,7 @@ func (r *Reader) Search(ctx context.Context, query api.EmailSearchQuery) ([]api.
 		return callErr
 	})
 	if err != nil {
-		return nil, fmt.Errorf("listing messages for subject search: %w", err)
+		return nil, errors.E("gmail.search", "listing messages for subject search", err)
 	}
 	if resp == nil {
 		return []api.EmailSearchResult{}, nil
@@ -453,7 +453,7 @@ func (r *Reader) getMessage(ctx context.Context, msgID string) (*gmail.Message, 
 		return callErr
 	})
 	if err != nil {
-		return nil, fmt.Errorf("getting message: %w", err)
+		return nil, errors.E("gmail.get_message", "getting message", err)
 	}
 	return msg, nil
 }
@@ -484,7 +484,7 @@ func handleListMessagesError(ctx context.Context, logger *slog.Logger, ruleName 
 		return ctx.Err()
 	}
 	logAPIError(logger, "failed to list messages", err)
-	return fmt.Errorf("listing messages for rule %q: %w", ruleName, err)
+	return errors.E("gmail.handle_list_messages_error", fmt.Sprintf("listing messages for rule %q", ruleName), err)
 }
 
 func (r *Reader) processRuleMessages(

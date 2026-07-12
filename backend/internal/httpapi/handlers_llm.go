@@ -3,13 +3,13 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/llm"
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 type llmProviderInfoJSON struct {

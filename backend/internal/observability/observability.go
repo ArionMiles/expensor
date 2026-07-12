@@ -108,7 +108,7 @@ func newResource(cfg config.Observability) (*resource.Resource, error) {
 		),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("creating telemetry resource: %w", err)
+		return nil, errors.E("observability.new_resource", "creating telemetry resource", err)
 	}
 	return res, nil
 }
@@ -124,7 +124,7 @@ func newTracerProvider(ctx context.Context, cfg config.Observability, res *resou
 
 	exporter, err := otlptracegrpc.New(ctx, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("creating otlp trace exporter: %w", err)
+		return nil, errors.E("observability.new_tracer_provider", "creating otlp trace exporter", err)
 	}
 	return sdktrace.NewTracerProvider(sdktrace.WithResource(res), sdktrace.WithBatcher(exporter)), nil
 }
@@ -140,7 +140,7 @@ func newMeterProvider(ctx context.Context, cfg config.Observability, res *resour
 
 	exporter, err := otlpmetricgrpc.New(ctx, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("creating otlp metric exporter: %w", err)
+		return nil, errors.E("observability.new_meter_provider", "creating otlp metric exporter", err)
 	}
 	return sdkmetric.NewMeterProvider(
 		sdkmetric.WithResource(res),

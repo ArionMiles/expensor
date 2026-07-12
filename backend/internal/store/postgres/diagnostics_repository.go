@@ -8,6 +8,7 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 type diagnosticsRepository struct {
@@ -42,7 +43,7 @@ func (r *diagnosticsRepository) RecordExtractionDiagnostic(ctx context.Context, 
 		diagnosticFailureReasons(diagnostic.FailureReasons),
 	)
 	if err != nil {
-		return fmt.Errorf("recording extraction diagnostic: %w", err)
+		return errors.E("postgres.diagnostics.record_extraction_diagnostic", "recording extraction diagnostic", err)
 	}
 	return nil
 }
@@ -100,12 +101,12 @@ func (r *diagnosticsRepository) ListExtractionDiagnostics(
 
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("listing extraction diagnostics: %w", err)
+		return nil, errors.E("postgres.diagnostics.list_extraction_diagnostics", "listing extraction diagnostics", err)
 	}
 	defer rows.Close()
 	result, err := scanDiagnosticRows(rows)
 	if err != nil {
-		return nil, fmt.Errorf("listing extraction diagnostics: %w", err)
+		return nil, errors.E("postgres.diagnostics.list_extraction_diagnostics", "listing extraction diagnostics", err)
 	}
 	return result, nil
 }
@@ -116,12 +117,12 @@ func (r *diagnosticsRepository) GetExtractionDiagnostic(ctx context.Context, ten
 		id, tenantIDParam(tenant),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("fetching extraction diagnostic: %w", err)
+		return nil, errors.E("postgres.diagnostics.get_extraction_diagnostic", "fetching extraction diagnostic", err)
 	}
 	defer rows.Close()
 	result, err := scanDiagnosticRows(rows)
 	if err != nil {
-		return nil, fmt.Errorf("fetching extraction diagnostic: %w", err)
+		return nil, errors.E("postgres.diagnostics.get_extraction_diagnostic", "fetching extraction diagnostic", err)
 	}
 	if len(result) == 0 {
 		return nil, notFound("store.diagnostics.get")
@@ -150,17 +151,29 @@ func (r *diagnosticsRepository) UpdateExtractionDiagnosticStatus(
 	)
 	if err != nil {
 		if isDiagnosticOpenConflict(err) {
-			return nil, conflict("store.diagnostics.update_status", fmt.Errorf("open diagnostic already exists for reader/message/rule: %s", messageDiagnosticConflict))
+			return nil, conflict(
+				"store.diagnostics.update_status",
+				errors.E(
+					errors.Conflict,
+					fmt.Sprintf("open diagnostic already exists for reader/message/rule: %s", messageDiagnosticConflict),
+				),
+			)
 		}
-		return nil, fmt.Errorf("updating extraction diagnostic status: %w", err)
+		return nil, errors.E("postgres.diagnostics.update_extraction_diagnostic_status", "updating extraction diagnostic status", err)
 	}
 	defer rows.Close()
 	result, err := scanDiagnosticRows(rows)
 	if err != nil {
 		if isDiagnosticOpenConflict(err) {
-			return nil, conflict("store.diagnostics.update_status", fmt.Errorf("open diagnostic already exists for reader/message/rule: %s", messageDiagnosticConflict))
+			return nil, conflict(
+				"store.diagnostics.update_status",
+				errors.E(
+					errors.Conflict,
+					fmt.Sprintf("open diagnostic already exists for reader/message/rule: %s", messageDiagnosticConflict),
+				),
+			)
 		}
-		return nil, fmt.Errorf("updating extraction diagnostic status: %w", err)
+		return nil, errors.E("postgres.diagnostics.update_extraction_diagnostic_status", "updating extraction diagnostic status", err)
 	}
 	if len(result) == 0 {
 		return nil, notFound("store.diagnostics.update_status")

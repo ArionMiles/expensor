@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -13,6 +12,8 @@ import (
 	"unicode"
 
 	"github.com/go-playground/validator/v10"
+
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 func newRequestValidator() *validator.Validate {

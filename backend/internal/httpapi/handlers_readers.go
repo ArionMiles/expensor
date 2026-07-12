@@ -127,7 +127,7 @@ func (h *Handlers) newEmailSearcher(ctx context.Context, tenant store.Tenant, na
 	if meta.Auth.Type == plugins.AuthTypeOAuth {
 		secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(ctx, tenant, name)
 		if err != nil {
-			return nil, fmt.Errorf("loading credentials for provider %q: %w", name, err)
+			return nil, errors.E("httpapi.handlers_readers.new_email_searcher", fmt.Sprintf("loading credentials for provider %q", name), err)
 		}
 		if !ok {
 			return nil, errors.E(op, oauth.KindCredentialsMissing, "credentials file missing")
@@ -146,7 +146,7 @@ func (h *Handlers) newEmailSearcher(ctx context.Context, tenant store.Tenant, na
 
 	readerConfig, _, err := h.readerRuntimeStore.GetReaderConfig(ctx, tenant, name)
 	if err != nil {
-		return nil, fmt.Errorf("loading provider config for %q: %w", name, err)
+		return nil, errors.E("httpapi.handlers_readers.new_email_searcher", fmt.Sprintf("loading provider config for %q", name), err)
 	}
 	return provider.NewEmailSearcher(plugins.ProviderInput{
 		HTTPClient:   httpClient,
@@ -380,7 +380,7 @@ func (h *Handlers) exchangeAndSaveToken(ctx context.Context, tenant store.Tenant
 
 	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(ctx, tenant, name)
 	if err != nil {
-		return fmt.Errorf("failed to load credentials: %w", err)
+		return errors.E("httpapi.handlers_readers.exchange_and_save_token", "failed to load credentials", err)
 	}
 	if !ok {
 		return errors.E(op, oauth.KindCredentialsMissing, "credentials file missing")
@@ -388,20 +388,20 @@ func (h *Handlers) exchangeAndSaveToken(ctx context.Context, tenant store.Tenant
 
 	oauthCfg, err := oauth.GetOAuthConfig(secretJSON, redirectURL, provider.Metadata.Auth.RequiredScopes...)
 	if err != nil {
-		return fmt.Errorf("failed to parse credentials: %w", err)
+		return errors.E("httpapi.handlers_readers.exchange_and_save_token", "failed to parse credentials", err)
 	}
 
 	tok, err := oauthCfg.Exchange(ctx, code)
 	if err != nil {
-		return fmt.Errorf("token exchange failed: %w", err)
+		return errors.E("httpapi.handlers_readers.exchange_and_save_token", "token exchange failed", err)
 	}
 
 	tokenJSON, err := json.Marshal(tok) //nolint:gosec // OAuth tokens are intentionally serialized into the runtime store.
 	if err != nil {
-		return fmt.Errorf("failed to marshal token: %w", err)
+		return errors.E("httpapi.handlers_readers.exchange_and_save_token", "failed to marshal token", err)
 	}
 	if err := h.readerRuntimeStore.SetReaderToken(ctx, tenant, name, tokenJSON); err != nil {
-		return fmt.Errorf("failed to save token: %w", err)
+		return errors.E("httpapi.handlers_readers.exchange_and_save_token", "failed to save token", err)
 	}
 	h.queueReaderScanning(ctx, tenant, name)
 	h.restartReaderDaemonAfterAuth(tenant, name)
@@ -632,14 +632,18 @@ func (h *Handlers) resolveOAuthTokenState(ctx context.Context, tenant store.Tena
 
 	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(ctx, tenant, name)
 	if err != nil {
-		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, fmt.Errorf("loading credentials for token refresh: %w", err)
+		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, errors.E(
+			"httpapi.handlers_readers.resolve_o_auth_token_state", "loading credentials for token refresh", err,
+		)
 	}
 	if !ok {
 		return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, nil
 	}
 	oauthCfg, err := oauth.GetOAuthConfig(secretJSON, h.baseURL+"/api/auth/callback", scopes...)
 	if err != nil {
-		return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, fmt.Errorf("parsing credentials for token refresh: %w", err)
+		return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, errors.E(
+			"httpapi.handlers_readers.resolve_o_auth_token_state", "parsing credentials for token refresh", err,
+		)
 	}
 	refreshed, err := oauthCfg.TokenSource(ctx, &tok).Token()
 	if err != nil {
@@ -651,10 +655,14 @@ func (h *Handlers) resolveOAuthTokenState(ctx context.Context, tenant store.Tena
 	}
 	refreshedJSON, err := json.Marshal(refreshed) //nolint:gosec // OAuth tokens are intentionally serialized into the runtime store.
 	if err != nil {
-		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, fmt.Errorf("marshaling refreshed token: %w", err)
+		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, errors.E(
+			"httpapi.handlers_readers.resolve_o_auth_token_state", "marshaling refreshed token", err,
+		)
 	}
 	if err := h.readerRuntimeStore.SetReaderToken(ctx, tenant, name, refreshedJSON); err != nil {
-		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, fmt.Errorf("saving refreshed token: %w", err)
+		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, errors.E(
+			"httpapi.handlers_readers.resolve_o_auth_token_state", "saving refreshed token", err,
+		)
 	}
 	return oauthTokenState{authenticated: true, authState: authStateConnected, expiry: tokenExpiry(*refreshed)}, nil
 }
@@ -1023,7 +1031,7 @@ func (h *Handlers) GetProviderGuide(w http.ResponseWriter, r *http.Request) {
 func generateState(readerName string) (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("generating OAuth state: %w", err)
+		return "", errors.E("httpapi.handlers_readers.generate_state", "generating OAuth state", err)
 	}
 	return fmt.Sprintf("reader:%s:%s", readerName, hex.EncodeToString(b)), nil
 }

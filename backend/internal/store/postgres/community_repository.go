@@ -9,6 +9,7 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 type communityRepository struct {
@@ -54,7 +55,7 @@ func (r *communityRepository) GetBucketMappings(ctx context.Context, tenant stor
 func (r *communityRepository) CategorizeMerchant(ctx context.Context, tenant store.Tenant, merchant, category, bucket string) (int64, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("beginning categorize-merchant transaction: %w", err)
+		return 0, errors.E("postgres.community.categorize_merchant", "beginning categorize-merchant transaction", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -65,7 +66,7 @@ func (r *communityRepository) CategorizeMerchant(ctx context.Context, tenant sto
 		merchant, category, bucket, tenantIDParam(tenant),
 	)
 	if err != nil {
-		return 0, fmt.Errorf("updating transactions for merchant %q: %w", merchant, err)
+		return 0, errors.E("postgres.community.categorize_merchant", fmt.Sprintf("updating transactions for merchant %q", merchant), err)
 	}
 	rowsUpdated := tag.RowsAffected()
 
@@ -80,11 +81,11 @@ func (r *communityRepository) CategorizeMerchant(ctx context.Context, tenant sto
 		tenantIDParam(tenant), merchant, category, bucket,
 	)
 	if err != nil {
-		return 0, fmt.Errorf("upserting merchant category for %q: %w", merchant, err)
+		return 0, errors.E("postgres.community.categorize_merchant", fmt.Sprintf("upserting merchant category for %q", merchant), err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("committing categorize-merchant transaction: %w", err)
+		return 0, errors.E("postgres.community.categorize_merchant", "committing categorize-merchant transaction", err)
 	}
 	return rowsUpdated, nil
 }
@@ -105,7 +106,7 @@ func (r *communityRepository) applyTaxonomyByMerchant(
 ) (int64, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("beginning taxonomy merchant transaction: %w", err)
+		return 0, errors.E("postgres.community.apply_taxonomy_by_merchant", "beginning taxonomy merchant transaction", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -114,7 +115,7 @@ func (r *communityRepository) applyTaxonomyByMerchant(
 		merchant, value, tenantIDParam(tenant),
 	)
 	if err != nil {
-		return 0, fmt.Errorf("updating transactions for merchant %q: %w", merchant, err)
+		return 0, errors.E("postgres.community.apply_taxonomy_by_merchant", fmt.Sprintf("updating transactions for merchant %q", merchant), err)
 	}
 	rowsUpdated := tag.RowsAffected()
 
@@ -128,11 +129,11 @@ func (r *communityRepository) applyTaxonomyByMerchant(
 		tenantIDParam(tenant), merchant, value,
 	)
 	if err != nil {
-		return 0, fmt.Errorf("upserting merchant taxonomy for %q: %w", merchant, err)
+		return 0, errors.E("postgres.community.apply_taxonomy_by_merchant", fmt.Sprintf("upserting merchant taxonomy for %q", merchant), err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("committing taxonomy merchant transaction: %w", err)
+		return 0, errors.E("postgres.community.apply_taxonomy_by_merchant", "committing taxonomy merchant transaction", err)
 	}
 	return rowsUpdated, nil
 }
@@ -150,7 +151,7 @@ func (r *communityRepository) removeTaxonomyByMerchant(
 		merchant, value, tenantIDParam(tenant),
 	)
 	if err != nil {
-		return 0, fmt.Errorf("removing merchant taxonomy for %q: %w", merchant, err)
+		return 0, errors.E("postgres.community.remove_taxonomy_by_merchant", fmt.Sprintf("removing merchant taxonomy for %q", merchant), err)
 	}
 	rowsUpdated := tag.RowsAffected()
 	_, err = r.pool.Exec(ctx,
@@ -159,7 +160,7 @@ func (r *communityRepository) removeTaxonomyByMerchant(
 		merchant, tenantIDParam(tenant),
 	)
 	if err != nil {
-		return 0, fmt.Errorf("pruning empty merchant taxonomy for %q: %w", merchant, err)
+		return 0, errors.E("postgres.community.remove_taxonomy_by_merchant", fmt.Sprintf("pruning empty merchant taxonomy for %q", merchant), err)
 	}
 	return rowsUpdated, nil
 }
@@ -173,14 +174,14 @@ func (r *communityRepository) getTaxonomyMappings(ctx context.Context, tenant st
 		column,
 	), tenantIDParam(tenant))
 	if err != nil {
-		return nil, fmt.Errorf("listing merchant taxonomy mappings: %w", err)
+		return nil, errors.E("postgres.community.get_taxonomy_mappings", "listing merchant taxonomy mappings", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var name string
 		var merchant string
 		if err := rows.Scan(&name, &merchant); err != nil {
-			return nil, fmt.Errorf("scanning merchant taxonomy mapping: %w", err)
+			return nil, errors.E("postgres.community.get_taxonomy_mappings", "scanning merchant taxonomy mapping", err)
 		}
 		mappings[name] = append(mappings[name], merchant)
 	}
@@ -199,7 +200,7 @@ func (r *communityRepository) SeedMCCCodes(ctx context.Context, entries []store.
 				updated_at  = NOW()
 		`, entry.Code, entry.Description, entry.Category, entry.Bucket)
 		if err != nil {
-			return fmt.Errorf("upserting mcc code %s: %w", entry.Code, err)
+			return errors.E("postgres.community.seed_mcc_codes", fmt.Sprintf("upserting mcc code %s", entry.Code), err)
 		}
 	}
 	return nil
@@ -219,7 +220,7 @@ func (r *communityRepository) SeedMerchantCategories(ctx context.Context, entrie
 			WHERE merchant_categories.user_locked = false
 		`, entry.Fragment, entry.MCC, entry.Category, entry.Bucket)
 		if err != nil {
-			return 0, fmt.Errorf("upserting merchant category %s: %w", entry.Fragment, err)
+			return 0, errors.E("postgres.community.seed_merchant_categories", fmt.Sprintf("upserting merchant category %s", entry.Fragment), err)
 		}
 		updated += tag.RowsAffected()
 	}
@@ -248,7 +249,7 @@ func (r *communityRepository) loadCategorySnapshotEntries(ctx context.Context) (
 		  )
 	`)
 	if err != nil {
-		return nil, fmt.Errorf("loading category snapshot: %w", err)
+		return nil, errors.E("postgres.community.load_category_snapshot_entries", "loading category snapshot", err)
 	}
 	defer rows.Close()
 
@@ -256,12 +257,12 @@ func (r *communityRepository) loadCategorySnapshotEntries(ctx context.Context) (
 	for rows.Next() {
 		var entry categorySnapshotEntry
 		if err := rows.Scan(&entry.fragment, &entry.category, &entry.bucket); err != nil {
-			return nil, fmt.Errorf("scanning category row: %w", err)
+			return nil, errors.E("postgres.community.load_category_snapshot_entries", "scanning category row", err)
 		}
 		entries = append(entries, entry)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating category rows: %w", err)
+		return nil, errors.E("postgres.community.load_category_snapshot_entries", "iterating category rows", err)
 	}
 	return entries, nil
 }
@@ -289,7 +290,7 @@ func (r *communityRepository) SeedMCCCategories(ctx context.Context, names []str
 			ON CONFLICT (name) WHERE tenant_id IS NULL DO NOTHING
 		`, name)
 		if err != nil {
-			return fmt.Errorf("seeding category %s: %w", name, err)
+			return errors.E("postgres.community.seed_mcc_categories", fmt.Sprintf("seeding category %s", name), err)
 		}
 	}
 	return nil

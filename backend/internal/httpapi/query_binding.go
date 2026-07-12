@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"errors"
 	"net/http"
 	"reflect"
 	"sort"
@@ -10,6 +9,8 @@ import (
 	"time"
 
 	"github.com/go-playground/form/v4"
+
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 //nolint:gochecknoglobals // immutable query metadata is shared across handler instances.

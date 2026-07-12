@@ -3,7 +3,6 @@ package thunderbird
 import (
 	"bytes"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -14,6 +13,8 @@ import (
 
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/encoding/unicode"
+
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 const defaultCharset = "utf-8"
@@ -26,14 +27,14 @@ func ExtractBody(msg *mail.Message) (string, error) {
 		// No content type, try to read as plain text
 		body, err := io.ReadAll(msg.Body)
 		if err != nil {
-			return "", fmt.Errorf("reading body: %w", err)
+			return "", errors.E("thunderbird.mime.extract_body", "reading body", err)
 		}
 		return string(body), nil
 	}
 
 	mediaType, params, err := mime.ParseMediaType(contentType)
 	if err != nil {
-		return "", fmt.Errorf("parsing content type: %w", err)
+		return "", errors.E("thunderbird.mime.extract_body", "parsing content type", err)
 	}
 
 	// Handle single-part messages
@@ -44,7 +45,7 @@ func ExtractBody(msg *mail.Message) (string, error) {
 	// Handle multipart messages
 	boundary, ok := params["boundary"]
 	if !ok {
-		return "", fmt.Errorf("multipart message missing boundary")
+		return "", errors.E(errors.InvalidInput, "multipart message missing boundary")
 	}
 
 	return extractMultipart(msg.Body, boundary, mediaType)
@@ -61,7 +62,7 @@ func extractSinglePart(body io.Reader, mediaType string, params map[string]strin
 	// Read body
 	data, err := io.ReadAll(body)
 	if err != nil {
-		return "", fmt.Errorf("reading body: %w", err)
+		return "", errors.E("thunderbird.mime.extract_single_part", "reading body", err)
 	}
 
 	// Decode based on content transfer encoding
@@ -89,7 +90,7 @@ func extractMultipart(body io.Reader, boundary, mediaType string) (string, error
 			break
 		}
 		if err != nil {
-			return "", fmt.Errorf("reading part: %w", err)
+			return "", errors.E("thunderbird.mime.extract_multipart", "reading part", err)
 		}
 		processPart(part, mediaType, &htmlParts, &textParts)
 	}
@@ -164,7 +165,7 @@ func extractPartBody(part *multipart.Part, mediaType string, params map[string]s
 	// Read content
 	data, err := io.ReadAll(reader)
 	if err != nil {
-		return "", fmt.Errorf("reading part: %w", err)
+		return "", errors.E("thunderbird.mime.extract_part_body", "reading part", err)
 	}
 
 	// Decode charset; fall back to raw content if decoding fails.
@@ -219,7 +220,7 @@ func decodeCharset(data []byte, charset string) (string, error) {
 		return string(decoded), nil
 	default:
 		// Unknown charset, return as-is
-		return string(data), fmt.Errorf("unsupported charset: %s", charset)
+		return string(data), errors.E(errors.InvalidInput, fmt.Sprintf("unsupported charset: %s", charset))
 	}
 }
 

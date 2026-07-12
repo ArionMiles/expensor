@@ -4,7 +4,6 @@ package daemon
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -150,8 +149,8 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 	g.Go(func() error { return reader.Read(gctx, transactions, ackChan) })
 
 	if err := g.Wait(); err != nil &&
-		!errors.Is(err, context.Canceled) &&
-		!errors.Is(err, context.DeadlineExceeded) {
+		!apperrors.Is(err, context.Canceled) &&
+		!apperrors.Is(err, context.DeadlineExceeded) {
 		runErr = err
 		r.logger.Error("daemon error", "error", err)
 	}

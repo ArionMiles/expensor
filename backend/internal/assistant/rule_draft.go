@@ -259,7 +259,7 @@ func ruleDraftContextJSON(input RuleDraftInput, repairNote string) (string, erro
 	}
 	body, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
-		return "", fmt.Errorf("encoding rule draft prompt context: %w", err)
+		return "", errors.E("assistant.rule_draft.rule_draft_context_json", "encoding rule draft prompt context", err)
 	}
 	return string(body), nil
 }
