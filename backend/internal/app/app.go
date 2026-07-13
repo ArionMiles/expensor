@@ -99,9 +99,17 @@ func newApp(ctx context.Context, opts Options, openStore func(context.Context, S
 	schedulerScope := observability.NewScope(logger.With("component", "scheduler"),
 		"github.com/ArionMiles/expensor/backend/internal/daemon/scheduler")
 	scheduledScans := scheduler.NewScanRunner(scanService)
-	sched := scheduler.New(scheduler.Config{
-		Store: st, Runner: scheduler.NewInstrumentedRunner(scheduledScans, schedulerScope), Logger: logger.With("component", "scheduler"),
+	sched, err := scheduler.New(scheduler.Config{
+		Store:          st,
+		Runner:         scheduler.NewInstrumentedRunner(scheduledScans, schedulerScope),
+		PollInterval:   opts.Config.Scheduler.PollInterval,
+		BaseRetryDelay: opts.Config.Scheduler.BaseRetryDelay,
+		MaxRetryDelay:  opts.Config.Scheduler.MaxRetryDelay,
+		Logger:         logger.With("component", "scheduler"),
 	})
+	if err != nil {
+		return nil, errors.E("app.new", "constructing scan scheduler", err)
+	}
 	communityService, err := community.New(ctx, community.Dependencies{
 		Config: opts.Config.Community, Store: st, Runtime: st, Resolver: controller, Logger: logger,
 	})

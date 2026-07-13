@@ -12,12 +12,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
-const (
-	defaultPollInterval = 10 * time.Second
-	baseRetryDelay      = time.Minute
-	maxRetryDelay       = time.Hour
-)
-
 // StateStore is the scheduler persistence surface.
 type StateStore interface {
 	ListUsers(ctx context.Context) ([]store.User, error)
@@ -45,11 +39,13 @@ func (realClock) Now() time.Time {
 
 // Scheduler starts fair, bounded tenant scan runs.
 type Scheduler struct {
-	store        StateStore
-	runner       Runner
-	clock        Clock
-	pollInterval time.Duration
-	logger       *slog.Logger
+	store          StateStore
+	runner         Runner
+	clock          Clock
+	pollInterval   time.Duration
+	baseRetryDelay time.Duration
+	maxRetryDelay  time.Duration
+	logger         *slog.Logger
 
 	mu      sync.Mutex
 	running map[string]context.CancelFunc
@@ -58,34 +54,46 @@ type Scheduler struct {
 
 // Config contains Scheduler dependencies.
 type Config struct {
-	Store        StateStore
-	Runner       Runner
-	Clock        Clock
-	PollInterval time.Duration
-	Logger       *slog.Logger
+	Store          StateStore
+	Runner         Runner
+	Clock          Clock
+	PollInterval   time.Duration
+	BaseRetryDelay time.Duration
+	MaxRetryDelay  time.Duration
+	Logger         *slog.Logger
 }
 
-func New(cfg Config) *Scheduler {
+func New(cfg Config) (*Scheduler, error) {
+	if cfg.PollInterval <= 0 {
+		return nil, errors.E(errors.InvalidInput, "scheduler poll interval must be positive")
+	}
+	if cfg.BaseRetryDelay <= 0 {
+		return nil, errors.E(errors.InvalidInput, "scheduler base retry delay must be positive")
+	}
+	if cfg.MaxRetryDelay <= 0 {
+		return nil, errors.E(errors.InvalidInput, "scheduler maximum retry delay must be positive")
+	}
+	if cfg.BaseRetryDelay > cfg.MaxRetryDelay {
+		return nil, errors.E(errors.InvalidInput, "scheduler base retry delay must not exceed maximum retry delay")
+	}
 	clock := cfg.Clock
 	if clock == nil {
 		clock = realClock{}
-	}
-	pollInterval := cfg.PollInterval
-	if pollInterval <= 0 {
-		pollInterval = defaultPollInterval
 	}
 	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &Scheduler{
-		store:        cfg.Store,
-		runner:       cfg.Runner,
-		clock:        clock,
-		pollInterval: pollInterval,
-		logger:       logger,
-		running:      make(map[string]context.CancelFunc),
-	}
+		store:          cfg.Store,
+		runner:         cfg.Runner,
+		clock:          clock,
+		pollInterval:   cfg.PollInterval,
+		baseRetryDelay: cfg.BaseRetryDelay,
+		maxRetryDelay:  cfg.MaxRetryDelay,
+		logger:         logger,
+		running:        make(map[string]context.CancelFunc),
+	}, nil
 }
 
 // Start runs the scheduler loop until ctx is canceled.
@@ -245,7 +253,7 @@ func (s *Scheduler) runTenant(ctx context.Context, state store.TenantScanningSta
 		return
 	}
 
-	update := failureStateUpdate(err, state.RetryCount, finishedAt)
+	update := s.failureStateUpdate(err, state.RetryCount, finishedAt)
 	if updateErr := s.store.UpdateScanningState(contextWithoutCancel(ctx), tenant, update); updateErr != nil {
 		s.logger.Error("failed to mark scan failed", "error", updateErr)
 	}
@@ -257,7 +265,7 @@ func (s *Scheduler) clearRunning(tenantID string) {
 	delete(s.running, tenantID)
 }
 
-func failureStateUpdate(err error, currentRetry int, now time.Time) store.ScanningStateUpdate {
+func (s *Scheduler) failureStateUpdate(err error, currentRetry int, now time.Time) store.ScanningStateUpdate {
 	message := errors.UserMsg(err)
 	switch kind := errors.WhatKind(err); {
 	case kind == oauth.KindCredentialsMissing:
@@ -294,7 +302,7 @@ func failureStateUpdate(err error, currentRetry int, now time.Time) store.Scanni
 		}
 	}
 	nextRetryCount := currentRetry + 1
-	nextRetry := now.Add(retryDelay(nextRetryCount))
+	nextRetry := now.Add(s.retryDelay(nextRetryCount))
 	return store.ScanningStateUpdate{
 		State:         store.ScanningStateBackingOff,
 		ReasonCode:    store.ScanningReasonTemporaryFailure,
@@ -312,16 +320,19 @@ func safeMessage(message, fallback string) string {
 	return fallback
 }
 
-func retryDelay(retryCount int) time.Duration {
+func (s *Scheduler) retryDelay(retryCount int) time.Duration {
 	if retryCount < 1 {
 		retryCount = 1
 	}
-	delay := baseRetryDelay
-	for i := 1; i < retryCount && delay < maxRetryDelay; i++ {
+	delay := s.baseRetryDelay
+	for i := 1; i < retryCount && delay < s.maxRetryDelay; i++ {
+		if delay >= s.maxRetryDelay/2 {
+			return s.maxRetryDelay
+		}
 		delay *= 2
 	}
-	if delay > maxRetryDelay {
-		return maxRetryDelay
+	if delay > s.maxRetryDelay {
+		return s.maxRetryDelay
 	}
 	return delay
 }
