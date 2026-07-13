@@ -1,0 +1,39 @@
+port = 8080
+base_url = "http://localhost:8080"
+frontend_url = "http://localhost:5173"
+
+[database]
+backend = "postgres"
+batch_size = 10
+flush_interval = 30
+
+[database.postgres]
+host = "localhost"
+port = 5432
+database = "expensor"
+user = "expensor"
+password = "expensor_password"
+sslmode = "disable"
+
+[database.sqlite]
+path = "../tests/expensor.dev.db"
+busy_timeout = "5s"
+
+[community]
+sync_interval = "24h"
+sync_timeout = "2m"
+
+[persisted]
+read_timeout = "3s"
+
+[security]
+session_ttl = "168h"
+setup_token_ttl = "24h"
+
+[observability]
+enabled = true
+exporter = "otlp"
+otlp_endpoint = "localhost:4317"
+otlp_insecure = true
+log_level = "INFO"
+log_json = false

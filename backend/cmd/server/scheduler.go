@@ -22,15 +22,15 @@ import (
 )
 
 type scheduledScanRunner struct {
-	registry     *plugins.Registry
-	cfg          config.App
-	systemRules  []api.Rule
-	resolver     api.CategoryResolver
-	st           daemonStore
-	runtimeStore daemonRuntimeStore
-	diagnostics  api.DiagnosticSink
-	sinkFactory  daemon.TransactionSinkFactory
-	logger       *slog.Logger
+	registry          *plugins.Registry
+	cfg               config.App
+	systemRules       []api.Rule
+	resolver          api.CategoryResolver
+	st                daemonStore
+	runtimeStore      daemonRuntimeStore
+	diagnostics       api.DiagnosticSink
+	transactionWriter store.TransactionBatchWriter
+	logger            *slog.Logger
 }
 
 func (r *scheduledScanRunner) Run(ctx context.Context, tenant store.Tenant, readerName string) error {
@@ -57,7 +57,7 @@ func (r *scheduledScanRunner) Run(ctx context.Context, tenant store.Tenant, read
 		}
 	}
 
-	runner := daemon.New(r.registry, r.sinkFactory, httpClient, r.logger)
+	runner := daemon.New(r.registry, r.transactionWriter, httpClient, r.logger)
 	err = runner.Run(ctx, daemon.RunConfig{
 		ReaderName:     readerName,
 		Tenant:         tenant,

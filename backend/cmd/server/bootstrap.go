@@ -1,75 +1,15 @@
 package main
 
 import (
-	"context"
 	"embed"
 	"fmt"
 	"log/slog"
-	"time"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ArionMiles/expensor/backend/internal/plugins"
-	"github.com/ArionMiles/expensor/backend/internal/store"
-	"github.com/ArionMiles/expensor/backend/migrations"
-	"github.com/ArionMiles/expensor/backend/pkg/api"
-	"github.com/ArionMiles/expensor/backend/pkg/config"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 	"github.com/ArionMiles/expensor/backend/pkg/reader/gmail"
 	"github.com/ArionMiles/expensor/backend/pkg/reader/thunderbird"
 )
-
-// runMigrations applies migrations through a short-lived startup pool.
-func runMigrations(pgCfg config.Postgres, logger *slog.Logger) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	connStr := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s pool_max_conns=1",
-		pgCfg.Host, pgCfg.Port, pgCfg.User, pgCfg.Password, pgCfg.Database, pgCfg.SSLMode,
-	)
-	poolCfg, err := store.ParsePoolConfig(connStr)
-	if err != nil {
-		return fmt.Errorf("parsing migration connection string: %w", err)
-	}
-	poolCfg.MaxConns = 1
-
-	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
-	if err != nil {
-		return fmt.Errorf("creating migration pool: %w", err)
-	}
-	defer pool.Close()
-
-	return migrations.Run(ctx, pool, logger)
-}
-
-// waitForPostgres retries connectivity until the configured startup deadline.
-func waitForPostgres(pgCfg config.Postgres, logger *slog.Logger) error {
-	connStr := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s pool_max_conns=1",
-		pgCfg.Host, pgCfg.Port, pgCfg.User, pgCfg.Password, pgCfg.Database, pgCfg.SSLMode,
-	)
-	deadline := time.Now().Add(pgCfg.ConnectTimeout)
-	for attempt := 1; ; attempt++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		pool, err := pgxpool.New(ctx, connStr)
-		cancel()
-		if err == nil {
-			pingCtx, pingCancel := context.WithTimeout(context.Background(), 3*time.Second)
-			err = pool.Ping(pingCtx)
-			pingCancel()
-			pool.Close()
-			if err == nil {
-				logger.Info("postgres is ready", "host", pgCfg.Host, "port", pgCfg.Port)
-				return nil
-			}
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("postgres not ready after %s: %w", pgCfg.ConnectTimeout, err)
-		}
-		logger.Info("waiting for postgres", "attempt", attempt, "error", err)
-		time.Sleep(pgCfg.RetryInterval)
-	}
-}
 
 // registerPlugins assembles the application's concrete provider catalog.
 func registerPlugins(registry *plugins.Registry, fs embed.FS, logger *slog.Logger) error {
@@ -88,35 +28,8 @@ func registerPlugins(registry *plugins.Registry, fs embed.FS, logger *slog.Logge
 
 	for _, provider := range []plugins.Provider{gmail.Provider(gmailGuide), thunderbird.Provider(thunderbirdGuide)} {
 		if err := registry.RegisterProvider(provider); err != nil {
-			return fmt.Errorf("registering provider %s: %w", provider.Metadata.Name, err)
+			return errors.E("server.register_plugins", errors.Internal, fmt.Sprintf("registering provider %s", provider.Metadata.Name), err)
 		}
 	}
 	return nil
-}
-
-// seedStartupData persists bundled content and builds the category resolver.
-func seedStartupData(ctx context.Context, pgStore *store.Store, content embeddedContent, logger *slog.Logger) (api.CategoryResolver, error) {
-	systemRuleRows := buildSystemRuleRows(content.rawRules)
-	if err := pgStore.SeedPredefinedRules(ctx, systemRuleRows); err != nil {
-		return nil, fmt.Errorf("seeding predefined rules: %w", err)
-	}
-	logger.Info("predefined rules seeded", "count", len(systemRuleRows))
-
-	if err := pgStore.SeedMCCCodes(ctx, content.mccEntries); err != nil {
-		return nil, fmt.Errorf("seeding MCC codes: %w", err)
-	}
-	if _, err := pgStore.SeedMerchantCategories(ctx, content.catEntries); err != nil {
-		return nil, fmt.Errorf("seeding merchant categories: %w", err)
-	}
-	mccCategoryNames := uniqueCategoryNames(content.mccEntries)
-	if err := pgStore.SeedMCCCategories(ctx, mccCategoryNames); err != nil {
-		return nil, fmt.Errorf("seeding MCC category names: %w", err)
-	}
-
-	resolver, err := pgStore.LoadCategorySnapshot(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("loading category snapshot: %w", err)
-	}
-	logger.Info("category resolver loaded")
-	return resolver, nil
 }

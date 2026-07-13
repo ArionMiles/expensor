@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
+	apperrors "github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 type communitySyncStore interface {
@@ -24,15 +24,20 @@ type communitySyncStore interface {
 type communitySyncDependencies struct {
 	config      config.Community
 	store       communitySyncStore
-	pgStore     *store.Store
+	runtime     communityRuntimeStore
 	coordinator *daemonCoordinator
 	logger      *slog.Logger
 }
 
+type communityRuntimeStore interface {
+	GetCommunityURL(ctx context.Context) (string, error)
+	SetCommunityURL(ctx context.Context, url string) error
+}
+
 // startCommunitySync starts initial and periodic syncs and returns a manual trigger.
 func startCommunitySync(ctx context.Context, deps communitySyncDependencies) func() {
-	if existing, err := deps.pgStore.GetCommunityURL(ctx); err != nil || existing == "" {
-		if setErr := deps.pgStore.SetCommunityURL(ctx, deps.config.URL); setErr != nil {
+	if existing, err := deps.runtime.GetCommunityURL(ctx); err != nil || existing == "" {
+		if setErr := deps.runtime.SetCommunityURL(ctx, deps.config.URL); setErr != nil {
 			deps.logger.Warn("failed to seed default community URL", "error", setErr)
 		}
 	}
@@ -106,15 +111,15 @@ func syncCommunityContent(ctx context.Context, st communitySyncStore, baseURL st
 		url := strings.TrimRight(baseURL, "/") + "/" + path
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
-			return fmt.Errorf("building request: %w", err)
+			return apperrors.E("server.community_sync.fetch", apperrors.InvalidArgument, "building request", err)
 		}
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			return fmt.Errorf("fetching %s: %w", path, err)
+			return apperrors.E("server.community_sync.fetch", apperrors.Unavailable, "fetching community content", err)
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("unexpected status %d fetching %s", resp.StatusCode, path)
+			return apperrors.E("server.community_sync.fetch", apperrors.BadGateway, "unexpected community content status")
 		}
 		return json.NewDecoder(resp.Body).Decode(dest)
 	}

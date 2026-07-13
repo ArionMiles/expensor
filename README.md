@@ -157,6 +157,7 @@ Most setup happens in the web UI. Environment variables are only needed for depl
 |----------|-----|
 | `BASE_URL` | Public URL used for OAuth redirects. Set this if Expensor is not reached at `http://localhost:8080`. |
 | `FRONTEND_URL` | Post-auth redirect target. Usually leave unset unless running the Vite dev server separately. |
+| `EXPENSOR_DB_BACKEND` | Database backend. Set to `postgres` for PostgreSQL deployments. |
 | `POSTGRES_HOST` | PostgreSQL host. Required outside the bundled Compose setup. |
 | `POSTGRES_DB` | PostgreSQL database name. |
 | `POSTGRES_USER` | PostgreSQL user. |

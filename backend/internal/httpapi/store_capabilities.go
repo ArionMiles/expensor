@@ -3,32 +3,12 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
 type authStore interface {
-	BootstrapRequired(ctx context.Context) (bool, error)
-	CreateBootstrapAdmin(ctx context.Context, input store.CreateBootstrapAdminInput) (*store.User, error)
-	CreateUser(ctx context.Context, input store.CreateUserInput) (*store.User, error)
-	ListUsers(ctx context.Context) ([]store.User, error)
-	UpdateUser(ctx context.Context, id string, input store.UpdateUserInput) (*store.User, error)
-	UpdateUserPassword(ctx context.Context, id string, input store.UpdateUserPasswordInput) error
-	DeleteUser(ctx context.Context, id string) error
-	FindUserByEmail(ctx context.Context, email string) (*store.User, error)
-	FindUserByID(ctx context.Context, id string) (*store.User, error)
-	CreateSession(ctx context.Context, input store.CreateSessionInput) (*store.Session, error)
-	FindSessionByHash(ctx context.Context, tokenHash string) (*store.Session, error)
-	RevokeSession(ctx context.Context, id string) error
-	CreateAccessToken(ctx context.Context, input store.CreateAccessTokenInput) (*store.AccessToken, error)
-	ListAccessTokens(ctx context.Context, userID string) ([]store.AccessToken, error)
-	FindAccessTokenByHash(ctx context.Context, tokenHash string) (*store.AccessToken, error)
-	RevokeAccessToken(ctx context.Context, id, userID string) error
-	CreateAccountSetupToken(ctx context.Context, input store.CreateAccountSetupTokenInput) (*store.AccountSetupToken, error)
-	FindAccountSetupTokenByHash(ctx context.Context, tokenHash string) (*store.AccountSetupToken, error)
-	MarkAccountSetupTokenUsed(ctx context.Context, id string) error
-	CompleteAccountSetup(ctx context.Context, input store.CompleteAccountSetupInput) (*store.User, error)
+	store.AuthStore
 }
 
 type settingsStore interface {
@@ -49,12 +29,7 @@ type scanningStore interface {
 }
 
 type analyticsStore interface {
-	GetStats(ctx context.Context, tenant store.Tenant, baseCurrency string) (*store.Stats, error)
-	GetChartData(ctx context.Context, tenant store.Tenant) (*store.ChartData, error)
-	GetDashboardData(ctx context.Context, tenant store.Tenant) (*store.DashboardData, error)
-	GetSpendingHeatmap(ctx context.Context, tenant store.Tenant, from, to *time.Time) (*store.HeatmapData, error)
-	GetAnnualSpend(ctx context.Context, tenant store.Tenant, year int) ([]store.DailyBucket, error)
-	GetMonthlyBreakdownSpend(ctx context.Context, tenant store.Tenant, dimension string, months int) (*store.MonthlyBreakdownData, error)
+	store.AnalyticsStore
 }
 
 type transactionStore interface {
@@ -79,25 +54,7 @@ type muteStore interface {
 }
 
 type taxonomyStore interface {
-	ListLabels(ctx context.Context, tenant store.Tenant) ([]store.Label, error)
-	CreateLabel(ctx context.Context, tenant store.Tenant, name, color string) error
-	UpdateLabel(ctx context.Context, tenant store.Tenant, name, color string) error
-	DeleteLabel(ctx context.Context, tenant store.Tenant, name string, removeFromTransactions bool) error
-	ApplyLabelByMerchant(ctx context.Context, tenant store.Tenant, label, pattern string) (int64, error)
-	RemoveLabelByMerchant(ctx context.Context, tenant store.Tenant, label, pattern string) (int64, error)
-	GetLabelMappings(ctx context.Context, tenant store.Tenant) (map[string][]string, error)
-	ListCategories(ctx context.Context, tenant store.Tenant) ([]store.Category, error)
-	CreateCategory(ctx context.Context, tenant store.Tenant, name, description string) error
-	DeleteCategory(ctx context.Context, tenant store.Tenant, name string, removeFromTransactions bool) error
-	ApplyCategoryByMerchant(ctx context.Context, tenant store.Tenant, category, pattern string) (int64, error)
-	RemoveCategoryByMerchant(ctx context.Context, tenant store.Tenant, category, pattern string) (int64, error)
-	GetCategoryMappings(ctx context.Context, tenant store.Tenant) (map[string][]string, error)
-	ListBuckets(ctx context.Context, tenant store.Tenant) ([]store.Bucket, error)
-	CreateBucket(ctx context.Context, tenant store.Tenant, name, description string) error
-	DeleteBucket(ctx context.Context, tenant store.Tenant, name string, removeFromTransactions bool) error
-	ApplyBucketByMerchant(ctx context.Context, tenant store.Tenant, bucket, pattern string) (int64, error)
-	RemoveBucketByMerchant(ctx context.Context, tenant store.Tenant, bucket, pattern string) (int64, error)
-	GetBucketMappings(ctx context.Context, tenant store.Tenant) (map[string][]string, error)
+	store.TaxonomyStore
 }
 
 type readerRuntimeStore interface {
