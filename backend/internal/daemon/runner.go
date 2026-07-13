@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -148,7 +147,7 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 	ingestionCfg := store.IngestionConfig{Tenant: runCfg.Tenant}
 	if cfg != nil {
 		ingestionCfg.BatchSize = cfg.Database.BatchSize
-		ingestionCfg.FlushInterval = time.Duration(cfg.Database.FlushInterval) * time.Second
+		ingestionCfg.FlushInterval = cfg.Database.FlushInterval
 	}
 	sink, err := newTransactionSink(r.transactionWriter, ingestionCfg, r.logger.With("component", "transaction_ingestion"))
 	if err != nil {

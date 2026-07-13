@@ -25,11 +25,11 @@ func newTransactionSink(writer store.TransactionBatchWriter, cfg store.Ingestion
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if cfg.BatchSize == 0 {
-		cfg.BatchSize = 10
+	if cfg.BatchSize <= 0 {
+		return nil, errors.E("daemon.transaction_sink.new", errors.InvalidInput, "transaction batch size must be positive")
 	}
-	if cfg.FlushInterval == 0 {
-		cfg.FlushInterval = 30 * time.Second
+	if cfg.FlushInterval <= 0 {
+		return nil, errors.E("daemon.transaction_sink.new", errors.InvalidInput, "transaction flush interval must be positive")
 	}
 	return &transactionSink{
 		writer:        writer,

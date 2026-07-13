@@ -134,8 +134,8 @@ func (c *Thunderbird) GetMailboxes() []string {
 
 type Database struct {
 	Backend       DatabaseBackend `toml:"backend" env:"EXPENSOR_DB_BACKEND" validate:"omitempty,oneof=sqlite postgres"`
-	BatchSize     int             `toml:"batch_size" env:"EXPENSOR_DB_BATCH_SIZE" default:"10" validate:"gte=0"`
-	FlushInterval int             `toml:"flush_interval" env:"EXPENSOR_DB_FLUSH_INTERVAL" default:"30" validate:"gte=0"`
+	BatchSize     int             `toml:"batch_size" env:"EXPENSOR_DB_BATCH_SIZE" default:"10" validate:"gt=0"`
+	FlushInterval time.Duration   `toml:"flush_interval" env:"EXPENSOR_DB_FLUSH_INTERVAL" default:"30s" validate:"gt=0"`
 	SQLite        SQLite          `toml:"sqlite"`
 	Postgres      Postgres        `toml:"postgres"`
 }

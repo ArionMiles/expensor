@@ -60,7 +60,7 @@ func TestLoadAppliesDefaults(t *testing.T) {
 		cfg.Scheduler.MaxRetryDelay != time.Hour {
 		t.Fatalf("scheduler defaults: %#v", cfg.Scheduler)
 	}
-	if cfg.Database.Backend != config.DatabaseBackendPostgres || cfg.Database.BatchSize != 10 || cfg.Database.FlushInterval != 30 {
+	if cfg.Database.Backend != config.DatabaseBackendPostgres || cfg.Database.BatchSize != 10 || cfg.Database.FlushInterval != 30*time.Second {
 		t.Fatalf("database defaults: %#v", cfg.Database)
 	}
 	if cfg.Database.Postgres.Port != 5432 || cfg.Database.Postgres.SSLMode != "disable" || cfg.Database.Postgres.MaxPoolSize != 10 {
@@ -149,7 +149,7 @@ func TestLoadUsesEnvironmentOverrides(t *testing.T) {
 	t.Setenv("BASE_URL", "https://api.example.com")
 	t.Setenv("FRONTEND_URL", "https://app.example.com")
 	t.Setenv("EXPENSOR_DB_BATCH_SIZE", "25")
-	t.Setenv("EXPENSOR_DB_FLUSH_INTERVAL", "45")
+	t.Setenv("EXPENSOR_DB_FLUSH_INTERVAL", "45s")
 	t.Setenv("EXPENSOR_COMMUNITY_URL", "https://content.example.com")
 	t.Setenv("EXPENSOR_CONTENT_SYNC_INTERVAL", "12h")
 	t.Setenv("EXPENSOR_CONTENT_SYNC_TIMEOUT", "90s")
@@ -175,7 +175,7 @@ func TestLoadUsesEnvironmentOverrides(t *testing.T) {
 	if cfg.Port != 9090 || cfg.BaseURL != "https://api.example.com" || cfg.FrontendURL != "https://app.example.com" {
 		t.Fatalf("server overrides: got port=%d base=%q frontend=%q", cfg.Port, cfg.BaseURL, cfg.FrontendURL)
 	}
-	if cfg.Database.BatchSize != 25 || cfg.Database.FlushInterval != 45 {
+	if cfg.Database.BatchSize != 25 || cfg.Database.FlushInterval != 45*time.Second {
 		t.Fatalf("database overrides: %#v", cfg.Database)
 	}
 	if cfg.Community.URL != "https://content.example.com" || cfg.Community.SyncInterval != 12*time.Hour ||
@@ -236,6 +236,28 @@ func TestLoadRejectsNegativePostgresMaxPoolSize(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsNonPositiveIngestionSettings(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		value string
+	}{
+		{name: "batch size", key: "EXPENSOR_DB_BATCH_SIZE", value: "0"},
+		{name: "flush interval", key: "EXPENSOR_DB_FLUSH_INTERVAL", value: "0s"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setRequiredConfigEnv(t)
+			t.Setenv(tt.key, tt.value)
+
+			if _, err := config.Load(); err == nil {
+				t.Fatalf("Load accepted %s=%q", tt.key, tt.value)
+			}
+		})
+	}
+}
+
 func TestLoadRejectsSchedulerRetryRange(t *testing.T) {
 	setRequiredConfigEnv(t)
 	t.Setenv("EXPENSOR_SCHEDULER_BASE_RETRY_DELAY", "2h")
@@ -269,7 +291,7 @@ max_retry_delay = "2h"
 [database]
 backend = "postgres"
 batch_size = 20
-flush_interval = 15
+flush_interval = "15s"
 
 [database.postgres]
 host = "db"
@@ -300,7 +322,7 @@ secret_key_file = "` + filepath.ToSlash(keyPath) + `"
 		cfg.Scheduler.MaxRetryDelay != 2*time.Hour {
 		t.Fatalf("scheduler TOML values not applied: %#v", cfg.Scheduler)
 	}
-	if cfg.Database.Backend != config.DatabaseBackendPostgres || cfg.Database.BatchSize != 20 || cfg.Database.FlushInterval != 15 {
+	if cfg.Database.Backend != config.DatabaseBackendPostgres || cfg.Database.BatchSize != 20 || cfg.Database.FlushInterval != 15*time.Second {
 		t.Fatalf("database TOML values not applied: %#v", cfg.Database)
 	}
 	if cfg.Database.Postgres.Host != "db" || cfg.Database.Postgres.Database != "expensor_toml" || cfg.Database.Postgres.User != "toml_user" ||
