@@ -159,8 +159,9 @@ Run `task lint:be:prod` before every commit. It must report `0 issues`.
 
 ## Git Conventions
 
-- Branch format: `pr/<short-description>` (no Jira ticket for this repo)
-- Commits: imperative mood, Tim Pope style, `--no-gpg-sign`
+- Branch format: `<type>/<short-description>`, using one of `feat`, `fix`, `docs`, `style`, `refactor`, `test`, or `chore`. Use lowercase, hyphen-separated descriptions and no Jira ticket.
+- Commit and PR-title format: `<type>(<optional-scope>): <subject>`. Use a supported type, an optional concise lowercase scope, and a present-tense subject. For example: `refactor(daemon): centralize scan configuration`.
+- Commits use `--no-gpg-sign`.
 - Never commit to `main` directly — branch protection requires PRs (bypass only for docs/chore)
 - Check `.pre-commit-config.yaml` before committing if it exists
 - Always use the repository PR template at `.github/PULL_REQUEST_TEMPLATE.md` when creating or updating PR descriptions. Do not compose PR bodies from scratch or omit template sections.
