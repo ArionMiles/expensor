@@ -14,8 +14,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
-const shutdownTimeout = 10 * time.Second
-
 func main() {
 	os.Exit(run())
 }
@@ -50,7 +48,7 @@ func run() int {
 	}
 
 	runErr := application.Run(ctx)
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 	if err := application.Close(shutdownCtx); err != nil {
 		logger.Warn("application shutdown incomplete", "error", err)

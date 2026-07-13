@@ -53,6 +53,13 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.ScanInterval != 60 || cfg.LookbackDays != 180 {
 		t.Fatalf("application defaults: got scan=%d lookback=%d", cfg.ScanInterval, cfg.LookbackDays)
 	}
+	if cfg.ShutdownTimeout != 10*time.Second {
+		t.Fatalf("shutdown timeout = %s, want 10s", cfg.ShutdownTimeout)
+	}
+	if cfg.Scheduler.PollInterval != 10*time.Second || cfg.Scheduler.BaseRetryDelay != time.Minute ||
+		cfg.Scheduler.MaxRetryDelay != time.Hour {
+		t.Fatalf("scheduler defaults: %#v", cfg.Scheduler)
+	}
 	if cfg.Database.Backend != config.DatabaseBackendPostgres || cfg.Database.BatchSize != 10 || cfg.Database.FlushInterval != 30 {
 		t.Fatalf("database defaults: %#v", cfg.Database)
 	}
@@ -147,6 +154,10 @@ func TestLoadUsesEnvironmentOverrides(t *testing.T) {
 	t.Setenv("EXPENSOR_CONTENT_SYNC_INTERVAL", "12h")
 	t.Setenv("EXPENSOR_CONTENT_SYNC_TIMEOUT", "90s")
 	t.Setenv("EXPENSOR_APP_CONFIG_READ_TIMEOUT", "7s")
+	t.Setenv("EXPENSOR_SHUTDOWN_TIMEOUT", "20s")
+	t.Setenv("EXPENSOR_SCHEDULER_POLL_INTERVAL", "15s")
+	t.Setenv("EXPENSOR_SCHEDULER_BASE_RETRY_DELAY", "2m")
+	t.Setenv("EXPENSOR_SCHEDULER_MAX_RETRY_DELAY", "3h")
 	t.Setenv("EXPENSOR_SESSION_TTL", "72h")
 	t.Setenv("EXPENSOR_SETUP_TOKEN_TTL", "12h")
 	t.Setenv("LOG_LEVEL", "debug")
@@ -173,6 +184,13 @@ func TestLoadUsesEnvironmentOverrides(t *testing.T) {
 	}
 	if cfg.Persisted.ReadTimeout != 7*time.Second {
 		t.Fatalf("app config read timeout: got %s", cfg.Persisted.ReadTimeout)
+	}
+	if cfg.ShutdownTimeout != 20*time.Second {
+		t.Fatalf("shutdown timeout = %s, want 20s", cfg.ShutdownTimeout)
+	}
+	if cfg.Scheduler.PollInterval != 15*time.Second || cfg.Scheduler.BaseRetryDelay != 2*time.Minute ||
+		cfg.Scheduler.MaxRetryDelay != 3*time.Hour {
+		t.Fatalf("scheduler overrides: %#v", cfg.Scheduler)
 	}
 	if cfg.Security.SessionTTL != 72*time.Hour || cfg.Security.SetupTokenTTL != 12*time.Hour {
 		t.Fatalf("security overrides: %#v", cfg.Security)
@@ -218,6 +236,17 @@ func TestLoadRejectsNegativePostgresMaxPoolSize(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsSchedulerRetryRange(t *testing.T) {
+	setRequiredConfigEnv(t)
+	t.Setenv("EXPENSOR_SCHEDULER_BASE_RETRY_DELAY", "2h")
+	t.Setenv("EXPENSOR_SCHEDULER_MAX_RETRY_DELAY", "1h")
+
+	_, err := config.Load()
+	if err == nil || !strings.Contains(err.Error(), "EXPENSOR_SCHEDULER_BASE_RETRY_DELAY") {
+		t.Fatalf("expected invalid scheduler retry range error, got %v", err)
+	}
+}
+
 func TestLoadReadsTOMLConfigFile(t *testing.T) {
 	clearConfigEnv(t)
 	dir := t.TempDir()
@@ -230,6 +259,12 @@ func TestLoadReadsTOMLConfigFile(t *testing.T) {
 port = 9091
 base_url = "https://api.toml.example"
 scan_interval = 120
+shutdown_timeout = "30s"
+
+[scheduler]
+poll_interval = "20s"
+base_retry_delay = "3m"
+max_retry_delay = "2h"
 
 [database]
 backend = "postgres"
@@ -257,6 +292,13 @@ secret_key_file = "` + filepath.ToSlash(keyPath) + `"
 
 	if cfg.Port != 9091 || cfg.BaseURL != "https://api.toml.example" || cfg.ScanInterval != 120 {
 		t.Fatalf("server TOML values not applied: %#v", cfg)
+	}
+	if cfg.ShutdownTimeout != 30*time.Second {
+		t.Fatalf("ShutdownTimeout = %s, want 30s", cfg.ShutdownTimeout)
+	}
+	if cfg.Scheduler.PollInterval != 20*time.Second || cfg.Scheduler.BaseRetryDelay != 3*time.Minute ||
+		cfg.Scheduler.MaxRetryDelay != 2*time.Hour {
+		t.Fatalf("scheduler TOML values not applied: %#v", cfg.Scheduler)
 	}
 	if cfg.Database.Backend != config.DatabaseBackendPostgres || cfg.Database.BatchSize != 20 || cfg.Database.FlushInterval != 15 {
 		t.Fatalf("database TOML values not applied: %#v", cfg.Database)
@@ -401,6 +443,7 @@ func clearConfigEnv(t *testing.T) {
 		"BASE_URL",
 		"FRONTEND_URL",
 		"EXPENSOR_SCAN_INTERVAL",
+		"EXPENSOR_SHUTDOWN_TIMEOUT",
 		"EXPENSOR_LOOKBACK_DAYS",
 		"EXPENSOR_STATIC_DIR",
 		"EXPENSOR_CONFIG_FILE",
@@ -413,6 +456,9 @@ func clearConfigEnv(t *testing.T) {
 		"EXPENSOR_CONTENT_SYNC_INTERVAL",
 		"EXPENSOR_CONTENT_SYNC_TIMEOUT",
 		"EXPENSOR_APP_CONFIG_READ_TIMEOUT",
+		"EXPENSOR_SCHEDULER_POLL_INTERVAL",
+		"EXPENSOR_SCHEDULER_BASE_RETRY_DELAY",
+		"EXPENSOR_SCHEDULER_MAX_RETRY_DELAY",
 		"EXPENSOR_SECRET_KEY",
 		"EXPENSOR_SECRET_KEY_FILE",
 		"EXPENSOR_SESSION_TTL",
