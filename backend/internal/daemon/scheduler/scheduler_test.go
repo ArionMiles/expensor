@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ArionMiles/expensor/backend/internal/daemon"
+	"github.com/ArionMiles/expensor/backend/internal/oauth"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	apperrors "github.com/ArionMiles/expensor/backend/pkg/errors"
 )
@@ -74,7 +76,9 @@ func TestRunTenantMapsAuthFailureToNeedsAuth(t *testing.T) {
 	fakeStore := newFakeStore([]store.TenantScanningState{
 		{TenantID: "tenant-a", ActiveReader: "gmail", Enabled: true, State: store.ScanningStateQueued},
 	})
-	runner := &staticRunner{err: NewInvalidGrantFailure(errors.New("oauth2: invalid_grant"))}
+	runner := &staticRunner{err: apperrors.E(
+		apperrors.User("Reconnect your reader account to continue scanning."), errors.New("oauth2: invalid_grant"),
+	)}
 	scheduler := New(Config{Store: fakeStore, Runner: runner, Clock: fixedClock{now: now}})
 
 	if err := scheduler.Reconcile(context.Background()); err != nil {
@@ -85,8 +89,91 @@ func TestRunTenantMapsAuthFailureToNeedsAuth(t *testing.T) {
 	if state.ReasonCode != store.ScanningReasonInvalidGrant {
 		t.Fatalf("ReasonCode = %q, want %q", state.ReasonCode, store.ScanningReasonInvalidGrant)
 	}
-	if state.PublicMessage == "" || state.PublicMessage == "oauth2: invalid_grant" {
-		t.Fatalf("PublicMessage = %q, want safe user-facing message", state.PublicMessage)
+	if state.PublicMessage != "Reconnect your reader account to continue scanning." {
+		t.Fatalf("PublicMessage = %q, want reconnect guidance", state.PublicMessage)
+	}
+}
+
+func TestRunTenantMapsStructuredFailuresToScanState(t *testing.T) {
+	tests := []struct {
+		name          string
+		err           error
+		state         store.ScanningState
+		reason        store.ScanningReasonCode
+		publicMessage string
+	}{
+		{
+			name: "reader not configured",
+			err: apperrors.E(
+				apperrors.User("Complete reader setup to continue scanning."),
+				apperrors.E(daemon.KindReaderNotConfigured, "reader config is incomplete"),
+			),
+			state:         store.ScanningStateReaderNotConfigured,
+			reason:        store.ScanningReasonReaderNotConfigured,
+			publicMessage: "Complete reader setup to continue scanning.",
+		},
+		{
+			name: "missing credentials",
+			err: apperrors.E(
+				apperrors.User("Upload reader credentials to continue scanning."),
+				apperrors.E(oauth.KindCredentialsMissing, "reader credentials missing"),
+			),
+			state:         store.ScanningStateNeedsAuth,
+			reason:        store.ScanningReasonMissingCredentials,
+			publicMessage: "Upload reader credentials to continue scanning.",
+		},
+		{
+			name: "missing token",
+			err: apperrors.E(
+				apperrors.User("Connect your reader account to continue scanning."),
+				apperrors.E(oauth.KindTokenMissing, "reader token missing"),
+			),
+			state:         store.ScanningStateNeedsAuth,
+			reason:        store.ScanningReasonMissingToken,
+			publicMessage: "Connect your reader account to continue scanning.",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeStore := newFakeStore([]store.TenantScanningState{
+				{TenantID: "tenant-a", ActiveReader: "gmail", Enabled: true, State: store.ScanningStateQueued},
+			})
+			scheduler := New(Config{Store: fakeStore, Runner: &staticRunner{err: tc.err}})
+			if err := scheduler.Reconcile(context.Background()); err != nil {
+				t.Fatalf("Reconcile: %v", err)
+			}
+			state := fakeStore.waitForState(t, "tenant-a", tc.state)
+			if state.ReasonCode != tc.reason {
+				t.Fatalf("ReasonCode = %q, want %q", state.ReasonCode, tc.reason)
+			}
+			if state.PublicMessage != tc.publicMessage {
+				t.Fatalf("PublicMessage = %q, want %q", state.PublicMessage, tc.publicMessage)
+			}
+			if state.RetryCount != 0 {
+				t.Fatalf("RetryCount = %d, want 0", state.RetryCount)
+			}
+		})
+	}
+}
+
+func TestRunTenantPrefersReaderSetupFailureOverInvalidGrant(t *testing.T) {
+	fakeStore := newFakeStore([]store.TenantScanningState{
+		{TenantID: "tenant-a", ActiveReader: "gmail", Enabled: true, State: store.ScanningStateQueued},
+	})
+	runner := NewScanRunner(&scannerStub{err: apperrors.E(
+		daemon.KindReaderNotConfigured, errors.New("oauth2: invalid_grant"),
+	)})
+	scheduler := New(Config{Store: fakeStore, Runner: runner})
+	if err := scheduler.Reconcile(context.Background()); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	state := fakeStore.waitForState(t, "tenant-a", store.ScanningStateReaderNotConfigured)
+	if state.ReasonCode != store.ScanningReasonReaderNotConfigured {
+		t.Fatalf("ReasonCode = %q, want %q", state.ReasonCode, store.ScanningReasonReaderNotConfigured)
+	}
+	if state.PublicMessage != "Complete reader setup to continue scanning." {
+		t.Fatalf("PublicMessage = %q, want reader setup guidance", state.PublicMessage)
 	}
 }
 

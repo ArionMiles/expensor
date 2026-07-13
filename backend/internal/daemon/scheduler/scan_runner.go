@@ -25,19 +25,22 @@ func NewScanRunner(next scanner) *ScanRunner {
 
 // Run performs one bounded scheduled scan.
 func (r *ScanRunner) Run(ctx context.Context, tenant store.Tenant, reader string) error {
+	op := "scheduler.scan_runner.run"
 	err := r.scanner.Run(ctx, daemon.ScanRequest{Tenant: tenant, Reader: reader, Mode: daemon.ScanScheduled})
 	if err == nil {
 		return nil
 	}
-	switch {
-	case errors.WhatKind(err) == daemon.KindReaderNotConfigured:
-		return NewReaderNotConfiguredFailure(err)
-	case errors.WhatKind(err) == oauth.KindCredentialsMissing:
-		return NewMissingCredentialsFailure(err)
-	case errors.WhatKind(err) == oauth.KindTokenMissing:
-		return NewMissingTokenFailure(err)
+	switch kind := errors.WhatKind(err); {
+	case kind == daemon.KindReaderNotConfigured:
+		return errors.E(op, errors.User("Complete reader setup to continue scanning."), err)
+	case kind == oauth.KindCredentialsMissing:
+		return errors.E(op, errors.User("Upload reader credentials to continue scanning."), err)
+	case kind == oauth.KindTokenMissing:
+		return errors.E(op, errors.User("Connect your reader account to continue scanning."), err)
 	case oauth.IsInvalidGrant(err):
-		return NewInvalidGrantFailure(err)
+		return errors.E(
+			op, errors.FailedPrecondition, errors.User("Reconnect your reader account to continue scanning."), err,
+		)
 	default:
 		return err
 	}
