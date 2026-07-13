@@ -15,8 +15,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
-var openApplicationStore = NewStore
-
 // Options configures application composition.
 type Options struct {
 	Config   config.App
@@ -44,6 +42,10 @@ type App struct {
 
 // New fully constructs application dependencies and performs startup seeding without starting goroutines.
 func New(ctx context.Context, opts Options) (_ *App, err error) {
+	return newApp(ctx, opts, NewStore)
+}
+
+func newApp(ctx context.Context, opts Options, openStore func(context.Context, StoreOptions) (Store, error)) (_ *App, err error) {
 	logger := opts.Logger
 	if logger == nil {
 		logger = slog.Default()
@@ -61,7 +63,7 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 		"merchant_categories", len(content.Seed.MerchantCategories))
 	logger.Info("loaded llm prompt catalog", "prompts", content.PromptCatalog.Len())
 
-	storeRuntime, err := openApplicationStore(ctx, StoreOptions{Database: opts.Config.Database, Security: opts.Config.Security, Logger: logger})
+	storeRuntime, err := openStore(ctx, StoreOptions{Database: opts.Config.Database, Security: opts.Config.Security, Logger: logger})
 	if err != nil {
 		return nil, errors.E("app.new", "opening store", err)
 	}

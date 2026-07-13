@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ArionMiles/expensor/backend/internal/daemon"
+	"github.com/ArionMiles/expensor/backend/internal/oauth"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
@@ -243,8 +245,7 @@ func (s *Scheduler) runTenant(ctx context.Context, state store.TenantScanningSta
 		return
 	}
 
-	failure := classifyFailure(err)
-	update := failureStateUpdate(failure, state.RetryCount, finishedAt)
+	update := failureStateUpdate(err, state.RetryCount, finishedAt)
 	if updateErr := s.store.UpdateScanningState(contextWithoutCancel(ctx), tenant, update); updateErr != nil {
 		s.logger.Error("failed to mark scan failed", "error", updateErr)
 	}
@@ -256,36 +257,59 @@ func (s *Scheduler) clearRunning(tenantID string) {
 	delete(s.running, tenantID)
 }
 
-func failureStateUpdate(failure FailureError, currentRetry int, now time.Time) store.ScanningStateUpdate {
-	switch failure.Kind {
-	case FailureNeedsAuth:
+func failureStateUpdate(err error, currentRetry int, now time.Time) store.ScanningStateUpdate {
+	message := errors.UserMsg(err)
+	switch kind := errors.WhatKind(err); {
+	case kind == oauth.KindCredentialsMissing:
 		return store.ScanningStateUpdate{
 			State:         store.ScanningStateNeedsAuth,
-			ReasonCode:    failure.ReasonCode,
-			PublicMessage: failure.PublicMessage,
+			ReasonCode:    store.ScanningReasonMissingCredentials,
+			PublicMessage: safeMessage(message, "Upload reader credentials to continue scanning."),
 			LastFailedAt:  &now,
 			RetryCount:    intPtr(0),
 		}
-	case FailureReaderNotConfigured:
+	case kind == oauth.KindTokenMissing:
+		return store.ScanningStateUpdate{
+			State:         store.ScanningStateNeedsAuth,
+			ReasonCode:    store.ScanningReasonMissingToken,
+			PublicMessage: safeMessage(message, "Connect your reader account to continue scanning."),
+			LastFailedAt:  &now,
+			RetryCount:    intPtr(0),
+		}
+	case kind == daemon.KindReaderNotConfigured:
 		return store.ScanningStateUpdate{
 			State:         store.ScanningStateReaderNotConfigured,
-			ReasonCode:    failure.ReasonCode,
-			PublicMessage: failure.PublicMessage,
+			ReasonCode:    store.ScanningReasonReaderNotConfigured,
+			PublicMessage: safeMessage(message, "Complete reader setup to continue scanning."),
 			LastFailedAt:  &now,
 			RetryCount:    intPtr(0),
 		}
-	default:
-		nextRetryCount := currentRetry + 1
-		nextRetry := now.Add(retryDelay(nextRetryCount))
+	case oauth.IsInvalidGrant(err):
 		return store.ScanningStateUpdate{
-			State:         store.ScanningStateBackingOff,
-			ReasonCode:    failure.ReasonCode,
-			PublicMessage: failure.PublicMessage,
+			State:         store.ScanningStateNeedsAuth,
+			ReasonCode:    store.ScanningReasonInvalidGrant,
+			PublicMessage: safeMessage(message, "Reconnect your reader account to continue scanning."),
 			LastFailedAt:  &now,
-			NextRetryAt:   &nextRetry,
-			RetryCount:    &nextRetryCount,
+			RetryCount:    intPtr(0),
 		}
 	}
+	nextRetryCount := currentRetry + 1
+	nextRetry := now.Add(retryDelay(nextRetryCount))
+	return store.ScanningStateUpdate{
+		State:         store.ScanningStateBackingOff,
+		ReasonCode:    store.ScanningReasonTemporaryFailure,
+		PublicMessage: "Scanning hit a temporary problem. We will retry automatically.",
+		LastFailedAt:  &now,
+		NextRetryAt:   &nextRetry,
+		RetryCount:    &nextRetryCount,
+	}
+}
+
+func safeMessage(message, fallback string) string {
+	if message != "" {
+		return message
+	}
+	return fallback
 }
 
 func retryDelay(retryCount int) time.Duration {

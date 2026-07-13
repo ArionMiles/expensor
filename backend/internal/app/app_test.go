@@ -13,13 +13,11 @@ import (
 )
 
 func TestNewClosesStoreAfterPartialConstructionFailure(t *testing.T) {
-	original := openApplicationStore
-	t.Cleanup(func() { openApplicationStore = original })
 	var closes atomic.Int32
-	openApplicationStore = func(context.Context, StoreOptions) (Store, error) {
+	openStore := func(context.Context, StoreOptions) (Store, error) {
 		return Store{close: func() { closes.Add(1) }}, nil
 	}
-	if _, err := New(context.Background(), Options{Logger: discardLogger()}); err == nil {
+	if _, err := newApp(context.Background(), Options{Logger: discardLogger()}, openStore); err == nil {
 		t.Fatal("New() error = nil")
 	}
 	if closes.Load() != 1 {
