@@ -105,8 +105,8 @@ func TestRegistryRejectsDuplicateProvider(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected duplicate error, got nil")
 	}
-	if errors.WhatKind(err) != KindProviderConflict {
-		t.Fatalf("error = %v, want KindProviderConflict", err)
+	if errors.WhatKind(err) != errors.Conflict {
+		t.Fatalf("error = %v, want Conflict", err)
 	}
 }
 

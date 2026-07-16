@@ -256,7 +256,7 @@ func (r *scanningRepository) fetchScanningState(ctx context.Context, tenant stor
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return store.TenantScanningState{}, notFound("store.scanning.get_state")
+			return store.TenantScanningState{}, errors.E("store.scanning.get_state", errors.NotFound)
 		}
 		return store.TenantScanningState{}, errors.E("postgres.scanning.fetch_scanning_state", "getting scanning state", err)
 	}

@@ -127,7 +127,7 @@ func (r *diagnosticsRepository) GetExtractionDiagnostic(ctx context.Context, ten
 		return nil, errors.E("postgres.diagnostics.get_extraction_diagnostic", "fetching extraction diagnostic", err)
 	}
 	if len(result) == 0 {
-		return nil, notFound("store.diagnostics.get")
+		return nil, errors.E("store.diagnostics.get", errors.NotFound)
 	}
 	return &result[0], nil
 }
@@ -153,12 +153,10 @@ func (r *diagnosticsRepository) UpdateExtractionDiagnosticStatus(
 	)
 	if err != nil {
 		if isDiagnosticOpenConflict(err) {
-			return nil, conflict(
+			return nil, errors.E(
 				"store.diagnostics.update_status",
-				errors.E(
-					errors.Conflict,
-					fmt.Sprintf("open diagnostic already exists for reader/message/rule: %s", messageDiagnosticConflict),
-				),
+				errors.Conflict,
+				"open diagnostic already exists for reader/message/rule: diagnostic conflict",
 			)
 		}
 		return nil, errors.E("postgres.diagnostics.update_extraction_diagnostic_status", "updating extraction diagnostic status", err)
@@ -167,18 +165,16 @@ func (r *diagnosticsRepository) UpdateExtractionDiagnosticStatus(
 	result, err := scanDiagnosticRows(rows)
 	if err != nil {
 		if isDiagnosticOpenConflict(err) {
-			return nil, conflict(
+			return nil, errors.E(
 				"store.diagnostics.update_status",
-				errors.E(
-					errors.Conflict,
-					fmt.Sprintf("open diagnostic already exists for reader/message/rule: %s", messageDiagnosticConflict),
-				),
+				errors.Conflict,
+				"open diagnostic already exists for reader/message/rule: diagnostic conflict",
 			)
 		}
 		return nil, errors.E("postgres.diagnostics.update_extraction_diagnostic_status", "updating extraction diagnostic status", err)
 	}
 	if len(result) == 0 {
-		return nil, notFound("store.diagnostics.update_status")
+		return nil, errors.E("store.diagnostics.update_status", errors.NotFound)
 	}
 	return &result[0], nil
 }

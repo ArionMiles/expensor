@@ -101,7 +101,7 @@ func (r *Registry) RegisterProvider(provider Provider) error {
 		}
 	}
 	if _, exists := r.providers[name]; exists {
-		return errors.E(op, KindProviderConflict, fmt.Sprintf("llm provider %q already registered", name))
+		return errors.E(op, errors.Conflict, fmt.Sprintf("llm provider %q already registered", name))
 	}
 	provider.Metadata.Name = name
 	r.providers[name] = provider
@@ -114,7 +114,7 @@ func (r *Registry) GetProvider(name string) (Provider, error) {
 
 	provider, ok := r.providers[name]
 	if !ok {
-		return Provider{}, errors.E(op, KindProviderNotFound, fmt.Sprintf("llm provider %q not found", name))
+		return Provider{}, errors.E(op, errors.NotFound, fmt.Sprintf("llm provider %q not found", name))
 	}
 	return provider, nil
 }

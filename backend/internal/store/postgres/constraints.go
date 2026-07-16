@@ -6,28 +6,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
-const (
-	messageNotFound                = "not found"
-	messageBootstrapUnavailable    = "bootstrap unavailable"
-	messageRuleNameConflict        = "rule name conflict"
-	messageDiagnosticConflict      = "diagnostic conflict"
-	messageAccessTokenNameConflict = "access token name conflict"
-	messageUserEmailConflict       = "user email conflict"
-	messagePaginationOverflow      = "pagination offset overflow"
-)
-
-func notFound(op string) error {
-	return errors.E(op, errors.NotFound, messageNotFound)
-}
-
-func conflict(op string, args ...any) error {
-	return errors.E(append([]any{op, errors.Conflict}, args...)...)
-}
-
-func invalidInput(op string, args ...any) error {
-	return errors.E(append([]any{op, errors.InvalidInput}, args...)...)
-}
-
 func isDiagnosticOpenConflict(err error) bool {
 	return isUniqueViolationConstraint(
 		err,

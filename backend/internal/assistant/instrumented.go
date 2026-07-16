@@ -55,7 +55,9 @@ func (d *InstrumentedRuleDrafter) DraftRule(ctx context.Context, tenant store.Te
 	issueCount := len(result.ValidationIssues)
 	if err != nil {
 		outcome = ruleDraftOutcomeError
-		attrs = append(attrs, attribute.String("error_class", errors.Class(err)))
+		if kind := errors.WhatKind(err); kind.Code != "" {
+			attrs = append(attrs, attribute.String("error_kind", kind.Code))
+		}
 		d.logError(ctx, err, sampleCount)
 	} else if issueCount > 0 {
 		outcome = "needs_review"
@@ -88,7 +90,7 @@ func (d *InstrumentedRuleDrafter) logError(ctx context.Context, err error, sampl
 		slog.String("operation", "rule_draft"),
 		slog.Int("sample_count", sampleCount),
 	}
-	logAttrs = append(logAttrs, errors.LogAttrs(err)...)
+	logAttrs = append(logAttrs, errors.LogDetailAttrs(err)...)
 	if spanContext := trace.SpanFromContext(ctx).SpanContext(); spanContext.IsValid() {
 		logAttrs = append(logAttrs,
 			slog.String("trace_id", spanContext.TraceID().String()),

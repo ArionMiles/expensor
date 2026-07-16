@@ -53,18 +53,15 @@ func TestEJoinsSentinelAndCause(t *testing.T) {
 	}
 }
 
-func TestLogAttrsIncludesClassAndOps(t *testing.T) {
+func TestLogDetailAttrsIncludesKindAndOps(t *testing.T) {
 	err := E("assistant.rule_draft", InvalidInput, "bad input")
 
-	attrs := LogAttrs(err)
+	attrs := LogDetailAttrs(err)
 	got := map[string]any{}
 	for _, attr := range attrs {
 		got[attr.Key] = attr.Value.Any()
 	}
 
-	if got["error_class"] != InvalidInput.Code {
-		t.Fatalf("error_class = %#v, want %q", got["error_class"], InvalidInput.Code)
-	}
 	if got["error_kind"] != InvalidInput.Code {
 		t.Fatalf("error_kind = %#v, want %q", got["error_kind"], InvalidInput.Code)
 	}

@@ -205,22 +205,7 @@ func UserMsg(err error) string {
 	return ""
 }
 
-// Class returns a low-cardinality error class suitable for logs and metrics.
-func Class(err error) string {
-	kind := WhatKind(err)
-	if kind.Code != "" {
-		return kind.Code
-	}
-	return "error"
-}
-
-// LogAttrs returns low-cardinality structured logging attributes for err.
-func LogAttrs(err error) []slog.Attr {
-	attrs := []slog.Attr{slog.String("error_class", Class(err))}
-	return append(attrs, LogDetailAttrs(err)...)
-}
-
-// LogDetailAttrs returns structured error details without overriding a caller's error_class.
+// LogDetailAttrs returns structured error details safe for logs.
 func LogDetailAttrs(err error) []slog.Attr {
 	attrs := make([]slog.Attr, 0, 2)
 	kind := WhatKind(err)

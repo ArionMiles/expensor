@@ -128,7 +128,7 @@ func (h *Handlers) writeRuleDraftError(w http.ResponseWriter, err error) {
 	case assistant.KindRuleDraftPromptMissing:
 		writeError(w, http.StatusInternalServerError, "rule drafting prompt is not configured")
 	default:
-		writeLLMProviderError(w, err)
+		writeLLMError(w, err)
 	}
 }
 

@@ -80,7 +80,7 @@ func (r *rulesRepository) GetRule(ctx context.Context, tenant store.Tenant, id s
 		return nil, err
 	}
 	if len(result) == 0 {
-		return nil, notFound("store.rules.get")
+		return nil, errors.E("store.rules.get", errors.NotFound)
 	}
 	return &result[0], nil
 }
@@ -99,7 +99,7 @@ func (r *rulesRepository) CreateRule(ctx context.Context, tenant store.Tenant, r
 	)
 	if err != nil {
 		if isRuleNameConflict(err) {
-			return nil, conflict("store.rules.create", messageRuleNameConflict)
+			return nil, errors.E("store.rules.create", errors.Conflict, "rule name conflict")
 		}
 		return nil, errors.E("postgres.rules.create_rule", "creating rule", err)
 	}
@@ -107,7 +107,7 @@ func (r *rulesRepository) CreateRule(ctx context.Context, tenant store.Tenant, r
 	result, err := scanRuleRows(rows)
 	if err != nil {
 		if isRuleNameConflict(err) {
-			return nil, conflict("store.rules.create", messageRuleNameConflict)
+			return nil, errors.E("store.rules.create", errors.Conflict, "rule name conflict")
 		}
 		return nil, errors.E("postgres.rules.create_rule", "creating rule", err)
 	}
@@ -131,7 +131,7 @@ func (r *rulesRepository) UpdateRule(ctx context.Context, tenant store.Tenant, i
 	)
 	if err != nil {
 		if isRuleNameConflict(err) {
-			return nil, conflict("store.rules.update", messageRuleNameConflict)
+			return nil, errors.E("store.rules.update", errors.Conflict, "rule name conflict")
 		}
 		return nil, errors.E("postgres.rules.update_rule", "updating rule", err)
 	}
@@ -139,12 +139,12 @@ func (r *rulesRepository) UpdateRule(ctx context.Context, tenant store.Tenant, i
 	result, err := scanRuleRows(rows)
 	if err != nil {
 		if isRuleNameConflict(err) {
-			return nil, conflict("store.rules.update", messageRuleNameConflict)
+			return nil, errors.E("store.rules.update", errors.Conflict, "rule name conflict")
 		}
 		return nil, errors.E("postgres.rules.update_rule", "updating rule", err)
 	}
 	if len(result) == 0 {
-		return nil, notFound("store.rules.update")
+		return nil, errors.E("store.rules.update", errors.NotFound)
 	}
 	return &result[0], nil
 }
@@ -157,7 +157,7 @@ func (r *rulesRepository) DeleteRule(ctx context.Context, tenant store.Tenant, i
 		return errors.E("postgres.rules.delete_rule", "deleting rule", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return notFound("store.rules.delete")
+		return errors.E("store.rules.delete", errors.NotFound)
 	}
 	return nil
 }

@@ -1138,6 +1138,16 @@ func (c testLLMClient) HealthCheck(context.Context) error {
 
 func testLLMProvider(t *testing.T, client llm.Client) *llm.Registry {
 	t.Helper()
+	return testLLMProviderWithFactory(t, func(llm.ClientConfig) (llm.Client, error) {
+		return client, nil
+	})
+}
+
+func testLLMProviderWithFactory(
+	t *testing.T,
+	newClient func(llm.ClientConfig) (llm.Client, error),
+) *llm.Registry {
+	t.Helper()
 	registry := llm.NewRegistry()
 	if err := registry.RegisterProvider(llm.Provider{
 		Metadata: llm.ProviderMetadata{
@@ -1154,9 +1164,7 @@ func testLLMProvider(t *testing.T, client llm.Client) *llm.Registry {
 				Recommended: true,
 			}},
 		},
-		NewClient: func(llm.ClientConfig) (llm.Client, error) {
-			return client, nil
-		},
+		NewClient: newClient,
 	}); err != nil {
 		t.Fatalf("RegisterProvider() error = %v", err)
 	}
@@ -1438,12 +1446,11 @@ func TestActivateLLMProviderMapsQuotaErrors(t *testing.T) {
 		llmProviderCredentials: map[string][]byte{"tenant-a/openai": []byte(`{"api_key":"sk-test"}`)},
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	h.llmRegistry = testLLMProvider(t, testLLMClient{healthErr: &llm.ProviderError{
-		Provider:   "openai",
-		StatusCode: http.StatusTooManyRequests,
-		Code:       "insufficient_quota",
-		Message:    "raw provider quota message",
-	}})
+	h.llmRegistry = testLLMProvider(t, testLLMClient{healthErr: errors.E(
+		errors.ResourceExhausted,
+		errors.User("OpenAI API quota is unavailable. Add billing credits or choose another LLM provider."),
+		"raw provider quota message",
+	)})
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/llm/providers/openai/activate", nil)
 	req.SetPathValue("name", "openai")
@@ -1459,6 +1466,30 @@ func TestActivateLLMProviderMapsQuotaErrors(t *testing.T) {
 	}
 	if !strings.Contains(rr.Body.String(), "OpenAI API quota is unavailable") || strings.Contains(rr.Body.String(), "raw provider quota message") {
 		t.Fatalf("error body = %s, want friendly quota message", rr.Body.String())
+	}
+}
+
+func TestActivateLLMProviderDoesNotExposeClientConstructionError(t *testing.T) {
+	ms := &mockStore{
+		llmProviderConfigs:     map[string]json.RawMessage{"tenant-a/openai": json.RawMessage(`{"model":"gpt-5.4-mini"}`)},
+		llmProviderCredentials: map[string][]byte{"tenant-a/openai": []byte(`{"api_key":"sk-test"}`)},
+	}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	h.llmRegistry = testLLMProviderWithFactory(t, func(llm.ClientConfig) (llm.Client, error) {
+		return nil, errors.E(errors.FailedPrecondition, "raw credential parsing detail")
+	})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/llm/providers/openai/activate", nil)
+	req.SetPathValue("name", "openai")
+	rr := httptest.NewRecorder()
+
+	h.ActivateLLMProvider(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "LLM provider configuration is invalid.") || strings.Contains(rr.Body.String(), "raw credential parsing detail") {
+		t.Fatalf("error body = %s, want safe client construction error", rr.Body.String())
 	}
 }
 

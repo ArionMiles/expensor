@@ -189,7 +189,7 @@ func (h *Handlers) HealthCheckLLMProvider(w http.ResponseWriter, r *http.Request
 	ctx, cancel := context.WithTimeout(r.Context(), 75*time.Second)
 	defer cancel()
 	if err := client.HealthCheck(ctx); err != nil {
-		writeLLMProviderError(w, err)
+		writeLLMError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, llmProviderHealthResponse{
@@ -219,7 +219,7 @@ func (h *Handlers) ActivateLLMProvider(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 75*time.Second)
 	defer cancel()
 	if err := client.HealthCheck(ctx); err != nil {
-		writeLLMProviderError(w, err)
+		writeLLMError(w, err)
 		return
 	}
 	if err := h.llmRuntimeStore.SetActiveLLMProvider(r.Context(), requestTenant(r), provider.Metadata.Name); err != nil {
@@ -320,7 +320,11 @@ func (h *Handlers) llmProviderClientFromRuntime(w http.ResponseWriter, r *http.R
 		Credentials: cloneRawJSON(credentials),
 	})
 	if err != nil {
-		writeError(w, http.StatusConflict, err.Error())
+		writeLLMError(w, errors.E(
+			errors.Conflict,
+			errors.User("LLM provider configuration is invalid."),
+			err,
+		))
 		return llm.Provider{}, nil, false
 	}
 	client = llm.NewInstrumentedClient(
@@ -332,36 +336,12 @@ func (h *Handlers) llmProviderClientFromRuntime(w http.ResponseWriter, r *http.R
 	return provider, client, true
 }
 
-func writeLLMProviderError(w http.ResponseWriter, err error) {
-	var providerErr *llm.ProviderError
-	if errors.As(err, &providerErr) {
-		status := http.StatusBadGateway
-		message := providerErr.Message
-		switch providerErr.Code {
-		case "invalid_api_key":
-			status = http.StatusUnauthorized
-			message = "OpenAI API key was rejected. Check the key and try again."
-		case "insufficient_quota":
-			status = http.StatusTooManyRequests
-			message = "OpenAI API quota is unavailable. Add billing credits or choose another LLM provider."
-		case "rate_limit_exceeded":
-			status = http.StatusTooManyRequests
-			message = "OpenAI rate limit exceeded. Wait a moment and try again."
-		default:
-			switch providerErr.StatusCode {
-			case http.StatusUnauthorized:
-				status = http.StatusUnauthorized
-			case http.StatusTooManyRequests:
-				status = http.StatusTooManyRequests
-			}
-			if strings.TrimSpace(message) == "" {
-				message = "LLM provider request failed."
-			}
-		}
-		writeError(w, status, message)
-		return
+func writeLLMError(w http.ResponseWriter, err error) {
+	message := errors.UserMsg(err)
+	if message == "" {
+		message = "LLM provider request failed."
 	}
-	writeError(w, http.StatusBadGateway, err.Error())
+	writeError(w, errors.StatusCode(err), message)
 }
 
 func cloneRawJSON(in []byte) json.RawMessage {

@@ -63,7 +63,7 @@ func (s *Scope) RecordOperation(ctx context.Context, op Operation) {
 	if op.Err != nil {
 		span.SetStatus(codes.Error, errorStatus)
 		logAttrs = append(logAttrs, slog.Any("error", op.Err))
-		logAttrs = append(logAttrs, errors.LogAttrs(op.Err)...)
+		logAttrs = append(logAttrs, errors.LogDetailAttrs(op.Err)...)
 		s.logger.LogAttrs(ctx, slog.LevelError, "operation failed", logAttrs...)
 		return
 	}

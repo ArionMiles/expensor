@@ -2,7 +2,6 @@ package llm
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -53,7 +52,9 @@ func (c *InstrumentedClient) Complete(ctx context.Context, req Request) (Respons
 
 	recordAttrs := append([]attribute.KeyValue(nil), attrs...)
 	if err != nil {
-		recordAttrs = append(recordAttrs, errorAttrs(err)...)
+		if kind := errors.WhatKind(err); kind.Code != "" {
+			recordAttrs = append(recordAttrs, attribute.String("error_kind", kind.Code))
+		}
 		c.logError(ctx, "llm provider call failed", "complete", err, attrs)
 	}
 	span.SetAttributes(recordAttrs...)
@@ -80,7 +81,9 @@ func (c *InstrumentedClient) HealthCheck(ctx context.Context) error {
 	err := c.next.HealthCheck(ctx)
 	recordAttrs := append([]attribute.KeyValue(nil), attrs...)
 	if err != nil {
-		recordAttrs = append(recordAttrs, errorAttrs(err)...)
+		if kind := errors.WhatKind(err); kind.Code != "" {
+			recordAttrs = append(recordAttrs, attribute.String("error_kind", kind.Code))
+		}
 		c.logError(ctx, "llm provider healthcheck failed", "healthcheck", err, attrs)
 	}
 	span.SetAttributes(recordAttrs...)
@@ -126,7 +129,6 @@ func (c *InstrumentedClient) logError(ctx context.Context, message, operation st
 		slog.String("namespace", "llm"),
 		slog.String("operation", operation),
 		slog.String("provider", c.provider),
-		slog.String("error_class", errorClass(err)),
 	}
 	for _, attr := range attrs {
 		if attr.Key == "llm.workflow" {
@@ -136,9 +138,6 @@ func (c *InstrumentedClient) logError(ctx context.Context, message, operation st
 			logAttrs = append(logAttrs, slog.String("purpose", attr.Value.AsString()))
 		}
 	}
-	if statusCode := providerStatusCode(err); statusCode > 0 {
-		logAttrs = append(logAttrs, slog.Int("status_code", statusCode))
-	}
 	logAttrs = append(logAttrs, errors.LogDetailAttrs(err)...)
 	if spanContext := trace.SpanFromContext(ctx).SpanContext(); spanContext.IsValid() {
 		logAttrs = append(logAttrs,
@@ -147,43 +146,6 @@ func (c *InstrumentedClient) logError(ctx context.Context, message, operation st
 		)
 	}
 	c.logger.LogAttrs(ctx, slog.LevelError, message, logAttrs...)
-}
-
-func errorAttrs(err error) []attribute.KeyValue {
-	attrs := []attribute.KeyValue{attribute.String("error_class", errorClass(err))}
-	if statusCode := providerStatusCode(err); statusCode > 0 {
-		attrs = append(attrs, attribute.Int("status_code", statusCode))
-	}
-	return attrs
-}
-
-func errorClass(err error) string {
-	var providerErr *ProviderError
-	if errors.As(err, &providerErr) {
-		code := strings.TrimSpace(providerErr.Code)
-		if code != "" {
-			return code
-		}
-		if providerErr.StatusCode > 0 {
-			return fmt.Sprintf("http_%d", providerErr.StatusCode)
-		}
-		return "provider_error"
-	}
-	if errors.Is(err, context.Canceled) {
-		return "context_canceled"
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return "deadline_exceeded"
-	}
-	return "error"
-}
-
-func providerStatusCode(err error) int {
-	var providerErr *ProviderError
-	if errors.As(err, &providerErr) {
-		return providerErr.StatusCode
-	}
-	return 0
 }
 
 func safeAttr(value, fallback string) string {

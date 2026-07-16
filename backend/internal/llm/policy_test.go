@@ -22,8 +22,8 @@ func TestRedactTextMasksCommonSensitiveValues(t *testing.T) {
 
 func TestEnforceResultLimitsRejectsOversizedPayload(t *testing.T) {
 	err := EnforceResultLimits([]byte("abcdef"), ResultLimits{MaxBytes: 3})
-	if errors.WhatKind(err) != KindResultTooLarge {
-		t.Fatalf("EnforceResultLimits() error = %v, want KindResultTooLarge", err)
+	if errors.WhatKind(err) != errors.InvalidInput {
+		t.Fatalf("EnforceResultLimits() error = %v, want InvalidInput", err)
 	}
 }
 
@@ -31,8 +31,8 @@ func TestValidateMutationSafetyRejectsUnexpectedMutations(t *testing.T) {
 	err := ValidateMutationSafety(MutationPolicy{AllowMutations: false}, []MutationRequest{
 		{Resource: "transactions", Operation: "update"},
 	})
-	if errors.WhatKind(err) != KindUnsafeMutation {
-		t.Fatalf("ValidateMutationSafety() error = %v, want KindUnsafeMutation", err)
+	if errors.WhatKind(err) != errors.InvalidInput {
+		t.Fatalf("ValidateMutationSafety() error = %v, want InvalidInput", err)
 	}
 }
 
