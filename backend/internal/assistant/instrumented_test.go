@@ -106,13 +106,13 @@ func TestInstrumentedRuleDrafterRecordsSanitizedErrors(t *testing.T) {
 		t.Fatalf("ended spans = %d, want 1", len(spans))
 	}
 	attrs := assistantSpanAttrs(spans[0].Attributes())
-	if attrs["assistant.outcome"] != "error" || attrs["error_class"] != "invalid_output" {
-		t.Fatalf("span attrs = %#v, want sanitized error outcome", attrs)
+	if attrs["assistant.outcome"] != "error" || attrs["error_class"] != "rule_draft_invalid_output" {
+		t.Fatalf("span attrs = %#v, want structured error class", attrs)
 	}
 
 	gotLogs := logs.String()
-	if !strings.Contains(gotLogs, "rule draft failed") || !strings.Contains(gotLogs, "error_class=invalid_output") {
-		t.Fatalf("logs = %q, want sanitized rule draft error", gotLogs)
+	if !strings.Contains(gotLogs, "rule draft failed") || !strings.Contains(gotLogs, "error_class=rule_draft_invalid_output") {
+		t.Fatalf("logs = %q, want structured rule draft error", gotLogs)
 	}
 	if strings.Contains(gotLogs, "raw provider output") || strings.Contains(gotLogs, "email body must not be logged") {
 		t.Fatalf("logs = %q, want no raw error or email body", gotLogs)
