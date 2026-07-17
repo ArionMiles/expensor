@@ -65,8 +65,8 @@ func (r *transactionsRepository) queryTransactions(
 	query := strings.TrimSpace(request.search)
 
 	where, args := buildListWhere(f)
-	args = append(args, tenantIDParam(request.tenant))
-	where = combineWhere(tenantWhere("t.tenant_id", fmt.Sprintf("$%d", len(args))), where)
+	args = append(args, request.tenant.ID)
+	where = combineWhere(fmt.Sprintf("t.tenant_id = $%d", len(args)), where)
 	if query != "" {
 		searchCond := buildSearchCondition(query, &args)
 		where = combineWhere(searchCond, where)
@@ -153,9 +153,9 @@ func (r *transactionsRepository) getTransactionQuery(ctx context.Context, tenant
 		       t.source, COALESCE(t.source_type, ''), COALESCE(t.source_label, ''), COALESCE(t.bank, ''),
 		       COALESCE(t.description, ''), t.muted, t.muted_by_merchant, COALESCE(t.mute_reason,''), t.created_at, t.updated_at
 		FROM transactions t
-		WHERE t.id = $1 AND t.tenant_id IS NOT DISTINCT FROM $2
+		WHERE t.id = $1 AND t.tenant_id = $2
 	`
-	rows, err := r.pool.Query(ctx, q, id, tenantIDParam(tenant))
+	rows, err := r.pool.Query(ctx, q, id, tenant.ID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching transaction: %w", err)
 	}
@@ -177,8 +177,8 @@ func (r *transactionsRepository) getTransactionQuery(ctx context.Context, tenant
 
 func (r *transactionsRepository) UpdateDescription(ctx context.Context, tenant store.Tenant, id, description string) error {
 	tag, err := r.pool.Exec(ctx,
-		`UPDATE transactions SET description = $1 WHERE id = $2 AND tenant_id IS NOT DISTINCT FROM $3`,
-		description, id, tenantIDParam(tenant),
+		`UPDATE transactions SET description = $1 WHERE id = $2 AND tenant_id = $3`,
+		description, id, tenant.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating description: %w", err)
@@ -200,9 +200,9 @@ func (r *transactionsRepository) AddLabel(ctx context.Context, tenant store.Tena
 		`INSERT INTO transaction_label_sources (transaction_id, label, source_type, merchant_pattern)
 			 SELECT id, $2, 'manual', ''
 			 FROM transactions
-			 WHERE id = $1 AND tenant_id IS NOT DISTINCT FROM $3
+			 WHERE id = $1 AND tenant_id = $3
 			 ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING`,
-		transactionID, label, tenantIDParam(tenant),
+		transactionID, label, tenant.ID,
 	); err != nil {
 		return fmt.Errorf("adding label source: %w", err)
 	}
@@ -211,9 +211,9 @@ func (r *transactionsRepository) AddLabel(ctx context.Context, tenant store.Tena
 		`INSERT INTO transaction_labels (transaction_id, label)
 			 SELECT id, $2
 			 FROM transactions
-			 WHERE id = $1 AND tenant_id IS NOT DISTINCT FROM $3
+			 WHERE id = $1 AND tenant_id = $3
 			 ON CONFLICT (transaction_id, label) DO NOTHING`,
-		transactionID, label, tenantIDParam(tenant),
+		transactionID, label, tenant.ID,
 	); err != nil {
 		return fmt.Errorf("adding label: %w", err)
 	}
@@ -239,9 +239,9 @@ func (r *transactionsRepository) AddLabels(ctx context.Context, tenant store.Ten
 		`INSERT INTO transaction_label_sources (transaction_id, label, source_type, merchant_pattern)
 			 SELECT t.id, label, 'manual', ''
 			 FROM transactions t, unnest($2::text[]) AS labels(label)
-			 WHERE t.id = $1 AND t.tenant_id IS NOT DISTINCT FROM $3
+			 WHERE t.id = $1 AND t.tenant_id = $3
 			 ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING`,
-		transactionID, labels, tenantIDParam(tenant),
+		transactionID, labels, tenant.ID,
 	); err != nil {
 		return fmt.Errorf("adding label sources: %w", err)
 	}
@@ -250,9 +250,9 @@ func (r *transactionsRepository) AddLabels(ctx context.Context, tenant store.Ten
 		`INSERT INTO transaction_labels (transaction_id, label)
 			 SELECT t.id, label
 			 FROM transactions t, unnest($2::text[]) AS labels(label)
-			 WHERE t.id = $1 AND t.tenant_id IS NOT DISTINCT FROM $3
+			 WHERE t.id = $1 AND t.tenant_id = $3
 			 ON CONFLICT (transaction_id, label) DO NOTHING`,
-		transactionID, labels, tenantIDParam(tenant),
+		transactionID, labels, tenant.ID,
 	); err != nil {
 		return fmt.Errorf("adding labels: %w", err)
 	}
@@ -276,8 +276,8 @@ func (r *transactionsRepository) RemoveLabel(ctx context.Context, tenant store.T
 		 WHERE tls.transaction_id = t.id
 		   AND tls.transaction_id = $1
 		   AND tls.label = $2
-		   AND t.tenant_id IS NOT DISTINCT FROM $3`,
-		transactionID, label, tenantIDParam(tenant),
+		   AND t.tenant_id = $3`,
+		transactionID, label, tenant.ID,
 	); err != nil {
 		return fmt.Errorf("removing label sources: %w", err)
 	}
@@ -288,8 +288,8 @@ func (r *transactionsRepository) RemoveLabel(ctx context.Context, tenant store.T
 		 WHERE tl.transaction_id = t.id
 		   AND tl.transaction_id = $1
 		   AND tl.label = $2
-		   AND t.tenant_id IS NOT DISTINCT FROM $3`,
-		transactionID, label, tenantIDParam(tenant),
+		   AND t.tenant_id = $3`,
+		transactionID, label, tenant.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("removing label: %w", err)
@@ -359,57 +359,57 @@ func (r *transactionsRepository) loadFacetValues(ctx context.Context, tenant sto
 	}{
 		{
 			`SELECT DISTINCT source FROM transactions
-             WHERE tenant_id IS NOT DISTINCT FROM $1 AND source IS NOT NULL AND source != ''
+             WHERE tenant_id = $1 AND source IS NOT NULL AND source != ''
              ORDER BY source`,
 			&f.Sources,
 		},
 		{
 			`SELECT DISTINCT source_type FROM transactions
-             WHERE tenant_id IS NOT DISTINCT FROM $1 AND source_type IS NOT NULL AND source_type != ''
+             WHERE tenant_id = $1 AND source_type IS NOT NULL AND source_type != ''
              ORDER BY source_type`,
 			&f.SourceTypes,
 		},
 		{
 			`SELECT DISTINCT bank FROM transactions
-             WHERE tenant_id IS NOT DISTINCT FROM $1 AND bank IS NOT NULL AND bank != ''
+             WHERE tenant_id = $1 AND bank IS NOT NULL AND bank != ''
              ORDER BY bank`,
 			&f.Banks,
 		},
 		{
 			`SELECT DISTINCT category FROM transactions
-             WHERE tenant_id IS NOT DISTINCT FROM $1 AND category IS NOT NULL AND category != ''
+             WHERE tenant_id = $1 AND category IS NOT NULL AND category != ''
              ORDER BY category`,
 			&f.Categories,
 		},
 		{
 			`SELECT DISTINCT currency FROM transactions
-             WHERE tenant_id IS NOT DISTINCT FROM $1 AND currency IS NOT NULL AND currency != ''
+             WHERE tenant_id = $1 AND currency IS NOT NULL AND currency != ''
              ORDER BY currency`,
 			&f.Currencies,
 		},
 		{
 			`SELECT DISTINCT merchant_info FROM transactions
-             WHERE tenant_id IS NOT DISTINCT FROM $1 AND merchant_info IS NOT NULL AND merchant_info != ''
+             WHERE tenant_id = $1 AND merchant_info IS NOT NULL AND merchant_info != ''
              ORDER BY merchant_info`,
 			&f.Merchants,
 		},
 		{
 			`SELECT DISTINCT tl.label FROM transaction_labels tl
 			 JOIN transactions t ON t.id = tl.transaction_id
-			 WHERE t.tenant_id IS NOT DISTINCT FROM $1
+			 WHERE t.tenant_id = $1
              ORDER BY label`,
 			&f.Labels,
 		},
 		{
 			`SELECT DISTINCT bucket FROM transactions
-             WHERE tenant_id IS NOT DISTINCT FROM $1 AND bucket IS NOT NULL AND bucket != ''
+             WHERE tenant_id = $1 AND bucket IS NOT NULL AND bucket != ''
              ORDER BY bucket`,
 			&f.Buckets,
 		},
 	}
 
 	for _, q := range queries {
-		rows, err := r.pool.Query(ctx, q.sql, tenantIDParam(tenant))
+		rows, err := r.pool.Query(ctx, q.sql, tenant.ID)
 		if err != nil {
 			return fmt.Errorf("fetching facets: %w", err)
 		}
@@ -436,10 +436,10 @@ func (r *transactionsRepository) loadFacetCounts(ctx context.Context, tenant sto
 		SELECT tl.label, COUNT(*)::int
 		FROM transaction_labels tl
 		JOIN transactions t ON t.id = tl.transaction_id
-		WHERE t.tenant_id IS NOT DISTINCT FROM $1
+		WHERE t.tenant_id = $1
 		GROUP BY tl.label
 		ORDER BY label
-	`, "label", f.LabelCounts, tenantIDParam(tenant)); err != nil {
+	`, "label", f.LabelCounts, tenant.ID); err != nil {
 		return err
 	}
 
@@ -451,7 +451,7 @@ func (r *transactionsRepository) loadFacetCounts(ctx context.Context, tenant sto
 		{
 			`SELECT category, COUNT(*)::int
 			 FROM transactions
-			 WHERE tenant_id IS NOT DISTINCT FROM $1 AND category IS NOT NULL AND category != ''
+			 WHERE tenant_id = $1 AND category IS NOT NULL AND category != ''
 			 GROUP BY category
 			 ORDER BY category`,
 			f.CategoryCounts,
@@ -460,7 +460,7 @@ func (r *transactionsRepository) loadFacetCounts(ctx context.Context, tenant sto
 		{
 			`SELECT bucket, COUNT(*)::int
 			 FROM transactions
-			 WHERE tenant_id IS NOT DISTINCT FROM $1 AND bucket IS NOT NULL AND bucket != ''
+			 WHERE tenant_id = $1 AND bucket IS NOT NULL AND bucket != ''
 			 GROUP BY bucket
 			 ORDER BY bucket`,
 			f.BucketCounts,
@@ -468,7 +468,7 @@ func (r *transactionsRepository) loadFacetCounts(ctx context.Context, tenant sto
 		},
 	}
 	for _, q := range countQueries {
-		if err := r.scanFacetCountMap(ctx, q.sql, q.name, q.dest, tenantIDParam(tenant)); err != nil {
+		if err := r.scanFacetCountMap(ctx, q.sql, q.name, q.dest, tenant.ID); err != nil {
 			return err
 		}
 	}
@@ -542,9 +542,9 @@ func (r *transactionsRepository) UpdateTransaction(ctx context.Context, tenant s
 	if u.Bucket != nil {
 		setClauses = append(setClauses, "bucket = "+n(*u.Bucket))
 	}
-	args = append(args, id, tenantIDParam(tenant))
+	args = append(args, id, tenant.ID)
 	q := fmt.Sprintf(
-		"UPDATE transactions SET %s, updated_at = NOW() WHERE id = $%d AND tenant_id IS NOT DISTINCT FROM $%d",
+		"UPDATE transactions SET %s, updated_at = NOW() WHERE id = $%d AND tenant_id = $%d",
 		strings.Join(setClauses, ", "), len(args)-1, len(args),
 	)
 	tag, err := r.pool.Exec(ctx, q, args...)
@@ -563,14 +563,14 @@ func (r *transactionsRepository) MuteTransaction(ctx context.Context, tenant sto
 	if muted {
 		tag, err = r.pool.Exec(ctx,
 			`UPDATE transactions SET muted=true, muted_by_merchant=false, mute_reason=NULLIF($2,''), updated_at=NOW()
-			 WHERE id=$1 AND tenant_id IS NOT DISTINCT FROM $3`,
-			id, reason, tenantIDParam(tenant),
+			 WHERE id=$1 AND tenant_id = $3`,
+			id, reason, tenant.ID,
 		)
 	} else {
 		tag, err = r.pool.Exec(ctx,
 			`UPDATE transactions SET muted=false, muted_by_merchant=false, mute_reason=NULL, updated_at=NOW()
-			 WHERE id=$1 AND tenant_id IS NOT DISTINCT FROM $2`,
-			id, tenantIDParam(tenant),
+			 WHERE id=$1 AND tenant_id = $2`,
+			id, tenant.ID,
 		)
 	}
 	if err != nil {
@@ -585,8 +585,8 @@ func (r *transactionsRepository) MuteTransaction(ctx context.Context, tenant sto
 func (r *transactionsRepository) UpdateMuteReason(ctx context.Context, tenant store.Tenant, id, reason string) error {
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE transactions SET mute_reason=NULLIF($2,''), updated_at=NOW()
-		 WHERE id=$1 AND muted=true AND tenant_id IS NOT DISTINCT FROM $3`,
-		id, reason, tenantIDParam(tenant),
+		 WHERE id=$1 AND muted=true AND tenant_id = $3`,
+		id, reason, tenant.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating mute reason: %w", err)
@@ -599,8 +599,8 @@ func (r *transactionsRepository) UpdateMuteReason(ctx context.Context, tenant st
 
 func (r *transactionsRepository) UpdateMerchantReason(ctx context.Context, tenant store.Tenant, id, reason string) error {
 	tag, err := r.pool.Exec(ctx,
-		`UPDATE muted_merchants SET reason=NULLIF($2,'') WHERE id=$1 AND tenant_id IS NOT DISTINCT FROM $3`,
-		id, reason, tenantIDParam(tenant),
+		`UPDATE muted_merchants SET reason=NULLIF($2,'') WHERE id=$1 AND tenant_id = $3`,
+		id, reason, tenant.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating merchant reason: %w", err)
@@ -619,8 +619,8 @@ func (r *transactionsRepository) MuteByMerchant(ctx context.Context, tenant stor
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	_, err = tx.Exec(ctx,
-		mutedMerchantUpsertSQL(tenant),
-		tenantIDParam(tenant), pattern, reason,
+		mutedMerchantUpsertSQL,
+		tenant.ID, pattern, reason,
 	)
 	if err != nil {
 		return fmt.Errorf("storing muted merchant pattern: %w", err)
@@ -629,8 +629,8 @@ func (r *transactionsRepository) MuteByMerchant(ctx context.Context, tenant stor
 	_, err = tx.Exec(ctx,
 		`UPDATE transactions
 			 SET muted=true, muted_by_merchant=true, mute_reason=NULLIF($2,''), updated_at=NOW()
-			 WHERE merchant_info ILIKE $1 AND tenant_id IS NOT DISTINCT FROM $3`,
-		"%"+pattern+"%", reason, tenantIDParam(tenant),
+			 WHERE merchant_info ILIKE $1 AND tenant_id = $3`,
+		"%"+pattern+"%", reason, tenant.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("muting transactions by merchant: %w", err)
@@ -639,18 +639,12 @@ func (r *transactionsRepository) MuteByMerchant(ctx context.Context, tenant stor
 	return tx.Commit(ctx)
 }
 
-func mutedMerchantUpsertSQL(tenant store.Tenant) string {
-	if tenantIDParam(tenant) == nil {
-		return `INSERT INTO muted_merchants (tenant_id, pattern, reason)
-			 VALUES ($1, $2, NULLIF($3,''))
-			 ON CONFLICT (pattern) WHERE tenant_id IS NULL
-			 DO UPDATE SET reason=EXCLUDED.reason`
-	}
-	return `INSERT INTO muted_merchants (tenant_id, pattern, reason)
-			 VALUES ($1, $2, NULLIF($3,''))
-			 ON CONFLICT (tenant_id, pattern) WHERE tenant_id IS NOT NULL
-			 DO UPDATE SET reason=EXCLUDED.reason`
-}
+const mutedMerchantUpsertSQL = `
+	INSERT INTO muted_merchants (tenant_id, pattern, reason)
+	VALUES ($1, $2, NULLIF($3,''))
+	ON CONFLICT (tenant_id, pattern) WHERE tenant_id IS NOT NULL
+	DO UPDATE SET reason = EXCLUDED.reason
+`
 
 func (r *transactionsRepository) ListMutedMerchants(ctx context.Context, tenant store.Tenant) ([]store.MutedMerchant, error) {
 	return r.listMutedMerchantsQuery(ctx, tenant)
@@ -660,9 +654,9 @@ func (r *transactionsRepository) listMutedMerchantsQuery(ctx context.Context, te
 	rows, err := r.pool.Query(ctx,
 		`SELECT id, pattern, COALESCE(reason,''), created_at
 		 FROM muted_merchants
-		 WHERE tenant_id IS NOT DISTINCT FROM $1
+		 WHERE tenant_id = $1
 		 ORDER BY created_at DESC`,
-		tenantIDParam(tenant))
+		tenant.ID)
 	if err != nil {
 		return nil, fmt.Errorf("listing muted merchants: %w", err)
 	}
@@ -693,11 +687,11 @@ func (r *transactionsRepository) getMutedMerchantsWithCountQuery(ctx context.Con
 		LEFT JOIN transactions t
 		  ON t.muted_by_merchant = true
 		 AND t.merchant_info ILIKE '%' || mm.pattern || '%'
-		 AND t.tenant_id IS NOT DISTINCT FROM mm.tenant_id
-		WHERE mm.tenant_id IS NOT DISTINCT FROM $1
+		 AND t.tenant_id = mm.tenant_id
+		WHERE mm.tenant_id = $1
 		GROUP BY mm.id
 		ORDER BY mm.created_at DESC
-	`, tenantIDParam(tenant))
+	`, tenant.ID)
 	if err != nil {
 		return nil, fmt.Errorf("listing muted merchants with count: %w", err)
 	}
@@ -717,7 +711,7 @@ func (r *transactionsRepository) getMutedMerchantsWithCountQuery(ctx context.Con
 }
 
 func (r *transactionsRepository) DeleteMutedMerchant(ctx context.Context, tenant store.Tenant, id string) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM muted_merchants WHERE id=$1 AND tenant_id IS NOT DISTINCT FROM $2`, id, tenantIDParam(tenant))
+	tag, err := r.pool.Exec(ctx, `DELETE FROM muted_merchants WHERE id=$1 AND tenant_id = $2`, id, tenant.ID)
 	if err != nil {
 		return fmt.Errorf("deleting muted merchant: %w", err)
 	}
@@ -730,8 +724,8 @@ func (r *transactionsRepository) DeleteMutedMerchant(ctx context.Context, tenant
 func (r *transactionsRepository) UnmuteByPattern(ctx context.Context, tenant store.Tenant, pattern string) error {
 	_, err := r.pool.Exec(ctx,
 		`UPDATE transactions SET muted=false, muted_by_merchant=false, mute_reason=NULL, updated_at=NOW()
-			 WHERE merchant_info ILIKE $1 AND tenant_id IS NOT DISTINCT FROM $2`,
-		"%"+pattern+"%", tenantIDParam(tenant),
+			 WHERE merchant_info ILIKE $1 AND tenant_id = $2`,
+		"%"+pattern+"%", tenant.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("unmuting by pattern: %w", err)
@@ -748,7 +742,7 @@ func (r *transactionsRepository) DeleteMutedMerchantAndUnmute(ctx context.Contex
 
 	var pattern string
 	if err := tx.QueryRow(ctx,
-		`DELETE FROM muted_merchants WHERE id=$1 AND tenant_id IS NOT DISTINCT FROM $2 RETURNING pattern`, id, tenantIDParam(tenant),
+		`DELETE FROM muted_merchants WHERE id=$1 AND tenant_id = $2 RETURNING pattern`, id, tenant.ID,
 	).Scan(&pattern); err != nil {
 		if errorsIsNoRows(err) {
 			return notFound("store.transactions.delete_muted_merchant_and_unmute")
@@ -759,8 +753,8 @@ func (r *transactionsRepository) DeleteMutedMerchantAndUnmute(ctx context.Contex
 	if _, err := tx.Exec(ctx,
 		`UPDATE transactions
 			 SET muted=false, muted_by_merchant=false, mute_reason=NULL, updated_at=NOW()
-			 WHERE merchant_info ILIKE $1 AND tenant_id IS NOT DISTINCT FROM $2`,
-		"%"+pattern+"%", tenantIDParam(tenant),
+			 WHERE merchant_info ILIKE $1 AND tenant_id = $2`,
+		"%"+pattern+"%", tenant.ID,
 	); err != nil {
 		return fmt.Errorf("unmuting transactions: %w", err)
 	}
@@ -770,7 +764,7 @@ func (r *transactionsRepository) DeleteMutedMerchantAndUnmute(ctx context.Contex
 
 func (r *transactionsRepository) GetMutedMerchantPatterns(ctx context.Context, tenant store.Tenant) ([]string, error) {
 	var patterns []string
-	rows, err := r.pool.Query(ctx, `SELECT pattern FROM muted_merchants WHERE tenant_id IS NOT DISTINCT FROM $1`, tenantIDParam(tenant))
+	rows, err := r.pool.Query(ctx, `SELECT pattern FROM muted_merchants WHERE tenant_id = $1`, tenant.ID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching muted merchant patterns: %w", err)
 	}

@@ -251,7 +251,7 @@ func (r *scanningRepository) fetchScanningState(ctx context.Context, tenant stor
 		       last_started_at, last_stopped_at, last_failed_at, next_retry_at, retry_count, updated_at
 		FROM tenant_scanning_state
 		WHERE tenant_id = $1
-	`, tenantIDParam(tenant)).Scan(
+	`, tenant.ID).Scan(
 		&state.TenantID, &state.ActiveReader, &state.Enabled, &state.State, &state.ReasonCode, &state.PublicMessage,
 		&state.LastStartedAt, &state.LastStoppedAt, &state.LastFailedAt, &state.NextRetryAt, &state.RetryCount, &state.UpdatedAt,
 	)

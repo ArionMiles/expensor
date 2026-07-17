@@ -1,0 +1,2 @@
+-- Backfilling tenant ownership is intentionally irreversible: clearing tenant_id would hide
+-- both migrated legacy diagnostics and diagnostics recorded correctly after this migration.

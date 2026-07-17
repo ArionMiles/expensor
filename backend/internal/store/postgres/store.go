@@ -44,10 +44,7 @@ type Store struct {
 	txns      *transactionsRepository
 }
 
-var (
-	_ api.DiagnosticSink = (*Store)(nil)
-	_ store.Backend      = (*Store)(nil)
-)
+var _ store.Backend = (*Store)(nil)
 
 // New creates a Store connected to the PostgreSQL instance described by cfg.
 func New(ctx context.Context, opts Options) (*Store, error) {
@@ -604,13 +601,8 @@ func (s *Store) SeedPredefinedRules(ctx context.Context, rules []store.RuleRow) 
 	return s.rules.SeedPredefinedRules(ctx, rules)
 }
 
-// RecordExtractionDiagnostic persists a failed extraction attempt for the temporary legacy tenant.
-func (s *Store) RecordExtractionDiagnostic(ctx context.Context, diagnostic api.ExtractionDiagnostic) error {
-	return s.diag.RecordExtractionDiagnostic(ctx, store.Tenant{}, diagnostic)
-}
-
-// RecordTenantExtractionDiagnostic persists a failed extraction attempt for a tenant.
-func (s *Store) RecordTenantExtractionDiagnostic(ctx context.Context, tenant store.Tenant, diagnostic api.ExtractionDiagnostic) error {
+// RecordExtractionDiagnostic persists a failed extraction attempt for a tenant.
+func (s *Store) RecordExtractionDiagnostic(ctx context.Context, tenant store.Tenant, diagnostic api.ExtractionDiagnostic) error {
 	return s.diag.RecordExtractionDiagnostic(ctx, tenant, diagnostic)
 }
 

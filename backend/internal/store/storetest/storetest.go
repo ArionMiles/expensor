@@ -764,7 +764,7 @@ func testDiagnostics(ctx context.Context, t *testing.T, backend store.Backend) {
 	tenant := createTenant(ctx, t, backend, "diagnostics")
 	receivedAt := time.Now().UTC().Truncate(time.Microsecond)
 
-	if err := backend.RecordTenantExtractionDiagnostic(ctx, tenant, api.ExtractionDiagnostic{
+	if err := backend.RecordExtractionDiagnostic(ctx, tenant, api.ExtractionDiagnostic{
 		Reader:         "gmail",
 		MessageID:      "diag-" + suffix(t),
 		Source:         "Example",
@@ -779,7 +779,7 @@ func testDiagnostics(ctx context.Context, t *testing.T, backend store.Backend) {
 		CurrencyRegex:  `(INR)`,
 		FailureReasons: []string{api.FailureMerchantEmpty},
 	}); err != nil {
-		t.Fatalf("RecordTenantExtractionDiagnostic: %v", err)
+		t.Fatalf("RecordExtractionDiagnostic: %v", err)
 	}
 
 	rows, err := backend.ListExtractionDiagnostics(ctx, tenant, store.DiagnosticFilter{Status: store.DiagnosticStatusOpen, Limit: 10})

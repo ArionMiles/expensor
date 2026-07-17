@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/ArionMiles/expensor/backend/internal/observability"
-	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/internal/store/instrumented"
 )
 
@@ -17,7 +16,7 @@ func TestStoreEmitsRepresentativeDebugInstrumentation(t *testing.T) {
 	defer ts.cleanup()
 
 	ctx := context.Background()
-	if err := ts.CreateLabel(ctx, store.Tenant{}, "instrumented", "#38bdf8"); err != nil {
+	if err := ts.CreateLabel(ctx, testTenant(t, ts.base), "instrumented", "#38bdf8"); err != nil {
 		t.Fatalf("CreateLabel: %v", err)
 	}
 

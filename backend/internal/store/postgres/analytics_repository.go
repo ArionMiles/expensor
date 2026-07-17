@@ -79,22 +79,22 @@ func (r *analyticsRepository) statsReadModel(ctx context.Context, tenant store.T
 		SELECT COUNT(*),
 		       COALESCE(SUM(CASE WHEN currency = $1 THEN amount ELSE 0 END), 0)
 		FROM transactions
-		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $2
+		WHERE muted = false AND tenant_id = $2
 	`
 	var st store.Stats
 	st.BaseCurrency = baseCurrency
-	if err := r.pool.QueryRow(ctx, mainQ, baseCurrency, tenantIDParam(tenant)).Scan(&st.TotalCount, &st.TotalBase); err != nil {
+	if err := r.pool.QueryRow(ctx, mainQ, baseCurrency, tenant.ID).Scan(&st.TotalCount, &st.TotalBase); err != nil {
 		return nil, fmt.Errorf("fetching stats: %w", err)
 	}
 
 	const catQ = `
 		SELECT COALESCE(NULLIF(category, ''), 'Uncategorized'), COALESCE(SUM(amount), 0), COUNT(*)
 		FROM transactions
-		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $1
+		WHERE muted = false AND tenant_id = $1
 		GROUP BY COALESCE(NULLIF(category, ''), 'Uncategorized')
 		ORDER BY SUM(amount) DESC
 	`
-	rows, err := r.pool.Query(ctx, catQ, tenantIDParam(tenant))
+	rows, err := r.pool.Query(ctx, catQ, tenant.ID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching category stats: %w", err)
 	}
@@ -133,11 +133,11 @@ func (r *analyticsRepository) getChartDataAt(ctx context.Context, tenant store.T
 			       COALESCE(SUM(amount), 0)                     AS amount,
 			       COUNT(*)                                     AS cnt
 			FROM transactions
-			WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $2
+			WHERE muted = false AND tenant_id = $3 AND timestamp >= $2
 			GROUP BY period
 			ORDER BY period
 		`,
-			Args: []any{tz, now.AddDate(-1, 0, 0), tenantIDParam(tenant)},
+			Args: []any{tz, now.AddDate(-1, 0, 0), tenant.ID},
 		},
 		Daily: chartQueryRequest{
 			Label: "daily spend",
@@ -146,33 +146,33 @@ func (r *analyticsRepository) getChartDataAt(ctx context.Context, tenant store.T
 			       COALESCE(SUM(amount), 0)                        AS amount,
 			       COUNT(*)                                        AS cnt
 			FROM transactions
-			WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $2
+			WHERE muted = false AND tenant_id = $3 AND timestamp >= $2
 			GROUP BY period
 			ORDER BY period
 		`,
-			Args: []any{tz, now.AddDate(0, 0, -30), tenantIDParam(tenant)},
+			Args: []any{tz, now.AddDate(0, 0, -30), tenant.ID},
 		},
 		Category: chartQueryRequest{
 			Label: "category chart data",
 			Query: `
 			SELECT COALESCE(NULLIF(category, ''), 'Uncategorized'), COALESCE(SUM(amount), 0)
 			FROM transactions
-			WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $1
+			WHERE muted = false AND tenant_id = $1
 			GROUP BY COALESCE(NULLIF(category, ''), 'Uncategorized')
 			ORDER BY SUM(amount) DESC
 		`,
-			Args: []any{tenantIDParam(tenant)},
+			Args: []any{tenant.ID},
 		},
 		Bucket: chartQueryRequest{
 			Label: "bucket chart data",
 			Query: `
 			SELECT COALESCE(NULLIF(bucket, ''), 'Uncategorized'), COALESCE(SUM(amount), 0)
 			FROM transactions
-			WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $1
+			WHERE muted = false AND tenant_id = $1
 			GROUP BY COALESCE(NULLIF(bucket, ''), 'Uncategorized')
 			ORDER BY SUM(amount) DESC
 		`,
-			Args: []any{tenantIDParam(tenant)},
+			Args: []any{tenant.ID},
 		},
 		Label: chartQueryRequest{
 			Label: "label chart data",
@@ -180,45 +180,45 @@ func (r *analyticsRepository) getChartDataAt(ctx context.Context, tenant store.T
 			SELECT COALESCE(tl.label, 'Uncategorized'), COALESCE(SUM(t.amount), 0)
 			FROM transactions t
 			LEFT JOIN transaction_labels tl ON tl.transaction_id = t.id
-			WHERE t.muted = false AND t.tenant_id IS NOT DISTINCT FROM $1
+			WHERE t.muted = false AND t.tenant_id = $1
 			GROUP BY COALESCE(tl.label, 'Uncategorized')
 			ORDER BY SUM(t.amount) DESC
 			LIMIT 20
 		`,
-			Args: []any{tenantIDParam(tenant)},
+			Args: []any{tenant.ID},
 		},
 		Source: chartQueryRequest{
 			Label: "source chart data",
 			Query: `
 			SELECT COALESCE(source, ''), COALESCE(SUM(amount), 0)
 			FROM transactions
-			WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $1 AND source IS NOT NULL AND source != ''
+			WHERE muted = false AND tenant_id = $1 AND source IS NOT NULL AND source != ''
 			GROUP BY source
 			ORDER BY SUM(amount) DESC
 		`,
-			Args: []any{tenantIDParam(tenant)},
+			Args: []any{tenant.ID},
 		},
 		SourceType: chartQueryRequest{
 			Label: "source type chart data",
 			Query: `
 			SELECT COALESCE(source_type, ''), COALESCE(SUM(amount), 0)
 			FROM transactions
-			WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $1 AND source_type IS NOT NULL AND source_type != ''
+			WHERE muted = false AND tenant_id = $1 AND source_type IS NOT NULL AND source_type != ''
 			GROUP BY source_type
 			ORDER BY SUM(amount) DESC
 		`,
-			Args: []any{tenantIDParam(tenant)},
+			Args: []any{tenant.ID},
 		},
 		Bank: chartQueryRequest{
 			Label: "bank chart data",
 			Query: `
 			SELECT COALESCE(bank, ''), COALESCE(SUM(amount), 0)
 			FROM transactions
-			WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $1 AND bank IS NOT NULL AND bank != ''
+			WHERE muted = false AND tenant_id = $1 AND bank IS NOT NULL AND bank != ''
 			GROUP BY bank
 			ORDER BY SUM(amount) DESC
 		`,
-			Args: []any{tenantIDParam(tenant)},
+			Args: []any{tenant.ID},
 		},
 		CategoryMonthlyFn: func(ctx context.Context) (map[string]store.CategoryMonthlyEntry, error) {
 			return r.queryCategoryMonthlyAt(ctx, tenant, now)
@@ -268,7 +268,7 @@ func (r *analyticsRepository) getStatsBetween(ctx context.Context, tenant store.
 		SELECT COUNT(*),
 		       COALESCE(SUM(CASE WHEN currency = $1 THEN amount ELSE 0 END), 0)
 		FROM transactions
-		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $4 AND timestamp >= $2 AND timestamp < $3
+		WHERE muted = false AND tenant_id = $4 AND timestamp >= $2 AND timestamp < $3
 	`
 
 	st := &store.Stats{
@@ -276,18 +276,18 @@ func (r *analyticsRepository) getStatsBetween(ctx context.Context, tenant store.
 		TotalByCategory:    make(map[string]float64),
 		TotalCategoryCount: make(map[string]int),
 	}
-	if err := r.pool.QueryRow(ctx, mainQ, baseCurrency, startUTC, endUTC, tenantIDParam(tenant)).Scan(&st.TotalCount, &st.TotalBase); err != nil {
+	if err := r.pool.QueryRow(ctx, mainQ, baseCurrency, startUTC, endUTC, tenant.ID).Scan(&st.TotalCount, &st.TotalBase); err != nil {
 		return nil, fmt.Errorf("fetching range stats: %w", err)
 	}
 
 	const catQ = `
 		SELECT COALESCE(NULLIF(category, ''), 'Uncategorized'), COALESCE(SUM(amount), 0), COUNT(*)
 		FROM transactions
-		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $1 AND timestamp < $2
+		WHERE muted = false AND tenant_id = $3 AND timestamp >= $1 AND timestamp < $2
 		GROUP BY COALESCE(NULLIF(category, ''), 'Uncategorized')
 		ORDER BY SUM(amount) DESC
 	`
-	rows, err := r.pool.Query(ctx, catQ, startUTC, endUTC, tenantIDParam(tenant))
+	rows, err := r.pool.Query(ctx, catQ, startUTC, endUTC, tenant.ID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching range category stats: %w", err)
 	}
@@ -326,11 +326,11 @@ func (r *analyticsRepository) getChartDataBetween(
 		       COALESCE(SUM(amount), 0)                    AS amount,
 		       COUNT(*)                                    AS cnt
 		FROM transactions
-		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $4 AND timestamp >= $2 AND timestamp < $3
+		WHERE muted = false AND tenant_id = $4 AND timestamp >= $2 AND timestamp < $3
 		GROUP BY period
 		ORDER BY period
 	`,
-			Args: []any{tz, startUTC, endUTC, tenantIDParam(tenant)},
+			Args: []any{tz, startUTC, endUTC, tenant.ID},
 		},
 		Daily: chartQueryRequest{
 			Label: "range daily spend",
@@ -339,33 +339,33 @@ func (r *analyticsRepository) getChartDataBetween(
 		       COALESCE(SUM(amount), 0)                        AS amount,
 		       COUNT(*)                                        AS cnt
 		FROM transactions
-		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $4 AND timestamp >= $2 AND timestamp < $3
+		WHERE muted = false AND tenant_id = $4 AND timestamp >= $2 AND timestamp < $3
 		GROUP BY period
 		ORDER BY period
 	`,
-			Args: []any{tz, startUTC, endUTC, tenantIDParam(tenant)},
+			Args: []any{tz, startUTC, endUTC, tenant.ID},
 		},
 		Category: chartQueryRequest{
 			Label: "range category chart data",
 			Query: `
 		SELECT COALESCE(NULLIF(category, ''), 'Uncategorized'), COALESCE(SUM(amount), 0)
 		FROM transactions
-		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $1 AND timestamp < $2
+		WHERE muted = false AND tenant_id = $3 AND timestamp >= $1 AND timestamp < $2
 		GROUP BY COALESCE(NULLIF(category, ''), 'Uncategorized')
 		ORDER BY SUM(amount) DESC
 	`,
-			Args: []any{startUTC, endUTC, tenantIDParam(tenant)},
+			Args: []any{startUTC, endUTC, tenant.ID},
 		},
 		Bucket: chartQueryRequest{
 			Label: "range bucket chart data",
 			Query: `
 		SELECT COALESCE(NULLIF(bucket, ''), 'Uncategorized'), COALESCE(SUM(amount), 0)
 		FROM transactions
-		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $1 AND timestamp < $2
+		WHERE muted = false AND tenant_id = $3 AND timestamp >= $1 AND timestamp < $2
 		GROUP BY COALESCE(NULLIF(bucket, ''), 'Uncategorized')
 		ORDER BY SUM(amount) DESC
 	`,
-			Args: []any{startUTC, endUTC, tenantIDParam(tenant)},
+			Args: []any{startUTC, endUTC, tenant.ID},
 		},
 		Label: chartQueryRequest{
 			Label: "range label chart data",
@@ -373,48 +373,48 @@ func (r *analyticsRepository) getChartDataBetween(
 		SELECT COALESCE(tl.label, 'Uncategorized'), COALESCE(SUM(t.amount), 0)
 		FROM transactions t
 		LEFT JOIN transaction_labels tl ON tl.transaction_id = t.id
-		WHERE t.muted = false AND t.tenant_id IS NOT DISTINCT FROM $3 AND t.timestamp >= $1 AND t.timestamp < $2
+		WHERE t.muted = false AND t.tenant_id = $3 AND t.timestamp >= $1 AND t.timestamp < $2
 		GROUP BY COALESCE(tl.label, 'Uncategorized')
 		ORDER BY SUM(t.amount) DESC
 		LIMIT 20
 	`,
-			Args: []any{startUTC, endUTC, tenantIDParam(tenant)},
+			Args: []any{startUTC, endUTC, tenant.ID},
 		},
 		Source: chartQueryRequest{
 			Label: "range source chart data",
 			Query: `
 		SELECT COALESCE(source, ''), COALESCE(SUM(amount), 0)
 		FROM transactions
-		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $1 AND timestamp < $2
+		WHERE muted = false AND tenant_id = $3 AND timestamp >= $1 AND timestamp < $2
 		  AND source IS NOT NULL AND source != ''
 		GROUP BY source
 		ORDER BY SUM(amount) DESC
 	`,
-			Args: []any{startUTC, endUTC, tenantIDParam(tenant)},
+			Args: []any{startUTC, endUTC, tenant.ID},
 		},
 		SourceType: chartQueryRequest{
 			Label: "range source type chart data",
 			Query: `
 		SELECT COALESCE(source_type, ''), COALESCE(SUM(amount), 0)
 		FROM transactions
-		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $1 AND timestamp < $2
+		WHERE muted = false AND tenant_id = $3 AND timestamp >= $1 AND timestamp < $2
 		  AND source_type IS NOT NULL AND source_type != ''
 		GROUP BY source_type
 		ORDER BY SUM(amount) DESC
 	`,
-			Args: []any{startUTC, endUTC, tenantIDParam(tenant)},
+			Args: []any{startUTC, endUTC, tenant.ID},
 		},
 		Bank: chartQueryRequest{
 			Label: "range bank chart data",
 			Query: `
 		SELECT COALESCE(bank, ''), COALESCE(SUM(amount), 0)
 		FROM transactions
-		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $1 AND timestamp < $2
+		WHERE muted = false AND tenant_id = $3 AND timestamp >= $1 AND timestamp < $2
 		  AND bank IS NOT NULL AND bank != ''
 		GROUP BY bank
 		ORDER BY SUM(amount) DESC
 	`,
-			Args: []any{startUTC, endUTC, tenantIDParam(tenant)},
+			Args: []any{startUTC, endUTC, tenant.ID},
 		},
 		CategoryMonthlyFn: func(ctx context.Context) (map[string]store.CategoryMonthlyEntry, error) {
 			return r.queryCategoryMonthlyBetween(ctx, tenant, loc, startUTC, endUTC)
@@ -451,12 +451,12 @@ func (r *analyticsRepository) queryCategoryMonthlyBetween(
 		    ), 0) AS prior_month
 		FROM transactions
 		WHERE muted = false
-		    AND tenant_id IS NOT DISTINCT FROM $4
+		    AND tenant_id = $4
 		    AND timestamp >= $3
 		    AND timestamp < $2
 		GROUP BY COALESCE(NULLIF(category, ''), 'Uncategorized')
 	`
-	rows, err := r.pool.Query(ctx, q, startUTC, endUTC, priorStartUTC, tenantIDParam(tenant))
+	rows, err := r.pool.Query(ctx, q, startUTC, endUTC, priorStartUTC, tenant.ID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching category monthly data: %w", err)
 	}
@@ -562,10 +562,10 @@ func (r *analyticsRepository) annualSpendReadModel(ctx context.Context, tenant s
 			COALESCE(SUM(amount), 0)           AS amount,
 			COUNT(*)                           AS count
 		FROM transactions
-		WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND EXTRACT(YEAR FROM timestamp AT TIME ZONE $2) = $1
+		WHERE muted = false AND tenant_id = $3 AND EXTRACT(YEAR FROM timestamp AT TIME ZONE $2) = $1
 		GROUP BY date
 		ORDER BY date
-	`, year, tz, tenantIDParam(tenant))
+	`, year, tz, tenant.ID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching annual spend for %d: %w", year, err)
 	}
@@ -588,15 +588,15 @@ func (r *analyticsRepository) annualSpendReadModel(ctx context.Context, tenant s
 // GetSpendingHeatmap. Returns empty string and nil args when both are nil.
 func buildHeatmapWhere(tenant store.Tenant, from, to *time.Time) (string, []any) {
 	if from == nil && to == nil {
-		return " WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $1", []any{tenantIDParam(tenant)}
+		return " WHERE muted = false AND tenant_id = $1", []any{tenant.ID}
 	}
 	if from == nil {
-		return " WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $2 AND timestamp <= $1", []any{*to, tenantIDParam(tenant)}
+		return " WHERE muted = false AND tenant_id = $2 AND timestamp <= $1", []any{*to, tenant.ID}
 	}
 	if to == nil {
-		return " WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $2 AND timestamp >= $1", []any{*from, tenantIDParam(tenant)}
+		return " WHERE muted = false AND tenant_id = $2 AND timestamp >= $1", []any{*from, tenant.ID}
 	}
-	return " WHERE muted = false AND tenant_id IS NOT DISTINCT FROM $3 AND timestamp >= $1 AND timestamp <= $2", []any{*from, *to, tenantIDParam(tenant)}
+	return " WHERE muted = false AND tenant_id = $3 AND timestamp >= $1 AND timestamp <= $2", []any{*from, *to, tenant.ID}
 }
 
 // GetFacets returns the distinct non-empty values for source, category, currency, and label
@@ -754,11 +754,11 @@ func (r *analyticsRepository) monthlyBreakdownSpendReadModel(
 			LEFT JOIN transaction_labels tl ON tl.transaction_id = t.id
 			WHERE t.muted = false
 			  AND t.timestamp >= $2
-			  AND t.tenant_id IS NOT DISTINCT FROM $3
+			  AND t.tenant_id = $3
 			GROUP BY COALESCE(tl.label, 'Uncategorized'), month
 			ORDER BY month, label
 		`
-		args = []any{tz, startUTC, tenantIDParam(tenant)}
+		args = []any{tz, startUTC, tenant.ID}
 	case "categories":
 		query = `
 			SELECT
@@ -768,11 +768,11 @@ func (r *analyticsRepository) monthlyBreakdownSpendReadModel(
 			FROM transactions t
 			WHERE t.muted = false
 			  AND t.timestamp >= $2
-			  AND t.tenant_id IS NOT DISTINCT FROM $3
+			  AND t.tenant_id = $3
 			GROUP BY COALESCE(NULLIF(t.category, ''), 'Uncategorized'), month
 			ORDER BY month, label
 		`
-		args = []any{tz, startUTC, tenantIDParam(tenant)}
+		args = []any{tz, startUTC, tenant.ID}
 	case "buckets":
 		query = `
 			SELECT
@@ -782,11 +782,11 @@ func (r *analyticsRepository) monthlyBreakdownSpendReadModel(
 			FROM transactions t
 			WHERE t.muted = false
 			  AND t.timestamp >= $2
-			  AND t.tenant_id IS NOT DISTINCT FROM $3
+			  AND t.tenant_id = $3
 			GROUP BY COALESCE(NULLIF(t.bucket, ''), 'Uncategorized'), month
 			ORDER BY month, label
 		`
-		args = []any{tz, startUTC, tenantIDParam(tenant)}
+		args = []any{tz, startUTC, tenant.ID}
 	default:
 		return nil, fmt.Errorf("unsupported monthly breakdown dimension %q", dimension)
 	}

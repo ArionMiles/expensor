@@ -228,10 +228,10 @@ func TestTenantScopedRulesAndDiagnostics(t *testing.T) {
 	}
 
 	diagnostic := tenantScopeDiagnostic("diag-message", "Same user rule")
-	if err := ts.RecordTenantExtractionDiagnostic(ctx, tenantA, diagnostic); err != nil {
+	if err := ts.RecordExtractionDiagnostic(ctx, tenantA, diagnostic); err != nil {
 		t.Fatalf("RecordExtractionDiagnostic tenant A: %v", err)
 	}
-	if err := ts.RecordTenantExtractionDiagnostic(ctx, tenantB, diagnostic); err != nil {
+	if err := ts.RecordExtractionDiagnostic(ctx, tenantB, diagnostic); err != nil {
 		t.Fatalf("RecordExtractionDiagnostic tenant B with same message/rule: %v", err)
 	}
 	rows, err := ts.ListExtractionDiagnostics(ctx, tenantA, store.DiagnosticFilter{Status: store.DiagnosticStatusAll})

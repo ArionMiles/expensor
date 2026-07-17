@@ -48,10 +48,7 @@ func (w *ingestionRepository) Write(ctx context.Context, batch store.IngestionBa
 
 	// Prepare batch insert for transactions
 	pgBatch := &pgx.Batch{}
-	conflictClause := "ON CONFLICT (tenant_id, message_id) WHERE tenant_id IS NOT NULL"
-	if tenantIDParam(batch.Tenant) == nil {
-		conflictClause = "ON CONFLICT (message_id) WHERE tenant_id IS NULL"
-	}
+	const conflictClause = "ON CONFLICT (tenant_id, message_id) WHERE tenant_id IS NOT NULL"
 	for _, txn := range transactions {
 		currency, timestamp := w.normalizeWriteInput(txn)
 		pgBatch.Queue(fmt.Sprintf(`
@@ -80,7 +77,7 @@ func (w *ingestionRepository) Write(ctx context.Context, batch store.IngestionBa
 				updated_at = NOW()
 			RETURNING id
 		`, conflictClause),
-			tenantIDParam(batch.Tenant),
+			batch.Tenant.ID,
 			txn.MessageID,
 			txn.Amount,
 			currency,
@@ -169,7 +166,7 @@ func (w *ingestionRepository) applyMerchantLabels(ctx context.Context, tx pgx.Tx
 		FROM transactions t
 		JOIN label_merchants lm
 		  ON t.merchant_info ILIKE '%' || lm.merchant_pattern || '%'
-		 AND lm.tenant_id IS NOT DISTINCT FROM t.tenant_id
+		 AND lm.tenant_id = t.tenant_id
 		WHERE t.id = ANY($1)
 		ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING
 	`, txnIDs); err != nil {
@@ -201,7 +198,7 @@ func (w *ingestionRepository) applyMerchantCategories(ctx context.Context, tx pg
 			FROM transactions t
 			JOIN merchant_categories mc
 			  ON t.merchant_info ILIKE '%' || mc.fragment || '%'
-			 AND mc.tenant_id IS NOT DISTINCT FROM t.tenant_id
+			 AND mc.tenant_id = t.tenant_id
 			LEFT JOIN mcc_codes m ON m.code = mc.mcc_code
 			WHERE t.id = ANY($1)
 			  AND COALESCE(m.category, mc.category) IS NOT NULL
@@ -227,7 +224,7 @@ func (w *ingestionRepository) applyMutedMerchants(ctx context.Context, tx pgx.Tx
 		    updated_at = NOW()
 		FROM muted_merchants mm
 		WHERE t.id = ANY($1)
-		  AND mm.tenant_id IS NOT DISTINCT FROM t.tenant_id
+		  AND mm.tenant_id = t.tenant_id
 		  AND t.merchant_info ILIKE '%' || mm.pattern || '%'
 	`, txnIDs)
 	return err

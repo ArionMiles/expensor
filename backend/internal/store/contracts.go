@@ -56,8 +56,7 @@ type DiagnosticStore interface {
 	ListExtractionDiagnostics(ctx context.Context, tenant Tenant, filter DiagnosticFilter) ([]ExtractionDiagnosticRow, error)
 	GetExtractionDiagnostic(ctx context.Context, tenant Tenant, id string) (*ExtractionDiagnosticRow, error)
 	UpdateExtractionDiagnosticStatus(ctx context.Context, tenant Tenant, id, status string) (*ExtractionDiagnosticRow, error)
-	RecordExtractionDiagnostic(ctx context.Context, diagnostic api.ExtractionDiagnostic) error
-	RecordTenantExtractionDiagnostic(ctx context.Context, tenant Tenant, diagnostic api.ExtractionDiagnostic) error
+	RecordExtractionDiagnostic(ctx context.Context, tenant Tenant, diagnostic api.ExtractionDiagnostic) error
 }
 
 // RuleStore persists system and user extraction rules.

@@ -7,7 +7,11 @@ import (
 	"testing"
 	"time"
 
+	migrate "github.com/golang-migrate/migrate/v4"
+	pgdriver "github.com/golang-migrate/migrate/v4/database/pgx/v5"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -106,7 +110,104 @@ func TestRunUsesSchemaMigrationsInExpensor(t *testing.T) {
 	if dirty {
 		t.Fatal("schema_migrations marked dirty after migration run")
 	}
-	if version != 9 {
-		t.Fatalf("schema_migrations version = %d, want 9", version)
+	if version != 10 {
+		t.Fatalf("schema_migrations version = %d, want 10", version)
+	}
+}
+
+func TestDiagnosticTenantBackfillMigration(t *testing.T) {
+	ctx := context.Background()
+	pool := newMigrationTestPool(t)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	if err := migrations.Run(ctx, pool, logger); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	m := newMigrationTestMigrator(t, pool)
+	if err := m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) error = %v", err)
+	}
+
+	const (
+		tenantID         = "00000000-0000-0000-0000-000000000001"
+		customRuleID     = "00000000-0000-0000-0000-000000000011"
+		predefinedRuleID = "00000000-0000-0000-0000-000000000012"
+		customDiagID     = "00000000-0000-0000-0000-000000000021"
+		predefinedDiagID = "00000000-0000-0000-0000-000000000022"
+		unmatchedDiagID  = "00000000-0000-0000-0000-000000000023"
+	)
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO users (id, email, display_name, role)
+		VALUES ($1, 'diagnostic-backfill@example.com', 'Diagnostic Backfill', 'user')
+	`, tenantID); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO rules (id, tenant_id, name, amount_regex, merchant_regex, predefined)
+		VALUES
+			($1, $2, 'Custom diagnostic rule', 'amount', 'merchant', false),
+			($3, NULL, 'Predefined diagnostic rule', 'amount', 'merchant', true)
+	`, customRuleID, tenantID, predefinedRuleID); err != nil {
+		t.Fatalf("insert rules: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO extraction_diagnostics (id, reader, message_id, rule_id, rule_name)
+		VALUES
+			($1, 'gmail', 'backfill-custom', $2, 'Custom diagnostic rule'),
+			($3, 'gmail', 'backfill-predefined', $4, 'Predefined diagnostic rule'),
+			($5, 'gmail', 'backfill-unmatched', NULL, '')
+	`, customDiagID, customRuleID, predefinedDiagID, predefinedRuleID, unmatchedDiagID); err != nil {
+		t.Fatalf("insert diagnostics: %v", err)
+	}
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) error = %v", err)
+	}
+
+	assertDiagnosticTenant(ctx, t, pool, customDiagID, tenantID)
+	assertDiagnosticTenant(ctx, t, pool, predefinedDiagID, "")
+	assertDiagnosticTenant(ctx, t, pool, unmatchedDiagID, "")
+}
+
+func newMigrationTestMigrator(t *testing.T, pool *pgxpool.Pool) *migrate.Migrate {
+	t.Helper()
+
+	db := stdlib.OpenDBFromPool(pool)
+	source, err := iofs.New(migrations.FS, ".")
+	if err != nil {
+		_ = db.Close()
+		t.Fatalf("create migration source: %v", err)
+	}
+	driver, err := pgdriver.WithInstance(db, &pgdriver.Config{MigrationsTable: "schema_migrations"})
+	if err != nil {
+		_ = db.Close()
+		t.Fatalf("create migration driver: %v", err)
+	}
+	m, err := migrate.NewWithInstance("iofs", source, "pgx5", driver)
+	if err != nil {
+		_ = db.Close()
+		t.Fatalf("create migrator: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = m.Close()
+	})
+	return m
+}
+
+func assertDiagnosticTenant(ctx context.Context, t *testing.T, pool *pgxpool.Pool, diagnosticID, wantTenant string) {
+	t.Helper()
+
+	var gotTenant *string
+	if err := pool.QueryRow(ctx, `SELECT tenant_id::text FROM extraction_diagnostics WHERE id = $1`, diagnosticID).Scan(&gotTenant); err != nil {
+		t.Fatalf("get diagnostic %s tenant: %v", diagnosticID, err)
+	}
+	if wantTenant == "" {
+		if gotTenant != nil {
+			t.Fatalf("diagnostic %s tenant = %q, want NULL", diagnosticID, *gotTenant)
+		}
+		return
+	}
+	if gotTenant == nil || *gotTenant != wantTenant {
+		t.Fatalf("diagnostic %s tenant = %v, want %q", diagnosticID, gotTenant, wantTenant)
 	}
 }

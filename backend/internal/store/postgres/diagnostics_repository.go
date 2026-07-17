@@ -8,7 +8,37 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
+
+const recordExtractionDiagnosticSQL = `
+	INSERT INTO extraction_diagnostics (
+		tenant_id, reader, message_id, source, sender, sender_email, subject, email_body, received_at, snippet,
+		rule_id, rule_name, amount_regex, merchant_regex, currency_regex, failure_reasons
+	)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+	ON CONFLICT (tenant_id, reader, message_id, rule_name) WHERE tenant_id IS NOT NULL AND status = 'open' AND message_id IS NOT NULL
+	DO UPDATE SET
+	    source = EXCLUDED.source,
+	    sender = EXCLUDED.sender,
+	    sender_email = EXCLUDED.sender_email,
+	    subject = EXCLUDED.subject,
+	    email_body = EXCLUDED.email_body,
+	    received_at = EXCLUDED.received_at,
+	    snippet = EXCLUDED.snippet,
+	    rule_id = EXCLUDED.rule_id,
+	    amount_regex = EXCLUDED.amount_regex,
+	    merchant_regex = EXCLUDED.merchant_regex,
+	    currency_regex = EXCLUDED.currency_regex,
+	    failure_reasons = EXCLUDED.failure_reasons,
+	    updated_at = NOW()
+`
+
+const diagnosticColumns = `
+	id::text, status, reader, COALESCE(message_id, ''), source, sender, sender_email, subject, email_body,
+	received_at, snippet, rule_id::text, rule_name, amount_regex, merchant_regex, currency_regex, failure_reasons,
+	created_at, updated_at, resolved_at
+`
 
 type diagnosticsRepository struct {
 	pool *pgxpool.Pool
@@ -21,10 +51,12 @@ func newDiagnosticsRepository(deps repositoryDependencies) *diagnosticsRepositor
 }
 
 func (r *diagnosticsRepository) RecordExtractionDiagnostic(ctx context.Context, tenant store.Tenant, diagnostic api.ExtractionDiagnostic) error {
-	q := diagnosticUpsertSQL(tenant)
+	if tenant.ID == "" {
+		return errors.E("postgres.diagnostics.record_extraction", errors.InvalidInput, "tenant is required")
+	}
 
-	_, err := r.pool.Exec(ctx, q,
-		tenantIDParam(tenant),
+	_, err := r.pool.Exec(ctx, recordExtractionDiagnosticSQL,
+		tenant.ID,
 		diagnostic.Reader,
 		nullableString(diagnostic.MessageID),
 		diagnostic.Source,
@@ -47,35 +79,6 @@ func (r *diagnosticsRepository) RecordExtractionDiagnostic(ctx context.Context, 
 	return nil
 }
 
-func diagnosticUpsertSQL(tenant store.Tenant) string {
-	conflict := "ON CONFLICT (tenant_id, reader, message_id, rule_name) WHERE tenant_id IS NOT NULL AND status = 'open' AND message_id IS NOT NULL"
-	if tenantIDParam(tenant) == nil {
-		conflict = "ON CONFLICT (reader, message_id, rule_name) WHERE tenant_id IS NULL AND status = 'open' AND message_id IS NOT NULL"
-	}
-	return `
-			INSERT INTO extraction_diagnostics (
-				tenant_id, reader, message_id, source, sender, sender_email, subject, email_body, received_at, snippet,
-				rule_id, rule_name, amount_regex, merchant_regex, currency_regex, failure_reasons
-			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-			` + conflict + `
-			DO UPDATE SET
-			    source = EXCLUDED.source,
-			    sender = EXCLUDED.sender,
-			    sender_email = EXCLUDED.sender_email,
-			    subject = EXCLUDED.subject,
-			    email_body = EXCLUDED.email_body,
-			    received_at = EXCLUDED.received_at,
-			    snippet = EXCLUDED.snippet,
-			    rule_id = EXCLUDED.rule_id,
-			    amount_regex = EXCLUDED.amount_regex,
-			    merchant_regex = EXCLUDED.merchant_regex,
-			    currency_regex = EXCLUDED.currency_regex,
-			    failure_reasons = EXCLUDED.failure_reasons,
-			    updated_at = NOW()
-		`
-}
-
 func (r *diagnosticsRepository) ListExtractionDiagnostics(
 	ctx context.Context,
 	tenant store.Tenant,
@@ -86,8 +89,8 @@ func (r *diagnosticsRepository) ListExtractionDiagnostics(
 	}
 
 	query := `SELECT ` + diagnosticColumns + ` FROM extraction_diagnostics`
-	args := []any{tenantIDParam(tenant)}
-	query += ` WHERE tenant_id IS NOT DISTINCT FROM $1`
+	args := []any{tenant.ID}
+	query += ` WHERE tenant_id = $1`
 	if f.Status != store.DiagnosticStatusAll {
 		query += ` AND status = $2`
 		args = append(args, f.Status)
@@ -112,8 +115,8 @@ func (r *diagnosticsRepository) ListExtractionDiagnostics(
 
 func (r *diagnosticsRepository) GetExtractionDiagnostic(ctx context.Context, tenant store.Tenant, id string) (*store.ExtractionDiagnosticRow, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT `+diagnosticColumns+` FROM extraction_diagnostics WHERE id = $1 AND tenant_id IS NOT DISTINCT FROM $2`,
-		id, tenantIDParam(tenant),
+		`SELECT `+diagnosticColumns+` FROM extraction_diagnostics WHERE id = $1 AND tenant_id = $2`,
+		id, tenant.ID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("fetching extraction diagnostic: %w", err)
@@ -144,9 +147,9 @@ func (r *diagnosticsRepository) UpdateExtractionDiagnosticStatus(
 			SET status = $2,
 			    resolved_at = CASE WHEN $2 = 'open' THEN NULL ELSE NOW() END,
 			    updated_at = NOW()
-			WHERE id = $1 AND tenant_id IS NOT DISTINCT FROM $3
+			WHERE id = $1 AND tenant_id = $3
 			RETURNING `+diagnosticColumns,
-		id, status, tenantIDParam(tenant),
+		id, status, tenant.ID,
 	)
 	if err != nil {
 		if isDiagnosticOpenConflict(err) {

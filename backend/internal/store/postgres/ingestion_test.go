@@ -20,7 +20,11 @@ func newTestIngestor(t *testing.T, overrides store.IngestionConfig) *testIngesto
 	ts := newTestStore(t)
 	t.Cleanup(ts.cleanup)
 
-	return &testIngestor{st: ts.Store, tenant: overrides.Tenant}
+	tenant := overrides.Tenant
+	if tenant.ID == "" {
+		tenant = testTenant(t, ts)
+	}
+	return &testIngestor{st: ts.Store, tenant: tenant}
 }
 
 // TestWrite_SingleTransaction verifies a single transaction is written and acknowledged.
@@ -316,16 +320,18 @@ func TestWrite_AutoAppliesMerchantLabelToFutureTransactions(t *testing.T) {
 	const label = "subscription"
 
 	_, err := poolForTest(w.st).Exec(ctx, `
-		INSERT INTO labels (name, color) VALUES ($1, $2) ON CONFLICT (name) WHERE tenant_id IS NULL DO NOTHING
-	`, label, "#f59e0b")
+		INSERT INTO labels (tenant_id, name, color)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (tenant_id, name) WHERE tenant_id IS NOT NULL DO NOTHING
+	`, w.tenant.ID, label, "#f59e0b")
 	if err != nil {
 		t.Fatalf("seed label row: %v", err)
 	}
 
 	_, err = poolForTest(w.st).Exec(ctx, `
-		INSERT INTO label_merchants (label, merchant_pattern) VALUES ($1, $2)
-		ON CONFLICT (label, merchant_pattern) WHERE tenant_id IS NULL DO NOTHING
-	`, label, merchant)
+		INSERT INTO label_merchants (tenant_id, label, merchant_pattern) VALUES ($1, $2, $3)
+		ON CONFLICT (tenant_id, label, merchant_pattern) WHERE tenant_id IS NOT NULL DO NOTHING
+	`, w.tenant.ID, label, merchant)
 	if err != nil {
 		t.Fatalf("seed label mapping: %v", err)
 	}
@@ -377,26 +383,26 @@ func TestWrite_AutoAppliesMerchantCategoryBucketToFutureTransactions(t *testing.
 	}
 
 	_, err = poolForTest(w.st).Exec(ctx, `
-		INSERT INTO merchant_categories (fragment, mcc_code, category, bucket, user_locked)
-		VALUES ($1, $2, NULL, NULL, true)
-		ON CONFLICT (fragment) WHERE tenant_id IS NULL DO UPDATE
+		INSERT INTO merchant_categories (tenant_id, fragment, mcc_code, category, bucket, user_locked)
+		VALUES ($1, $2, $3, NULL, NULL, true)
+		ON CONFLICT (tenant_id, fragment) WHERE tenant_id IS NOT NULL DO UPDATE
 		SET mcc_code = EXCLUDED.mcc_code,
 		    category = EXCLUDED.category,
 		    bucket = EXCLUDED.bucket,
 		    user_locked = true
-	`, "Uber", "4121")
+	`, w.tenant.ID, "Uber", "4121")
 	if err != nil {
 		t.Fatalf("seed MCC-backed merchant category: %v", err)
 	}
 
 	_, err = poolForTest(w.st).Exec(ctx, `
-		INSERT INTO merchant_categories (fragment, category, bucket, user_locked)
-		VALUES ($1, $2, $3, true)
-		ON CONFLICT (fragment) WHERE tenant_id IS NULL DO UPDATE
+		INSERT INTO merchant_categories (tenant_id, fragment, category, bucket, user_locked)
+		VALUES ($1, $2, $3, $4, true)
+		ON CONFLICT (tenant_id, fragment) WHERE tenant_id IS NOT NULL DO UPDATE
 		SET category = EXCLUDED.category,
 		    bucket = EXCLUDED.bucket,
 		    user_locked = true
-	`, "Uber Eats", "Food Delivery", "Wants")
+	`, w.tenant.ID, "Uber Eats", "Food Delivery", "Wants")
 	if err != nil {
 		t.Fatalf("seed overlapping merchant category: %v", err)
 	}
