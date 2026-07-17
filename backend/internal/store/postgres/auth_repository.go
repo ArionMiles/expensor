@@ -4,7 +4,9 @@ import (
 	"context"
 	"strings"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
@@ -234,8 +236,9 @@ func (r *authRepository) CreateAccessToken(ctx context.Context, input store.Crea
 		RETURNING id, user_id, name, token_hash, created_at, expires_at, last_used_at, revoked_at
 	`, input.UserID, input.Name, input.TokenHash, input.ExpiresAt))
 	if err != nil {
-		if isAccessTokenNameConflict(err) {
-			return nil, errors.E("store.auth.create_access_token", errors.Conflict, "access token name conflict")
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, errors.E("store.auth.create_access_token", errors.Conflict, "access token name conflict", err)
 		}
 		return nil, errors.E("postgres.auth.create_access_token", "creating access token", err)
 	}
@@ -392,8 +395,9 @@ func insertUser(ctx context.Context, tx pgx.Tx, input store.CreateUserInput) (*s
 		          disabled_at, created_at, updated_at
 	`, input.Email, input.PasswordHash, input.DisplayName, role, avatarKey))
 	if err != nil {
-		if isUserEmailConflict(err) {
-			return nil, errors.E("store.auth.create_user", errors.Conflict, "user email conflict")
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, errors.E("store.auth.create_user", errors.Conflict, "user email conflict", err)
 		}
 		return nil, errors.E("postgres.auth.insert_user", "creating user", err)
 	}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
@@ -98,16 +100,18 @@ func (r *rulesRepository) CreateRule(ctx context.Context, tenant store.Tenant, r
 		ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
 	)
 	if err != nil {
-		if isRuleNameConflict(err) {
-			return nil, errors.E("store.rules.create", errors.Conflict, "rule name conflict")
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, errors.E("store.rules.create", errors.Conflict, "rule name conflict", err)
 		}
 		return nil, errors.E("postgres.rules.create_rule", "creating rule", err)
 	}
 	defer rows.Close()
 	result, err := scanRuleRows(rows)
 	if err != nil {
-		if isRuleNameConflict(err) {
-			return nil, errors.E("store.rules.create", errors.Conflict, "rule name conflict")
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, errors.E("store.rules.create", errors.Conflict, "rule name conflict", err)
 		}
 		return nil, errors.E("postgres.rules.create_rule", "creating rule", err)
 	}
@@ -130,16 +134,18 @@ func (r *rulesRepository) UpdateRule(ctx context.Context, tenant store.Tenant, i
 		ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank, tenant.ID,
 	)
 	if err != nil {
-		if isRuleNameConflict(err) {
-			return nil, errors.E("store.rules.update", errors.Conflict, "rule name conflict")
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, errors.E("store.rules.update", errors.Conflict, "rule name conflict", err)
 		}
 		return nil, errors.E("postgres.rules.update_rule", "updating rule", err)
 	}
 	defer rows.Close()
 	result, err := scanRuleRows(rows)
 	if err != nil {
-		if isRuleNameConflict(err) {
-			return nil, errors.E("store.rules.update", errors.Conflict, "rule name conflict")
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, errors.E("store.rules.update", errors.Conflict, "rule name conflict", err)
 		}
 		return nil, errors.E("postgres.rules.update_rule", "updating rule", err)
 	}

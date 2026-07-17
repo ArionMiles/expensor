@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
@@ -152,11 +154,13 @@ func (r *diagnosticsRepository) UpdateExtractionDiagnosticStatus(
 		id, status, tenant.ID,
 	)
 	if err != nil {
-		if isDiagnosticOpenConflict(err) {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return nil, errors.E(
 				"store.diagnostics.update_status",
 				errors.Conflict,
 				"open diagnostic already exists for reader/message/rule: diagnostic conflict",
+				err,
 			)
 		}
 		return nil, errors.E("postgres.diagnostics.update_extraction_diagnostic_status", "updating extraction diagnostic status", err)
@@ -164,11 +168,13 @@ func (r *diagnosticsRepository) UpdateExtractionDiagnosticStatus(
 	defer rows.Close()
 	result, err := scanDiagnosticRows(rows)
 	if err != nil {
-		if isDiagnosticOpenConflict(err) {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return nil, errors.E(
 				"store.diagnostics.update_status",
 				errors.Conflict,
 				"open diagnostic already exists for reader/message/rule: diagnostic conflict",
+				err,
 			)
 		}
 		return nil, errors.E("postgres.diagnostics.update_extraction_diagnostic_status", "updating extraction diagnostic status", err)
