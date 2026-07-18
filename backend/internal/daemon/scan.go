@@ -59,7 +59,7 @@ type ScanDependencies struct {
 	SystemRules       []api.Rule
 	Resolver          api.CategoryResolver
 	Store             scanStore
-	Diagnostics       api.DiagnosticSink
+	Diagnostics       DiagnosticStore
 	TransactionWriter store.TransactionBatchWriter
 	Logger            *slog.Logger
 }
@@ -70,12 +70,12 @@ type ScanService struct {
 	config            config.App
 	systemRules       []api.Rule
 	store             scanStore
-	diagnostics       api.DiagnosticSink
+	diagnostics       DiagnosticStore
 	transactionWriter store.TransactionBatchWriter
 	logger            *slog.Logger
 	resolverMu        sync.RWMutex
 	resolver          api.CategoryResolver
-	newRunner         func(*http.Client) scanRunner
+	newRunner         func(RunnerDeps) scanRunner
 }
 
 type scanRunner interface {
@@ -95,9 +95,7 @@ func NewScanService(deps ScanDependencies) (*ScanService, error) {
 		registry: deps.Registry, config: deps.Config, systemRules: deps.SystemRules, resolver: deps.Resolver,
 		store: deps.Store, diagnostics: deps.Diagnostics, transactionWriter: deps.TransactionWriter, logger: logger,
 	}
-	service.newRunner = func(client *http.Client) scanRunner {
-		return New(service.registry, service.transactionWriter, client, service.logger)
-	}
+	service.newRunner = func(deps RunnerDeps) scanRunner { return New(deps) }
 	return service, nil
 }
 
@@ -121,12 +119,17 @@ func (s *ScanService) Run(ctx context.Context, request ScanRequest) error {
 	if !forceRescan {
 		stateManager = state.NewDBManager(s.store, request.Tenant, s.logger)
 	}
-	runner := s.newRunner(httpClient)
+	runner := s.newRunner(RunnerDeps{
+		Registry:          s.registry,
+		TransactionWriter: s.transactionWriter,
+		Diagnostics:       s.diagnostics,
+		HTTPClient:        httpClient,
+		Logger:            s.logger,
+	})
 	err = runner.Run(ctx, RunConfig{
 		ReaderName: request.Reader, Tenant: request.Tenant, Config: &runtimeConfig,
 		Rules:    rules.MergeRules(s.systemRules, rules.LoadPersisted(ctx, s.store, request.Tenant, s.logger)),
-		Resolver: s.resolverSnapshot(), StateManager: stateManager, DiagnosticSink: s.diagnostics,
-		RuntimeStore: s.store, ForceRescan: forceRescan,
+		Resolver: s.resolverSnapshot(), StateManager: stateManager, RuntimeStore: s.store, ForceRescan: forceRescan,
 	})
 	if err != nil {
 		return errors.E("daemon.scan.run", err)

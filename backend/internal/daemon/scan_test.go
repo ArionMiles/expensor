@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
-	"net/http"
 	"regexp"
 	"testing"
 	"time"
@@ -99,7 +98,7 @@ func TestScanServiceAppliesModePoliciesAndMergesRules(t *testing.T) {
 		Name: "Bundled", SenderEmail: "system@example.test", Amount: regexp.MustCompile(`(\d+)`), MerchantInfo: regexp.MustCompile(`(shop)`),
 	}})
 	runner := &scanRunnerStub{}
-	service.newRunner = func(*http.Client) scanRunner { return runner }
+	service.newRunner = func(RunnerDeps) scanRunner { return runner }
 
 	for _, mode := range []ScanMode{ScanContinuous, ScanScheduled, ScanRescan} {
 		if err := service.Run(context.Background(), ScanRequest{Tenant: store.Tenant{ID: "tenant-a"}, Reader: "test", Mode: mode}); err != nil {
@@ -159,6 +158,24 @@ func TestScanServiceRefreshesResolverSnapshot(t *testing.T) {
 	category, bucket := service.resolverSnapshot()("merchant")
 	if category != "Dining" || bucket != "Wants" {
 		t.Fatalf("resolver result = %q, %q", category, bucket)
+	}
+}
+
+func TestScanServicePassesDiagnosticsToRunner(t *testing.T) {
+	service := newScanServiceForTest(t, &scanStoreStub{appConfig: map[string]string{}}, testProvider("test", plugins.AuthType(""), nil), nil)
+	diagnostics := &mockDiagnosticStore{}
+	service.diagnostics = diagnostics
+
+	var gotDeps RunnerDeps
+	service.newRunner = func(deps RunnerDeps) scanRunner {
+		gotDeps = deps
+		return &scanRunnerStub{}
+	}
+	if err := service.Run(t.Context(), ScanRequest{Tenant: store.Tenant{ID: "tenant-a"}, Reader: "test"}); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if gotDeps.Diagnostics != diagnostics {
+		t.Fatalf("runner diagnostics = %T, want configured diagnostic store", gotDeps.Diagnostics)
 	}
 }
 

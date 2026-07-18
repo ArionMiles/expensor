@@ -356,7 +356,7 @@ func TestRun_PassesTenantScopedDiagnosticSinkToProvider(t *testing.T) {
 	err := runner.Run(context.Background(), RunConfig{
 		ReaderName: "test-reader",
 		Tenant:     wantTenant,
-		Config:     &config.App{},
+		Config:     testAppConfig(),
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
