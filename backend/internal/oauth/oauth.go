@@ -53,7 +53,7 @@ func NewFromJSONAndStore(ctx context.Context, input StoreClientInput) (*http.Cli
 		return nil, errors.E(op, "loading token for reader "+input.Reader, err)
 	}
 	if !ok {
-		return nil, errors.E(op, KindTokenMissing, "reader token missing")
+		return nil, errors.E(op, KindTokenMissing, errors.User("provider is not authenticated"), "reader token missing")
 	}
 	tok := &oauth2.Token{}
 	if err := json.Unmarshal(tokenJSON, tok); err != nil {

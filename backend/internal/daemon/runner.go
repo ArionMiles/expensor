@@ -4,10 +4,8 @@ package daemon
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -149,7 +147,7 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 	ingestionCfg := store.IngestionConfig{Tenant: runCfg.Tenant}
 	if cfg != nil {
 		ingestionCfg.BatchSize = cfg.Database.BatchSize
-		ingestionCfg.FlushInterval = time.Duration(cfg.Database.FlushInterval) * time.Second
+		ingestionCfg.FlushInterval = cfg.Database.FlushInterval
 	}
 	sink, err := newTransactionSink(r.transactionWriter, ingestionCfg, r.logger.With("component", "transaction_ingestion"))
 	if err != nil {
@@ -171,8 +169,8 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 	g.Go(func() error { return reader.Read(gctx, transactions, ackChan) })
 
 	if err := g.Wait(); err != nil &&
-		!errors.Is(err, context.Canceled) &&
-		!errors.Is(err, context.DeadlineExceeded) {
+		!apperrors.Is(err, context.Canceled) &&
+		!apperrors.Is(err, context.DeadlineExceeded) {
 		runErr = err
 		r.logger.Error("daemon error", "error", err)
 	}

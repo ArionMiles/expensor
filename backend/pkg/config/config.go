@@ -50,6 +50,11 @@ type App struct {
 	// Default: 60
 	ScanInterval int `toml:"scan_interval" env:"EXPENSOR_SCAN_INTERVAL" default:"60" validate:"gte=0"`
 
+	// ShutdownTimeout bounds application shutdown after the HTTP server stops.
+	// Environment variable: EXPENSOR_SHUTDOWN_TIMEOUT
+	// Default: 10s
+	ShutdownTimeout time.Duration `toml:"shutdown_timeout" env:"EXPENSOR_SHUTDOWN_TIMEOUT" default:"10s" validate:"gt=0"`
+
 	// LookbackDays limits how far back readers search for emails on first run.
 	// Environment variable: EXPENSOR_LOOKBACK_DAYS
 	// Default: 180
@@ -71,12 +76,31 @@ type App struct {
 
 	// Thunderbird reader configuration (profile path/mailboxes set via UI wizard).
 	Thunderbird Thunderbird `toml:"thunderbird"`
+	Scheduler   Scheduler   `toml:"scheduler"`
 
 	Database      Database      `toml:"database"`
 	Community     Community     `toml:"community"`
 	Persisted     Persisted     `toml:"persisted"`
 	Security      Security      `toml:"security"`
 	Observability Observability `toml:"observability"`
+}
+
+// Scheduler controls automatic scheduled-scan timing.
+type Scheduler struct {
+	// PollInterval controls how often queued tenant scans are reconciled.
+	// Environment variable: EXPENSOR_SCHEDULER_POLL_INTERVAL
+	// Default: 10s
+	PollInterval time.Duration `toml:"poll_interval" env:"EXPENSOR_SCHEDULER_POLL_INTERVAL" default:"10s" validate:"gt=0"`
+
+	// BaseRetryDelay is the initial delay before retrying a temporary scan failure.
+	// Environment variable: EXPENSOR_SCHEDULER_BASE_RETRY_DELAY
+	// Default: 1m
+	BaseRetryDelay time.Duration `toml:"base_retry_delay" env:"EXPENSOR_SCHEDULER_BASE_RETRY_DELAY" default:"1m" validate:"gt=0"`
+
+	// MaxRetryDelay caps exponential retry delays for temporary scan failures.
+	// Environment variable: EXPENSOR_SCHEDULER_MAX_RETRY_DELAY
+	// Default: 1h
+	MaxRetryDelay time.Duration `toml:"max_retry_delay" env:"EXPENSOR_SCHEDULER_MAX_RETRY_DELAY" default:"1h" validate:"gt=0"`
 }
 
 // Thunderbird holds Thunderbird reader configuration.
@@ -110,8 +134,8 @@ func (c *Thunderbird) GetMailboxes() []string {
 
 type Database struct {
 	Backend       DatabaseBackend `toml:"backend" env:"EXPENSOR_DB_BACKEND" validate:"omitempty,oneof=sqlite postgres"`
-	BatchSize     int             `toml:"batch_size" env:"EXPENSOR_DB_BATCH_SIZE" default:"10" validate:"gte=0"`
-	FlushInterval int             `toml:"flush_interval" env:"EXPENSOR_DB_FLUSH_INTERVAL" default:"30" validate:"gte=0"`
+	BatchSize     int             `toml:"batch_size" env:"EXPENSOR_DB_BATCH_SIZE" default:"10" validate:"gt=0"`
+	FlushInterval time.Duration   `toml:"flush_interval" env:"EXPENSOR_DB_FLUSH_INTERVAL" default:"30s" validate:"gt=0"`
 	SQLite        SQLite          `toml:"sqlite"`
 	Postgres      Postgres        `toml:"postgres"`
 }
@@ -146,7 +170,7 @@ type Postgres struct {
 // Community controls community content synchronization.
 type Community struct {
 	//nolint:lll // default content URL is intentionally explicit in the config tag.
-	URL          string        `toml:"url" env:"EXPENSOR_COMMUNITY_URL" default:"https://raw.githubusercontent.com/ArionMiles/expensor/main/backend/cmd/server/content"`
+	URL          string        `toml:"url" env:"EXPENSOR_COMMUNITY_URL" default:"https://raw.githubusercontent.com/ArionMiles/expensor/main/backend/internal/catalog/content"`
 	SyncInterval time.Duration `toml:"sync_interval" env:"EXPENSOR_CONTENT_SYNC_INTERVAL" default:"24h" validate:"gt=0"`
 	SyncTimeout  time.Duration `toml:"sync_timeout" env:"EXPENSOR_CONTENT_SYNC_TIMEOUT" default:"2m" validate:"gt=0"`
 }
@@ -352,6 +376,9 @@ func validate(cfg *App) error {
 		if strings.TrimSpace(cfg.Database.Postgres.User) == "" {
 			return errors.E("config.validate", errors.InvalidArgument, "POSTGRES_USER is required when EXPENSOR_DB_BACKEND=postgres")
 		}
+	}
+	if cfg.Scheduler.BaseRetryDelay > cfg.Scheduler.MaxRetryDelay {
+		return errors.E(errors.InvalidArgument, "EXPENSOR_SCHEDULER_BASE_RETRY_DELAY must not exceed EXPENSOR_SCHEDULER_MAX_RETRY_DELAY")
 	}
 	return nil
 }

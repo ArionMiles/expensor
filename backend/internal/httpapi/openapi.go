@@ -4,4 +4,4 @@
 // @BasePath /api
 // @schemes http https
 
-package main
+package httpapi

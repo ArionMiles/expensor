@@ -2,14 +2,15 @@ package postgres
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"strings"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 type authRepository struct {
@@ -23,7 +24,7 @@ func newAuthRepository(deps repositoryDependencies) *authRepository {
 func (r *authRepository) BootstrapRequired(ctx context.Context) (bool, error) {
 	var exists bool
 	if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM users)`).Scan(&exists); err != nil {
-		return false, fmt.Errorf("checking bootstrap status: %w", err)
+		return false, errors.E("postgres.auth.bootstrap_required", "checking bootstrap status", err)
 	}
 	return !exists, nil
 }
@@ -31,7 +32,7 @@ func (r *authRepository) BootstrapRequired(ctx context.Context) (bool, error) {
 func (r *authRepository) CreateBootstrapAdmin(ctx context.Context, input store.CreateBootstrapAdminInput) (*store.User, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("beginning bootstrap admin transaction: %w", err)
+		return nil, errors.E("postgres.auth.create_bootstrap_admin", "beginning bootstrap admin transaction", err)
 	}
 	defer func() {
 		_ = tx.Rollback(ctx)
@@ -39,10 +40,14 @@ func (r *authRepository) CreateBootstrapAdmin(ctx context.Context, input store.C
 
 	var existingUsers int
 	if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&existingUsers); err != nil {
-		return nil, fmt.Errorf("counting users for bootstrap: %w", err)
+		return nil, errors.E("postgres.auth.create_bootstrap_admin", "counting users for bootstrap", err)
 	}
 	if existingUsers > 0 {
-		return nil, conflict("store.auth.create_bootstrap_admin", messageBootstrapUnavailable)
+		return nil, errors.E(
+			"store.auth.create_bootstrap_admin",
+			errors.Conflict,
+			errors.User("bootstrap unavailable"),
+		)
 	}
 
 	user, err := insertUser(ctx, tx, store.CreateUserInput{
@@ -56,7 +61,7 @@ func (r *authRepository) CreateBootstrapAdmin(ctx context.Context, input store.C
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("committing bootstrap admin transaction: %w", err)
+		return nil, errors.E("postgres.auth.create_bootstrap_admin", "committing bootstrap admin transaction", err)
 	}
 	return user, nil
 }
@@ -64,7 +69,7 @@ func (r *authRepository) CreateBootstrapAdmin(ctx context.Context, input store.C
 func (r *authRepository) CreateUser(ctx context.Context, input store.CreateUserInput) (*store.User, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("beginning create user transaction: %w", err)
+		return nil, errors.E("postgres.auth.create_user", "beginning create user transaction", err)
 	}
 	defer func() {
 		_ = tx.Rollback(ctx)
@@ -75,7 +80,7 @@ func (r *authRepository) CreateUser(ctx context.Context, input store.CreateUserI
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("committing create user transaction: %w", err)
+		return nil, errors.E("postgres.auth.create_user", "committing create user transaction", err)
 	}
 	return user, nil
 }
@@ -88,7 +93,7 @@ func (r *authRepository) ListUsers(ctx context.Context) ([]store.User, error) {
 		ORDER BY created_at, id
 	`)
 	if err != nil {
-		return nil, fmt.Errorf("listing users: %w", err)
+		return nil, errors.E("postgres.auth.list_users", "listing users", err)
 	}
 	defer rows.Close()
 
@@ -96,12 +101,12 @@ func (r *authRepository) ListUsers(ctx context.Context) ([]store.User, error) {
 	for rows.Next() {
 		user, err := scanUser(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scanning user: %w", err)
+			return nil, errors.E("postgres.auth.list_users", "scanning user", err)
 		}
 		users = append(users, *user)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating users: %w", err)
+		return nil, errors.E("postgres.auth.list_users", "iterating users", err)
 	}
 	return users, nil
 }
@@ -124,9 +129,9 @@ func (r *authRepository) UpdateUser(ctx context.Context, id string, input store.
 	`, id, input.DisplayName, input.Role, input.AvatarKey, input.Disabled))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, notFound("store.auth.update_user")
+			return nil, errors.E("store.auth.update_user", errors.NotFound, errors.User("user not found"))
 		}
-		return nil, fmt.Errorf("updating user: %w", err)
+		return nil, errors.E("postgres.auth.update_user", "updating user", err)
 	}
 	return user, nil
 }
@@ -139,10 +144,10 @@ func (r *authRepository) UpdateUserPassword(ctx context.Context, id string, inpu
 		WHERE id = $1
 	`, id, input.PasswordHash)
 	if err != nil {
-		return fmt.Errorf("updating user password: %w", err)
+		return errors.E("postgres.auth.update_user_password", "updating user password", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return notFound("store.auth.update_user_password")
+		return errors.E("store.auth.update_user_password", errors.NotFound, errors.User("user not found"))
 	}
 	return nil
 }
@@ -150,10 +155,10 @@ func (r *authRepository) UpdateUserPassword(ctx context.Context, id string, inpu
 func (r *authRepository) DeleteUser(ctx context.Context, id string) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
 	if err != nil {
-		return fmt.Errorf("deleting user: %w", err)
+		return errors.E("postgres.auth.delete_user", "deleting user", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return notFound("store.auth.delete_user")
+		return errors.E("store.auth.delete_user", errors.NotFound, errors.User("user not found"))
 	}
 	return nil
 }
@@ -167,9 +172,9 @@ func (r *authRepository) FindUserByEmail(ctx context.Context, email string) (*st
 	`, email))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, notFound("store.auth.find_user_by_email")
+			return nil, errors.E("store.auth.find_user_by_email", errors.NotFound, errors.User("user not found"))
 		}
-		return nil, fmt.Errorf("finding user by email: %w", err)
+		return nil, errors.E("postgres.auth.find_user_by_email", "finding user by email", err)
 	}
 	return user, nil
 }
@@ -183,9 +188,9 @@ func (r *authRepository) FindUserByID(ctx context.Context, id string) (*store.Us
 	`, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, notFound("store.auth.find_user_by_id")
+			return nil, errors.E("store.auth.find_user_by_id", errors.NotFound, errors.User("user not found"))
 		}
-		return nil, fmt.Errorf("finding user by id: %w", err)
+		return nil, errors.E("postgres.auth.find_user_by_id", "finding user by id", err)
 	}
 	return user, nil
 }
@@ -197,7 +202,7 @@ func (r *authRepository) CreateSession(ctx context.Context, input store.CreateSe
 		RETURNING id, user_id, token_hash, created_at, expires_at, last_used_at, revoked_at
 	`, input.UserID, input.TokenHash, input.ExpiresAt))
 	if err != nil {
-		return nil, fmt.Errorf("creating session: %w", err)
+		return nil, errors.E("postgres.auth.create_session", "creating session", err)
 	}
 	return session, nil
 }
@@ -210,9 +215,9 @@ func (r *authRepository) FindSessionByHash(ctx context.Context, tokenHash string
 	`, tokenHash))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, notFound("store.auth.find_session_by_hash")
+			return nil, errors.E("store.auth.find_session_by_hash", errors.NotFound)
 		}
-		return nil, fmt.Errorf("finding session by hash: %w", err)
+		return nil, errors.E("postgres.auth.find_session_by_hash", "finding session by hash", err)
 	}
 	return session, nil
 }
@@ -220,10 +225,10 @@ func (r *authRepository) FindSessionByHash(ctx context.Context, tokenHash string
 func (r *authRepository) RevokeSession(ctx context.Context, id string) error {
 	tag, err := r.pool.Exec(ctx, `UPDATE sessions SET revoked_at = NOW() WHERE id = $1`, id)
 	if err != nil {
-		return fmt.Errorf("revoking session: %w", err)
+		return errors.E("postgres.auth.revoke_session", "revoking session", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return notFound("store.auth.revoke_session")
+		return errors.E("store.auth.revoke_session", errors.NotFound)
 	}
 	return nil
 }
@@ -235,10 +240,17 @@ func (r *authRepository) CreateAccessToken(ctx context.Context, input store.Crea
 		RETURNING id, user_id, name, token_hash, created_at, expires_at, last_used_at, revoked_at
 	`, input.UserID, input.Name, input.TokenHash, input.ExpiresAt))
 	if err != nil {
-		if isAccessTokenNameConflict(err) {
-			return nil, conflict("store.auth.create_access_token", messageAccessTokenNameConflict)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, errors.E(
+				"store.auth.create_access_token",
+				errors.Conflict,
+				errors.User("Token "+input.Name+" already exists."),
+				"access token name conflict",
+				err,
+			)
 		}
-		return nil, fmt.Errorf("creating access token: %w", err)
+		return nil, errors.E("postgres.auth.create_access_token", "creating access token", err)
 	}
 	return token, nil
 }
@@ -251,7 +263,7 @@ func (r *authRepository) ListAccessTokens(ctx context.Context, userID string) ([
 		ORDER BY created_at DESC, id DESC
 	`, userID)
 	if err != nil {
-		return nil, fmt.Errorf("listing access tokens: %w", err)
+		return nil, errors.E("postgres.auth.list_access_tokens", "listing access tokens", err)
 	}
 	defer rows.Close()
 
@@ -259,12 +271,12 @@ func (r *authRepository) ListAccessTokens(ctx context.Context, userID string) ([
 	for rows.Next() {
 		token, err := scanAccessToken(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scanning access token: %w", err)
+			return nil, errors.E("postgres.auth.list_access_tokens", "scanning access token", err)
 		}
 		tokens = append(tokens, *token)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating access tokens: %w", err)
+		return nil, errors.E("postgres.auth.list_access_tokens", "iterating access tokens", err)
 	}
 	return tokens, nil
 }
@@ -277,9 +289,9 @@ func (r *authRepository) FindAccessTokenByHash(ctx context.Context, tokenHash st
 	`, tokenHash))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, notFound("store.auth.find_access_token_by_hash")
+			return nil, errors.E("store.auth.find_access_token_by_hash", errors.NotFound)
 		}
-		return nil, fmt.Errorf("finding access token by hash: %w", err)
+		return nil, errors.E("postgres.auth.find_access_token_by_hash", "finding access token by hash", err)
 	}
 	return token, nil
 }
@@ -287,10 +299,10 @@ func (r *authRepository) FindAccessTokenByHash(ctx context.Context, tokenHash st
 func (r *authRepository) RevokeAccessToken(ctx context.Context, id, userID string) error {
 	tag, err := r.pool.Exec(ctx, `UPDATE access_tokens SET revoked_at = NOW() WHERE id = $1 AND user_id = $2`, id, userID)
 	if err != nil {
-		return fmt.Errorf("revoking access token: %w", err)
+		return errors.E("postgres.auth.revoke_access_token", "revoking access token", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return notFound("store.auth.revoke_access_token")
+		return errors.E("store.auth.revoke_access_token", errors.NotFound, errors.User("token not found"))
 	}
 	return nil
 }
@@ -302,7 +314,7 @@ func (r *authRepository) CreateAccountSetupToken(ctx context.Context, input stor
 		RETURNING id, user_id, token_hash, created_at, expires_at, used_at
 	`, input.UserID, input.TokenHash, input.ExpiresAt))
 	if err != nil {
-		return nil, fmt.Errorf("creating account setup token: %w", err)
+		return nil, errors.E("postgres.auth.create_account_setup_token", "creating account setup token", err)
 	}
 	return token, nil
 }
@@ -315,9 +327,9 @@ func (r *authRepository) FindAccountSetupTokenByHash(ctx context.Context, tokenH
 	`, tokenHash))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, notFound("store.auth.find_account_setup_token_by_hash")
+			return nil, errors.E("store.auth.find_account_setup_token_by_hash", errors.NotFound)
 		}
-		return nil, fmt.Errorf("finding account setup token by hash: %w", err)
+		return nil, errors.E("postgres.auth.find_account_setup_token_by_hash", "finding account setup token by hash", err)
 	}
 	return token, nil
 }
@@ -325,10 +337,10 @@ func (r *authRepository) FindAccountSetupTokenByHash(ctx context.Context, tokenH
 func (r *authRepository) MarkAccountSetupTokenUsed(ctx context.Context, id string) error {
 	tag, err := r.pool.Exec(ctx, `UPDATE account_setup_tokens SET used_at = NOW() WHERE id = $1`, id)
 	if err != nil {
-		return fmt.Errorf("marking account setup token used: %w", err)
+		return errors.E("postgres.auth.mark_account_setup_token_used", "marking account setup token used", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return notFound("store.auth.mark_account_setup_token_used")
+		return errors.E("store.auth.mark_account_setup_token_used", errors.NotFound)
 	}
 	return nil
 }
@@ -336,7 +348,7 @@ func (r *authRepository) MarkAccountSetupTokenUsed(ctx context.Context, id strin
 func (r *authRepository) CompleteAccountSetup(ctx context.Context, input store.CompleteAccountSetupInput) (*store.User, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("beginning account setup transaction: %w", err)
+		return nil, errors.E("postgres.auth.complete_account_setup", "beginning account setup transaction", err)
 	}
 	defer func() {
 		_ = tx.Rollback(ctx)
@@ -350,9 +362,9 @@ func (r *authRepository) CompleteAccountSetup(ctx context.Context, input store.C
 	`, input.TokenHash))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, notFound("store.auth.complete_account_setup")
+			return nil, errors.E("store.auth.complete_account_setup", errors.NotFound)
 		}
-		return nil, fmt.Errorf("finding active account setup token: %w", err)
+		return nil, errors.E("postgres.auth.complete_account_setup", "finding active account setup token", err)
 	}
 
 	user, err := scanUser(tx.QueryRow(ctx, `
@@ -366,13 +378,13 @@ func (r *authRepository) CompleteAccountSetup(ctx context.Context, input store.C
 		          disabled_at, created_at, updated_at
 	`, token.UserID, input.PasswordHash, input.DisplayName, input.AvatarKey))
 	if err != nil {
-		return nil, fmt.Errorf("updating setup password: %w", err)
+		return nil, errors.E("postgres.auth.complete_account_setup", "updating setup password", err)
 	}
 	if _, err := tx.Exec(ctx, `UPDATE account_setup_tokens SET used_at = NOW() WHERE id = $1`, token.ID); err != nil {
-		return nil, fmt.Errorf("marking account setup token used: %w", err)
+		return nil, errors.E("postgres.auth.complete_account_setup", "marking account setup token used", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("committing account setup transaction: %w", err)
+		return nil, errors.E("postgres.auth.complete_account_setup", "committing account setup transaction", err)
 	}
 	return user, nil
 }
@@ -393,10 +405,17 @@ func insertUser(ctx context.Context, tx pgx.Tx, input store.CreateUserInput) (*s
 		          disabled_at, created_at, updated_at
 	`, input.Email, input.PasswordHash, input.DisplayName, role, avatarKey))
 	if err != nil {
-		if isUserEmailConflict(err) {
-			return nil, conflict("store.auth.create_user", messageUserEmailConflict)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, errors.E(
+				"store.auth.create_user",
+				errors.Conflict,
+				errors.User("User "+strings.ToLower(strings.TrimSpace(input.Email))+" already exists."),
+				"user email conflict",
+				err,
+			)
 		}
-		return nil, fmt.Errorf("creating user: %w", err)
+		return nil, errors.E("postgres.auth.insert_user", "creating user", err)
 	}
 	return user, nil
 }

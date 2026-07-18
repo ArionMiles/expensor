@@ -2,18 +2,14 @@ package scheduler
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/ArionMiles/expensor/backend/internal/daemon"
+	"github.com/ArionMiles/expensor/backend/internal/oauth"
 	"github.com/ArionMiles/expensor/backend/internal/store"
-)
-
-const (
-	defaultPollInterval = 10 * time.Second
-	baseRetryDelay      = time.Minute
-	maxRetryDelay       = time.Hour
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // StateStore is the scheduler persistence surface.
@@ -43,55 +39,70 @@ func (realClock) Now() time.Time {
 
 // Scheduler starts fair, bounded tenant scan runs.
 type Scheduler struct {
-	store        StateStore
-	runner       Runner
-	clock        Clock
-	pollInterval time.Duration
-	logger       *slog.Logger
+	store          StateStore
+	runner         Runner
+	clock          Clock
+	pollInterval   time.Duration
+	baseRetryDelay time.Duration
+	maxRetryDelay  time.Duration
+	logger         *slog.Logger
 
 	mu      sync.Mutex
 	running map[string]context.CancelFunc
+	runs    sync.WaitGroup
 }
 
 // Config contains Scheduler dependencies.
 type Config struct {
-	Store        StateStore
-	Runner       Runner
-	Clock        Clock
-	PollInterval time.Duration
-	Logger       *slog.Logger
+	Store          StateStore
+	Runner         Runner
+	Clock          Clock
+	PollInterval   time.Duration
+	BaseRetryDelay time.Duration
+	MaxRetryDelay  time.Duration
+	Logger         *slog.Logger
 }
 
-func New(cfg Config) *Scheduler {
+func New(cfg Config) (*Scheduler, error) {
+	if cfg.PollInterval <= 0 {
+		return nil, errors.E(errors.InvalidInput, "scheduler poll interval must be positive")
+	}
+	if cfg.BaseRetryDelay <= 0 {
+		return nil, errors.E(errors.InvalidInput, "scheduler base retry delay must be positive")
+	}
+	if cfg.MaxRetryDelay <= 0 {
+		return nil, errors.E(errors.InvalidInput, "scheduler maximum retry delay must be positive")
+	}
+	if cfg.BaseRetryDelay > cfg.MaxRetryDelay {
+		return nil, errors.E(errors.InvalidInput, "scheduler base retry delay must not exceed maximum retry delay")
+	}
 	clock := cfg.Clock
 	if clock == nil {
 		clock = realClock{}
-	}
-	pollInterval := cfg.PollInterval
-	if pollInterval <= 0 {
-		pollInterval = defaultPollInterval
 	}
 	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &Scheduler{
-		store:        cfg.Store,
-		runner:       cfg.Runner,
-		clock:        clock,
-		pollInterval: pollInterval,
-		logger:       logger,
-		running:      make(map[string]context.CancelFunc),
-	}
+		store:          cfg.Store,
+		runner:         cfg.Runner,
+		clock:          clock,
+		pollInterval:   cfg.PollInterval,
+		baseRetryDelay: cfg.BaseRetryDelay,
+		maxRetryDelay:  cfg.MaxRetryDelay,
+		logger:         logger,
+		running:        make(map[string]context.CancelFunc),
+	}, nil
 }
 
 // Start runs the scheduler loop until ctx is canceled.
 func (s *Scheduler) Start(ctx context.Context) error {
 	if s.store == nil {
-		return errors.New("scheduler store is nil")
+		return errors.E(errors.FailedPrecondition, "scheduler store is nil")
 	}
 	if s.runner == nil {
-		return errors.New("scheduler runner is nil")
+		return errors.E(errors.FailedPrecondition, "scheduler runner is nil")
 	}
 	if err := s.Reconcile(ctx); err != nil {
 		s.logger.Error("initial scheduler reconcile failed", "error", err)
@@ -103,6 +114,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			s.Stop()
+			s.runs.Wait()
 			return ctx.Err()
 		case <-ticker.C:
 			if err := s.Reconcile(ctx); err != nil {
@@ -202,7 +214,11 @@ func (s *Scheduler) startTenant(ctx context.Context, state store.TenantScanningS
 	s.running[state.TenantID] = cancel
 	s.mu.Unlock()
 
-	go s.runTenant(runCtx, state, cancel)
+	s.runs.Add(1)
+	go func() {
+		defer s.runs.Done()
+		s.runTenant(runCtx, state, cancel)
+	}()
 	return nil
 }
 
@@ -237,8 +253,7 @@ func (s *Scheduler) runTenant(ctx context.Context, state store.TenantScanningSta
 		return
 	}
 
-	failure := classifyFailure(err)
-	update := failureStateUpdate(failure, state.RetryCount, finishedAt)
+	update := s.failureStateUpdate(err, state.RetryCount, finishedAt)
 	if updateErr := s.store.UpdateScanningState(contextWithoutCancel(ctx), tenant, update); updateErr != nil {
 		s.logger.Error("failed to mark scan failed", "error", updateErr)
 	}
@@ -250,48 +265,74 @@ func (s *Scheduler) clearRunning(tenantID string) {
 	delete(s.running, tenantID)
 }
 
-func failureStateUpdate(failure FailureError, currentRetry int, now time.Time) store.ScanningStateUpdate {
-	switch failure.Kind {
-	case FailureNeedsAuth:
+func (s *Scheduler) failureStateUpdate(err error, currentRetry int, now time.Time) store.ScanningStateUpdate {
+	message := errors.UserMsg(err)
+	switch kind := errors.WhatKind(err); {
+	case kind == oauth.KindCredentialsMissing:
 		return store.ScanningStateUpdate{
 			State:         store.ScanningStateNeedsAuth,
-			ReasonCode:    failure.ReasonCode,
-			PublicMessage: failure.PublicMessage,
+			ReasonCode:    store.ScanningReasonMissingCredentials,
+			PublicMessage: safeMessage(message, "Upload reader credentials to continue scanning."),
 			LastFailedAt:  &now,
 			RetryCount:    intPtr(0),
 		}
-	case FailureReaderNotConfigured:
+	case kind == oauth.KindTokenMissing:
+		return store.ScanningStateUpdate{
+			State:         store.ScanningStateNeedsAuth,
+			ReasonCode:    store.ScanningReasonMissingToken,
+			PublicMessage: safeMessage(message, "Connect your reader account to continue scanning."),
+			LastFailedAt:  &now,
+			RetryCount:    intPtr(0),
+		}
+	case kind == daemon.KindReaderNotConfigured:
 		return store.ScanningStateUpdate{
 			State:         store.ScanningStateReaderNotConfigured,
-			ReasonCode:    failure.ReasonCode,
-			PublicMessage: failure.PublicMessage,
+			ReasonCode:    store.ScanningReasonReaderNotConfigured,
+			PublicMessage: safeMessage(message, "Complete reader setup to continue scanning."),
 			LastFailedAt:  &now,
 			RetryCount:    intPtr(0),
 		}
-	default:
-		nextRetryCount := currentRetry + 1
-		nextRetry := now.Add(retryDelay(nextRetryCount))
+	case oauth.IsInvalidGrant(err):
 		return store.ScanningStateUpdate{
-			State:         store.ScanningStateBackingOff,
-			ReasonCode:    failure.ReasonCode,
-			PublicMessage: failure.PublicMessage,
+			State:         store.ScanningStateNeedsAuth,
+			ReasonCode:    store.ScanningReasonInvalidGrant,
+			PublicMessage: safeMessage(message, "Reconnect your reader account to continue scanning."),
 			LastFailedAt:  &now,
-			NextRetryAt:   &nextRetry,
-			RetryCount:    &nextRetryCount,
+			RetryCount:    intPtr(0),
 		}
+	}
+	nextRetryCount := currentRetry + 1
+	nextRetry := now.Add(s.retryDelay(nextRetryCount))
+	return store.ScanningStateUpdate{
+		State:         store.ScanningStateBackingOff,
+		ReasonCode:    store.ScanningReasonTemporaryFailure,
+		PublicMessage: "Scanning hit a temporary problem. We will retry automatically.",
+		LastFailedAt:  &now,
+		NextRetryAt:   &nextRetry,
+		RetryCount:    &nextRetryCount,
 	}
 }
 
-func retryDelay(retryCount int) time.Duration {
+func safeMessage(message, fallback string) string {
+	if message != "" {
+		return message
+	}
+	return fallback
+}
+
+func (s *Scheduler) retryDelay(retryCount int) time.Duration {
 	if retryCount < 1 {
 		retryCount = 1
 	}
-	delay := baseRetryDelay
-	for i := 1; i < retryCount && delay < maxRetryDelay; i++ {
+	delay := s.baseRetryDelay
+	for i := 1; i < retryCount && delay < s.maxRetryDelay; i++ {
+		if delay >= s.maxRetryDelay/2 {
+			return s.maxRetryDelay
+		}
 		delay *= 2
 	}
-	if delay > maxRetryDelay {
-		return maxRetryDelay
+	if delay > s.maxRetryDelay {
+		return s.maxRetryDelay
 	}
 	return delay
 }

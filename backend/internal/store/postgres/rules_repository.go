@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 type rulesRepository struct {
@@ -56,12 +59,12 @@ func (r *rulesRepository) ListRules(ctx context.Context, tenant store.Tenant) ([
 			 ORDER BY predefined, name`,
 		tenant.ID)
 	if err != nil {
-		return nil, fmt.Errorf("listing rules: %w", err)
+		return nil, errors.E("postgres.rules.list_rules", "listing rules", err)
 	}
 	defer rows.Close()
 	result, err := scanRuleRows(rows)
 	if err != nil {
-		return nil, fmt.Errorf("listing rules: %w", err)
+		return nil, errors.E("postgres.rules.list_rules", "listing rules", err)
 	}
 	return result, nil
 }
@@ -71,7 +74,7 @@ func (r *rulesRepository) GetRule(ctx context.Context, tenant store.Tenant, id s
 		`SELECT `+ruleColumns+` FROM rules WHERE id = $1 AND (predefined = true OR tenant_id = $2)`,
 		id, tenant.ID)
 	if err != nil {
-		return nil, fmt.Errorf("fetching rule: %w", err)
+		return nil, errors.E("postgres.rules.get_rule", "fetching rule", err)
 	}
 	defer rows.Close()
 	result, err := scanRuleRows(rows)
@@ -79,7 +82,7 @@ func (r *rulesRepository) GetRule(ctx context.Context, tenant store.Tenant, id s
 		return nil, err
 	}
 	if len(result) == 0 {
-		return nil, notFound("store.rules.get")
+		return nil, errors.E("store.rules.get", errors.NotFound, errors.User("rule not found"))
 	}
 	return &result[0], nil
 }
@@ -97,21 +100,23 @@ func (r *rulesRepository) CreateRule(ctx context.Context, tenant store.Tenant, r
 		ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
 	)
 	if err != nil {
-		if isRuleNameConflict(err) {
-			return nil, conflict("store.rules.create", messageRuleNameConflict)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, errors.E("store.rules.create", errors.Conflict, errors.User("rule name already exists"), "rule name conflict", err)
 		}
-		return nil, fmt.Errorf("creating rule: %w", err)
+		return nil, errors.E("postgres.rules.create_rule", "creating rule", err)
 	}
 	defer rows.Close()
 	result, err := scanRuleRows(rows)
 	if err != nil {
-		if isRuleNameConflict(err) {
-			return nil, conflict("store.rules.create", messageRuleNameConflict)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, errors.E("store.rules.create", errors.Conflict, errors.User("rule name already exists"), "rule name conflict", err)
 		}
-		return nil, fmt.Errorf("creating rule: %w", err)
+		return nil, errors.E("postgres.rules.create_rule", "creating rule", err)
 	}
 	if len(result) == 0 {
-		return nil, fmt.Errorf("creating rule: no row returned")
+		return nil, errors.E(errors.Internal, "creating rule: no row returned")
 	}
 	return &result[0], nil
 }
@@ -129,21 +134,23 @@ func (r *rulesRepository) UpdateRule(ctx context.Context, tenant store.Tenant, i
 		ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank, tenant.ID,
 	)
 	if err != nil {
-		if isRuleNameConflict(err) {
-			return nil, conflict("store.rules.update", messageRuleNameConflict)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, errors.E("store.rules.update", errors.Conflict, errors.User("rule name already exists"), "rule name conflict", err)
 		}
-		return nil, fmt.Errorf("updating rule: %w", err)
+		return nil, errors.E("postgres.rules.update_rule", "updating rule", err)
 	}
 	defer rows.Close()
 	result, err := scanRuleRows(rows)
 	if err != nil {
-		if isRuleNameConflict(err) {
-			return nil, conflict("store.rules.update", messageRuleNameConflict)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, errors.E("store.rules.update", errors.Conflict, errors.User("rule name already exists"), "rule name conflict", err)
 		}
-		return nil, fmt.Errorf("updating rule: %w", err)
+		return nil, errors.E("postgres.rules.update_rule", "updating rule", err)
 	}
 	if len(result) == 0 {
-		return nil, notFound("store.rules.update")
+		return nil, errors.E("store.rules.update", errors.NotFound, errors.User("rule not found"))
 	}
 	return &result[0], nil
 }
@@ -153,10 +160,10 @@ func (r *rulesRepository) DeleteRule(ctx context.Context, tenant store.Tenant, i
 		`DELETE FROM rules WHERE id=$1 AND predefined = false AND tenant_id = $2`,
 		id, tenant.ID)
 	if err != nil {
-		return fmt.Errorf("deleting rule: %w", err)
+		return errors.E("postgres.rules.delete_rule", "deleting rule", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return notFound("store.rules.delete")
+		return errors.E("store.rules.delete", errors.NotFound, errors.User("rule not found"))
 	}
 	return nil
 }
@@ -174,7 +181,7 @@ func (r *rulesRepository) SeedPredefinedRules(ctx context.Context, rules []store
 			ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
 		)
 		if err != nil {
-			return fmt.Errorf("seeding predefined rule %q: %w", rule.Name, err)
+			return errors.E("postgres.rules.seed_predefined_rules", fmt.Sprintf("seeding predefined rule %q", rule.Name), err)
 		}
 	}
 	return nil
@@ -183,7 +190,7 @@ func (r *rulesRepository) SeedPredefinedRules(ctx context.Context, rules []store
 func (r *rulesRepository) ImportUserRules(ctx context.Context, tenant store.Tenant, rules []store.RuleRow) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("beginning import transaction: %w", err)
+		return errors.E("postgres.rules.import_user_rules", "beginning import transaction", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -210,7 +217,7 @@ func (r *rulesRepository) ImportUserRules(ctx context.Context, tenant store.Tena
 			ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
 		)
 		if err != nil {
-			return fmt.Errorf("importing rule %q: %w", rule.Name, err)
+			return errors.E("postgres.rules.import_user_rules", fmt.Sprintf("importing rule %q", rule.Name), err)
 		}
 	}
 	return tx.Commit(ctx)

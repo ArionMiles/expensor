@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/ArionMiles/expensor/backend/internal/auth"
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 const (
@@ -48,7 +48,7 @@ func (r *runtimeRepository) GetAppConfig(ctx context.Context, tenant store.Tenan
 		`SELECT value FROM app_config WHERE tenant_id = $1 AND key = $2`,
 		tenant.ID, key,
 	).Scan(&value); err != nil {
-		return "", fmt.Errorf("getting app config %q: %w", key, err)
+		return "", errors.E("postgres.runtime.get_app_config", fmt.Sprintf("getting app config %q", key), err)
 	}
 	return value, nil
 }
@@ -59,7 +59,7 @@ func (r *runtimeRepository) SetAppConfig(ctx context.Context, tenant store.Tenan
 		tenant.ID, key, value,
 	)
 	if err != nil {
-		return fmt.Errorf("setting app config %q: %w", key, err)
+		return errors.E("postgres.runtime.set_app_config", fmt.Sprintf("setting app config %q", key), err)
 	}
 	return nil
 }
@@ -87,7 +87,7 @@ func (r *runtimeRepository) DeleteReaderToken(ctx context.Context, tenant store.
 		WHERE tenant_id = $1 AND reader = $2
 	`, tenant.ID, reader)
 	if err != nil {
-		return fmt.Errorf("deleting reader token for %q: %w", reader, err)
+		return errors.E("postgres.runtime.delete_reader_token", fmt.Sprintf("deleting reader token for %q", reader), err)
 	}
 	return nil
 }
@@ -121,7 +121,7 @@ func (r *runtimeRepository) GetLLMProviderCredentials(ctx context.Context, tenan
 func (r *runtimeRepository) DeleteLLMProviderRuntime(ctx context.Context, tenant store.Tenant, provider string) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM llm_provider_runtime WHERE tenant_id = $1 AND provider = $2`, tenant.ID, provider)
 	if err != nil {
-		return fmt.Errorf("deleting llm provider runtime for %q: %w", provider, err)
+		return errors.E("postgres.runtime.delete_llm_provider_runtime", fmt.Sprintf("deleting llm provider runtime for %q", provider), err)
 	}
 	return nil
 }
@@ -129,7 +129,7 @@ func (r *runtimeRepository) DeleteLLMProviderRuntime(ctx context.Context, tenant
 func (r *runtimeRepository) SetActiveLLMProvider(ctx context.Context, tenant store.Tenant, provider string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("starting llm provider activation transaction: %w", err)
+		return errors.E("postgres.runtime.set_active_llm_provider", "starting llm provider activation transaction", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
@@ -137,13 +137,13 @@ func (r *runtimeRepository) SetActiveLLMProvider(ctx context.Context, tenant sto
 		`UPDATE llm_provider_runtime SET active = false, updated_at = NOW() WHERE tenant_id = $1 AND active = true`,
 		tenant.ID,
 	); err != nil {
-		return fmt.Errorf("clearing active llm provider: %w", err)
+		return errors.E("postgres.runtime.set_active_llm_provider", "clearing active llm provider", err)
 	}
 	if _, err := tx.Exec(ctx, llmProviderRuntimeUpsertActiveSQL, tenant.ID, provider); err != nil {
-		return fmt.Errorf("setting active llm provider %q: %w", provider, err)
+		return errors.E("postgres.runtime.set_active_llm_provider", fmt.Sprintf("setting active llm provider %q", provider), err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("committing llm provider activation: %w", err)
+		return errors.E("postgres.runtime.set_active_llm_provider", "committing llm provider activation", err)
 	}
 	return nil
 }
@@ -154,7 +154,7 @@ func (r *runtimeRepository) ClearActiveLLMProvider(ctx context.Context, tenant s
 		tenant.ID,
 	)
 	if err != nil {
-		return fmt.Errorf("clearing active llm provider: %w", err)
+		return errors.E("postgres.runtime.clear_active_llm_provider", "clearing active llm provider", err)
 	}
 	return nil
 }
@@ -174,15 +174,18 @@ func (r *runtimeRepository) GetActiveLLMProviderRuntime(ctx context.Context, ten
 		if errors.Is(err, pgx.ErrNoRows) {
 			return store.LLMProviderRuntime{}, false, nil
 		}
-		return store.LLMProviderRuntime{}, false, fmt.Errorf("getting active llm provider: %w", err)
+		return store.LLMProviderRuntime{}, false, errors.E("postgres.runtime.get_active_llm_provider_runtime", "getting active llm provider", err)
 	}
 	if runtime.HasCredentials {
 		if r.secretBox == nil {
-			return store.LLMProviderRuntime{}, false, errors.New("store secret box is not initialized")
+			return store.LLMProviderRuntime{}, false, errors.E(errors.FailedPrecondition, "store secret box is not initialized")
 		}
 		credentials, err := r.secretBox.Open(credentialsCiphertext, llmProviderAssociatedData(tenant, runtime.Provider))
 		if err != nil {
-			return store.LLMProviderRuntime{}, false, fmt.Errorf("decrypting llm provider %q credentials: %w", runtime.Provider, err)
+			return store.LLMProviderRuntime{}, false, errors.E(
+				"postgres.runtime.get_active_llm_provider_runtime",
+				fmt.Sprintf("decrypting llm provider %q credentials", runtime.Provider), err,
+			)
 		}
 		runtime.Credentials = credentials
 	}
@@ -192,7 +195,7 @@ func (r *runtimeRepository) GetActiveLLMProviderRuntime(ctx context.Context, ten
 func (r *runtimeRepository) DeleteReaderRuntime(ctx context.Context, tenant store.Tenant, reader string) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM reader_runtime WHERE tenant_id = $1 AND reader = $2`, tenant.ID, reader)
 	if err != nil {
-		return fmt.Errorf("deleting reader runtime for %q: %w", reader, err)
+		return errors.E("postgres.runtime.delete_reader_runtime", fmt.Sprintf("deleting reader runtime for %q", reader), err)
 	}
 	return nil
 }
@@ -209,14 +212,14 @@ func (r *runtimeRepository) IsMessageProcessed(ctx context.Context, tenant store
 			WHERE tenant_id = $1 AND message_key = $2
 		)
 	`, tenant.ID, key).Scan(&exists); err != nil {
-		return false, fmt.Errorf("checking processed message %q: %w", key, err)
+		return false, errors.E("postgres.runtime.is_message_processed", fmt.Sprintf("checking processed message %q", key), err)
 	}
 	return exists, nil
 }
 
 func (r *runtimeRepository) MarkMessageProcessed(ctx context.Context, tenant store.Tenant, key string, at time.Time) error {
 	if strings.TrimSpace(key) == "" {
-		return errors.New("message key cannot be blank")
+		return errors.E(errors.InvalidInput, "message key cannot be blank")
 	}
 	const query = `
 		INSERT INTO processed_messages (tenant_id, message_key, processed_at)
@@ -226,7 +229,7 @@ func (r *runtimeRepository) MarkMessageProcessed(ctx context.Context, tenant sto
 	`
 	_, err := r.pool.Exec(ctx, query, tenant.ID, key, at)
 	if err != nil {
-		return fmt.Errorf("marking processed message %q: %w", key, err)
+		return errors.E("postgres.runtime.mark_message_processed", fmt.Sprintf("marking processed message %q", key), err)
 	}
 	return nil
 }
@@ -238,7 +241,7 @@ func (r *runtimeRepository) GetSyncStatus(ctx context.Context) (store.SyncStatus
 		return status, nil //nolint:nilerr // key-not-found on first run is expected; zero value means "never synced"
 	}
 	if err := json.Unmarshal([]byte(val), &status); err != nil {
-		return store.SyncStatus{}, fmt.Errorf("parsing sync status: %w", err)
+		return store.SyncStatus{}, errors.E("postgres.runtime.get_sync_status", "parsing sync status", err)
 	}
 	return status, nil
 }
@@ -246,7 +249,7 @@ func (r *runtimeRepository) GetSyncStatus(ctx context.Context) (store.SyncStatus
 func (r *runtimeRepository) SetSyncStatus(ctx context.Context, status store.SyncStatus) error {
 	b, err := json.Marshal(status)
 	if err != nil {
-		return fmt.Errorf("marshaling sync status: %w", err)
+		return errors.E("postgres.runtime.set_sync_status", "marshaling sync status", err)
 	}
 	return r.writeGlobalAppConfig(ctx, "content_sync_status", string(b))
 }
@@ -262,7 +265,7 @@ func (r *runtimeRepository) GetCommunitySyncSettings(ctx context.Context) (store
 	}
 	parsed, err := strconv.ParseBool(value)
 	if err != nil {
-		return store.CommunitySyncSettings{}, fmt.Errorf("parsing community auto sync setting: %w", err)
+		return store.CommunitySyncSettings{}, errors.E("postgres.runtime.get_community_sync_settings", "parsing community auto sync setting", err)
 	}
 	return store.CommunitySyncSettings{AutomaticSyncEnabled: &parsed}, nil
 }
@@ -293,10 +296,10 @@ func (r *runtimeRepository) SetCommunityURL(ctx context.Context, url string) err
 
 func (r *runtimeRepository) writeReaderEncryptedJSON(ctx context.Context, tenant store.Tenant, reader, column string, value []byte) error {
 	if !json.Valid(value) {
-		return fmt.Errorf("%s for reader %q must be valid JSON", column, reader)
+		return errors.E(errors.InvalidInput, fmt.Sprintf("%s for reader %q must be valid JSON", column, reader))
 	}
 	if r.secretBox == nil {
-		return errors.New("store secret box is not initialized")
+		return errors.E(errors.FailedPrecondition, "store secret box is not initialized")
 	}
 	ciphertext, err := r.secretBox.Seal(value, auth.SecretAssociatedData{
 		TenantID: tenant.ID,
@@ -305,14 +308,14 @@ func (r *runtimeRepository) writeReaderEncryptedJSON(ctx context.Context, tenant
 		Kind:     column,
 	})
 	if err != nil {
-		return fmt.Errorf("encrypting %s for reader %q: %w", column, reader, err)
+		return errors.E("postgres.runtime.write_reader_encrypted_json", fmt.Sprintf("encrypting %s for reader %q", column, reader), err)
 	}
 	query, err := runtimeSetReaderSecretQuery(column)
 	if err != nil {
 		return err
 	}
 	if _, err := r.pool.Exec(ctx, query, tenant.ID, reader, ciphertext); err != nil {
-		return fmt.Errorf("setting %s for reader %q: %w", column, reader, err)
+		return errors.E("postgres.runtime.write_reader_encrypted_json", fmt.Sprintf("setting %s for reader %q", column, reader), err)
 	}
 	return nil
 }
@@ -320,7 +323,7 @@ func (r *runtimeRepository) writeReaderEncryptedJSON(ctx context.Context, tenant
 func (r *runtimeRepository) readReaderEncryptedJSON(ctx context.Context, tenant store.Tenant, reader, column string) ([]byte, bool, error) {
 	var ciphertext []byte
 	if r.secretBox == nil {
-		return nil, false, errors.New("store secret box is not initialized")
+		return nil, false, errors.E(errors.FailedPrecondition, "store secret box is not initialized")
 	}
 	query, err := runtimeGetReaderSecretQuery(column)
 	if err != nil {
@@ -331,7 +334,7 @@ func (r *runtimeRepository) readReaderEncryptedJSON(ctx context.Context, tenant 
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, false, nil
 		}
-		return nil, false, fmt.Errorf("getting %s for reader %q: %w", column, reader, err)
+		return nil, false, errors.E("postgres.runtime.read_reader_encrypted_json", fmt.Sprintf("getting %s for reader %q", column, reader), err)
 	}
 	plaintext, err := r.secretBox.Open(ciphertext, auth.SecretAssociatedData{
 		TenantID: tenant.ID,
@@ -340,17 +343,20 @@ func (r *runtimeRepository) readReaderEncryptedJSON(ctx context.Context, tenant 
 		Kind:     column,
 	})
 	if err != nil {
-		return nil, false, fmt.Errorf("decrypting %s for reader %q: %w", column, reader, err)
+		return nil, false, errors.E("postgres.runtime.read_reader_encrypted_json", fmt.Sprintf("decrypting %s for reader %q", column, reader), err)
 	}
 	return plaintext, true, nil
 }
 
 func (r *runtimeRepository) writeReaderConfigJSON(ctx context.Context, tenant store.Tenant, reader string, value []byte) error {
 	if !json.Valid(value) {
-		return fmt.Errorf("%s for reader %q must be valid JSON", readerRuntimeConfig, reader)
+		return errors.E(
+			errors.InvalidInput,
+			fmt.Sprintf("%s for reader %q must be valid JSON", readerRuntimeConfig, reader),
+		)
 	}
 	if _, err := r.pool.Exec(ctx, runtimeSetReaderConfigSQL, tenant.ID, reader, value); err != nil {
-		return fmt.Errorf("setting %s for reader %q: %w", readerRuntimeConfig, reader, err)
+		return errors.E("postgres.runtime.write_reader_config_json", fmt.Sprintf("setting %s for reader %q", readerRuntimeConfig, reader), err)
 	}
 	return nil
 }
@@ -366,17 +372,20 @@ func (r *runtimeRepository) readReaderConfigJSON(ctx context.Context, tenant sto
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, false, nil
 		}
-		return nil, false, fmt.Errorf("getting %s for reader %q: %w", readerRuntimeConfig, reader, err)
+		return nil, false, errors.E("postgres.runtime.read_reader_config_json", fmt.Sprintf("getting %s for reader %q", readerRuntimeConfig, reader), err)
 	}
 	return value, true, nil
 }
 
 func (r *runtimeRepository) writeLLMProviderConfigJSON(ctx context.Context, tenant store.Tenant, provider string, value []byte) error {
 	if !json.Valid(value) {
-		return fmt.Errorf("config for llm provider %q must be valid JSON", provider)
+		return errors.E(
+			errors.InvalidInput,
+			fmt.Sprintf("config for llm provider %q must be valid JSON", provider),
+		)
 	}
 	if _, err := r.pool.Exec(ctx, llmProviderRuntimeSetConfigSQL, tenant.ID, provider, value); err != nil {
-		return fmt.Errorf("setting config for llm provider %q: %w", provider, err)
+		return errors.E("postgres.runtime.write_llm_provider_config_json", fmt.Sprintf("setting config for llm provider %q", provider), err)
 	}
 	return nil
 }
@@ -392,24 +401,27 @@ func (r *runtimeRepository) readLLMProviderConfigJSON(ctx context.Context, tenan
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, false, nil
 		}
-		return nil, false, fmt.Errorf("getting config for llm provider %q: %w", provider, err)
+		return nil, false, errors.E("postgres.runtime.read_llm_provider_config_json", fmt.Sprintf("getting config for llm provider %q", provider), err)
 	}
 	return value, true, nil
 }
 
 func (r *runtimeRepository) writeLLMProviderEncryptedJSON(ctx context.Context, tenant store.Tenant, provider string, value []byte) error {
 	if !json.Valid(value) {
-		return fmt.Errorf("%s for llm provider %q must be valid JSON", llmProviderCredentials, provider)
+		return errors.E(
+			errors.InvalidInput,
+			fmt.Sprintf("%s for llm provider %q must be valid JSON", llmProviderCredentials, provider),
+		)
 	}
 	if r.secretBox == nil {
-		return errors.New("store secret box is not initialized")
+		return errors.E(errors.FailedPrecondition, "store secret box is not initialized")
 	}
 	ciphertext, err := r.secretBox.Seal(value, llmProviderAssociatedData(tenant, provider))
 	if err != nil {
-		return fmt.Errorf("encrypting llm provider %q credentials: %w", provider, err)
+		return errors.E("postgres.runtime.write_llm_provider_encrypted_json", fmt.Sprintf("encrypting llm provider %q credentials", provider), err)
 	}
 	if _, err := r.pool.Exec(ctx, llmProviderRuntimeSetCredentialsSQL, tenant.ID, provider, ciphertext); err != nil {
-		return fmt.Errorf("setting credentials for llm provider %q: %w", provider, err)
+		return errors.E("postgres.runtime.write_llm_provider_encrypted_json", fmt.Sprintf("setting credentials for llm provider %q", provider), err)
 	}
 	return nil
 }
@@ -417,7 +429,7 @@ func (r *runtimeRepository) writeLLMProviderEncryptedJSON(ctx context.Context, t
 func (r *runtimeRepository) readLLMProviderEncryptedJSON(ctx context.Context, tenant store.Tenant, provider string) ([]byte, bool, error) {
 	var ciphertext []byte
 	if r.secretBox == nil {
-		return nil, false, errors.New("store secret box is not initialized")
+		return nil, false, errors.E(errors.FailedPrecondition, "store secret box is not initialized")
 	}
 	err := r.pool.QueryRow(ctx, `
 		SELECT credentials_ciphertext
@@ -428,11 +440,11 @@ func (r *runtimeRepository) readLLMProviderEncryptedJSON(ctx context.Context, te
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, false, nil
 		}
-		return nil, false, fmt.Errorf("getting credentials for llm provider %q: %w", provider, err)
+		return nil, false, errors.E("postgres.runtime.read_llm_provider_encrypted_json", fmt.Sprintf("getting credentials for llm provider %q", provider), err)
 	}
 	plaintext, err := r.secretBox.Open(ciphertext, llmProviderAssociatedData(tenant, provider))
 	if err != nil {
-		return nil, false, fmt.Errorf("decrypting llm provider %q credentials: %w", provider, err)
+		return nil, false, errors.E("postgres.runtime.read_llm_provider_encrypted_json", fmt.Sprintf("decrypting llm provider %q credentials", provider), err)
 	}
 	return plaintext, true, nil
 }
@@ -453,7 +465,7 @@ func (r *runtimeRepository) readAppConfig(ctx context.Context, tenant store.Tena
 		tenant.ID, key,
 	).Scan(&value)
 	if err != nil {
-		return "", fmt.Errorf("getting app config %q: %w", key, err)
+		return "", errors.E("postgres.runtime.read_app_config", fmt.Sprintf("getting app config %q", key), err)
 	}
 	return value, nil
 }
@@ -464,7 +476,7 @@ func (r *runtimeRepository) writeAppConfig(ctx context.Context, tenant store.Ten
 		tenant.ID, key, value,
 	)
 	if err != nil {
-		return fmt.Errorf("setting app config %q: %w", key, err)
+		return errors.E("postgres.runtime.write_app_config", fmt.Sprintf("setting app config %q", key), err)
 	}
 	return nil
 }
@@ -476,7 +488,7 @@ func (r *runtimeRepository) readGlobalAppConfig(ctx context.Context, key string)
 		key,
 	).Scan(&value)
 	if err != nil {
-		return "", fmt.Errorf("getting global app config %q: %w", key, err)
+		return "", errors.E("postgres.runtime.read_global_app_config", fmt.Sprintf("getting global app config %q", key), err)
 	}
 	return value, nil
 }
@@ -489,7 +501,7 @@ func (r *runtimeRepository) writeGlobalAppConfig(ctx context.Context, key, value
 		DO UPDATE SET value = EXCLUDED.value
 	`, key, value)
 	if err != nil {
-		return fmt.Errorf("setting global app config %q: %w", key, err)
+		return errors.E("postgres.runtime.write_global_app_config", fmt.Sprintf("setting global app config %q", key), err)
 	}
 	return nil
 }
@@ -501,7 +513,7 @@ func runtimeSetReaderSecretQuery(column string) (string, error) {
 	case readerRuntimeOAuthToken:
 		return runtimeSetReaderOAuthTokenSQL, nil
 	default:
-		return "", fmt.Errorf("unsupported reader runtime column %q", column)
+		return "", errors.E(errors.Internal, fmt.Sprintf("unsupported reader runtime column %q", column))
 	}
 }
 
@@ -520,7 +532,7 @@ func runtimeGetReaderSecretQuery(column string) (string, error) {
 			WHERE tenant_id = $1 AND reader = $2 AND oauth_token_ciphertext IS NOT NULL
 		`, nil
 	default:
-		return "", fmt.Errorf("unsupported reader runtime column %q", column)
+		return "", errors.E(errors.Internal, fmt.Sprintf("unsupported reader runtime column %q", column))
 	}
 }
 

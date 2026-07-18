@@ -15,11 +15,10 @@ import (
 )
 
 const (
-	ProviderName    = "openai"
-	defaultBaseURL  = "https://api.openai.com/v1"
-	defaultModel    = "gpt-5.4-mini"
-	defaultTimeout  = 60 * time.Second
-	maxErrorBodyLen = 800
+	ProviderName   = "openai"
+	defaultBaseURL = "https://api.openai.com/v1"
+	defaultModel   = "gpt-5.4-mini"
+	defaultTimeout = 60 * time.Second
 )
 
 type credentials struct {
@@ -178,12 +177,7 @@ func (c *client) Complete(ctx context.Context, req llm.Request) (llm.Response, e
 		return llm.Response{}, errors.E(op, errors.BadGateway, "decoding OpenAI response", err)
 	}
 	if resp.Error != nil {
-		return llm.Response{}, errors.E(op, &llm.ProviderError{
-			Provider:   ProviderName,
-			StatusCode: httpResp.StatusCode,
-			Code:       resp.Error.Code,
-			Message:    resp.Error.Message,
-		})
+		return llm.Response{}, errors.E(op, openAIProviderFailure(httpResp.StatusCode, resp.Error.Code, resp.Error.Type))
 	}
 
 	text := strings.TrimSpace(resp.OutputText)
@@ -274,23 +268,34 @@ func openAIProviderError(status int, body []byte) error {
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(body, &parsed); err == nil && parsed.Error != nil {
-		code := strings.TrimSpace(parsed.Error.Code)
-		if code == "" {
-			code = strings.TrimSpace(parsed.Error.Type)
-		}
-		return &llm.ProviderError{
-			Provider:   ProviderName,
-			StatusCode: status,
-			Code:       code,
-			Message:    parsed.Error.Message,
-		}
+		return openAIProviderFailure(status, parsed.Error.Code, parsed.Error.Type)
 	}
-	message := strings.TrimSpace(string(body))
-	if len(message) > maxErrorBodyLen {
-		message = message[:maxErrorBodyLen] + "..."
+	return openAIProviderFailure(status, "", "")
+}
+
+func openAIProviderFailure(status int, code, typ string) error {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		code = strings.TrimSpace(typ)
 	}
-	if message == "" {
-		message = http.StatusText(status)
+	switch code {
+	case "invalid_api_key":
+		return errors.E(errors.Unauthenticated, errors.User("OpenAI API key was rejected. Check the key and try again."))
+	case "insufficient_quota":
+		return errors.E(
+			errors.ResourceExhausted,
+			errors.User("OpenAI API quota is unavailable. Add billing credits or choose another LLM provider."),
+		)
+	case "rate_limit_exceeded":
+		return errors.E(errors.ResourceExhausted, errors.User("OpenAI rate limit exceeded. Wait a moment and try again."))
 	}
-	return &llm.ProviderError{Provider: ProviderName, StatusCode: status, Message: message}
+
+	switch status {
+	case http.StatusUnauthorized:
+		return errors.E(errors.Unauthenticated, errors.User("OpenAI API key was rejected. Check the key and try again."))
+	case http.StatusTooManyRequests:
+		return errors.E(errors.ResourceExhausted, errors.User("LLM provider request was rate limited. Wait a moment and try again."))
+	default:
+		return errors.E(errors.BadGateway, errors.User("LLM provider request failed."))
+	}
 }

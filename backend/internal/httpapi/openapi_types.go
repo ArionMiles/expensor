@@ -4,20 +4,16 @@ import "time"
 
 // ErrorResponse is the standard JSON error payload for OpenAPI generation.
 type ErrorResponse struct {
-	Error string `json:"error" example:"internal server error"`
+	Message          string            `json:"message" example:"Something went wrong." validate:"required"`
+	RequestID        string            `json:"request_id" example:"7b08e51d-8e8f-4b4a-9c14-fd1ff4c823b3" validate:"required"`
+	ValidationErrors []ValidationError `json:"validation_errors,omitempty"`
 }
 
-// ValidationErrorDetail describes one invalid request field.
-type ValidationErrorDetail struct {
+// ValidationError describes one invalid request field.
+type ValidationError struct {
 	Field    string `json:"field" example:"page_size"`
 	Location string `json:"location" example:"query"`
 	Message  string `json:"message" example:"must be at most 100"`
-}
-
-// ValidationErrorResponse is returned for semantically invalid requests.
-type ValidationErrorResponse struct {
-	Error   string                  `json:"error" example:"request validation failed"`
-	Details []ValidationErrorDetail `json:"details"`
 }
 
 type diagnosticListQuery struct {

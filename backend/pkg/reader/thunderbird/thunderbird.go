@@ -3,7 +3,6 @@ package thunderbird
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -20,6 +19,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/state"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // Reader reads transactions from Thunderbird MBOX mailboxes.
@@ -82,7 +82,7 @@ func New(cfg Config, logger *slog.Logger) (*Reader, error) {
 	// Find mailbox paths
 	mailboxPaths, err := FindMailboxes(cfg.ProfilePath, cfg.Mailboxes)
 	if err != nil {
-		return nil, fmt.Errorf("finding mailboxes: %w", err)
+		return nil, errors.E("thunderbird.new", "finding mailboxes", err)
 	}
 
 	logger.Info("found mailboxes", "count", len(mailboxPaths), "paths", mailboxPaths)
@@ -292,7 +292,7 @@ type thunderbirdMessageSearchInput struct {
 func (r *Reader) searchMailbox(ctx context.Context, input thunderbirdMessageSearchInput) error {
 	file, err := os.Open(input.mailboxPath)
 	if err != nil {
-		return fmt.Errorf("opening mailbox %q: %w", input.mailboxName, err)
+		return errors.E("thunderbird.search_mailbox", fmt.Sprintf("opening mailbox %q", input.mailboxName), err)
 	}
 	defer file.Close()
 
@@ -309,7 +309,7 @@ func (r *Reader) searchMailbox(ctx context.Context, input thunderbirdMessageSear
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("reading mailbox %q: %w", input.mailboxName, err)
+			return errors.E("thunderbird.search_mailbox", fmt.Sprintf("reading mailbox %q", input.mailboxName), err)
 		}
 
 		msg, err := mail.ReadMessage(msgReader)
@@ -336,7 +336,7 @@ func thunderbirdMessageSample(msg *mail.Message, mailboxPath, subject string) (a
 	messageID := msg.Header.Get("Message-Id")
 	body, err := ExtractBody(msg)
 	if err != nil {
-		return api.EmailSearchResult{}, fmt.Errorf("extracting body: %w", err)
+		return api.EmailSearchResult{}, errors.E("thunderbird.thunderbird_message_sample", "extracting body", err)
 	}
 	body = strings.TrimRight(body, "\r\n")
 	var receivedAt *time.Time
@@ -370,7 +370,7 @@ func (r *Reader) scanMailbox(ctx context.Context, mailboxName, mailboxPath strin
 
 	file, err := os.Open(mailboxPath)
 	if err != nil {
-		return fmt.Errorf("opening mailbox: %w", err)
+		return errors.E("thunderbird.scan_mailbox", "opening mailbox", err)
 	}
 	defer file.Close()
 
@@ -500,7 +500,7 @@ func (r *Reader) extractTransaction(ctx context.Context, msg *mail.Message, rule
 	// Extract body
 	body, err := ExtractBody(msg)
 	if err != nil {
-		return nil, fmt.Errorf("extracting body: %w", err)
+		return nil, errors.E("thunderbird.extract_transaction", "extracting body", err)
 	}
 
 	// Parse date

@@ -3,7 +3,7 @@ package llm
 import (
 	"bytes"
 	"context"
-	"errors"
+	stderrors "errors"
 	"log/slog"
 	"strings"
 	"testing"
@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/ArionMiles/expensor/backend/internal/observability"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 type instrumentedClientStub struct {
@@ -40,12 +41,7 @@ func TestInstrumentedClientRecordsCompleteSpanAndSanitizedErrorLog(t *testing.T)
 	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	scope := observability.NewScope(logger, "test/llm")
 	client := NewInstrumentedClient(instrumentedClientStub{
-		err: &ProviderError{
-			Provider:   "openai",
-			StatusCode: 429,
-			Code:       "insufficient_quota",
-			Message:    "quota failed for sensitive account detail",
-		},
+		err: errors.E(errors.ResourceExhausted, errors.User("OpenAI API quota is unavailable."), stderrors.New("quota failed for sensitive account detail")),
 	}, "openai", scope, logger)
 
 	_, err := client.Complete(context.Background(), Request{
@@ -69,13 +65,13 @@ func TestInstrumentedClientRecordsCompleteSpanAndSanitizedErrorLog(t *testing.T)
 	if attrs["llm.provider"] != "openai" || attrs["llm.workflow"] != "rule_drafting" || attrs["llm.purpose"] != "draft_rule" {
 		t.Fatalf("span attrs = %#v, want provider/workflow/purpose", attrs)
 	}
-	if attrs["error_class"] != "insufficient_quota" || attrs["status_code"] != "429" {
-		t.Fatalf("span error attrs = %#v, want sanitized provider error class and status", attrs)
+	if attrs["error_kind"] != errors.ResourceExhausted.Code {
+		t.Fatalf("span error attrs = %#v, want structured error kind", attrs)
 	}
 
 	gotLogs := logs.String()
-	if !strings.Contains(gotLogs, "llm provider call failed") || !strings.Contains(gotLogs, "error_class=insufficient_quota") {
-		t.Fatalf("logs = %q, want sanitized provider failure", gotLogs)
+	if !strings.Contains(gotLogs, "llm provider call failed") || !strings.Contains(gotLogs, "error_kind=resource_exhausted") {
+		t.Fatalf("logs = %q, want structured provider failure", gotLogs)
 	}
 	if strings.Contains(gotLogs, "sensitive account detail") || strings.Contains(gotLogs, "body must not be logged") {
 		t.Fatalf("logs = %q, want no raw provider message or prompt content", gotLogs)
@@ -94,7 +90,7 @@ func TestInstrumentedClientRecordsHealthcheckFailure(t *testing.T) {
 	client := NewInstrumentedClient(instrumentedClientStub{err: context.DeadlineExceeded}, "openai", scope, logger)
 
 	err := client.HealthCheck(context.Background())
-	if !errors.Is(err, context.DeadlineExceeded) {
+	if !stderrors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("HealthCheck() error = %v, want deadline exceeded", err)
 	}
 
@@ -103,8 +99,8 @@ func TestInstrumentedClientRecordsHealthcheckFailure(t *testing.T) {
 		t.Fatalf("spans = %#v, want one llm.healthcheck span", spans)
 	}
 	attrs := spanAttrs(spans[0].Attributes())
-	if attrs["llm.provider"] != "openai" || attrs["error_class"] != "deadline_exceeded" {
-		t.Fatalf("span attrs = %#v, want provider and sanitized error class", attrs)
+	if attrs["llm.provider"] != "openai" || attrs["error_kind"] != errors.DeadlineExceeded.Code {
+		t.Fatalf("span attrs = %#v, want provider and structured error kind", attrs)
 	}
 	if !strings.Contains(logs.String(), "llm provider healthcheck failed") {
 		t.Fatalf("logs = %q, want healthcheck failure log", logs.String())

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 )
@@ -16,12 +17,20 @@ func loggingMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 		start := time.Now()
 		rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rw, r)
-		logger.Debug("http request",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", rw.status,
-			"duration_ms", time.Since(start).Milliseconds(),
-		)
+		attrs := []slog.Attr{
+			slog.String("request_id", requestIDFromContext(r.Context())),
+			slog.String("method", r.Method),
+			slog.String("path", r.URL.Path),
+			slog.Int("status", rw.status),
+			slog.Int64("duration_ms", time.Since(start).Milliseconds()),
+		}
+		if spanContext := trace.SpanFromContext(r.Context()).SpanContext(); spanContext.IsValid() {
+			attrs = append(attrs,
+				slog.String("trace_id", spanContext.TraceID().String()),
+				slog.String("span_id", spanContext.SpanID().String()),
+			)
+		}
+		logger.LogAttrs(r.Context(), slog.LevelDebug, "http request", attrs...)
 	})
 }
 
@@ -68,6 +77,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Expose-Headers", requestIDHeader)
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -81,10 +91,18 @@ func recoveryMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				logger.Error("panic recovered", "panic", rec)
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusInternalServerError)
-				_, _ = w.Write([]byte(`{"error":"internal server error"}`))
+				attrs := []slog.Attr{
+					slog.String("request_id", requestIDFromContext(r.Context())),
+					slog.Any("panic", rec),
+				}
+				if spanContext := trace.SpanFromContext(r.Context()).SpanContext(); spanContext.IsValid() {
+					attrs = append(attrs,
+						slog.String("trace_id", spanContext.TraceID().String()),
+						slog.String("span_id", spanContext.SpanID().String()),
+					)
+				}
+				logger.LogAttrs(r.Context(), slog.LevelError, "panic recovered", attrs...)
+				writeErrorResponse(w, http.StatusInternalServerError, unexpectedErrorMessage)
 			}
 		}()
 		next.ServeHTTP(w, r)

@@ -105,8 +105,8 @@ func TestRegistryRejectsDuplicateProvider(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected duplicate error, got nil")
 	}
-	if errors.WhatKind(err) != KindProviderConflict {
-		t.Fatalf("error = %v, want KindProviderConflict", err)
+	if errors.WhatKind(err) != errors.Conflict {
+		t.Fatalf("error = %v, want Conflict", err)
 	}
 }
 
@@ -118,5 +118,7 @@ func TestProviderSupportsCapabilities(t *testing.T) {
 	}
 	if err := provider.RequireCapabilities(CapabilityStreaming); errors.WhatKind(err) != KindCapabilityUnsupported {
 		t.Fatalf("RequireCapabilities(CapabilityStreaming) error = %v, want KindCapabilityUnsupported", err)
+	} else if message := errors.UserMsg(err); message != "The active LLM provider does not support the requested operation." {
+		t.Fatalf("UserMsg() = %q", message)
 	}
 }

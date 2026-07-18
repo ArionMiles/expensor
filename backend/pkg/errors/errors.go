@@ -23,10 +23,13 @@ var (
 	Unauthenticated    = Kind{Code: "unauthenticated", Status: http.StatusUnauthorized}
 	PermissionDenied   = Kind{Code: "permission_denied", Status: http.StatusForbidden}
 	NotFound           = Kind{Code: "not_found", Status: http.StatusNotFound}
+	MethodNotAllowed   = Kind{Code: "method_not_allowed", Status: http.StatusMethodNotAllowed}
 	Conflict           = Kind{Code: "conflict", Status: http.StatusConflict}
 	FailedPrecondition = Kind{Code: "failed_precondition", Status: http.StatusPreconditionFailed}
+	PayloadTooLarge    = Kind{Code: "payload_too_large", Status: http.StatusRequestEntityTooLarge}
 	ResourceExhausted  = Kind{Code: "resource_exhausted", Status: http.StatusTooManyRequests}
 	Internal           = Kind{Code: "internal", Status: http.StatusInternalServerError}
+	Unimplemented      = Kind{Code: "unimplemented", Status: http.StatusNotImplemented}
 	Unavailable        = Kind{Code: "unavailable", Status: http.StatusServiceUnavailable}
 	Canceled           = Kind{Code: "canceled", Status: http.StatusServiceUnavailable}
 	DeadlineExceeded   = Kind{Code: "deadline_exceeded", Status: http.StatusServiceUnavailable}
@@ -198,29 +201,20 @@ func StatusCode(err error) int {
 
 // UserMsg returns the safe user-facing message, if any.
 func UserMsg(err error) string {
-	var appErr *Error
-	if As(err, &appErr) {
-		return appErr.UserMsg
+	for err != nil {
+		var appErr *Error
+		if !As(err, &appErr) {
+			return ""
+		}
+		if appErr.UserMsg != "" {
+			return appErr.UserMsg
+		}
+		err = appErr.Err
 	}
 	return ""
 }
 
-// Class returns a low-cardinality error class suitable for logs and metrics.
-func Class(err error) string {
-	kind := WhatKind(err)
-	if kind.Code != "" {
-		return kind.Code
-	}
-	return "error"
-}
-
-// LogAttrs returns low-cardinality structured logging attributes for err.
-func LogAttrs(err error) []slog.Attr {
-	attrs := []slog.Attr{slog.String("error_class", Class(err))}
-	return append(attrs, LogDetailAttrs(err)...)
-}
-
-// LogDetailAttrs returns structured error details without overriding a caller's error_class.
+// LogDetailAttrs returns structured error details safe for logs.
 func LogDetailAttrs(err error) []slog.Attr {
 	attrs := make([]slog.Attr, 0, 2)
 	kind := WhatKind(err)
@@ -255,12 +249,18 @@ func KindFromStatus(status int) Kind {
 		return PermissionDenied
 	case http.StatusNotFound:
 		return NotFound
+	case http.StatusMethodNotAllowed:
+		return MethodNotAllowed
 	case http.StatusConflict:
 		return Conflict
 	case http.StatusPreconditionFailed:
 		return FailedPrecondition
+	case http.StatusRequestEntityTooLarge:
+		return PayloadTooLarge
 	case http.StatusTooManyRequests:
 		return ResourceExhausted
+	case http.StatusNotImplemented:
+		return Unimplemented
 	case http.StatusBadGateway:
 		return BadGateway
 	case http.StatusServiceUnavailable:

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/ArionMiles/expensor/backend/internal/assistant"
-	"github.com/ArionMiles/expensor/backend/internal/llm"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
@@ -91,13 +90,13 @@ type ruleDraftIssueJSON struct {
 // @Success 200 {object} RuleDraftResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 429 {object} ErrorResponse
 // @Failure 502 {object} ErrorResponse
 // @Router /rule-drafts [post]
 func (h *Handlers) CreateRuleDraft(w http.ResponseWriter, r *http.Request) {
 	if h.ruleDrafts == nil {
-		writeError(w, http.StatusServiceUnavailable, "rule drafting is not configured")
+		writeError(w, r, errors.E(errors.Unavailable, errors.User("rule drafting is not configured")))
 		return
 	}
 	body, ok := decodeAndValidateJSON[ruleDraftRequestJSON](h, w, r)
@@ -109,34 +108,10 @@ func (h *Handlers) CreateRuleDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := h.ruleDrafts.DraftRule(r.Context(), requestTenant(r), ruleDraftInputFromJSON(body))
 	if err != nil {
-		h.writeRuleDraftError(w, err)
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, ruleDraftResultToJSON(result))
-}
-
-func (h *Handlers) writeRuleDraftError(w http.ResponseWriter, err error) {
-	switch errors.WhatKind(err) {
-	case llm.KindNoProviderConfigured:
-		writeError(w, http.StatusConflict, "Configure an LLM provider before drafting rules.")
-	case llm.KindCapabilityUnsupported:
-		writeError(w, http.StatusConflict, "The active LLM provider does not support structured rule drafting.")
-	case assistant.KindRuleDraftInvalidInput:
-		writeError(w, http.StatusUnprocessableEntity, safeRuleDraftErrorMessage(err, "rule draft input is invalid"))
-	case assistant.KindRuleDraftInvalidOutput:
-		writeError(w, http.StatusUnprocessableEntity, safeRuleDraftErrorMessage(err, "rule draft output is invalid"))
-	case assistant.KindRuleDraftPromptMissing:
-		writeError(w, http.StatusInternalServerError, "rule drafting prompt is not configured")
-	default:
-		writeLLMProviderError(w, err)
-	}
-}
-
-func safeRuleDraftErrorMessage(err error, fallback string) string {
-	if msg := errors.UserMsg(err); msg != "" {
-		return msg
-	}
-	return fallback
 }
 
 func validateRuleDraftRequest(w http.ResponseWriter, body ruleDraftRequestJSON) bool {
@@ -153,7 +128,7 @@ func validateRuleDraftRequest(w http.ResponseWriter, body ruleDraftRequestJSON) 
 		}
 	}
 	if !hasBody {
-		writeValidationErrors(w, []ValidationErrorDetail{{
+		writeValidationErrors(w, []ValidationError{{
 			Field:    "samples",
 			Location: "body",
 			Message:  "must include at least one email body",
@@ -161,7 +136,7 @@ func validateRuleDraftRequest(w http.ResponseWriter, body ruleDraftRequestJSON) 
 		return false
 	}
 	if !hasExpected {
-		writeValidationErrors(w, []ValidationErrorDetail{{
+		writeValidationErrors(w, []ValidationError{{
 			Field:    "samples.expected",
 			Location: "body",
 			Message:  "must include expected amount and merchant for at least one email body",

@@ -3,12 +3,12 @@ package openai
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/ArionMiles/expensor/backend/internal/llm"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 func TestNewClientRequiresAPIKeyAndAppliesDefaults(t *testing.T) {
@@ -143,11 +143,10 @@ func TestCompleteMapsOpenAIErrorResponses(t *testing.T) {
 	_, err = got.Complete(context.Background(), llm.Request{
 		Messages: []llm.Message{{Role: llm.RoleUser, Content: "hello"}},
 	})
-	var providerErr *llm.ProviderError
-	if !errors.As(err, &providerErr) {
-		t.Fatalf("Complete() error = %v, want ProviderError", err)
+	if errors.WhatKind(err) != errors.ResourceExhausted {
+		t.Fatalf("Complete() error = %v, want resource exhausted", err)
 	}
-	if providerErr.Provider != ProviderName || providerErr.StatusCode != http.StatusTooManyRequests || providerErr.Code != "insufficient_quota" {
-		t.Fatalf("provider error = %+v, want OpenAI insufficient_quota 429", providerErr)
+	if errors.UserMsg(err) != "OpenAI API quota is unavailable. Add billing credits or choose another LLM provider." {
+		t.Fatalf("user message = %q", errors.UserMsg(err))
 	}
 }

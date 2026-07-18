@@ -3,13 +3,13 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/llm"
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 type llmProviderInfoJSON struct {
@@ -90,8 +90,7 @@ func (h *Handlers) GetLLMProviderStatus(w http.ResponseWriter, r *http.Request) 
 	}
 	status, err := h.llmProviderStatus(r.Context(), requestTenant(r), provider.Metadata.Name)
 	if err != nil {
-		h.logger.Error("get llm provider status", "provider", provider.Metadata.Name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to load LLM provider status")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, status)
@@ -108,7 +107,7 @@ func (h *Handlers) GetLLMProviderStatus(w http.ResponseWriter, r *http.Request) 
 // @Success 200 {object} StatusOnlyResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /llm/providers/{name}/config [put]
 func (h *Handlers) SaveLLMProviderConfig(w http.ResponseWriter, r *http.Request) {
@@ -121,12 +120,11 @@ func (h *Handlers) SaveLLMProviderConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if !json.Valid(body.Config) {
-		writeError(w, http.StatusBadRequest, "invalid provider config JSON")
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid provider config JSON")))
 		return
 	}
 	if err := h.llmRuntimeStore.SetLLMProviderConfig(r.Context(), requestTenant(r), provider.Metadata.Name, body.Config); err != nil {
-		h.logger.Error("save llm provider config", "provider", provider.Metadata.Name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to save LLM provider config")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
@@ -142,7 +140,7 @@ func (h *Handlers) SaveLLMProviderConfig(w http.ResponseWriter, r *http.Request)
 // @Param request body LLMProviderCredentialsRequest true "Provider credentials"
 // @Success 200 {object} StatusOnlyResponse
 // @Failure 404 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /llm/providers/{name}/credentials [put]
 func (h *Handlers) SaveLLMProviderCredentials(w http.ResponseWriter, r *http.Request) {
@@ -156,12 +154,11 @@ func (h *Handlers) SaveLLMProviderCredentials(w http.ResponseWriter, r *http.Req
 	}
 	credentials, err := json.Marshal(map[string]string{"api_key": strings.TrimSpace(body.APIKey)})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to encode LLM provider credentials")
+		writeError(w, r, err)
 		return
 	}
 	if err := h.llmRuntimeStore.SetLLMProviderCredentials(r.Context(), requestTenant(r), provider.Metadata.Name, credentials); err != nil {
-		h.logger.Error("save llm provider credentials", "provider", provider.Metadata.Name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to save LLM provider credentials")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
@@ -189,7 +186,7 @@ func (h *Handlers) HealthCheckLLMProvider(w http.ResponseWriter, r *http.Request
 	ctx, cancel := context.WithTimeout(r.Context(), 75*time.Second)
 	defer cancel()
 	if err := client.HealthCheck(ctx); err != nil {
-		writeLLMProviderError(w, err)
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, llmProviderHealthResponse{
@@ -219,12 +216,11 @@ func (h *Handlers) ActivateLLMProvider(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 75*time.Second)
 	defer cancel()
 	if err := client.HealthCheck(ctx); err != nil {
-		writeLLMProviderError(w, err)
+		writeError(w, r, err)
 		return
 	}
 	if err := h.llmRuntimeStore.SetActiveLLMProvider(r.Context(), requestTenant(r), provider.Metadata.Name); err != nil {
-		h.logger.Error("activate llm provider", "provider", provider.Metadata.Name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to activate LLM provider")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "active"})
@@ -245,8 +241,7 @@ func (h *Handlers) DisconnectLLMProvider(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err := h.llmRuntimeStore.DeleteLLMProviderRuntime(r.Context(), requestTenant(r), provider.Metadata.Name); err != nil {
-		h.logger.Error("disconnect llm provider", "provider", provider.Metadata.Name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to disconnect LLM provider")
+		writeError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -254,13 +249,13 @@ func (h *Handlers) DisconnectLLMProvider(w http.ResponseWriter, r *http.Request)
 
 func (h *Handlers) llmProviderByPath(w http.ResponseWriter, r *http.Request) (llm.Provider, bool) {
 	if h.llmRegistry == nil {
-		writeError(w, http.StatusNotFound, "LLM providers are not configured")
+		writeError(w, r, errors.E(errors.NotFound, errors.User("LLM providers are not configured")))
 		return llm.Provider{}, false
 	}
 	name := r.PathValue("name")
 	provider, err := h.llmRegistry.GetProvider(name)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "LLM provider not found")
+		writeError(w, r, errors.E(errors.NotFound, errors.User("LLM provider not found"), err))
 		return llm.Provider{}, false
 	}
 	return provider, true
@@ -301,18 +296,16 @@ func (h *Handlers) llmProviderClientFromRuntime(w http.ResponseWriter, r *http.R
 	tenant := requestTenant(r)
 	config, _, err := h.llmRuntimeStore.GetLLMProviderConfig(r.Context(), tenant, provider.Metadata.Name)
 	if err != nil {
-		h.logger.Error("load llm provider config", "provider", provider.Metadata.Name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to load LLM provider config")
+		writeError(w, r, err)
 		return llm.Provider{}, nil, false
 	}
 	credentials, found, err := h.llmRuntimeStore.GetLLMProviderCredentials(r.Context(), tenant, provider.Metadata.Name)
 	if err != nil {
-		h.logger.Error("load llm provider credentials", "provider", provider.Metadata.Name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to load LLM provider credentials")
+		writeError(w, r, err)
 		return llm.Provider{}, nil, false
 	}
 	if !found {
-		writeError(w, http.StatusConflict, "LLM provider credentials are not configured")
+		writeError(w, r, errors.E(errors.Conflict, errors.User("LLM provider credentials are not configured")))
 		return llm.Provider{}, nil, false
 	}
 	client, err := provider.NewClient(llm.ClientConfig{
@@ -320,7 +313,11 @@ func (h *Handlers) llmProviderClientFromRuntime(w http.ResponseWriter, r *http.R
 		Credentials: cloneRawJSON(credentials),
 	})
 	if err != nil {
-		writeError(w, http.StatusConflict, err.Error())
+		writeError(w, r, errors.E(
+			errors.Conflict,
+			errors.User("LLM provider configuration is invalid."),
+			err,
+		))
 		return llm.Provider{}, nil, false
 	}
 	client = llm.NewInstrumentedClient(
@@ -330,38 +327,6 @@ func (h *Handlers) llmProviderClientFromRuntime(w http.ResponseWriter, r *http.R
 		h.logger.With("component", "llm"),
 	)
 	return provider, client, true
-}
-
-func writeLLMProviderError(w http.ResponseWriter, err error) {
-	var providerErr *llm.ProviderError
-	if errors.As(err, &providerErr) {
-		status := http.StatusBadGateway
-		message := providerErr.Message
-		switch providerErr.Code {
-		case "invalid_api_key":
-			status = http.StatusUnauthorized
-			message = "OpenAI API key was rejected. Check the key and try again."
-		case "insufficient_quota":
-			status = http.StatusTooManyRequests
-			message = "OpenAI API quota is unavailable. Add billing credits or choose another LLM provider."
-		case "rate_limit_exceeded":
-			status = http.StatusTooManyRequests
-			message = "OpenAI rate limit exceeded. Wait a moment and try again."
-		default:
-			switch providerErr.StatusCode {
-			case http.StatusUnauthorized:
-				status = http.StatusUnauthorized
-			case http.StatusTooManyRequests:
-				status = http.StatusTooManyRequests
-			}
-			if strings.TrimSpace(message) == "" {
-				message = "LLM provider request failed."
-			}
-		}
-		writeError(w, status, message)
-		return
-	}
-	writeError(w, http.StatusBadGateway, err.Error())
 }
 
 func cloneRawJSON(in []byte) json.RawMessage {

@@ -26,6 +26,8 @@ When fixing GitHub-reported vulnerabilities, read the GitHub Security Advisory o
 
 ### Backend code health
 
+Production Go code must use `backend/pkg/errors`. Outside `*_test.go` files and `backend/pkg/errors` itself, do not import the standard-library `errors` package or call `fmt.Errorf`. Use `errors.E` with a stable operation name and useful kind when wrapping failures at package/application boundaries; leaf validation errors may use a kind and message without an operation when the exact message is part of the existing contract. Use the project package's `Is`, `As`, `Join`, and `Unwrap` helpers for error-chain operations. Golangci-lint enforces these restrictions.
+
 Do not add optional plugin interfaces for required metadata. If every reader must provide it, put it in the main metadata struct.
 
 Use Go generics when they improve compile-time type safety or remove meaningful repeated algorithms across concrete types. Do not introduce generics solely to replace `any` when the underlying library still relies on reflection or when call sites do not become clearer. Do not claim a generics performance benefit without measuring the relevant path. For tag-driven decoders and validators, cache unavoidable local reflection metadata by concrete DTO type when it is reused.
@@ -75,7 +77,7 @@ Validation errors must use the structured `field`, `location`, and `message` det
 HTTP validation improves contracts and error reporting; it is not SQL-injection protection. Continue using parameterized SQL at the repository boundary, and retain domain/store invariants needed by non-HTTP callers or required for data integrity.
 
 ### Plugin system
-Reader plugins implement interfaces in `pkg/api`. Plugins are registered in `cmd/server/main.go` and selected at runtime via the web UI (not env vars). Adding a new reader means implementing `plugins.ReaderPlugin` and registering it in the registry.
+Reader plugins implement interfaces in `pkg/api`. Built-in plugins are registered in `internal/app/readers.go` and selected at runtime via the web UI (not env vars). Adding a new reader means implementing the plugin capabilities and registering the provider in application composition.
 
 ### Storer interface
 `internal/httpapi/store.go` defines `Storer` — a narrow interface over the persistence surface used by HTTP handlers. It is not the concrete Postgres store. When adding a new store method that a handler needs, add it to `Storer` first, then implement it on the concrete backend store and the instrumented wrapper. The compile-time assertions in `store.go` catch mismatches.
@@ -90,7 +92,7 @@ Unit tests in `internal/api/handlers_test.go` use `mockStore` (not a real DB). W
 Postgres SQL files in `backend/internal/store/postgres/migrations/` are embedded into the binary and run automatically on startup. Name new files `NNN_description.sql` (next sequential number). Migrations use `IF NOT EXISTS` and `ON CONFLICT DO NOTHING` — they must be idempotent.
 
 ### Rules and fixtures
-Bundled extraction rules live in `backend/cmd/server/content/rules.json` as a versioned v2 document. Treat this as the source of truth for rule edits and contributions. Rules use exact sender matching with `sender_emails`; add every supported sender address explicitly. Rule source is structured as `source.type`, `source.label`, and `source.bank`. When bundled rules introduce a new type or bank, update the matching `presets.source_types` or `presets.banks` entry too.
+Bundled extraction rules live in `backend/internal/catalog/content/rules.json` as a versioned v2 document. Treat this as the source of truth for rule edits and contributions. Rules use exact sender matching with `sender_emails`; add every supported sender address explicitly. Rule source is structured as `source.type`, `source.label`, and `source.bank`. When bundled rules introduce a new type or bank, update the matching `presets.source_types` or `presets.banks` entry too.
 
 Rule email tests live under `tests/data/rule-emails` as self-contained `.rule.fixture` files with YAML front matter plus the raw email body below the closing `---`. Use one email per file and name each file `<bank>_<source-type>_<case>.rule.fixture`, with lowercase slug segments such as `hdfc_credit-card_classic-spend.rule.fixture`. Fixtures must not include regexes or timestamps; the table-driven runner loads the named rule from `rules.json`, uses the fixture filename as the subtest name, and asserts sender/subject matching plus amount, merchant, and currency extraction.
 
@@ -157,8 +159,9 @@ Run `task lint:be:prod` before every commit. It must report `0 issues`.
 
 ## Git Conventions
 
-- Branch format: `pr/<short-description>` (no Jira ticket for this repo)
-- Commits: imperative mood, Tim Pope style, `--no-gpg-sign`
+- Branch format: `<type>/<short-description>`, using one of `feat`, `fix`, `docs`, `style`, `refactor`, `test`, or `chore`. Use lowercase, hyphen-separated descriptions and no Jira ticket.
+- Commit and PR-title format: `<type>(<optional-scope>): <subject>`. Use a supported type, an optional concise lowercase scope, and a present-tense subject. For example: `refactor(daemon): centralize scan configuration`.
+- Commits use `--no-gpg-sign`.
 - Never commit to `main` directly — branch protection requires PRs (bypass only for docs/chore)
 - Check `.pre-commit-config.yaml` before committing if it exists
 - Always use the repository PR template at `.github/PULL_REQUEST_TEMPLATE.md` when creating or updating PR descriptions. Do not compose PR bodies from scratch or omit template sections.

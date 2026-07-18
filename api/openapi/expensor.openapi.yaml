@@ -312,9 +312,19 @@ definitions:
     type: object
   httpapi.ErrorResponse:
     properties:
-      error:
-        example: internal server error
+      message:
+        example: Something went wrong.
         type: string
+      request_id:
+        example: 7b08e51d-8e8f-4b4a-9c14-fd1ff4c823b3
+        type: string
+      validation_errors:
+        items:
+          $ref: '#/definitions/httpapi.ValidationError'
+        type: array
+    required:
+    - message
+    - request_id
     type: object
   httpapi.ExtractionDiagnosticResponse:
     properties:
@@ -1418,7 +1428,7 @@ definitions:
         example: db://reader_runtime/gmail/client_secret
         type: string
     type: object
-  httpapi.ValidationErrorDetail:
+  httpapi.ValidationError:
     properties:
       field:
         example: page_size
@@ -1428,16 +1438,6 @@ definitions:
         type: string
       message:
         example: must be at most 100
-        type: string
-    type: object
-  httpapi.ValidationErrorResponse:
-    properties:
-      details:
-        items:
-          $ref: '#/definitions/httpapi.ValidationErrorDetail'
-        type: array
-      error:
-        example: request validation failed
         type: string
     type: object
   httpapi.VersionResponse:
@@ -1724,7 +1724,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -1784,7 +1784,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
       summary: Update runtime logging settings
       tags:
       - Admin
@@ -1828,7 +1828,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -1898,7 +1898,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -1979,7 +1979,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2099,7 +2099,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2167,7 +2167,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2210,7 +2210,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
@@ -2379,7 +2379,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2422,7 +2422,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
@@ -2591,7 +2591,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2626,7 +2626,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2672,7 +2672,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2839,7 +2839,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2976,7 +2976,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3029,7 +3029,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "501":
           description: Not Implemented
           schema:
@@ -3062,7 +3062,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "501":
           description: Not Implemented
           schema:
@@ -3101,7 +3101,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3188,7 +3188,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3323,7 +3323,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3362,7 +3362,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3461,7 +3461,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3519,7 +3519,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3559,7 +3559,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3606,7 +3606,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3666,7 +3666,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3699,7 +3699,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3786,7 +3786,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -4099,7 +4099,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -4152,7 +4152,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -4201,7 +4201,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "429":
           description: Too Many Requests
           schema:
@@ -4265,7 +4265,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -4354,7 +4354,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -4413,7 +4413,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -4450,7 +4450,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "501":
           description: Not Implemented
           schema:
@@ -4498,7 +4498,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -4581,7 +4581,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -4657,7 +4657,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -4691,7 +4691,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -4769,7 +4769,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -4979,7 +4979,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -5062,7 +5062,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -5106,7 +5106,7 @@ paths:
         "422":
           description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/httpapi.ValidationErrorResponse'
+            $ref: '#/definitions/httpapi.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:

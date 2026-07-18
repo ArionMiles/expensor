@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/ArionMiles/expensor/backend/internal/daemon"
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // GetScanningSettings handles GET /api/scanning/settings.
@@ -19,8 +21,7 @@ import (
 func (h *Handlers) GetScanningSettings(w http.ResponseWriter, r *http.Request) {
 	state, err := h.scanningStore.GetScanningState(r.Context(), requestTenant(r))
 	if err != nil {
-		h.logger.Error("failed to load scanning settings", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to load scanning settings")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, ScanningSettingsResponse{
@@ -37,7 +38,7 @@ func (h *Handlers) GetScanningSettings(w http.ResponseWriter, r *http.Request) {
 // @Param request body ScanningSettingsPatchRequest true "Scanning settings patch"
 // @Success 200 {object} ScanningSettingsResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /scanning/settings [patch]
 func (h *Handlers) PatchScanningSettings(w http.ResponseWriter, r *http.Request) {
@@ -50,24 +51,21 @@ func (h *Handlers) PatchScanningSettings(w http.ResponseWriter, r *http.Request)
 		reader := strings.TrimSpace(*body.ActiveReader)
 		if reader != "" {
 			if _, err := h.registry.GetProvider(reader); err != nil {
-				writeError(w, http.StatusBadRequest, fmt.Sprintf("reader %q not found", reader))
+				writeError(w, r, errors.E(errors.InvalidArgument, errors.User(fmt.Sprintf("reader %q not found", reader)), err))
 				return
 			}
 			if err := h.scanningStore.SetActiveScanningReader(r.Context(), tenant, reader); err != nil {
-				h.logger.Error("failed to set active scanning reader", "error", err)
-				writeError(w, http.StatusInternalServerError, "failed to update scanning settings")
+				writeError(w, r, err)
 				return
 			}
 		} else if err := h.scanningStore.ClearActiveScanningReader(r.Context(), tenant); err != nil {
-			h.logger.Error("failed to clear active scanning reader", "error", err)
-			writeError(w, http.StatusInternalServerError, "failed to update scanning settings")
+			writeError(w, r, err)
 			return
 		}
 	}
 	if body.Enabled != nil {
 		if err := h.applyScanningEnabled(r.Context(), tenant, *body.Enabled); err != nil {
-			h.logger.Error("failed to update scanning enabled", "error", err)
-			writeError(w, http.StatusInternalServerError, "failed to update scanning settings")
+			writeError(w, r, err)
 			return
 		}
 	}
@@ -84,8 +82,7 @@ func (h *Handlers) PatchScanningSettings(w http.ResponseWriter, r *http.Request)
 func (h *Handlers) GetScanningStatus(w http.ResponseWriter, r *http.Request) {
 	state, err := h.scanningStore.GetScanningState(r.Context(), requestTenant(r))
 	if err != nil {
-		h.logger.Error("failed to load scanning status", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to load scanning status")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, scanningStatusResponse(state, false))
@@ -99,7 +96,7 @@ func (h *Handlers) GetScanningStatus(w http.ResponseWriter, r *http.Request) {
 // @Param request body DaemonReaderRequest true "Rescan request"
 // @Success 202 {object} StatusOnlyResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 501 {object} ErrorResponse
 // @Router /scanning/rescans [post]
 func (h *Handlers) CreateScanningRescan(w http.ResponseWriter, r *http.Request) {
@@ -108,14 +105,14 @@ func (h *Handlers) CreateScanningRescan(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if _, err := h.registry.GetProvider(body.Reader); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("reader %q not found", body.Reader))
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User(fmt.Sprintf("reader %q not found", body.Reader)), err))
 		return
 	}
-	if h.rescanFn == nil {
-		writeError(w, http.StatusNotImplemented, "rescan not configured")
+	if h.daemon == nil {
+		writeError(w, r, errors.E(errors.Unimplemented, errors.User("rescan not configured")))
 		return
 	}
-	h.rescanFn(DaemonRunRequest{Tenant: requestTenant(r), Reader: body.Reader})
+	h.daemon.Rescan(daemon.RunRequest{Tenant: requestTenant(r), Reader: body.Reader})
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "rescanning"})
 }
 
@@ -129,8 +126,7 @@ func (h *Handlers) CreateScanningRescan(w http.ResponseWriter, r *http.Request) 
 func (h *Handlers) GetAdminScanningSettings(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.scanningStore.GetSchedulerConfig(r.Context())
 	if err != nil {
-		h.logger.Error("failed to load scheduler config", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to load scanning settings")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, adminScanningSettingsResponse(cfg))
@@ -144,7 +140,7 @@ func (h *Handlers) GetAdminScanningSettings(w http.ResponseWriter, r *http.Reque
 // @Param request body AdminScanningSettingsPatchRequest true "Global scanning settings patch"
 // @Success 200 {object} AdminScanningSettingsResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /admin/scanning/settings [patch]
 func (h *Handlers) PatchAdminScanningSettings(w http.ResponseWriter, r *http.Request) {
@@ -156,8 +152,7 @@ func (h *Handlers) PatchAdminScanningSettings(w http.ResponseWriter, r *http.Req
 		MaxConcurrentScans: body.MaxConcurrentScans,
 	})
 	if err != nil {
-		h.logger.Error("failed to update scheduler config", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update scanning settings")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, adminScanningSettingsResponse(cfg))

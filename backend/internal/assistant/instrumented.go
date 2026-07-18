@@ -8,7 +8,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/ArionMiles/expensor/backend/internal/llm"
 	"github.com/ArionMiles/expensor/backend/internal/observability"
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
@@ -56,7 +55,9 @@ func (d *InstrumentedRuleDrafter) DraftRule(ctx context.Context, tenant store.Te
 	issueCount := len(result.ValidationIssues)
 	if err != nil {
 		outcome = ruleDraftOutcomeError
-		attrs = append(attrs, attribute.String("error_class", ruleDraftErrorClass(err)))
+		if kind := errors.WhatKind(err); kind.Code != "" {
+			attrs = append(attrs, attribute.String("error_kind", kind.Code))
+		}
 		d.logError(ctx, err, sampleCount)
 	} else if issueCount > 0 {
 		outcome = "needs_review"
@@ -87,7 +88,6 @@ func (d *InstrumentedRuleDrafter) logError(ctx context.Context, err error, sampl
 	logAttrs := []slog.Attr{
 		slog.String("namespace", "assistant"),
 		slog.String("operation", "rule_draft"),
-		slog.String("error_class", ruleDraftErrorClass(err)),
 		slog.Int("sample_count", sampleCount),
 	}
 	logAttrs = append(logAttrs, errors.LogDetailAttrs(err)...)
@@ -98,27 +98,6 @@ func (d *InstrumentedRuleDrafter) logError(ctx context.Context, err error, sampl
 		)
 	}
 	d.logger.LogAttrs(ctx, slog.LevelError, "rule draft failed", logAttrs...)
-}
-
-func ruleDraftErrorClass(err error) string {
-	switch errors.WhatKind(err) {
-	case llm.KindNoProviderConfigured:
-		return "no_provider_configured"
-	case llm.KindCapabilityUnsupported:
-		return "capability_unsupported"
-	case KindRuleDraftInvalidInput:
-		return "invalid_input"
-	case KindRuleDraftInvalidOutput:
-		return "invalid_output"
-	case KindRuleDraftPromptMissing:
-		return "prompt_missing"
-	case errors.Canceled:
-		return "context_canceled"
-	case errors.DeadlineExceeded:
-		return "deadline_exceeded"
-	default:
-		return "error"
-	}
 }
 
 func countDraftSamples(input RuleDraftInput) int {

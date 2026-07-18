@@ -72,14 +72,37 @@ const apiClient = axios.create({
   },
 })
 
+export type ValidationError = {
+  field: string
+  location: string
+  message: string
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly requestID: string,
+    readonly validationErrors: ValidationError[] = [],
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   (error: unknown) => {
     if (axios.isAxiosError(error)) {
       if (error.response) {
-        const data = error.response.data as { error?: string; message?: string } | undefined
-        const message = data?.error ?? data?.message ?? `Server error: ${error.response.status}`
-        throw new Error(message)
+        const data = error.response.data as
+          | {
+              message?: string
+              request_id?: string
+              validation_errors?: ValidationError[]
+            }
+          | undefined
+        const message = data?.message ?? `Server error: ${error.response.status}`
+        throw new ApiError(message, data?.request_id ?? '', data?.validation_errors)
       } else if (error.request) {
         throw new Error('No response from server. Is the backend running?')
       } else {
