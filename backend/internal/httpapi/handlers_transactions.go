@@ -1,12 +1,10 @@
 package httpapi
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
-	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // --- transactions ---
@@ -48,7 +46,7 @@ import (
 // @Param sort_dir query string false "Sort direction" Enums(asc,desc)
 // @Success 200 {object} TransactionsListResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions [get]
@@ -72,8 +70,7 @@ func (h *Handlers) ListTransactions(w http.ResponseWriter, r *http.Request) {
 		txns, result, err = h.transactionStore.SearchTransactions(r.Context(), requestTenant(r), q, f)
 	}
 	if err != nil {
-		h.logger.Error("query transactions", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to query transactions")
+		writeError(w, r, err)
 		return
 	}
 	if txns == nil {
@@ -170,12 +167,7 @@ func (h *Handlers) GetTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 	txn, err := h.transactionStore.GetTransaction(r.Context(), requestTenant(r), id)
 	if err != nil {
-		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusNotFound, "transaction not found")
-			return
-		}
-		h.logger.Error("get transaction", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to fetch transaction")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, txn)
@@ -186,7 +178,7 @@ func (h *Handlers) GetTransaction(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) validateCategory(w http.ResponseWriter, r *http.Request, name string) bool {
 	cats, err := h.taxonomyStore.ListCategories(r.Context(), requestTenant(r))
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to validate category")
+		writeError(w, r, err)
 		return false
 	}
 	for _, c := range cats {
@@ -194,7 +186,11 @@ func (h *Handlers) validateCategory(w http.ResponseWriter, r *http.Request, name
 			return true
 		}
 	}
-	writeError(w, http.StatusUnprocessableEntity, fmt.Sprintf("category %q does not exist", name))
+	writeValidationErrors(w, []ValidationError{{
+		Field:    "category",
+		Location: "body",
+		Message:  "does not exist",
+	}})
 	return false
 }
 
@@ -203,7 +199,7 @@ func (h *Handlers) validateCategory(w http.ResponseWriter, r *http.Request, name
 func (h *Handlers) validateBucket(w http.ResponseWriter, r *http.Request, name string) bool {
 	bkts, err := h.taxonomyStore.ListBuckets(r.Context(), requestTenant(r))
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to validate bucket")
+		writeError(w, r, err)
 		return false
 	}
 	for _, b := range bkts {
@@ -211,7 +207,11 @@ func (h *Handlers) validateBucket(w http.ResponseWriter, r *http.Request, name s
 			return true
 		}
 	}
-	writeError(w, http.StatusUnprocessableEntity, fmt.Sprintf("bucket %q does not exist", name))
+	writeValidationErrors(w, []ValidationError{{
+		Field:    "bucket",
+		Location: "body",
+		Message:  "does not exist",
+	}})
 	return false
 }
 
@@ -227,7 +227,7 @@ func (h *Handlers) validateBucket(w http.ResponseWriter, r *http.Request, name s
 // @Success 200 {object} TransactionResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions/{id} [patch]
@@ -254,11 +254,7 @@ func (h *Handlers) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := h.transactionStore.GetTransaction(r.Context(), requestTenant(r), id)
 	if err != nil {
-		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusNotFound, "transaction not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "failed to fetch updated transaction")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, tx)
@@ -277,7 +273,8 @@ func (h *Handlers) patchTransaction(
 			Bucket:      body.Bucket,
 		}
 		if err := h.transactionStore.UpdateTransaction(r.Context(), requestTenant(r), id, update); err != nil {
-			return h.writeTransactionPatchError(w, err, "update transaction details")
+			writeError(w, r, err)
+			return false
 		}
 	}
 	if body.Muted != nil {
@@ -286,24 +283,16 @@ func (h *Handlers) patchTransaction(
 			reason = *body.MuteReason
 		}
 		if err := h.muteStore.MuteTransaction(r.Context(), requestTenant(r), id, *body.Muted, reason); err != nil {
-			return h.writeTransactionPatchError(w, err, "update transaction mute state")
+			writeError(w, r, err)
+			return false
 		}
 	} else if body.MuteReason != nil {
 		if err := h.muteStore.UpdateMuteReason(r.Context(), requestTenant(r), id, *body.MuteReason); err != nil {
-			return h.writeTransactionPatchError(w, err, "update transaction mute reason")
+			writeError(w, r, err)
+			return false
 		}
 	}
 	return true
-}
-
-func (h *Handlers) writeTransactionPatchError(w http.ResponseWriter, err error, operation string) bool {
-	if errors.WhatKind(err) == errors.NotFound {
-		writeError(w, http.StatusNotFound, "transaction not found")
-		return false
-	}
-	h.logger.Error(operation, "error", err)
-	writeError(w, http.StatusInternalServerError, "failed to update transaction")
-	return false
 }
 
 // ListMutedMerchants handles GET /api/muted-merchants.
@@ -318,8 +307,7 @@ func (h *Handlers) writeTransactionPatchError(w http.ResponseWriter, err error, 
 func (h *Handlers) ListMutedMerchants(w http.ResponseWriter, r *http.Request) {
 	merchants, err := h.muteStore.GetMutedMerchantsWithCount(r.Context(), requestTenant(r))
 	if err != nil {
-		h.logger.Error("list muted merchants", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to list muted merchants")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, merchants)
@@ -335,7 +323,7 @@ func (h *Handlers) ListMutedMerchants(w http.ResponseWriter, r *http.Request) {
 // @Param request body MuteMerchantRequest true "Merchant mute payload"
 // @Success 201 {object} MuteMerchantResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /muted-merchants [post]
@@ -345,8 +333,7 @@ func (h *Handlers) MuteByMerchant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.muteStore.MuteByMerchant(r.Context(), requestTenant(r), body.Pattern, body.Reason); err != nil {
-		h.logger.Error("mute by merchant", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to mute merchant")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]string{"pattern": body.Pattern})
@@ -364,7 +351,7 @@ func (h *Handlers) MuteByMerchant(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} MerchantReasonResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /muted-merchants/{id} [patch]
@@ -378,12 +365,7 @@ func (h *Handlers) UpdateMerchantReason(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := h.muteStore.UpdateMerchantReason(r.Context(), requestTenant(r), id, body.Reason); err != nil {
-		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusNotFound, "muted merchant not found")
-			return
-		}
-		h.logger.Error("update merchant reason", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update reason")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"reason": body.Reason})
@@ -400,7 +382,7 @@ func (h *Handlers) UpdateMerchantReason(w http.ResponseWriter, r *http.Request) 
 // @Success 204
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /muted-merchants/{id} [delete]
@@ -422,12 +404,7 @@ func (h *Handlers) DeleteMutedMerchant(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusNotFound, "muted merchant not found")
-			return
-		}
-		h.logger.Error("delete muted merchant", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to delete muted merchant")
+		writeError(w, r, err)
 		return
 	}
 
@@ -445,7 +422,7 @@ func (h *Handlers) DeleteMutedMerchant(w http.ResponseWriter, r *http.Request) {
 // @Param request body CategorizeMerchantRequest true "Merchant categorization payload"
 // @Success 200 {object} CategorizeMerchantResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /merchants/categorize [post]
@@ -456,8 +433,7 @@ func (h *Handlers) CategorizeMerchant(w http.ResponseWriter, r *http.Request) {
 	}
 	n, err := h.muteStore.CategorizeMerchant(r.Context(), requestTenant(r), body.Merchant, body.Category, body.Bucket)
 	if err != nil {
-		h.logger.Error("categorize merchant", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to categorize merchant")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, CategorizeMerchantResponse{Updated: n})
@@ -476,8 +452,7 @@ func (h *Handlers) CategorizeMerchant(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) GetFacets(w http.ResponseWriter, r *http.Request) {
 	facets, err := h.transactionStore.GetFacets(r.Context(), requestTenant(r))
 	if err != nil {
-		h.logger.Error("get facets", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to fetch facets")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, facets)

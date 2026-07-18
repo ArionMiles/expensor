@@ -65,7 +65,12 @@ func (p Provider) RequireCapabilities(required ...Capability) error {
 	}
 	for _, capability := range required {
 		if _, ok := available[capability]; !ok {
-			return errors.E(op, KindCapabilityUnsupported, fmt.Sprintf("llm capability unsupported: %s", capability))
+			return errors.E(
+				op,
+				KindCapabilityUnsupported,
+				errors.User("The active LLM provider does not support the requested operation."),
+				fmt.Sprintf("llm capability unsupported: %s", capability),
+			)
 		}
 	}
 	return nil

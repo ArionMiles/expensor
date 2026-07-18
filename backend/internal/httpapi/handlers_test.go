@@ -38,10 +38,10 @@ const (
 var (
 	errStoreNotFound                = errors.E(errors.NotFound, "not found")
 	errStoreConflict                = errors.E(errors.Conflict, "conflict")
-	errStoreAccessTokenNameConflict = errors.E(errors.Conflict, "access token name conflict")
-	errStoreUserEmailConflict       = errors.E(errors.Conflict, "user email conflict")
-	errStoreRuleNameConflict        = errors.E(errors.Conflict, "rule name conflict")
-	errStoreDiagnosticConflict      = errors.E(errors.Conflict, "diagnostic conflict")
+	errStoreAccessTokenNameConflict = errors.E(errors.Conflict, errors.User("Token test already exists."), "access token name conflict")
+	errStoreUserEmailConflict       = errors.E(errors.Conflict, errors.User("User b@example.com already exists."), "user email conflict")
+	errStoreRuleNameConflict        = errors.E(errors.Conflict, errors.User("rule name already exists"), "rule name conflict")
+	errStoreDiagnosticConflict      = errors.E(errors.Conflict, errors.User("open extraction diagnostic already exists"), "diagnostic conflict")
 )
 
 // --- mocks ---
@@ -1213,14 +1213,17 @@ func assertValidationError(
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d (body=%s)", rr.Code, rr.Body.String())
 	}
-	var response ValidationErrorResponse
+	var response ErrorResponse
 	decodeJSON(t, rr.Body.String(), &response)
-	if response.Error != "request validation failed" {
-		t.Fatalf("error = %q", response.Error)
+	if response.Message != "Request validation failed." {
+		t.Fatalf("message = %q", response.Message)
 	}
-	want := []ValidationErrorDetail{{Field: field, Location: location, Message: message}}
-	if !reflect.DeepEqual(response.Details, want) {
-		t.Fatalf("details = %#v, want %#v", response.Details, want)
+	if response.RequestID == "" {
+		t.Fatal("request_id is empty")
+	}
+	want := []ValidationError{{Field: field, Location: location, Message: message}}
+	if !reflect.DeepEqual(response.ValidationErrors, want) {
+		t.Fatalf("validation_errors = %#v, want %#v", response.ValidationErrors, want)
 	}
 }
 
@@ -1268,8 +1271,8 @@ func TestStatus_StatsError(t *testing.T) {
 	}
 	var resp map[string]string
 	decodeJSON(t, rr.Body.String(), &resp)
-	if resp["error"] != "failed to fetch stats" {
-		t.Errorf("expected failed to fetch stats error, got %q", resp["error"])
+	if resp["message"] != unexpectedErrorMessage {
+		t.Errorf("message = %q, want %q", resp["message"], unexpectedErrorMessage)
 	}
 }
 
@@ -2324,7 +2327,7 @@ func TestGetTransaction_Found(t *testing.T) {
 }
 
 func TestGetTransaction_NotFound(t *testing.T) {
-	st := &mockStore{getErr: errStoreNotFound}
+	st := &mockStore{getErr: errors.E(errors.NotFound, errors.User("transaction not found"))}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/22222222-2222-2222-2222-222222222222", nil)
@@ -2334,6 +2337,14 @@ func TestGetTransaction_NotFound(t *testing.T) {
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rr.Code)
+	}
+	var response ErrorResponse
+	decodeJSON(t, rr.Body.String(), &response)
+	if response.Message != "transaction not found" {
+		t.Fatalf("message = %q", response.Message)
+	}
+	if response.RequestID == "" {
+		t.Fatal("request_id is empty")
 	}
 }
 
@@ -2414,7 +2425,7 @@ func TestUpdateTransaction_MuteReasonOnly(t *testing.T) {
 }
 
 func TestUpdateTransaction_NotFound(t *testing.T) {
-	st := &mockStore{updateTxErr: errStoreNotFound}
+	st := &mockStore{updateTxErr: errors.E(errors.NotFound, errors.User("transaction not found"))}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	body := `{"description":"x"}`
@@ -2425,6 +2436,11 @@ func TestUpdateTransaction_NotFound(t *testing.T) {
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rr.Code)
+	}
+	var response ErrorResponse
+	decodeJSON(t, rr.Body.String(), &response)
+	if response.Message != "transaction not found" {
+		t.Fatalf("message = %q", response.Message)
 	}
 }
 
@@ -2464,6 +2480,23 @@ func TestUpdateTransaction_InvalidJSON(t *testing.T) {
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
+}
+
+func TestUpdateTransaction_ReportsUnknownCategoryAsValidationError(t *testing.T) {
+	st := &mockStore{categories: []store.Category{{Name: "Food"}}}
+	h := newTestHandlers(t, st, &mockDaemon{})
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPatch,
+		"/api/transactions/"+testTransactionID,
+		strings.NewReader(`{"category":"Unknown"}`),
+	)
+	req.SetPathValue("id", testTransactionID)
+	rr := httptest.NewRecorder()
+
+	h.UpdateTransaction(rr, req)
+
+	assertValidationError(t, rr, "category", "body", "does not exist")
 }
 
 func TestListExtractionDiagnostics_DefaultsStatusOpen(t *testing.T) {
@@ -3598,7 +3631,11 @@ func TestListCategories_Success(t *testing.T) {
 }
 
 func TestDeleteCategory_DefaultRejected(t *testing.T) {
-	ms := &mockStore{catsErr: fmt.Errorf("cannot delete default category \"food\"")}
+	ms := &mockStore{catsErr: errors.E(
+		errors.Conflict,
+		errors.User("The default category cannot be deleted."),
+		"cannot delete default category \"food\"",
+	)}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/config/categories/food", nil)
 	req.SetPathValue("name", "food")
@@ -3606,6 +3643,11 @@ func TestDeleteCategory_DefaultRejected(t *testing.T) {
 	h.DeleteCategory(rr, req)
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+	var response ErrorResponse
+	decodeJSON(t, rr.Body.String(), &response)
+	if response.Message != "The default category cannot be deleted." {
+		t.Fatalf("message = %q", response.Message)
 	}
 }
 
@@ -4036,8 +4078,8 @@ func TestCreateRule_DuplicateNameReturns409(t *testing.T) {
 	}
 	var resp map[string]string
 	decodeJSON(t, rr.Body.String(), &resp)
-	if resp["error"] != "rule name already exists" {
-		t.Fatalf("error = %q, want rule name already exists", resp["error"])
+	if resp["message"] != "rule name already exists" {
+		t.Fatalf("message = %q, want rule name already exists", resp["message"])
 	}
 }
 
@@ -4168,8 +4210,8 @@ func TestUpdateRule_DuplicateNameReturns409(t *testing.T) {
 	}
 	var resp map[string]string
 	decodeJSON(t, rr.Body.String(), &resp)
-	if resp["error"] != "rule name already exists" {
-		t.Fatalf("error = %q, want rule name already exists", resp["error"])
+	if resp["message"] != "rule name already exists" {
+		t.Fatalf("message = %q, want rule name already exists", resp["message"])
 	}
 }
 

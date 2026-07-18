@@ -129,7 +129,7 @@ func (r *diagnosticsRepository) GetExtractionDiagnostic(ctx context.Context, ten
 		return nil, errors.E("postgres.diagnostics.get_extraction_diagnostic", "fetching extraction diagnostic", err)
 	}
 	if len(result) == 0 {
-		return nil, errors.E("store.diagnostics.get", errors.NotFound)
+		return nil, errors.E("store.diagnostics.get", errors.NotFound, errors.User("extraction diagnostic not found"))
 	}
 	return &result[0], nil
 }
@@ -159,6 +159,7 @@ func (r *diagnosticsRepository) UpdateExtractionDiagnosticStatus(
 			return nil, errors.E(
 				"store.diagnostics.update_status",
 				errors.Conflict,
+				errors.User("open extraction diagnostic already exists"),
 				"open diagnostic already exists for reader/message/rule: diagnostic conflict",
 				err,
 			)
@@ -173,6 +174,7 @@ func (r *diagnosticsRepository) UpdateExtractionDiagnosticStatus(
 			return nil, errors.E(
 				"store.diagnostics.update_status",
 				errors.Conflict,
+				errors.User("open extraction diagnostic already exists"),
 				"open diagnostic already exists for reader/message/rule: diagnostic conflict",
 				err,
 			)
@@ -180,7 +182,7 @@ func (r *diagnosticsRepository) UpdateExtractionDiagnosticStatus(
 		return nil, errors.E("postgres.diagnostics.update_extraction_diagnostic_status", "updating extraction diagnostic status", err)
 	}
 	if len(result) == 0 {
-		return nil, errors.E("store.diagnostics.update_status", errors.NotFound)
+		return nil, errors.E("store.diagnostics.update_status", errors.NotFound, errors.User("extraction diagnostic not found"))
 	}
 	return &result[0], nil
 }

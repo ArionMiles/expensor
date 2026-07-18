@@ -17,8 +17,7 @@ import (
 func (h *Handlers) GetChartData(w http.ResponseWriter, r *http.Request) {
 	cd, err := h.analyticsStore.GetChartData(r.Context(), requestTenant(r))
 	if err != nil {
-		h.logger.Error("get chart data", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to fetch chart data")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, cd)
@@ -35,8 +34,7 @@ func (h *Handlers) GetChartData(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) GetDashboardData(w http.ResponseWriter, r *http.Request) {
 	data, err := h.analyticsStore.GetDashboardData(r.Context(), requestTenant(r))
 	if err != nil {
-		h.logger.Error("get dashboard data", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to fetch dashboard data")
+		writeError(w, r, err)
 		return
 	}
 
@@ -53,7 +51,7 @@ func (h *Handlers) GetDashboardData(w http.ResponseWriter, r *http.Request) {
 // @Param to query string false "RFC3339 end timestamp" example(2026-05-31T23:59:59Z)
 // @Param year query int false "Calendar year; cannot be combined with from or to" example(2026)
 // @Success 200 {object} HeatmapResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /stats/heatmap [get]
@@ -69,8 +67,7 @@ func (h *Handlers) GetHeatmap(w http.ResponseWriter, r *http.Request) {
 
 	data, err := h.analyticsStore.GetSpendingHeatmap(r.Context(), requestTenant(r), query.From, query.To)
 	if err != nil {
-		h.logger.Error("get heatmap", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to fetch heatmap data")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, data)
@@ -79,8 +76,7 @@ func (h *Handlers) GetHeatmap(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) getAnnualHeatmap(w http.ResponseWriter, r *http.Request, year int) {
 	buckets, err := h.analyticsStore.GetAnnualSpend(r.Context(), requestTenant(r), year)
 	if err != nil {
-		h.logger.Error("get annual heatmap", "error", err, "year", year)
-		writeError(w, http.StatusInternalServerError, "failed to fetch annual heatmap data")
+		writeError(w, r, err)
 		return
 	}
 

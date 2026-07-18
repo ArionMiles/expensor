@@ -75,7 +75,7 @@ const defaultProviderMessageSearchLimit = 10
 // @Success 200 {object} ProviderSearchResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 412 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /providers/{name}/messages [get]
 func (h *Handlers) SearchProviderMessages(w http.ResponseWriter, r *http.Request) {
@@ -90,15 +90,7 @@ func (h *Handlers) SearchProviderMessages(w http.ResponseWriter, r *http.Request
 	name := r.PathValue("name")
 	searcher, err := h.newEmailSearcher(r.Context(), requestTenant(r), name)
 	if err != nil {
-		switch {
-		case errors.WhatKind(err) == errors.NotFound:
-			writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
-		case errors.WhatKind(err) == oauth.KindCredentialsMissing, errors.WhatKind(err) == oauth.KindTokenMissing:
-			writeError(w, http.StatusPreconditionFailed, "provider is not authenticated")
-		default:
-			h.logger.Error("create provider for message search", "provider", name, "error", err)
-			writeError(w, http.StatusInternalServerError, "failed to prepare provider search")
-		}
+		writeError(w, r, err)
 		return
 	}
 
@@ -107,8 +99,7 @@ func (h *Handlers) SearchProviderMessages(w http.ResponseWriter, r *http.Request
 		Limit:        query.Limit,
 	})
 	if err != nil {
-		h.logger.Error("search provider messages", "provider", name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to search provider messages")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, ProviderSearchResponse{Results: providerSearchResultsToHTTP(results)})
@@ -130,7 +121,12 @@ func (h *Handlers) newEmailSearcher(ctx context.Context, tenant store.Tenant, na
 			return nil, errors.E("httpapi.handlers_readers.new_email_searcher", fmt.Sprintf("loading credentials for provider %q", name), err)
 		}
 		if !ok {
-			return nil, errors.E(op, oauth.KindCredentialsMissing, "credentials file missing")
+			return nil, errors.E(
+				op,
+				oauth.KindCredentialsMissing,
+				errors.User("provider is not authenticated"),
+				"credentials file missing",
+			)
 		}
 		httpClient, err = oauth.NewFromJSONAndStore(ctx, oauth.StoreClientInput{
 			SecretJSON: secretJSON,
@@ -206,18 +202,23 @@ func (h *Handlers) UploadCredentials(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	provider, err := h.registry.GetProvider(name)
 	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
+		writeError(w, r, err)
 		return
 	}
 	if !provider.Metadata.Auth.RequiresCredentialsUpload {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("provider %q does not require credentials upload", name))
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User(fmt.Sprintf("provider %q does not require credentials upload", name))))
 		return
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxCredentialsSize)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeError(w, http.StatusRequestEntityTooLarge, "file too large (max 5 MB)")
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeError(w, r, errors.E(errors.PayloadTooLarge, errors.User("file too large (max 5 MB)"), err))
+		} else {
+			writeError(w, r, err)
+		}
 		return
 	}
 
@@ -228,19 +229,20 @@ func (h *Handlers) UploadCredentials(w http.ResponseWriter, r *http.Request) {
 		Installed json.RawMessage `json:"installed"`
 	}
 	if err := json.Unmarshal(body, &creds); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "file is not valid JSON")
+		writeError(w, r, errors.E(errors.InvalidInput, errors.User("file is not valid JSON"), err))
 		return
 	}
 	if creds.Web == nil && creds.Installed == nil {
-		writeError(w, http.StatusUnprocessableEntity,
-			`invalid credentials file: expected a Google OAuth2 client_secret.json with a "web" or "installed"`+
-				` top-level key — download it from Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client IDs`)
+		writeError(w, r, errors.E(
+			errors.InvalidInput,
+			errors.User(`invalid credentials file: expected a Google OAuth2 client_secret.json with a "web" or "installed"`+
+				` top-level key — download it from Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client IDs`),
+		))
 		return
 	}
 
 	if err := h.readerRuntimeStore.SetReaderSecret(r.Context(), requestTenant(r), name, body); err != nil {
-		h.logger.Error("failed to save credentials", "reader", name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to save credentials")
+		writeError(w, r, err)
 		return
 	}
 
@@ -260,14 +262,13 @@ func (h *Handlers) UploadCredentials(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) CredentialsStatus(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.registry.GetProvider(name); err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
+		writeError(w, r, err)
 		return
 	}
 
 	_, exists, err := h.readerRuntimeStore.GetReaderSecret(r.Context(), requestTenant(r), name)
 	if err != nil {
-		h.logger.Error("failed to load credentials status", "reader", name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to load credentials status")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"exists": exists})
@@ -304,11 +305,11 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	provider, err := h.registry.GetProvider(name)
 	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
+		writeError(w, r, err)
 		return
 	}
 	if provider.Metadata.Auth.Type != plugins.AuthTypeOAuth {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("provider %q does not use OAuth", name))
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User(fmt.Sprintf("provider %q does not use OAuth", name))))
 		return
 	}
 
@@ -316,12 +317,11 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 	h.logger.Debug("reading credentials from store", "reader", name)
 	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(r.Context(), tenant, name)
 	if err != nil {
-		h.logger.Error("failed to load credentials", "reader", name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to load credentials")
+		writeError(w, r, err)
 		return
 	}
 	if !ok {
-		writeError(w, http.StatusPreconditionFailed, "credentials not uploaded — upload client credentials first")
+		writeError(w, r, errors.E(errors.FailedPrecondition, errors.User("credentials not uploaded — upload client credentials first")))
 		return
 	}
 
@@ -330,16 +330,14 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 	h.logger.Debug("building OAuth config", "reader", name, "redirect_url", redirectURL, "scopes", scopes)
 	oauthCfg, err := oauth.GetOAuthConfig(secretJSON, redirectURL, scopes...)
 	if err != nil {
-		h.logger.Error("failed to parse credentials", "reader", name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to parse credentials: "+err.Error())
+		writeError(w, r, errors.E(errors.User("Provider credentials could not be parsed."), err))
 		return
 	}
 
 	// Generate a random state token that encodes the reader name.
 	state, err := generateState(name)
 	if err != nil {
-		h.logger.Error("failed to generate OAuth state", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to initiate OAuth flow")
+		writeError(w, r, err)
 		return
 	}
 	h.mu.Lock()
@@ -383,7 +381,12 @@ func (h *Handlers) exchangeAndSaveToken(ctx context.Context, tenant store.Tenant
 		return errors.E("httpapi.handlers_readers.exchange_and_save_token", "failed to load credentials", err)
 	}
 	if !ok {
-		return errors.E(op, oauth.KindCredentialsMissing, "credentials file missing")
+		return errors.E(
+			op,
+			oauth.KindCredentialsMissing,
+			errors.User("credentials not uploaded — upload client credentials first"),
+			"credentials file missing",
+		)
 	}
 
 	oauthCfg, err := oauth.GetOAuthConfig(secretJSON, redirectURL, provider.Metadata.Auth.RequiredScopes...)
@@ -439,23 +442,18 @@ func (h *Handlers) AuthCallback(w http.ResponseWriter, r *http.Request) {
 	name := entry.readerName
 	h.logger.Debug("OAuth callback received", "state_valid", ok, "reader", name, "has_code", code != "")
 	if !ok || time.Now().After(entry.expiresAt) {
-		writeError(w, http.StatusBadRequest, "invalid or expired OAuth state")
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid or expired OAuth state")))
 		return
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
 	tenant, tenantOK := entryTenant(entry, requestTenant(r))
 	if !tenantOK {
-		writeError(w, http.StatusBadRequest, "invalid or expired OAuth state")
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid or expired OAuth state")))
 		return
 	}
 	if err := h.exchangeAndSaveToken(r.Context(), tenant, name, code, redirectURL); err != nil {
-		h.logger.Error("OAuth token exchange failed", "reader", name, "error", err)
-		if errors.WhatKind(err) == oauth.KindCredentialsMissing || errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusInternalServerError, err.Error())
-		} else {
-			writeError(w, http.StatusBadRequest, err.Error())
-		}
+		writeError(w, r, err)
 		return
 	}
 
@@ -501,7 +499,7 @@ func (h *Handlers) writeOAuthClosePage(w http.ResponseWriter, name string) {
 // @Param request body AuthExchangeRequest true "OAuth callback URL payload"
 // @Success 200 {object} AuthExchangeResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /providers/{name}/auth/exchange [post]
 func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
@@ -514,7 +512,7 @@ func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 
 	parsed, err := url.Parse(body.URL)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid url: "+err.Error())
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("Invalid URL."), err))
 		return
 	}
 
@@ -522,11 +520,11 @@ func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 	state := parsed.Query().Get("state")
 
 	if code == "" {
-		writeError(w, http.StatusBadRequest, "url is missing the \"code\" query parameter")
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("url is missing the \"code\" query parameter")))
 		return
 	}
 	if state == "" {
-		writeError(w, http.StatusBadRequest, "url is missing the \"state\" query parameter")
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("url is missing the \"state\" query parameter")))
 		return
 	}
 
@@ -538,23 +536,18 @@ func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 	h.mu.Unlock()
 
 	if !ok || time.Now().After(entry.expiresAt) {
-		writeError(w, http.StatusBadRequest, "invalid or expired OAuth state")
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid or expired OAuth state")))
 		return
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
 	tenant, tenantOK := entryTenant(entry, requestTenant(r))
 	if !tenantOK {
-		writeError(w, http.StatusBadRequest, "invalid or expired OAuth state")
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid or expired OAuth state")))
 		return
 	}
 	if err := h.exchangeAndSaveToken(r.Context(), tenant, name, code, redirectURL); err != nil {
-		h.logger.Error("manual OAuth exchange failed", "reader", name, "error", err)
-		if errors.WhatKind(err) == oauth.KindCredentialsMissing || errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusInternalServerError, err.Error())
-		} else {
-			writeError(w, http.StatusBadRequest, err.Error())
-		}
+		writeError(w, r, err)
 		return
 	}
 
@@ -575,7 +568,7 @@ func (h *Handlers) AuthStatus(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	provider, err := h.registry.GetProvider(name)
 	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
+		writeError(w, r, err)
 		return
 	}
 	if provider.Metadata.Auth.Type != plugins.AuthTypeOAuth {
@@ -590,8 +583,7 @@ func (h *Handlers) AuthStatus(w http.ResponseWriter, r *http.Request) {
 
 	tokenJSON, ok, err := h.readerRuntimeStore.GetReaderToken(r.Context(), requestTenant(r), name)
 	if err != nil {
-		h.logger.Error("failed to load token", "reader", name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to load token")
+		writeError(w, r, err)
 		return
 	}
 	if !ok {
@@ -604,8 +596,7 @@ func (h *Handlers) AuthStatus(w http.ResponseWriter, r *http.Request) {
 
 	tokenState, err := h.resolveOAuthTokenState(r.Context(), requestTenant(r), name, provider.Metadata.Auth.RequiredScopes, tokenJSON)
 	if err != nil {
-		h.logger.Error("failed to resolve OAuth token state", "reader", name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to resolve OAuth token state")
+		writeError(w, r, err)
 		return
 	}
 
@@ -709,26 +700,23 @@ func (h *Handlers) resolveReaderAuthStatus(ctx context.Context, tenant store.Ten
 func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.registry.GetProvider(name); err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
+		writeError(w, r, err)
 		return
 	}
 
 	tenant := requestTenant(r)
 	state, err := h.scanningStore.GetScanningState(r.Context(), tenant)
 	if err != nil {
-		h.logger.Error("failed to read scanning state before disconnect", "reader", name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
+		writeError(w, r, err)
 		return
 	}
 	if err := h.readerRuntimeStore.DeleteReaderRuntime(r.Context(), tenant, name); err != nil {
-		h.logger.Error("failed to disconnect reader", "reader", name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
+		writeError(w, r, err)
 		return
 	}
 	if state.ActiveReader == name {
 		if err := h.scanningStore.ClearActiveScanningReader(r.Context(), tenant); err != nil {
-			h.logger.Error("failed to clear active scanning reader", "reader", name, "error", err)
-			writeError(w, http.StatusInternalServerError, "failed to disconnect reader")
+			writeError(w, r, err)
 			return
 		}
 		if h.daemon != nil && h.daemon.Status().Running {
@@ -753,21 +741,19 @@ func (h *Handlers) DisconnectReader(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) RevokeToken(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.registry.GetProvider(name); err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
+		writeError(w, r, err)
 		return
 	}
 
 	if _, ok, err := h.readerRuntimeStore.GetReaderToken(r.Context(), requestTenant(r), name); err != nil {
-		h.logger.Error("failed to load token", "reader", name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to remove token")
+		writeError(w, r, err)
 		return
 	} else if !ok {
-		writeError(w, http.StatusNotFound, "no token found")
+		writeError(w, r, errors.E(errors.NotFound, errors.User("no token found")))
 		return
 	}
 	if err := h.readerRuntimeStore.DeleteReaderToken(r.Context(), requestTenant(r), name); err != nil {
-		h.logger.Error("failed to remove token", "reader", name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to remove token")
+		writeError(w, r, err)
 		return
 	}
 	if state, err := h.scanningStore.GetScanningState(r.Context(), requestTenant(r)); err == nil && state.ActiveReader == name {
@@ -801,14 +787,13 @@ func (h *Handlers) RevokeToken(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) GetReaderConfig(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.registry.GetProvider(name); err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
+		writeError(w, r, err)
 		return
 	}
 
 	data, ok, err := h.readerRuntimeStore.GetReaderConfig(r.Context(), requestTenant(r), name)
 	if err != nil {
-		h.logger.Error("failed to read config", "reader", name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to read config")
+		writeError(w, r, err)
 		return
 	}
 	if !ok {
@@ -838,27 +823,26 @@ func (h *Handlers) GetReaderConfig(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) SaveReaderConfig(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.registry.GetProvider(name); err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
+		writeError(w, r, err)
 		return
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxCredentialsSize)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "failed to read body")
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("failed to read body"), err))
 		return
 	}
 
 	// Validate JSON.
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid JSON body"), err))
 		return
 	}
 
 	if err := h.readerRuntimeStore.SetReaderConfig(r.Context(), requestTenant(r), name, json.RawMessage(body)); err != nil {
-		h.logger.Error("failed to save config", "reader", name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to save config")
+		writeError(w, r, err)
 		return
 	}
 
@@ -880,7 +864,7 @@ func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	provider, err := h.registry.GetProvider(name)
 	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
+		writeError(w, r, err)
 		return
 	}
 
@@ -899,8 +883,7 @@ func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 	if meta.Auth.RequiresCredentialsUpload {
 		_, ok, err := h.readerRuntimeStore.GetReaderSecret(r.Context(), requestTenant(r), name)
 		if err != nil {
-			h.logger.Error("failed to load credentials status", "reader", name, "error", err)
-			writeError(w, http.StatusInternalServerError, "failed to load credentials status")
+			writeError(w, r, err)
 			return
 		}
 		st.CredentialsUploaded = ok
@@ -915,8 +898,7 @@ func (h *Handlers) ReaderStatus(w http.ResponseWriter, r *http.Request) {
 	} else {
 		_, ok, err := h.readerRuntimeStore.GetReaderConfig(r.Context(), requestTenant(r), name)
 		if err != nil {
-			h.logger.Error("failed to load provider config status", "reader", name, "error", err)
-			writeError(w, http.StatusInternalServerError, "failed to load provider config status")
+			writeError(w, r, err)
 			return
 		}
 		st.ConfigPresent = ok
@@ -971,7 +953,7 @@ func (h *Handlers) DiscoverProfiles(w http.ResponseWriter, _ *http.Request) {
 // @Produce json
 // @Param profile query string true "Thunderbird profile path"
 // @Success 200 {object} ThunderbirdMailboxesResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /providers/thunderbird/discover/mailboxes [get]
@@ -981,14 +963,17 @@ func (h *Handlers) DiscoverMailboxes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	profile := query.Profile
-	if _, err := os.Stat(profile); os.IsNotExist(err) {
-		writeError(w, http.StatusNotFound, "profile directory not found")
+	if _, err := os.Stat(profile); err != nil {
+		if os.IsNotExist(err) {
+			writeError(w, r, errors.E(errors.NotFound, errors.User("profile directory not found")))
+		} else {
+			writeError(w, r, err)
+		}
 		return
 	}
 	mailboxes, err := thunderbird.ListMailboxes(profile)
 	if err != nil {
-		h.logger.Error("discovering mailboxes", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to discover mailboxes")
+		writeError(w, r, err)
 		return
 	}
 	if mailboxes == nil {
@@ -1010,18 +995,17 @@ func (h *Handlers) GetProviderGuide(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	provider, err := h.registry.GetProvider(name)
 	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("provider %q not found", name))
+		writeError(w, r, err)
 		return
 	}
 	guideData := provider.Metadata.SetupGuide
 	if len(guideData) == 0 {
-		writeError(w, http.StatusNotFound, "no setup guide available for this provider")
+		writeError(w, r, errors.E(errors.NotFound, errors.User("no setup guide available for this provider")))
 		return
 	}
 	var guide plugins.ProviderGuide
 	if err := json.Unmarshal(guideData, &guide); err != nil {
-		h.logger.Error("parsing provider guide", "reader", name, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to parse provider guide")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, guide)

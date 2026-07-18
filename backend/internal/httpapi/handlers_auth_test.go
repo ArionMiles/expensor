@@ -236,8 +236,8 @@ func TestCreateAccessTokenNameConflictReturnsConflict(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if resp.Error != "Token test already exists." {
-		t.Fatalf("error = %q, want duplicate token message", resp.Error)
+	if resp.Message != "Token test already exists." {
+		t.Fatalf("message = %q, want duplicate token message", resp.Message)
 	}
 }
 
@@ -516,8 +516,8 @@ func TestCreateUserEmailConflictReturnsConflict(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if resp.Error != "User b@example.com already exists." {
-		t.Fatalf("error = %q, want duplicate user message", resp.Error)
+	if resp.Message != "User b@example.com already exists." {
+		t.Fatalf("message = %q, want duplicate user message", resp.Message)
 	}
 }
 
@@ -731,17 +731,17 @@ func TestUpdateUserReportsAllSemanticValidationErrors(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422; body = %s", rec.Code, rec.Body.String())
 	}
-	var resp ValidationErrorResponse
+	var resp ErrorResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	want := []ValidationErrorDetail{
+	want := []ValidationError{
 		{Field: "display_name", Location: "body", Message: "is required"},
 		{Field: "avatar_key", Location: "body", Message: "must be one of: default, ledger, wallet"},
 		{Field: "role", Location: "body", Message: "must be one of: admin, user"},
 	}
-	if !reflect.DeepEqual(resp.Details, want) {
-		t.Fatalf("details = %#v, want %#v", resp.Details, want)
+	if !reflect.DeepEqual(resp.ValidationErrors, want) {
+		t.Fatalf("validation_errors = %#v, want %#v", resp.ValidationErrors, want)
 	}
 	if ms.updatedUserID != "" {
 		t.Fatalf("updated user id = %q, want no store write", ms.updatedUserID)

@@ -49,7 +49,7 @@ func (h *Handlers) GetPreferences(w http.ResponseWriter, r *http.Request) {
 // @Param request body PreferencesPatchRequest true "Preferences to update"
 // @Success 200 {object} PreferencesResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/preferences [patch]
@@ -59,12 +59,11 @@ func (h *Handlers) PatchPreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	normalizePreferencesPatch(&body)
-	if !h.validateRequest(w, "body", body) {
+	if !h.validateRequest(w, r, "body", body) {
 		return
 	}
 	if err := h.persistPreferences(r.Context(), requestTenant(r), body); err != nil {
-		h.logger.Error("update preferences", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update preferences")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, h.preferences(r.Context(), requestTenant(r)))
@@ -209,8 +208,7 @@ func (h *Handlers) GetReaderCheckpoint(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) ClearReaderCheckpoint(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := h.settingsStore.SetAppConfig(r.Context(), requestTenant(r), "reader."+name+".last_scan_at", ""); err != nil {
-		h.logger.Error("clear reader checkpoint", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to clear checkpoint")
+		writeError(w, r, err)
 		return
 	}
 	// Restart the running daemon so it reloads the (now-absent) checkpoint and

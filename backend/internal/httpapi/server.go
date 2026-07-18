@@ -9,9 +9,11 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/observability"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // Server wraps the HTTP server and its dependencies.
@@ -31,8 +33,8 @@ func NewServer(port int, handlers *Handlers, staticDir string, logger *slog.Logg
 	}
 
 	scope := observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/internal/httpapi")
-	protectedMux := authMiddleware(handlers, mux)
-	chain := corsMiddleware(loggingMiddleware(logger, observabilityMiddleware(scope, recoveryMiddleware(logger, protectedMux))))
+	protectedMux := authMiddleware(handlers, apiErrorFallback(mux))
+	chain := requestIDMiddleware(corsMiddleware(observabilityMiddleware(scope, loggingMiddleware(logger, recoveryMiddleware(logger, protectedMux)))))
 
 	return &Server{
 		httpServer: &http.Server{
@@ -44,6 +46,56 @@ func NewServer(port int, handlers *Handlers, staticDir string, logger *slog.Logg
 		},
 		logger: logger,
 	}
+}
+
+// apiErrorFallback replaces the default ServeMux 404 and 405 bodies for API
+// paths with the standard JSON error response. It probes only an unmatched
+// ServeMux handler, so matched routes still own their responses.
+func apiErrorFallback(mux *http.ServeMux) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler, pattern := mux.Handler(r)
+		if pattern != "" || !isAPIPath(r.URL.Path) {
+			handler.ServeHTTP(w, r)
+			return
+		}
+
+		probe := &muxResponseProbe{header: make(http.Header)}
+		handler.ServeHTTP(probe, r)
+		switch probe.status {
+		case http.StatusNotFound:
+			writeError(w, r, errors.E(errors.NotFound, errors.User("API endpoint not found.")))
+		case http.StatusMethodNotAllowed:
+			writeError(w, r, errors.E(errors.MethodNotAllowed, errors.User("Method not allowed.")))
+		default:
+			handler.ServeHTTP(w, r)
+		}
+	})
+}
+
+func isAPIPath(routePath string) bool {
+	return routePath == "/api" || strings.HasPrefix(routePath, "/api/")
+}
+
+type muxResponseProbe struct {
+	header http.Header
+	status int
+}
+
+func (p *muxResponseProbe) Header() http.Header {
+	return p.header
+}
+
+func (p *muxResponseProbe) WriteHeader(status int) {
+	if p.status == 0 {
+		p.status = status
+	}
+}
+
+func (p *muxResponseProbe) Write(data []byte) (int, error) {
+	if p.status == 0 {
+		p.WriteHeader(http.StatusOK)
+	}
+	return len(data), nil
 }
 
 // Start listens and serves until ctx is canceled.

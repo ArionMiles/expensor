@@ -23,8 +23,7 @@ import (
 func (h *Handlers) ListLabels(w http.ResponseWriter, r *http.Request) {
 	labels, err := h.taxonomyStore.ListLabels(r.Context(), requestTenant(r))
 	if err != nil {
-		h.logger.Error("list labels", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to list labels")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, labels)
@@ -39,7 +38,7 @@ func (h *Handlers) ListLabels(w http.ResponseWriter, r *http.Request) {
 // @Param request body CreateLabelRequest true "Label payload"
 // @Success 201 {object} LabelMutationResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/labels [post]
@@ -52,8 +51,7 @@ func (h *Handlers) CreateLabel(w http.ResponseWriter, r *http.Request) {
 		body.Color = "#6366f1"
 	}
 	if err := h.taxonomyStore.CreateLabel(r.Context(), requestTenant(r), body.Name, body.Color); err != nil {
-		h.logger.Error("create label", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create label")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]string{"name": body.Name, "color": body.Color})
@@ -70,7 +68,7 @@ func (h *Handlers) CreateLabel(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} LabelMutationResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/labels/{name} [put]
@@ -81,12 +79,7 @@ func (h *Handlers) UpdateLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.taxonomyStore.UpdateLabel(r.Context(), requestTenant(r), name, body.Color); err != nil {
-		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusNotFound, "label not found")
-			return
-		}
-		h.logger.Error("update label", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update label")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"name": name, "color": body.Color})
@@ -100,7 +93,7 @@ func (h *Handlers) UpdateLabel(w http.ResponseWriter, r *http.Request) {
 // @Param remove_from_transactions query bool false "Remove the label from existing transactions"
 // @Success 204 "No Content"
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/labels/{name} [delete]
@@ -111,8 +104,7 @@ func (h *Handlers) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.taxonomyStore.DeleteLabel(r.Context(), requestTenant(r), name, removeFromTransactions); err != nil {
-		h.logger.Error("delete label", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to delete label")
+		writeError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -162,7 +154,7 @@ func (h *Handlers) RemoveLabelByMerchant(w http.ResponseWriter, r *http.Request)
 // @Produce json
 // @Param dimension query string false "Breakdown dimension" Enums(labels,categories,buckets) default(labels)
 // @Success 200 {object} MonthlyBreakdownResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /stats/labels/monthly [get]
@@ -178,8 +170,7 @@ func (h *Handlers) GetLabelMonthlySpend(w http.ResponseWriter, r *http.Request) 
 
 	data, err := h.analyticsStore.GetMonthlyBreakdownSpend(r.Context(), requestTenant(r), dimension, 12)
 	if err != nil {
-		h.logger.Error("get monthly breakdown spend", "dimension", dimension, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to fetch monthly breakdown spend")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, data)
@@ -197,8 +188,7 @@ func (h *Handlers) GetLabelMonthlySpend(w http.ResponseWriter, r *http.Request) 
 func (h *Handlers) GetLabelMappings(w http.ResponseWriter, r *http.Request) {
 	mappings, err := h.taxonomyStore.GetLabelMappings(r.Context(), requestTenant(r))
 	if err != nil {
-		h.logger.Error("get label mappings", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to get label mappings")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, mappings)
@@ -216,14 +206,12 @@ func (h *Handlers) GetLabelMappings(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) ExportLabels(w http.ResponseWriter, r *http.Request) {
 	labels, err := h.taxonomyStore.ListLabels(r.Context(), requestTenant(r))
 	if err != nil {
-		h.logger.Error("export labels", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to list labels")
+		writeError(w, r, err)
 		return
 	}
 	mappings, err := h.taxonomyStore.GetLabelMappings(r.Context(), requestTenant(r))
 	if err != nil {
-		h.logger.Error("export label mappings", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to list label mappings")
+		writeError(w, r, err)
 		return
 	}
 	type exportRow struct {
@@ -256,9 +244,6 @@ func (h *Handlers) ExportLabels(w http.ResponseWriter, r *http.Request) {
 // @Router /config/categories/export [get]
 func (h *Handlers) ExportCategories(w http.ResponseWriter, r *http.Request) {
 	handleExportNamedTaxonomy(w, r, taxonomyExportConfig[store.Category]{
-		handlers: h,
-		singular: "category",
-		plural:   "categories",
 		filename: "expensor-categories.json",
 		list: func(ctx context.Context) ([]store.Category, error) {
 			return h.taxonomyStore.ListCategories(ctx, requestTenant(r))
@@ -281,8 +266,7 @@ func (h *Handlers) ExportCategories(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) GetCategoryMappings(w http.ResponseWriter, r *http.Request) {
 	mappings, err := h.taxonomyStore.GetCategoryMappings(r.Context(), requestTenant(r))
 	if err != nil {
-		h.logger.Error("get category mappings", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to get category mappings")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, mappings)
@@ -299,8 +283,7 @@ func (h *Handlers) GetCategoryMappings(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) ListCategories(w http.ResponseWriter, r *http.Request) {
 	cats, err := h.taxonomyStore.ListCategories(r.Context(), requestTenant(r))
 	if err != nil {
-		h.logger.Error("list categories", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to list categories")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, cats)
@@ -314,7 +297,7 @@ func (h *Handlers) ListCategories(w http.ResponseWriter, r *http.Request) {
 // @Param request body CreateCategoryRequest true "Category payload"
 // @Success 201 {object} NameResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/categories [post]
@@ -324,8 +307,7 @@ func (h *Handlers) CreateCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.taxonomyStore.CreateCategory(r.Context(), requestTenant(r), body.Name, body.Description); err != nil {
-		h.logger.Error("create category", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create category")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]string{"name": body.Name})
@@ -340,7 +322,7 @@ func (h *Handlers) CreateCategory(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/categories/{name} [delete]
 func (h *Handlers) DeleteCategory(w http.ResponseWriter, r *http.Request) {
@@ -350,12 +332,7 @@ func (h *Handlers) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.taxonomyStore.DeleteCategory(r.Context(), requestTenant(r), name, removeFromTransactions); err != nil {
-		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusNotFound, "category not found")
-			return
-		}
-		// Default categories return a plain error string.
-		writeError(w, http.StatusConflict, err.Error())
+		writeError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -406,8 +383,7 @@ func (h *Handlers) RemoveCategoryByMerchant(w http.ResponseWriter, r *http.Reque
 func (h *Handlers) ListBuckets(w http.ResponseWriter, r *http.Request) {
 	bkts, err := h.taxonomyStore.ListBuckets(r.Context(), requestTenant(r))
 	if err != nil {
-		h.logger.Error("list buckets", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to list buckets")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, bkts)
@@ -421,7 +397,7 @@ func (h *Handlers) ListBuckets(w http.ResponseWriter, r *http.Request) {
 // @Param request body CreateBucketRequest true "Bucket payload"
 // @Success 201 {object} NameResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/buckets [post]
@@ -431,8 +407,7 @@ func (h *Handlers) CreateBucket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.taxonomyStore.CreateBucket(r.Context(), requestTenant(r), body.Name, body.Description); err != nil {
-		h.logger.Error("create bucket", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create bucket")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]string{"name": body.Name})
@@ -447,7 +422,7 @@ func (h *Handlers) CreateBucket(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /config/buckets/{name} [delete]
 func (h *Handlers) DeleteBucket(w http.ResponseWriter, r *http.Request) {
@@ -457,11 +432,7 @@ func (h *Handlers) DeleteBucket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.taxonomyStore.DeleteBucket(r.Context(), requestTenant(r), name, removeFromTransactions); err != nil {
-		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusNotFound, "bucket not found")
-			return
-		}
-		writeError(w, http.StatusConflict, err.Error())
+		writeError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -478,9 +449,6 @@ func (h *Handlers) DeleteBucket(w http.ResponseWriter, r *http.Request) {
 // @Router /config/buckets/export [get]
 func (h *Handlers) ExportBuckets(w http.ResponseWriter, r *http.Request) {
 	handleExportNamedTaxonomy(w, r, taxonomyExportConfig[store.Bucket]{
-		handlers: h,
-		singular: "bucket",
-		plural:   "buckets",
 		filename: "expensor-buckets.json",
 		list: func(ctx context.Context) ([]store.Bucket, error) {
 			return h.taxonomyStore.ListBuckets(ctx, requestTenant(r))
@@ -503,8 +471,7 @@ func (h *Handlers) ExportBuckets(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) GetBucketMappings(w http.ResponseWriter, r *http.Request) {
 	mappings, err := h.taxonomyStore.GetBucketMappings(r.Context(), requestTenant(r))
 	if err != nil {
-		h.logger.Error("get bucket mappings", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to get bucket mappings")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, mappings)
@@ -552,7 +519,7 @@ func (h *Handlers) taxonomyCleanupFlag(w http.ResponseWriter, r *http.Request) (
 	var body TaxonomyCleanupRequest
 	if r.Body != nil {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid JSON body"), err))
 			return false, false
 		}
 	}
@@ -565,9 +532,6 @@ type taxonomyExportRow struct {
 }
 
 type taxonomyExportConfig[T any] struct {
-	handlers    *Handlers
-	singular    string
-	plural      string
 	filename    string
 	list        func(context.Context) ([]T, error)
 	getMappings func(context.Context) (map[string][]string, error)
@@ -579,17 +543,14 @@ func handleExportNamedTaxonomy[T any](
 	r *http.Request,
 	config taxonomyExportConfig[T],
 ) {
-	h := config.handlers
 	items, err := config.list(r.Context())
 	if err != nil {
-		h.logger.Error("export taxonomy", "kind", config.singular, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to list "+config.plural)
+		writeError(w, r, err)
 		return
 	}
 	mappings, err := config.getMappings(r.Context())
 	if err != nil {
-		h.logger.Error("export taxonomy mappings", "kind", config.singular, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to list "+config.singular+" mappings")
+		writeError(w, r, err)
 		return
 	}
 	export := make([]taxonomyExportRow, 0, len(items))
@@ -646,13 +607,12 @@ func (h *Handlers) handleTaxonomyMerchant(
 	name := r.PathValue("name")
 	pattern := r.PathValue("pattern")
 	if name == "" || pattern == "" {
-		writeError(w, http.StatusBadRequest, "taxonomy name and merchant pattern are required")
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("taxonomy name and merchant pattern are required")))
 		return
 	}
 	count, err := action.update(r.Context(), name, pattern)
 	if err != nil {
-		h.logger.Error(action.action+" taxonomy merchant", "kind", action.kind, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to "+action.action+" merchant")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{action.responseKey: count})
@@ -668,7 +628,7 @@ func (h *Handlers) handleTaxonomyMerchant(
 // @Param request body TransactionLabelsRequest true "Labels payload"
 // @Success 200 {object} StatusOnlyResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /transactions/{id}/labels [post]
@@ -683,8 +643,7 @@ func (h *Handlers) AddLabels(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.transactionStore.AddLabels(r.Context(), requestTenant(r), id, body.Labels); err != nil {
-		h.logger.Error("add labels", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to add labels")
+		writeError(w, r, err)
 		return
 	}
 
@@ -711,12 +670,7 @@ func (h *Handlers) RemoveLabel(w http.ResponseWriter, r *http.Request) {
 	label := r.PathValue("label")
 
 	if err := h.transactionStore.RemoveLabel(r.Context(), requestTenant(r), id, label); err != nil {
-		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusNotFound, "label not found on transaction")
-			return
-		}
-		h.logger.Error("remove label", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to remove label")
+		writeError(w, r, err)
 		return
 	}
 

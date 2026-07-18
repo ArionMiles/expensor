@@ -107,7 +107,7 @@ func mustRegisterValidation(validate *validator.Validate, tag string, fn validat
 	}
 }
 
-func (h *Handlers) validateRequest(w http.ResponseWriter, location string, request any) bool {
+func (h *Handlers) validateRequest(w http.ResponseWriter, r *http.Request, location string, request any) bool {
 	err := h.validate.Struct(request)
 	if err == nil {
 		return true
@@ -115,14 +115,13 @@ func (h *Handlers) validateRequest(w http.ResponseWriter, location string, reque
 
 	var validationErrors validator.ValidationErrors
 	if !errors.As(err, &validationErrors) {
-		h.logger.Error("validate request", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to validate request")
+		writeError(w, r, err)
 		return false
 	}
 
-	details := make([]ValidationErrorDetail, 0, len(validationErrors))
+	details := make([]ValidationError, 0, len(validationErrors))
 	for _, fieldError := range validationErrors {
-		details = append(details, ValidationErrorDetail{
+		details = append(details, ValidationError{
 			Field:    validationFieldPath(fieldError),
 			Location: location,
 			Message:  validationMessage(fieldError),
@@ -149,7 +148,7 @@ func decodeAndValidateJSON[T any](
 	if !ok {
 		return request, false
 	}
-	if !h.validateRequest(w, "body", request) {
+	if !h.validateRequest(w, r, "body", request) {
 		return request, false
 	}
 	return request, true
@@ -158,7 +157,7 @@ func decodeAndValidateJSON[T any](
 func decodeJSONRequest[T any](w http.ResponseWriter, r *http.Request) (T, bool) {
 	var request T
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid JSON body"), err))
 		return request, false
 	}
 	return request, true
@@ -204,9 +203,10 @@ func validationMessage(fieldError validator.FieldError) string {
 	}
 }
 
-func writeValidationErrors(w http.ResponseWriter, details []ValidationErrorDetail) {
-	writeJSON(w, http.StatusUnprocessableEntity, ValidationErrorResponse{
-		Error:   "request validation failed",
-		Details: details,
+func writeValidationErrors(w http.ResponseWriter, validationErrors []ValidationError) {
+	writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{
+		Message:          "Request validation failed.",
+		RequestID:        responseRequestID(w),
+		ValidationErrors: validationErrors,
 	})
 }

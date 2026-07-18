@@ -29,6 +29,9 @@ func TestRouterReturnsNoProviderConfigured(t *testing.T) {
 	if errors.WhatKind(err) != KindNoProviderConfigured {
 		t.Fatalf("Complete() error = %v, want KindNoProviderConfigured", err)
 	}
+	if message := errors.UserMsg(err); message != "No LLM provider is configured." {
+		t.Fatalf("UserMsg() = %q", message)
+	}
 }
 
 func TestRouterRequiresProviderCapabilities(t *testing.T) {
@@ -52,5 +55,8 @@ func TestRouterRequiresProviderCapabilities(t *testing.T) {
 	})
 	if errors.WhatKind(err) != KindCapabilityUnsupported {
 		t.Fatalf("Complete() error = %v, want KindCapabilityUnsupported", err)
+	}
+	if message := errors.UserMsg(err); message != "The active LLM provider does not support the requested operation." {
+		t.Fatalf("UserMsg() = %q", message)
 	}
 }

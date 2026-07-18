@@ -224,8 +224,7 @@ func presetValuesFromRules(entries []ruleDocumentEntry, value func(api.Source) s
 func (h *Handlers) ListRules(w http.ResponseWriter, r *http.Request) {
 	ruleRows, err := h.ruleStore.ListRules(r.Context(), requestTenant(r))
 	if err != nil {
-		h.logger.Error("list rules", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to list rules")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, ruleRowsToHTTP(ruleRows))
@@ -241,7 +240,7 @@ func (h *Handlers) ListRules(w http.ResponseWriter, r *http.Request) {
 // @Success 201 {object} RuleResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /rules [post]
@@ -253,12 +252,7 @@ func (h *Handlers) CreateRule(w http.ResponseWriter, r *http.Request) {
 	row := ruleMutationToRow(body)
 	created, err := h.ruleStore.CreateRule(r.Context(), requestTenant(r), row)
 	if err != nil {
-		if errors.WhatKind(err) == errors.Conflict {
-			writeError(w, http.StatusConflict, "rule name already exists")
-			return
-		}
-		h.logger.Error("create rule", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create rule")
+		writeError(w, r, err)
 		return
 	}
 	h.clearActiveReaderCheckpointForNewRule(r.Context(), requestTenant(r))
@@ -301,7 +295,7 @@ func (h *Handlers) readActiveReader(ctx context.Context, tenant store.Tenant) (s
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /rules/{id} [put]
@@ -317,16 +311,7 @@ func (h *Handlers) UpdateRule(w http.ResponseWriter, r *http.Request) {
 	row := ruleMutationToRow(body)
 	updated, err := h.ruleStore.UpdateRule(r.Context(), requestTenant(r), id, row)
 	if err != nil {
-		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusNotFound, "rule not found")
-			return
-		}
-		if errors.WhatKind(err) == errors.Conflict {
-			writeError(w, http.StatusConflict, "rule name already exists")
-			return
-		}
-		h.logger.Error("update rule", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update rule")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, ruleRowToHTTP(*updated))
@@ -353,24 +338,15 @@ func (h *Handlers) DeleteRule(w http.ResponseWriter, r *http.Request) {
 	}
 	existing, err := h.ruleStore.GetRule(r.Context(), requestTenant(r), id)
 	if err != nil {
-		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusNotFound, "rule not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "failed to fetch rule")
+		writeError(w, r, err)
 		return
 	}
 	if existing.Predefined {
-		writeError(w, http.StatusForbidden, "predefined rules cannot be deleted")
+		writeError(w, r, errors.E(errors.PermissionDenied, errors.User("predefined rules cannot be deleted")))
 		return
 	}
 	if err := h.ruleStore.DeleteRule(r.Context(), requestTenant(r), id); err != nil {
-		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusNotFound, "rule not found")
-			return
-		}
-		h.logger.Error("delete rule", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to delete rule")
+		writeError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -390,8 +366,7 @@ func (h *Handlers) DeleteRule(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) ExportRules(w http.ResponseWriter, r *http.Request) {
 	all, err := h.ruleStore.ListRules(r.Context(), requestTenant(r))
 	if err != nil {
-		h.logger.Error("export rules", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to fetch rules")
+		writeError(w, r, err)
 		return
 	}
 	export := make([]ruleDocumentEntry, 0)
@@ -417,7 +392,7 @@ func (h *Handlers) ExportRules(w http.ResponseWriter, r *http.Request) {
 // @Param request body RuleDocumentResponse true "Rules document"
 // @Success 200 {object} RuleImportResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /rules/import [post]
@@ -425,16 +400,16 @@ func (h *Handlers) ImportRules(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 5<<20)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid JSON body"), err))
 		return
 	}
 	if !json.Valid(body) {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid JSON body")))
 		return
 	}
 	doc, err := rules.ParseDocument(body)
 	if err != nil {
-		writeValidationErrors(w, []ValidationErrorDetail{ruleImportValidationError(err)})
+		writeValidationErrors(w, []ValidationError{ruleImportValidationError(err)})
 		return
 	}
 	rows := make([]store.RuleRow, 0, len(doc.Rules))
@@ -442,14 +417,13 @@ func (h *Handlers) ImportRules(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, ruleToRow(rule))
 	}
 	if err := h.ruleStore.ImportUserRules(r.Context(), requestTenant(r), rows); err != nil {
-		h.logger.Error("import rules", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to import rules")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"imported": len(rows)})
 }
 
-func ruleImportValidationError(err error) ValidationErrorDetail {
+func ruleImportValidationError(err error) ValidationError {
 	message := err.Error()
 	field := "rules"
 	for _, candidate := range []string{"version", "sender_emails", "amount_regex", "merchant_regex", "currency_regex", "source", "name"} {
@@ -458,5 +432,5 @@ func ruleImportValidationError(err error) ValidationErrorDetail {
 			break
 		}
 	}
-	return ValidationErrorDetail{Field: field, Location: "body", Message: message}
+	return ValidationError{Field: field, Location: "body", Message: message}
 }

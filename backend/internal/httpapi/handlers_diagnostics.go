@@ -3,10 +3,7 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/google/uuid"
-
 	"github.com/ArionMiles/expensor/backend/internal/store"
-	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // ListExtractionDiagnostics handles GET /api/extraction-diagnostics.
@@ -16,7 +13,7 @@ import (
 // @Param status query string false "Diagnostic status filter" Enums(open,resolved,ignored,all) default(open)
 // @Param limit query int false "Maximum rows to return" minimum(1) default(20)
 // @Success 200 {array} ExtractionDiagnosticResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /extraction-diagnostics [get]
@@ -36,8 +33,7 @@ func (h *Handlers) ListExtractionDiagnostics(w http.ResponseWriter, r *http.Requ
 
 	rows, err := h.diagnosticStore.ListExtractionDiagnostics(r.Context(), requestTenant(r), filter)
 	if err != nil {
-		h.logger.Error("list extraction diagnostics", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to list extraction diagnostics")
+		writeError(w, r, err)
 		return
 	}
 	if rows == nil {
@@ -58,20 +54,14 @@ func (h *Handlers) ListExtractionDiagnostics(w http.ResponseWriter, r *http.Requ
 // @Failure 503 {object} ErrorResponse
 // @Router /extraction-diagnostics/{id} [get]
 func (h *Handlers) GetExtractionDiagnostic(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if _, err := uuid.Parse(id); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid extraction diagnostic id")
+	id, ok := uuidPathValue(w, r, "id", "extraction diagnostic")
+	if !ok {
 		return
 	}
 
 	row, err := h.diagnosticStore.GetExtractionDiagnostic(r.Context(), requestTenant(r), id)
 	if err != nil {
-		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusNotFound, "extraction diagnostic not found")
-			return
-		}
-		h.logger.Error("get extraction diagnostic", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to fetch extraction diagnostic")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, row)
@@ -88,14 +78,13 @@ func (h *Handlers) GetExtractionDiagnostic(w http.ResponseWriter, r *http.Reques
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /extraction-diagnostics/{id} [patch]
 func (h *Handlers) UpdateExtractionDiagnosticStatus(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if _, err := uuid.Parse(id); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid extraction diagnostic id")
+	id, ok := uuidPathValue(w, r, "id", "extraction diagnostic")
+	if !ok {
 		return
 	}
 
@@ -106,16 +95,7 @@ func (h *Handlers) UpdateExtractionDiagnosticStatus(w http.ResponseWriter, r *ht
 
 	row, err := h.diagnosticStore.UpdateExtractionDiagnosticStatus(r.Context(), requestTenant(r), id, body.Status)
 	if err != nil {
-		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusNotFound, "extraction diagnostic not found")
-			return
-		}
-		if errors.WhatKind(err) == errors.Conflict {
-			writeError(w, http.StatusConflict, "open extraction diagnostic already exists")
-			return
-		}
-		h.logger.Error("update extraction diagnostic status", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update extraction diagnostic")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, row)

@@ -37,12 +37,15 @@ func TestRecoveryMiddlewareContentType(t *testing.T) {
 		t.Errorf("expected Content-Type application/json, got %q", ct)
 	}
 
-	var body map[string]string
+	var body ErrorResponse
 	if err := json.NewDecoder(rr.Body).Decode(&body); err != nil {
 		t.Fatalf("response body is not valid JSON: %v", err)
 	}
-	if _, ok := body["error"]; !ok {
-		t.Errorf("expected JSON body to contain 'error' key, got %v", body)
+	if body.Message != "Something went wrong." {
+		t.Errorf("message = %q", body.Message)
+	}
+	if body.RequestID == "" {
+		t.Error("request_id is empty")
 	}
 }
 

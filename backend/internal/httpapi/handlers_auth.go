@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -120,8 +119,7 @@ type setupTokenResponse struct {
 func (h *Handlers) GetBootstrap(w http.ResponseWriter, r *http.Request) {
 	required, err := h.authStore.BootstrapRequired(r.Context())
 	if err != nil {
-		h.logger.Error("bootstrap status", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to check bootstrap status")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, bootstrapResponse{Required: required})
@@ -136,7 +134,7 @@ func (h *Handlers) GetBootstrap(w http.ResponseWriter, r *http.Request) {
 // @Success 201 {object} principalResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /bootstrap [post]
 func (h *Handlers) Bootstrap(w http.ResponseWriter, r *http.Request) {
@@ -146,8 +144,7 @@ func (h *Handlers) Bootstrap(w http.ResponseWriter, r *http.Request) {
 	}
 	passwordHash, err := auth.HashPassword(body.Password)
 	if err != nil {
-		h.logger.Error("hash bootstrap password", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create admin")
+		writeError(w, r, err)
 		return
 	}
 	user, err := h.authStore.CreateBootstrapAdmin(r.Context(), store.CreateBootstrapAdminInput{
@@ -157,12 +154,7 @@ func (h *Handlers) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		AvatarKey:    normalizeAvatarKey(body.AvatarKey),
 	})
 	if err != nil {
-		if errors.WhatKind(err) == errors.Conflict {
-			writeError(w, http.StatusConflict, "bootstrap unavailable")
-			return
-		}
-		h.logger.Error("create bootstrap admin", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create admin")
+		writeError(w, r, err)
 		return
 	}
 	if !h.createSessionCookie(w, r, user) {
@@ -180,7 +172,7 @@ func (h *Handlers) Bootstrap(w http.ResponseWriter, r *http.Request) {
 // @Success 201 {object} principalResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /session [post]
 func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
@@ -190,11 +182,14 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	user, err := h.authStore.FindUserByEmail(r.Context(), strings.ToLower(strings.TrimSpace(body.Email)))
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, "invalid email or password")
+		if errors.WhatKind(err) != errors.NotFound {
+			logError(r, responseRequestID(w), err)
+		}
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("invalid email or password")))
 		return
 	}
 	if user.DisabledAt != nil || auth.VerifyPassword(user.PasswordHash, body.Password) != nil {
-		writeError(w, http.StatusUnauthorized, "invalid email or password")
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("invalid email or password")))
 		return
 	}
 	if !h.createSessionCookie(w, r, user) {
@@ -230,8 +225,7 @@ func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
 		session, findErr := h.authStore.FindSessionByHash(r.Context(), auth.HashOpaqueToken(cookie.Value))
 		if findErr == nil {
 			if err := h.authStore.RevokeSession(r.Context(), session.ID); err != nil && errors.WhatKind(err) != errors.NotFound {
-				h.logger.Error("revoke session", "error", err)
-				writeError(w, http.StatusInternalServerError, "failed to log out")
+				writeError(w, r, err)
 				return
 			}
 		}
@@ -261,13 +255,13 @@ func (h *Handlers) GetProfile(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} principalResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /profile [patch]
 func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "authentication required")
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
 		return
 	}
 	body, ok := decodeAndValidateJSON[updateProfileRequest](h, w, r)
@@ -281,11 +275,10 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	user, err := h.authStore.UpdateUser(r.Context(), principal.UserID, input)
 	if err != nil {
 		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusUnauthorized, "authentication required")
+			writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
 			return
 		}
-		h.logger.Error("update profile", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update profile")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, principalFromUser(user))
@@ -299,7 +292,7 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 // @Success 204
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /profile/password [patch]
 func (h *Handlers) UpdatePassword(w http.ResponseWriter, r *http.Request) {
@@ -312,22 +305,20 @@ func (h *Handlers) UpdatePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if auth.VerifyPassword(user.PasswordHash, body.CurrentPassword) != nil {
-		writeError(w, http.StatusUnauthorized, "current password is incorrect")
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("current password is incorrect")))
 		return
 	}
 	passwordHash, err := auth.HashPassword(body.NewPassword)
 	if err != nil {
-		h.logger.Error("hash updated password", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update password")
+		writeError(w, r, err)
 		return
 	}
 	if err := h.authStore.UpdateUserPassword(r.Context(), user.ID, store.UpdateUserPasswordInput{PasswordHash: passwordHash}); err != nil {
 		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusUnauthorized, "authentication required")
+			writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
 			return
 		}
-		h.logger.Error("update password", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update password")
+		writeError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -343,13 +334,13 @@ func (h *Handlers) UpdatePassword(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /tokens [post]
 func (h *Handlers) CreateAccessToken(w http.ResponseWriter, r *http.Request) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "authentication required")
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
 		return
 	}
 	body, ok := decodeAndValidateJSON[createAccessTokenRequest](h, w, r)
@@ -358,8 +349,7 @@ func (h *Handlers) CreateAccessToken(w http.ResponseWriter, r *http.Request) {
 	}
 	raw, hash, err := auth.NewOpaqueToken(accessTokenPrefix)
 	if err != nil {
-		h.logger.Error("generate access token", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create token")
+		writeError(w, r, err)
 		return
 	}
 	token, err := h.authStore.CreateAccessToken(r.Context(), store.CreateAccessTokenInput{
@@ -368,12 +358,7 @@ func (h *Handlers) CreateAccessToken(w http.ResponseWriter, r *http.Request) {
 		TokenHash: hash,
 	})
 	if err != nil {
-		if errors.WhatKind(err) == errors.Conflict {
-			writeError(w, http.StatusConflict, fmt.Sprintf("Token %s already exists.", strings.TrimSpace(body.Name)))
-			return
-		}
-		h.logger.Error("create access token", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create token")
+		writeError(w, r, err)
 		return
 	}
 	resp := accessTokenFromStore(token)
@@ -392,13 +377,12 @@ func (h *Handlers) CreateAccessToken(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) ListAccessTokens(w http.ResponseWriter, r *http.Request) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "authentication required")
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
 		return
 	}
 	tokens, err := h.authStore.ListAccessTokens(r.Context(), principal.UserID)
 	if err != nil {
-		h.logger.Error("list access tokens", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to list tokens")
+		writeError(w, r, err)
 		return
 	}
 	resp := make([]accessTokenResponse, 0, len(tokens))
@@ -420,16 +404,11 @@ func (h *Handlers) ListAccessTokens(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) RevokeAccessToken(w http.ResponseWriter, r *http.Request) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "authentication required")
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
 		return
 	}
 	if err := h.authStore.RevokeAccessToken(r.Context(), r.PathValue("id"), principal.UserID); err != nil {
-		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusNotFound, "token not found")
-			return
-		}
-		h.logger.Error("revoke access token", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to revoke token")
+		writeError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -446,7 +425,7 @@ func (h *Handlers) RevokeAccessToken(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /admin/users [post]
 func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
@@ -467,12 +446,7 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 		AvatarKey: "default",
 	})
 	if err != nil {
-		if errors.WhatKind(err) == errors.Conflict {
-			writeError(w, http.StatusConflict, fmt.Sprintf("User %s already exists.", strings.ToLower(strings.TrimSpace(body.Email))))
-			return
-		}
-		h.logger.Error("create user", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create user")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, userFromStore(user))
@@ -493,8 +467,7 @@ func (h *Handlers) ListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	users, err := h.authStore.ListUsers(r.Context())
 	if err != nil {
-		h.logger.Error("list users", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to list users")
+		writeError(w, r, err)
 		return
 	}
 	resp := make([]userResponse, 0, len(users))
@@ -516,7 +489,7 @@ func (h *Handlers) ListUsers(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /admin/users/{id} [patch]
 func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
@@ -525,7 +498,7 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "authentication required")
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
 		return
 	}
 	body, ok := decodeAndValidateJSON[updateUserRequest](h, w, r)
@@ -538,21 +511,16 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := r.PathValue("id")
 	if input.Role != nil && userID == principal.UserID {
-		writeError(w, http.StatusForbidden, "cannot change your own role")
+		writeError(w, r, errors.E(errors.PermissionDenied, errors.User("cannot change your own role")))
 		return
 	}
 	if input.Disabled != nil && *input.Disabled && userID == principal.UserID {
-		writeError(w, http.StatusForbidden, "cannot disable your own account")
+		writeError(w, r, errors.E(errors.PermissionDenied, errors.User("cannot disable your own account")))
 		return
 	}
 	user, err := h.authStore.UpdateUser(r.Context(), userID, input)
 	if err != nil {
-		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusNotFound, "user not found")
-			return
-		}
-		h.logger.Error("update user", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update user")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, userFromStore(user))
@@ -574,21 +542,16 @@ func (h *Handlers) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "authentication required")
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
 		return
 	}
 	userID := r.PathValue("id")
 	if userID == principal.UserID {
-		writeError(w, http.StatusForbidden, "cannot delete your own account")
+		writeError(w, r, errors.E(errors.PermissionDenied, errors.User("cannot delete your own account")))
 		return
 	}
 	if err := h.authStore.DeleteUser(r.Context(), userID); err != nil {
-		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusNotFound, "user not found")
-			return
-		}
-		h.logger.Error("delete user", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to delete user")
+		writeError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -613,22 +576,16 @@ func (h *Handlers) CreateSetupToken(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
 	user, err := h.authStore.FindUserByID(r.Context(), userID)
 	if err != nil {
-		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusNotFound, "user not found")
-			return
-		}
-		h.logger.Error("find setup token user", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create setup token")
+		writeError(w, r, err)
 		return
 	}
 	if strings.TrimSpace(user.PasswordHash) != "" {
-		writeError(w, http.StatusConflict, "account already set up")
+		writeError(w, r, errors.E(errors.Conflict, errors.User("account already set up")))
 		return
 	}
 	raw, hash, err := auth.NewOpaqueToken(setupTokenPrefix)
 	if err != nil {
-		h.logger.Error("generate setup token", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create setup token")
+		writeError(w, r, err)
 		return
 	}
 	expiresAt := time.Now().Add(setupTokenTTL)
@@ -638,8 +595,7 @@ func (h *Handlers) CreateSetupToken(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt: expiresAt,
 	})
 	if err != nil {
-		h.logger.Error("create setup token", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create setup token")
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, setupTokenResponse{Token: raw, ExpiresAt: token.ExpiresAt})
@@ -674,7 +630,7 @@ func (h *Handlers) GetAccountSetup(w http.ResponseWriter, r *http.Request) {
 // @Success 201 {object} principalResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /account-setup [post]
 func (h *Handlers) CompleteAccountSetup(w http.ResponseWriter, r *http.Request) {
@@ -684,8 +640,7 @@ func (h *Handlers) CompleteAccountSetup(w http.ResponseWriter, r *http.Request) 
 	}
 	passwordHash, err := auth.HashPassword(body.Password)
 	if err != nil {
-		h.logger.Error("hash account setup password", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to complete account setup")
+		writeError(w, r, err)
 		return
 	}
 	user, err := h.authStore.CompleteAccountSetup(r.Context(), store.CompleteAccountSetupInput{
@@ -696,11 +651,10 @@ func (h *Handlers) CompleteAccountSetup(w http.ResponseWriter, r *http.Request) 
 	})
 	if err != nil {
 		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusUnauthorized, "invalid or expired setup token")
+			writeError(w, r, errors.E(errors.Unauthenticated, errors.User("invalid or expired setup token")))
 			return
 		}
-		h.logger.Error("complete account setup", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to complete account setup")
+		writeError(w, r, err)
 		return
 	}
 	if !h.createSessionCookie(w, r, user) {
@@ -712,31 +666,29 @@ func (h *Handlers) CompleteAccountSetup(w http.ResponseWriter, r *http.Request) 
 func (h *Handlers) accountSetupUserFromToken(w http.ResponseWriter, r *http.Request) (*store.User, bool) {
 	tokenValue := strings.TrimSpace(r.URL.Query().Get("token"))
 	if tokenValue == "" {
-		writeError(w, http.StatusUnauthorized, "invalid or expired setup token")
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("invalid or expired setup token")))
 		return nil, false
 	}
 	setupToken, err := h.authStore.FindAccountSetupTokenByHash(r.Context(), auth.HashOpaqueToken(tokenValue))
 	if err != nil || setupToken.UsedAt != nil || !setupToken.ExpiresAt.After(time.Now()) {
 		if err != nil && errors.WhatKind(err) != errors.NotFound {
-			h.logger.Error("find account setup token", "error", err)
-			writeError(w, http.StatusInternalServerError, "failed to fetch account setup")
+			writeError(w, r, err)
 			return nil, false
 		}
-		writeError(w, http.StatusUnauthorized, "invalid or expired setup token")
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("invalid or expired setup token")))
 		return nil, false
 	}
 	user, err := h.authStore.FindUserByID(r.Context(), setupToken.UserID)
 	if err != nil {
 		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusUnauthorized, "invalid or expired setup token")
+			writeError(w, r, errors.E(errors.Unauthenticated, errors.User("invalid or expired setup token")))
 			return nil, false
 		}
-		h.logger.Error("find setup token user", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to fetch account setup")
+		writeError(w, r, err)
 		return nil, false
 	}
 	if strings.TrimSpace(user.PasswordHash) != "" {
-		writeError(w, http.StatusUnauthorized, "invalid or expired setup token")
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("invalid or expired setup token")))
 		return nil, false
 	}
 	return user, true
@@ -745,8 +697,7 @@ func (h *Handlers) accountSetupUserFromToken(w http.ResponseWriter, r *http.Requ
 func (h *Handlers) createSessionCookie(w http.ResponseWriter, r *http.Request, user *store.User) bool {
 	raw, hash, err := auth.NewOpaqueToken(sessionTokenPrefix)
 	if err != nil {
-		h.logger.Error("generate session token", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create session")
+		writeError(w, r, err)
 		return false
 	}
 	expiresAt := time.Now().Add(sessionTTL)
@@ -755,8 +706,7 @@ func (h *Handlers) createSessionCookie(w http.ResponseWriter, r *http.Request, u
 		TokenHash: hash,
 		ExpiresAt: expiresAt,
 	}); err != nil {
-		h.logger.Error("create session", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create session")
+		writeError(w, r, err)
 		return false
 	}
 	http.SetCookie(w, sessionCookie(r, raw, expiresAt))
@@ -766,17 +716,16 @@ func (h *Handlers) createSessionCookie(w http.ResponseWriter, r *http.Request, u
 func (h *Handlers) currentUser(w http.ResponseWriter, r *http.Request) (*store.User, bool) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "authentication required")
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
 		return nil, false
 	}
 	user, err := h.authStore.FindUserByID(r.Context(), principal.UserID)
 	if err != nil {
 		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, http.StatusUnauthorized, "authentication required")
+			writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
 			return nil, false
 		}
-		h.logger.Error("get current user", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to fetch current user")
+		writeError(w, r, err)
 		return nil, false
 	}
 	return user, true
@@ -838,7 +787,7 @@ func accessTokenFromStore(token *store.AccessToken) accessTokenResponse {
 
 func updateUserInputFromProfile(w http.ResponseWriter, request updateProfileRequest) (store.UpdateUserInput, bool) {
 	var input store.UpdateUserInput
-	var details []ValidationErrorDetail
+	var details []ValidationError
 	applyProfileUserUpdates(request.DisplayName, request.AvatarKey, &input, &details)
 	if len(details) > 0 {
 		writeValidationErrors(w, details)
@@ -849,7 +798,7 @@ func updateUserInputFromProfile(w http.ResponseWriter, request updateProfileRequ
 
 func updateUserInputFromAdmin(w http.ResponseWriter, request updateUserRequest) (store.UpdateUserInput, bool) {
 	var input store.UpdateUserInput
-	var details []ValidationErrorDetail
+	var details []ValidationError
 	applyProfileUserUpdates(request.DisplayName, request.AvatarKey, &input, &details)
 	if request.Role != nil {
 		role := store.UserRole(strings.TrimSpace(*request.Role))
@@ -857,7 +806,7 @@ func updateUserInputFromAdmin(w http.ResponseWriter, request updateUserRequest) 
 		case store.UserRoleAdmin, store.UserRoleUser:
 			input.Role = &role
 		default:
-			details = append(details, ValidationErrorDetail{Field: "role", Location: "body", Message: "must be one of: admin, user"})
+			details = append(details, ValidationError{Field: "role", Location: "body", Message: "must be one of: admin, user"})
 		}
 	}
 	input.Disabled = request.Disabled
@@ -872,19 +821,19 @@ func applyProfileUserUpdates(
 	displayNameValue *string,
 	avatarKeyValue *string,
 	input *store.UpdateUserInput,
-	details *[]ValidationErrorDetail,
+	details *[]ValidationError,
 ) {
 	if displayNameValue != nil {
 		displayName := strings.TrimSpace(*displayNameValue)
 		if displayName == "" {
-			*details = append(*details, ValidationErrorDetail{Field: "display_name", Location: "body", Message: "is required"})
+			*details = append(*details, ValidationError{Field: "display_name", Location: "body", Message: "is required"})
 		}
 		input.DisplayName = &displayName
 	}
 	if avatarKeyValue != nil {
 		avatarKey := strings.TrimSpace(*avatarKeyValue)
 		if !ValidAvatarKey(avatarKey) {
-			*details = append(*details, ValidationErrorDetail{
+			*details = append(*details, ValidationError{
 				Field:    "avatar_key",
 				Location: "body",
 				Message:  "must be one of: default, ledger, wallet",
@@ -897,11 +846,11 @@ func applyProfileUserUpdates(
 func requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "authentication required")
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
 		return false
 	}
 	if principal.Role != auth.RoleAdmin {
-		writeError(w, http.StatusForbidden, "admin role required")
+		writeError(w, r, errors.E(errors.PermissionDenied, errors.User("admin role required")))
 		return false
 	}
 	return true

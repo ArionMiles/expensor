@@ -38,8 +38,12 @@ func TestRuleDraftRequests(t *testing.T) {
 			expectedStatus: http.StatusConflict,
 			assertBody: func(t *testing.T, body map[string]any) {
 				t.Helper()
-				if !strings.Contains(body["error"].(string), "Configure an LLM provider") {
+				message, ok := body["message"].(string)
+				if !ok || !strings.Contains(message, "No LLM provider is configured") {
 					t.Fatalf("unexpected error body: %#v", body)
+				}
+				if _, ok := body["request_id"].(string); !ok {
+					t.Fatalf("missing request ID: %#v", body)
 				}
 			},
 		},
@@ -58,7 +62,7 @@ func TestRuleDraftRequests(t *testing.T) {
 			expectedStatus: http.StatusUnprocessableEntity,
 			assertBody: func(t *testing.T, body map[string]any) {
 				t.Helper()
-				details, ok := body["details"].([]any)
+				details, ok := body["validation_errors"].([]any)
 				if !ok || len(details) == 0 {
 					t.Fatalf("expected validation details, got %#v", body)
 				}

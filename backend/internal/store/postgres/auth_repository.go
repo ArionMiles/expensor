@@ -43,7 +43,11 @@ func (r *authRepository) CreateBootstrapAdmin(ctx context.Context, input store.C
 		return nil, errors.E("postgres.auth.create_bootstrap_admin", "counting users for bootstrap", err)
 	}
 	if existingUsers > 0 {
-		return nil, errors.E("store.auth.create_bootstrap_admin", errors.Conflict, "bootstrap unavailable")
+		return nil, errors.E(
+			"store.auth.create_bootstrap_admin",
+			errors.Conflict,
+			errors.User("bootstrap unavailable"),
+		)
 	}
 
 	user, err := insertUser(ctx, tx, store.CreateUserInput{
@@ -125,7 +129,7 @@ func (r *authRepository) UpdateUser(ctx context.Context, id string, input store.
 	`, id, input.DisplayName, input.Role, input.AvatarKey, input.Disabled))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.E("store.auth.update_user", errors.NotFound)
+			return nil, errors.E("store.auth.update_user", errors.NotFound, errors.User("user not found"))
 		}
 		return nil, errors.E("postgres.auth.update_user", "updating user", err)
 	}
@@ -143,7 +147,7 @@ func (r *authRepository) UpdateUserPassword(ctx context.Context, id string, inpu
 		return errors.E("postgres.auth.update_user_password", "updating user password", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return errors.E("store.auth.update_user_password", errors.NotFound)
+		return errors.E("store.auth.update_user_password", errors.NotFound, errors.User("user not found"))
 	}
 	return nil
 }
@@ -154,7 +158,7 @@ func (r *authRepository) DeleteUser(ctx context.Context, id string) error {
 		return errors.E("postgres.auth.delete_user", "deleting user", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return errors.E("store.auth.delete_user", errors.NotFound)
+		return errors.E("store.auth.delete_user", errors.NotFound, errors.User("user not found"))
 	}
 	return nil
 }
@@ -168,7 +172,7 @@ func (r *authRepository) FindUserByEmail(ctx context.Context, email string) (*st
 	`, email))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.E("store.auth.find_user_by_email", errors.NotFound)
+			return nil, errors.E("store.auth.find_user_by_email", errors.NotFound, errors.User("user not found"))
 		}
 		return nil, errors.E("postgres.auth.find_user_by_email", "finding user by email", err)
 	}
@@ -184,7 +188,7 @@ func (r *authRepository) FindUserByID(ctx context.Context, id string) (*store.Us
 	`, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.E("store.auth.find_user_by_id", errors.NotFound)
+			return nil, errors.E("store.auth.find_user_by_id", errors.NotFound, errors.User("user not found"))
 		}
 		return nil, errors.E("postgres.auth.find_user_by_id", "finding user by id", err)
 	}
@@ -238,7 +242,13 @@ func (r *authRepository) CreateAccessToken(ctx context.Context, input store.Crea
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, errors.E("store.auth.create_access_token", errors.Conflict, "access token name conflict", err)
+			return nil, errors.E(
+				"store.auth.create_access_token",
+				errors.Conflict,
+				errors.User("Token "+input.Name+" already exists."),
+				"access token name conflict",
+				err,
+			)
 		}
 		return nil, errors.E("postgres.auth.create_access_token", "creating access token", err)
 	}
@@ -292,7 +302,7 @@ func (r *authRepository) RevokeAccessToken(ctx context.Context, id, userID strin
 		return errors.E("postgres.auth.revoke_access_token", "revoking access token", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return errors.E("store.auth.revoke_access_token", errors.NotFound)
+		return errors.E("store.auth.revoke_access_token", errors.NotFound, errors.User("token not found"))
 	}
 	return nil
 }
@@ -397,7 +407,13 @@ func insertUser(ctx context.Context, tx pgx.Tx, input store.CreateUserInput) (*s
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, errors.E("store.auth.create_user", errors.Conflict, "user email conflict", err)
+			return nil, errors.E(
+				"store.auth.create_user",
+				errors.Conflict,
+				errors.User("User "+strings.ToLower(strings.TrimSpace(input.Email))+" already exists."),
+				"user email conflict",
+				err,
+			)
 		}
 		return nil, errors.E("postgres.auth.insert_user", "creating user", err)
 	}

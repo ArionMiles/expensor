@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // TriggerSync triggers an immediate community content sync.
@@ -17,7 +18,7 @@ import (
 // @Router /config/sync [post]
 func (h *Handlers) TriggerSync(w http.ResponseWriter, r *http.Request) {
 	if h.community == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "sync not configured"})
+		writeError(w, r, errors.E(errors.Unavailable, errors.User("sync not configured")))
 		return
 	}
 	go h.community.Trigger()
@@ -36,7 +37,7 @@ func (h *Handlers) TriggerSync(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) GetSyncStatus(w http.ResponseWriter, r *http.Request) {
 	status, err := h.syncStore.GetSyncStatus(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, status)
@@ -53,7 +54,7 @@ func (h *Handlers) GetSyncStatus(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) GetCommunitySyncSettings(w http.ResponseWriter, r *http.Request) {
 	settings, err := h.syncStore.GetCommunitySyncSettings(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, communitySyncSettingsResponse(settings))
@@ -68,7 +69,7 @@ func (h *Handlers) GetCommunitySyncSettings(w http.ResponseWriter, r *http.Reque
 // @Param body body CommunitySyncSettingsPatchRequest true "Community sync settings patch"
 // @Success 200 {object} CommunitySyncSettingsResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /config/sync/settings [patch]
 func (h *Handlers) PatchCommunitySyncSettings(w http.ResponseWriter, r *http.Request) {
@@ -80,7 +81,7 @@ func (h *Handlers) PatchCommunitySyncSettings(w http.ResponseWriter, r *http.Req
 		AutomaticSyncEnabled: body.AutomaticSyncEnabled,
 	})
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, communitySyncSettingsResponse(settings))

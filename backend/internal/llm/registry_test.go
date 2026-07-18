@@ -118,5 +118,7 @@ func TestProviderSupportsCapabilities(t *testing.T) {
 	}
 	if err := provider.RequireCapabilities(CapabilityStreaming); errors.WhatKind(err) != KindCapabilityUnsupported {
 		t.Fatalf("RequireCapabilities(CapabilityStreaming) error = %v, want KindCapabilityUnsupported", err)
+	} else if message := errors.UserMsg(err); message != "The active LLM provider does not support the requested operation." {
+		t.Fatalf("UserMsg() = %q", message)
 	}
 }

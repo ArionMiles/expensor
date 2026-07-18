@@ -37,6 +37,14 @@ func TestNestedOps(t *testing.T) {
 	}
 }
 
+func TestUserMsgFindsSafeMessageInWrappedApplicationError(t *testing.T) {
+	err := E("http.rule_draft", E("assistant.rule_draft", InvalidInput, User("add at least one email sample")))
+
+	if got := UserMsg(err); got != "add at least one email sample" {
+		t.Fatalf("UserMsg() = %q, want safe inner message", got)
+	}
+}
+
 func TestEJoinsSentinelAndCause(t *testing.T) {
 	base := errors.New("invalid output")
 	cause := errors.New("json parse failed")

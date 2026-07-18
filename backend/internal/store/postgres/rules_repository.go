@@ -82,7 +82,7 @@ func (r *rulesRepository) GetRule(ctx context.Context, tenant store.Tenant, id s
 		return nil, err
 	}
 	if len(result) == 0 {
-		return nil, errors.E("store.rules.get", errors.NotFound)
+		return nil, errors.E("store.rules.get", errors.NotFound, errors.User("rule not found"))
 	}
 	return &result[0], nil
 }
@@ -102,7 +102,7 @@ func (r *rulesRepository) CreateRule(ctx context.Context, tenant store.Tenant, r
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, errors.E("store.rules.create", errors.Conflict, "rule name conflict", err)
+			return nil, errors.E("store.rules.create", errors.Conflict, errors.User("rule name already exists"), "rule name conflict", err)
 		}
 		return nil, errors.E("postgres.rules.create_rule", "creating rule", err)
 	}
@@ -111,7 +111,7 @@ func (r *rulesRepository) CreateRule(ctx context.Context, tenant store.Tenant, r
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, errors.E("store.rules.create", errors.Conflict, "rule name conflict", err)
+			return nil, errors.E("store.rules.create", errors.Conflict, errors.User("rule name already exists"), "rule name conflict", err)
 		}
 		return nil, errors.E("postgres.rules.create_rule", "creating rule", err)
 	}
@@ -136,7 +136,7 @@ func (r *rulesRepository) UpdateRule(ctx context.Context, tenant store.Tenant, i
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, errors.E("store.rules.update", errors.Conflict, "rule name conflict", err)
+			return nil, errors.E("store.rules.update", errors.Conflict, errors.User("rule name already exists"), "rule name conflict", err)
 		}
 		return nil, errors.E("postgres.rules.update_rule", "updating rule", err)
 	}
@@ -145,12 +145,12 @@ func (r *rulesRepository) UpdateRule(ctx context.Context, tenant store.Tenant, i
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, errors.E("store.rules.update", errors.Conflict, "rule name conflict", err)
+			return nil, errors.E("store.rules.update", errors.Conflict, errors.User("rule name already exists"), "rule name conflict", err)
 		}
 		return nil, errors.E("postgres.rules.update_rule", "updating rule", err)
 	}
 	if len(result) == 0 {
-		return nil, errors.E("store.rules.update", errors.NotFound)
+		return nil, errors.E("store.rules.update", errors.NotFound, errors.User("rule not found"))
 	}
 	return &result[0], nil
 }
@@ -163,7 +163,7 @@ func (r *rulesRepository) DeleteRule(ctx context.Context, tenant store.Tenant, i
 		return errors.E("postgres.rules.delete_rule", "deleting rule", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return errors.E("store.rules.delete", errors.NotFound)
+		return errors.E("store.rules.delete", errors.NotFound, errors.User("rule not found"))
 	}
 	return nil
 }

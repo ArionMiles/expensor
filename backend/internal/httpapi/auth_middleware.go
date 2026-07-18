@@ -58,14 +58,17 @@ func (h *Handlers) authenticateRequest(w http.ResponseWriter, r *http.Request) (
 	if token, ok := bearerToken(r.Header.Get("Authorization")); ok {
 		return h.authenticateBearer(w, r, token)
 	}
-	writeError(w, http.StatusUnauthorized, "authentication required")
+	writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
 	return auth.Principal{}, false
 }
 
 func (h *Handlers) authenticateSession(w http.ResponseWriter, r *http.Request, raw string) (auth.Principal, bool) {
 	session, err := h.authStore.FindSessionByHash(r.Context(), auth.HashOpaqueToken(raw))
 	if err != nil || session.RevokedAt != nil || !session.ExpiresAt.After(time.Now()) {
-		writeError(w, http.StatusUnauthorized, "authentication required")
+		if err != nil && errors.WhatKind(err) != errors.NotFound {
+			logError(r, responseRequestID(w), err)
+		}
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
 		return auth.Principal{}, false
 	}
 	user, ok := h.authenticatedUser(w, r, session.UserID)
@@ -78,7 +81,10 @@ func (h *Handlers) authenticateSession(w http.ResponseWriter, r *http.Request, r
 func (h *Handlers) authenticateBearer(w http.ResponseWriter, r *http.Request, raw string) (auth.Principal, bool) {
 	token, err := h.authStore.FindAccessTokenByHash(r.Context(), auth.HashOpaqueToken(raw))
 	if err != nil || token.RevokedAt != nil || (token.ExpiresAt != nil && !token.ExpiresAt.After(time.Now())) {
-		writeError(w, http.StatusUnauthorized, "authentication required")
+		if err != nil && errors.WhatKind(err) != errors.NotFound {
+			logError(r, responseRequestID(w), err)
+		}
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
 		return auth.Principal{}, false
 	}
 	user, ok := h.authenticatedUser(w, r, token.UserID)
@@ -92,13 +98,13 @@ func (h *Handlers) authenticatedUser(w http.ResponseWriter, r *http.Request, use
 	user, err := h.authStore.FindUserByID(r.Context(), userID)
 	if err != nil {
 		if errors.WhatKind(err) != errors.NotFound {
-			h.logger.Error("authenticate user", "error", err)
+			logError(r, responseRequestID(w), err)
 		}
-		writeError(w, http.StatusUnauthorized, "authentication required")
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
 		return nil, false
 	}
 	if user.DisabledAt != nil {
-		writeError(w, http.StatusUnauthorized, "authentication required")
+		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
 		return nil, false
 	}
 	return user, true

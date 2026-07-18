@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/ArionMiles/expensor/backend/internal/daemon"
+	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
 // --- daemon control ---
@@ -20,12 +21,12 @@ import (
 // @Param request body DaemonReaderRequest true "Daemon start request"
 // @Success 202 {object} StatusOnlyResponse "Daemon starting"
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 501 {object} ErrorResponse
 // @Router /daemon/start [post]
 func (h *Handlers) StartDaemon(w http.ResponseWriter, r *http.Request) {
 	if h.daemon == nil {
-		writeError(w, http.StatusNotImplemented, "daemon start not configured")
+		writeError(w, r, errors.E(errors.Unimplemented, errors.User("daemon start not configured")))
 		return
 	}
 
@@ -34,7 +35,7 @@ func (h *Handlers) StartDaemon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.registry.GetProvider(body.Reader); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("reader %q not found", body.Reader))
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User(fmt.Sprintf("reader %q not found", body.Reader)), err))
 		return
 	}
 
@@ -54,7 +55,7 @@ func (h *Handlers) StartDaemon(w http.ResponseWriter, r *http.Request) {
 // @Param request body DaemonReaderRequest true "Daemon rescan request"
 // @Success 202 {object} StatusOnlyResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 501 {object} ErrorResponse
 // @Router /daemon/rescan [post]
 func (h *Handlers) Rescan(w http.ResponseWriter, r *http.Request) {
@@ -63,12 +64,12 @@ func (h *Handlers) Rescan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.registry.GetProvider(body.Reader); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("reader %q not found", body.Reader))
+		writeError(w, r, errors.E(errors.InvalidArgument, errors.User(fmt.Sprintf("reader %q not found", body.Reader)), err))
 		return
 	}
 
 	if h.daemon == nil {
-		writeError(w, http.StatusNotImplemented, "rescan not configured")
+		writeError(w, r, errors.E(errors.Unimplemented, errors.User("rescan not configured")))
 		return
 	}
 	h.daemon.Rescan(daemon.RunRequest{Tenant: requestTenant(r), Reader: body.Reader})

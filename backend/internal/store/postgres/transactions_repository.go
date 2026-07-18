@@ -166,7 +166,7 @@ func (r *transactionsRepository) getTransactionQuery(ctx context.Context, tenant
 		return nil, err
 	}
 	if len(txns) == 0 {
-		return nil, errors.E("store.transactions.get", errors.NotFound)
+		return nil, errors.E("store.transactions.get", errors.NotFound, errors.User("transaction not found"))
 	}
 
 	if err := r.loadLabels(ctx, txns); err != nil {
@@ -184,7 +184,7 @@ func (r *transactionsRepository) UpdateDescription(ctx context.Context, tenant s
 		return errors.E("postgres.transactions.update_description", "updating description", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return errors.E("store.transactions.update_description", errors.NotFound)
+		return errors.E("store.transactions.update_description", errors.NotFound, errors.User("transaction not found"))
 	}
 	return nil
 }
@@ -295,7 +295,7 @@ func (r *transactionsRepository) RemoveLabel(ctx context.Context, tenant store.T
 		return errors.E("postgres.transactions.remove_label", "removing label", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return errors.E("store.transactions.remove_label", errors.NotFound)
+		return errors.E("store.transactions.remove_label", errors.NotFound, errors.User("label not found on transaction"))
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -552,7 +552,7 @@ func (r *transactionsRepository) UpdateTransaction(ctx context.Context, tenant s
 		return errors.E("postgres.transactions.update_transaction", "updating transaction", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return errors.E("store.transactions.update", errors.NotFound)
+		return errors.E("store.transactions.update", errors.NotFound, errors.User("transaction not found"))
 	}
 	return nil
 }
@@ -577,7 +577,7 @@ func (r *transactionsRepository) MuteTransaction(ctx context.Context, tenant sto
 		return errors.E("postgres.transactions.mute_transaction", "muting transaction", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return errors.E("store.transactions.mute", errors.NotFound)
+		return errors.E("store.transactions.mute", errors.NotFound, errors.User("transaction not found"))
 	}
 	return nil
 }
@@ -592,7 +592,7 @@ func (r *transactionsRepository) UpdateMuteReason(ctx context.Context, tenant st
 		return errors.E("postgres.transactions.update_mute_reason", "updating mute reason", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return errors.E("store.transactions.update_mute_reason", errors.NotFound)
+		return errors.E("store.transactions.update_mute_reason", errors.NotFound, errors.User("transaction not found"))
 	}
 	return nil
 }
@@ -606,7 +606,7 @@ func (r *transactionsRepository) UpdateMerchantReason(ctx context.Context, tenan
 		return errors.E("postgres.transactions.update_merchant_reason", "updating merchant reason", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return errors.E("store.transactions.update_merchant_reason", errors.NotFound)
+		return errors.E("store.transactions.update_merchant_reason", errors.NotFound, errors.User("muted merchant not found"))
 	}
 	return nil
 }
@@ -716,7 +716,7 @@ func (r *transactionsRepository) DeleteMutedMerchant(ctx context.Context, tenant
 		return errors.E("postgres.transactions.delete_muted_merchant", "deleting muted merchant", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return errors.E("store.transactions.delete_muted_merchant", errors.NotFound)
+		return errors.E("store.transactions.delete_muted_merchant", errors.NotFound, errors.User("muted merchant not found"))
 	}
 	return nil
 }
@@ -745,7 +745,11 @@ func (r *transactionsRepository) DeleteMutedMerchantAndUnmute(ctx context.Contex
 		`DELETE FROM muted_merchants WHERE id=$1 AND tenant_id = $2 RETURNING pattern`, id, tenant.ID,
 	).Scan(&pattern); err != nil {
 		if errorsIsNoRows(err) {
-			return errors.E("store.transactions.delete_muted_merchant_and_unmute", errors.NotFound)
+			return errors.E(
+				"store.transactions.delete_muted_merchant_and_unmute",
+				errors.NotFound,
+				errors.User("muted merchant not found"),
+			)
 		}
 		return errors.E("postgres.transactions.delete_muted_merchant_and_unmute", "deleting muted merchant", err)
 	}

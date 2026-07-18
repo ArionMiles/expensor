@@ -140,7 +140,12 @@ func (r *Registry) RegisterProvider(provider Provider) error {
 func (r *Registry) GetProvider(name string) (Provider, error) {
 	provider, exists := r.providers[name]
 	if !exists {
-		return Provider{}, errors.E(errors.NotFound, fmt.Sprintf("provider %q not found", name))
+		message := fmt.Sprintf("provider %q not found", name)
+		return Provider{}, errors.E(
+			errors.NotFound,
+			errors.User(message),
+			message,
+		)
 	}
 	return provider, nil
 }

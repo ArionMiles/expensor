@@ -30,20 +30,19 @@ func decodeAndValidateQuery[T any](
 	var query T
 	err := h.queryDecoder.Decode(&query, r.URL.Query())
 	if err != nil {
-		writeQueryDecodeError[T](h, w, err)
+		writeQueryDecodeError[T](h, w, r, err)
 		return query, false
 	}
-	if !h.validateRequest(w, "query", query) {
+	if !h.validateRequest(w, r, "query", query) {
 		return query, false
 	}
 	return query, true
 }
 
-func writeQueryDecodeError[T any](h *Handlers, w http.ResponseWriter, err error) {
+func writeQueryDecodeError[T any](h *Handlers, w http.ResponseWriter, r *http.Request, err error) {
 	var decodeErrors form.DecodeErrors
 	if !errors.As(err, &decodeErrors) {
-		h.logger.Error("decode query", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to decode query")
+		writeError(w, r, err)
 		return
 	}
 
@@ -54,9 +53,9 @@ func writeQueryDecodeError[T any](h *Handlers, w http.ResponseWriter, err error)
 	}
 	sort.Strings(fields)
 
-	violations := make([]ValidationErrorDetail, 0, len(fields))
+	violations := make([]ValidationError, 0, len(fields))
 	for _, field := range fields {
-		violations = append(violations, ValidationErrorDetail{
+		violations = append(violations, ValidationError{
 			Field:    field,
 			Location: "query",
 			Message:  queryConversionMessage(fieldTypes[field]),

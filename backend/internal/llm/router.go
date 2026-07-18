@@ -54,14 +54,14 @@ func (r *Router) Complete(ctx context.Context, tenant store.Tenant, req Request)
 	const op = "llm.Router.Complete"
 
 	if r.runtime == nil {
-		return Response{}, errors.E(op, KindNoProviderConfigured, "no llm provider configured")
+		return Response{}, errors.E(op, KindNoProviderConfigured, errors.User("No LLM provider is configured."), "no llm provider configured")
 	}
 	runtime, found, err := r.runtime.GetActiveLLMProviderRuntime(ctx, tenant)
 	if err != nil {
 		return Response{}, errors.E(op, err)
 	}
 	if !found {
-		return Response{}, errors.E(op, KindNoProviderConfigured, "no llm provider configured")
+		return Response{}, errors.E(op, KindNoProviderConfigured, errors.User("No LLM provider is configured."), "no llm provider configured")
 	}
 	provider, err := r.registry.GetProvider(runtime.Provider)
 	if err != nil {

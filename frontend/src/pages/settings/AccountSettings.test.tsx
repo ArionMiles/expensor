@@ -94,7 +94,7 @@ describe('AccountSettings', () => {
       http.get('/api/tokens', () => HttpResponse.json([])),
       http.patch('/api/profile/password', () => {
         passwordUpdateRequests += 1
-        return HttpResponse.json({ error: 'current password is incorrect' }, { status: 401 })
+        return HttpResponse.json({ message: 'current password is incorrect' }, { status: 401 })
       }),
     )
 
@@ -419,7 +419,7 @@ describe('AccountSettings', () => {
       http.get('/api/tokens', () => HttpResponse.json([])),
       http.get('/api/admin/users', () => HttpResponse.json([])),
       http.post('/api/tokens', () =>
-        HttpResponse.json({ error: 'Token test already exists.' }, { status: 409 }),
+        HttpResponse.json({ message: 'Token test already exists.' }, { status: 409 }),
       ),
     )
 
@@ -488,7 +488,7 @@ describe('AccountSettings', () => {
       http.get('/api/tokens', () => HttpResponse.json([])),
       http.get('/api/admin/users', () => HttpResponse.json([])),
       http.post('/api/admin/users', () =>
-        HttpResponse.json({ error: 'User john@example.com already exists.' }, { status: 409 }),
+        HttpResponse.json({ message: 'User john@example.com already exists.' }, { status: 409 }),
       ),
     )
 
@@ -522,7 +522,7 @@ describe('AccountSettings', () => {
       http.get('/api/admin/users', () => HttpResponse.json([])),
       http.post('/api/admin/users', () => {
         createUserRequests += 1
-        return HttpResponse.json({ error: 'request validation failed' }, { status: 422 })
+        return HttpResponse.json({ message: 'Request validation failed.' }, { status: 422 })
       }),
     )
 
@@ -538,7 +538,7 @@ describe('AccountSettings', () => {
     await user.click(within(newUserDialog).getByRole('button', { name: 'Create user' }))
 
     expect(within(newUserDialog).getByText('Enter a valid email address.')).toBeInTheDocument()
-    expect(within(newUserDialog).queryByText('request validation failed')).not.toBeInTheDocument()
+    expect(within(newUserDialog).queryByText('Request validation failed.')).not.toBeInTheDocument()
     expect(createUserRequests).toBe(0)
   })
 
@@ -574,7 +574,7 @@ describe('AccountSettings', () => {
         ]),
       ),
       http.delete('/api/admin/users/:id', () =>
-        HttpResponse.json({ error: 'failed to delete user' }, { status: 500 }),
+        HttpResponse.json({ message: 'failed to delete user' }, { status: 500 }),
       ),
     )
 

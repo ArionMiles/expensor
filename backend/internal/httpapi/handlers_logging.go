@@ -37,7 +37,7 @@ func (h *Handlers) GetAdminLoggingSettings(w http.ResponseWriter, r *http.Reques
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
-// @Failure 422 {object} ValidationErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Router /admin/logging/settings [patch]
 func (h *Handlers) PatchAdminLoggingSettings(w http.ResponseWriter, r *http.Request) {
 	if !requireAdmin(w, r) {
@@ -49,7 +49,7 @@ func (h *Handlers) PatchAdminLoggingSettings(w http.ResponseWriter, r *http.Requ
 	}
 	level, ok := parseAdminLogLevel(body.Level)
 	if !ok {
-		writeValidationErrors(w, []ValidationErrorDetail{{
+		writeValidationErrors(w, []ValidationError{{
 			Field:    "level",
 			Location: "body",
 			Message:  "must be one of: debug, info, warn, error",
