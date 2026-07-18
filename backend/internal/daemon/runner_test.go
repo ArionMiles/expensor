@@ -111,6 +111,21 @@ func (m *mockRuntimeStore) GetReaderConfig(ctx context.Context, _ store.Tenant, 
 	return m.readerConfig, m.hasConfig, m.err
 }
 
+type mockDiagnosticStore struct {
+	tenant     store.Tenant
+	diagnostic api.ExtractionDiagnostic
+}
+
+func (s *mockDiagnosticStore) RecordExtractionDiagnostic(
+	_ context.Context,
+	tenant store.Tenant,
+	diagnostic api.ExtractionDiagnostic,
+) error {
+	s.tenant = tenant
+	s.diagnostic = diagnostic
+	return nil
+}
+
 func TestNew(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -137,7 +152,12 @@ func TestNew(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			runner := New(tt.registry, tt.writer, tt.httpClient, tt.logger)
+			runner := New(RunnerDeps{
+				Registry:          tt.registry,
+				TransactionWriter: tt.writer,
+				HTTPClient:        tt.httpClient,
+				Logger:            tt.logger,
+			})
 
 			if runner == nil {
 				t.Fatal("expected non-nil runner")
@@ -171,7 +191,13 @@ func TestRunCreatesDaemonLifecycleSpan(t *testing.T) {
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	scope := observability.NewScope(logger, "test/daemon")
-	runner := NewWithScope(registry, &mockTransactionWriter{}, &http.Client{}, logger, scope)
+	runner := New(RunnerDeps{
+		Registry:          registry,
+		TransactionWriter: &mockTransactionWriter{},
+		HTTPClient:        &http.Client{},
+		Logger:            logger,
+		Scope:             scope,
+	})
 
 	err := runner.Run(t.Context(), RunConfig{
 		ReaderName: "test-reader",
@@ -234,7 +260,7 @@ func TestRun_SuccessfulRun(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, writer, &http.Client{}, logger)
+	runner := New(RunnerDeps{Registry: registry, TransactionWriter: writer, HTTPClient: &http.Client{}, Logger: logger})
 
 	cfg := &config.App{Database: config.Database{BatchSize: 1}}
 
@@ -291,13 +317,56 @@ func TestRun_PassesTenantToTransactionWriter(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, writer, &http.Client{}, logger)
+	runner := New(RunnerDeps{Registry: registry, TransactionWriter: writer, HTTPClient: &http.Client{}, Logger: logger})
 
 	if err := runner.Run(ctx, RunConfig{ReaderName: "test-reader", Tenant: wantTenant, Config: &config.App{}}); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if gotTenant.ID != wantTenant.ID {
 		t.Fatalf("transaction writer tenant = %q, want %q", gotTenant.ID, wantTenant.ID)
+	}
+}
+
+func TestRun_PassesTenantScopedDiagnosticSinkToProvider(t *testing.T) {
+	wantTenant := store.Tenant{ID: "tenant-a"}
+	diagnosticStore := &mockDiagnosticStore{}
+	reader := &mockReader{
+		readFunc: func(_ context.Context, out chan<- *api.TransactionDetails, _ <-chan string) error {
+			close(out)
+			return nil
+		},
+	}
+	readerProvider := &mockProvider{name: "test-reader", reader: reader}
+	registry := plugins.NewRegistry()
+	if err := registry.RegisterProvider(readerProvider.provider()); err != nil {
+		t.Fatalf("RegisterProvider() error = %v", err)
+	}
+
+	runner := New(RunnerDeps{
+		Registry:          registry,
+		TransactionWriter: &mockTransactionWriter{},
+		Diagnostics:       diagnosticStore,
+		HTTPClient:        &http.Client{},
+		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	err := runner.Run(context.Background(), RunConfig{
+		ReaderName: "test-reader",
+		Tenant:     wantTenant,
+		Config:     &config.App{},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	diagnostic := api.ExtractionDiagnostic{MessageID: "message-1"}
+	if err := readerProvider.input.DiagnosticSink.RecordExtractionDiagnostic(context.Background(), diagnostic); err != nil {
+		t.Fatalf("RecordExtractionDiagnostic() error = %v", err)
+	}
+	if diagnosticStore.tenant != wantTenant {
+		t.Fatalf("diagnostic tenant = %#v, want %#v", diagnosticStore.tenant, wantTenant)
+	}
+	if diagnosticStore.diagnostic.MessageID != diagnostic.MessageID {
+		t.Fatalf("diagnostic message ID = %q, want %q", diagnosticStore.diagnostic.MessageID, diagnostic.MessageID)
 	}
 }
 
@@ -320,7 +389,7 @@ func TestRun_ReaderError(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, writer, &http.Client{}, logger)
+	runner := New(RunnerDeps{Registry: registry, TransactionWriter: writer, HTTPClient: &http.Client{}, Logger: logger})
 
 	cfg := &config.App{}
 
@@ -362,7 +431,7 @@ func TestRun_SinkError(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, writer, &http.Client{}, logger)
+	runner := New(RunnerDeps{Registry: registry, TransactionWriter: writer, HTTPClient: &http.Client{}, Logger: logger})
 
 	cfg := &config.App{}
 
@@ -399,7 +468,7 @@ func TestRun_PassesPersistedReaderConfigToPlugin(t *testing.T) {
 		hasConfig:    true,
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, writer, &http.Client{}, logger)
+	runner := New(RunnerDeps{Registry: registry, TransactionWriter: writer, HTTPClient: &http.Client{}, Logger: logger})
 
 	err := runner.Run(context.Background(), RunConfig{
 		ReaderName:   "test-reader",
@@ -440,7 +509,7 @@ func TestRun_ContextCancellation(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, writer, &http.Client{}, logger)
+	runner := New(RunnerDeps{Registry: registry, TransactionWriter: writer, HTTPClient: &http.Client{}, Logger: logger})
 
 	cfg := &config.App{}
 
@@ -481,7 +550,7 @@ func TestRun_NewReaderError(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, &mockTransactionWriter{}, &http.Client{}, logger)
+	runner := New(RunnerDeps{Registry: registry, TransactionWriter: &mockTransactionWriter{}, HTTPClient: &http.Client{}, Logger: logger})
 
 	cfg := &config.App{}
 
@@ -518,7 +587,7 @@ func TestRun_NewSinkError(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, nil, &http.Client{}, logger)
+	runner := New(RunnerDeps{Registry: registry, HTTPClient: &http.Client{}, Logger: logger})
 
 	cfg := &config.App{}
 
@@ -577,7 +646,7 @@ func TestRunnerSinkErrorDeadlock(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	runner := New(registry, writer, &http.Client{}, logger)
+	runner := New(RunnerDeps{Registry: registry, TransactionWriter: writer, HTTPClient: &http.Client{}, Logger: logger})
 
 	runCfg := RunConfig{
 		ReaderName: "test-reader",

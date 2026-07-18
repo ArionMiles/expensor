@@ -95,7 +95,7 @@ type daemonCoordinator struct {
 	st                daemonStore
 	runtimeStore      daemonRuntimeStore
 	resolverStore     categorySnapshotStore
-	diagnostics       api.DiagnosticSink
+	diagnostics       daemon.DiagnosticStore
 	transactionWriter store.TransactionBatchWriter
 	dm                *daemonManager
 	logger            *slog.Logger
@@ -331,17 +331,22 @@ func (c *daemonCoordinator) runDaemon(
 		stateManager = state.NewDBManager(c.runtimeStore, run.tenant, c.logger)
 	}
 
-	runner := daemon.New(c.registry, c.transactionWriter, httpClient, c.logger)
+	runner := daemon.New(daemon.RunnerDeps{
+		Registry:          c.registry,
+		TransactionWriter: c.transactionWriter,
+		Diagnostics:       c.diagnostics,
+		HTTPClient:        httpClient,
+		Logger:            c.logger,
+	})
 	runCfg := daemon.RunConfig{
-		ReaderName:     run.readerName,
-		Tenant:         run.tenant,
-		Config:         &run.cfg,
-		Rules:          run.compiledRules,
-		Resolver:       run.resolver,
-		StateManager:   stateManager,
-		DiagnosticSink: c.diagnostics,
-		RuntimeStore:   c.runtimeStore,
-		ForceRescan:    run.forceRescan,
+		ReaderName:   run.readerName,
+		Tenant:       run.tenant,
+		Config:       &run.cfg,
+		Rules:        run.compiledRules,
+		Resolver:     run.resolver,
+		StateManager: stateManager,
+		RuntimeStore: c.runtimeStore,
+		ForceRescan:  run.forceRescan,
 	}
 
 	c.logger.Info("daemon starting", "reader", run.readerName)

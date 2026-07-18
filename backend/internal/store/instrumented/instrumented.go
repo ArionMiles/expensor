@@ -1115,20 +1115,11 @@ func (s *Store) UpdateExtractionDiagnosticStatus(ctx context.Context, tenant sto
 	return row, err
 }
 
-func (s *Store) RecordExtractionDiagnostic(ctx context.Context, diagnostic api.ExtractionDiagnostic) error {
-	ctx, span := s.scope.Start(ctx, "store.diagnostics.record_extraction")
-	defer span.End()
-
-	err := s.diagnostics.RecordExtractionDiagnostic(ctx, diagnostic)
-	s.recordOperation(ctx, "diagnostics.record_extraction", err)
-	return err
-}
-
-func (s *Store) RecordTenantExtractionDiagnostic(ctx context.Context, tenant store.Tenant, diagnostic api.ExtractionDiagnostic) error {
+func (s *Store) RecordExtractionDiagnostic(ctx context.Context, tenant store.Tenant, diagnostic api.ExtractionDiagnostic) error {
 	ctx, span := s.scope.Start(ctx, "store.diagnostics.record_tenant_extraction")
 	defer span.End()
 
-	err := s.diagnostics.RecordTenantExtractionDiagnostic(ctx, tenant, diagnostic)
+	err := s.diagnostics.RecordExtractionDiagnostic(ctx, tenant, diagnostic)
 	s.recordOperation(ctx, "diagnostics.record_tenant_extraction", err)
 	return err
 }

@@ -10,12 +10,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 )
 
-const diagnosticColumns = `
-	id::text, status, reader, COALESCE(message_id, ''), source, sender, sender_email, subject, email_body,
-	received_at, snippet, rule_id::text, rule_name, amount_regex, merchant_regex, currency_regex, failure_reasons,
-	created_at, updated_at, resolved_at
-`
-
 func nullableString(value string) any {
 	if value == "" {
 		return nil

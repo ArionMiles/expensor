@@ -28,6 +28,9 @@ type insertParams struct {
 }
 
 func insertForTest(ctx context.Context, st *Store, p insertParams) (string, error) {
+	if p.Tenant.ID == "" {
+		p.Tenant = testTenantForStore(st)
+	}
 	if p.Currency == "" {
 		p.Currency = defaultTransactionCurrency
 	}
@@ -48,13 +51,39 @@ func insertForTest(ctx context.Context, st *Store, p insertParams) (string, erro
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULLIF($12, ''), $13)
 		RETURNING id
 	`,
-		tenantIDParam(p.Tenant), p.MessageID, p.Amount, p.Currency, p.Timestamp,
+		p.Tenant.ID, p.MessageID, p.Amount, p.Currency, p.Timestamp,
 		p.MerchantInfo, p.Category, p.Source, p.SourceType, p.SourceLabel, p.Bank, p.Bucket, p.Description,
 	).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("insert transaction for test: %w", err)
 	}
 	return id, nil
+}
+
+func testTenantForStore(st *Store) store.Tenant {
+	value, ok := testStores.Load(st)
+	if !ok {
+		panic("test store tenant is not registered")
+	}
+	ts := value.(*testStore)
+	ts.tenantOnce.Do(func() {
+		user, err := st.CreateUser(context.Background(), store.CreateUserInput{
+			Email:        "test-tenant@example.com",
+			DisplayName:  "Test Tenant",
+			Role:         store.UserRoleUser,
+			AvatarKey:    "default",
+			PasswordHash: "$2a$10$abcdefghijklmnopqrstuu6Z6RMcYbqVvB6KZlSmLfHLj6y8s3zme",
+		})
+		if err != nil {
+			ts.tenantErr = err
+			return
+		}
+		ts.tenant = store.Tenant{ID: user.TenantID}
+	})
+	if ts.tenantErr != nil {
+		panic(ts.tenantErr)
+	}
+	return ts.tenant
 }
 
 func poolForTest(st *Store) *pgxpool.Pool {

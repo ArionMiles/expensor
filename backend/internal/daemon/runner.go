@@ -24,37 +24,38 @@ import (
 type Runner struct {
 	registry          *plugins.Registry
 	transactionWriter store.TransactionBatchWriter
+	diagnostics       DiagnosticStore
 	httpClient        *http.Client
 	logger            *slog.Logger
 	scope             *observability.Scope
 }
 
-// New creates a new daemon runner.
-func New(registry *plugins.Registry, transactionWriter store.TransactionBatchWriter, httpClient *http.Client, logger *slog.Logger) *Runner {
-	return NewWithScope(registry, transactionWriter, httpClient, logger, nil)
+// RunnerDeps contains the application dependencies for a daemon runner.
+type RunnerDeps struct {
+	Registry          *plugins.Registry
+	TransactionWriter store.TransactionBatchWriter
+	Diagnostics       DiagnosticStore
+	HTTPClient        *http.Client
+	Logger            *slog.Logger
+	Scope             *observability.Scope
 }
 
-// NewWithScope creates a daemon runner with an explicit observability scope.
-func NewWithScope(
-	registry *plugins.Registry,
-	transactionWriter store.TransactionBatchWriter,
-	httpClient *http.Client,
-	logger *slog.Logger,
-	scope *observability.Scope,
-) *Runner {
-	if logger == nil {
-		logger = slog.Default()
+// New creates a new daemon runner.
+func New(deps RunnerDeps) *Runner {
+	if deps.Logger == nil {
+		deps.Logger = slog.Default()
 	}
-	if scope == nil {
-		scope = observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/internal/daemon")
+	if deps.Scope == nil {
+		deps.Scope = observability.NewScope(deps.Logger, "github.com/ArionMiles/expensor/backend/internal/daemon")
 	}
 
 	return &Runner{
-		registry:          registry,
-		transactionWriter: transactionWriter,
-		httpClient:        httpClient,
-		logger:            logger,
-		scope:             scope,
+		registry:          deps.Registry,
+		transactionWriter: deps.TransactionWriter,
+		diagnostics:       deps.Diagnostics,
+		httpClient:        deps.HTTPClient,
+		logger:            deps.Logger,
+		scope:             deps.Scope,
 	}
 }
 
@@ -63,18 +64,38 @@ type TransactionSink interface {
 	Write(ctx context.Context, in <-chan *api.TransactionDetails, ackChan chan<- string) error
 }
 
+// DiagnosticStore persists extraction diagnostics for a tenant-scoped run.
+type DiagnosticStore interface {
+	RecordExtractionDiagnostic(ctx context.Context, tenant store.Tenant, diagnostic api.ExtractionDiagnostic) error
+}
+
+type tenantDiagnosticSink struct {
+	store  DiagnosticStore
+	tenant store.Tenant
+}
+
+func (s tenantDiagnosticSink) RecordExtractionDiagnostic(ctx context.Context, diagnostic api.ExtractionDiagnostic) error {
+	return s.store.RecordExtractionDiagnostic(ctx, s.tenant, diagnostic)
+}
+
+func (r *Runner) diagnosticSink(tenant store.Tenant) api.DiagnosticSink {
+	if r.diagnostics == nil {
+		return nil
+	}
+	return tenantDiagnosticSink{store: r.diagnostics, tenant: tenant}
+}
+
 // RunConfig holds the configuration for running the daemon.
 type RunConfig struct {
 	// ReaderName is the provider name of the reader to use (e.g. "gmail").
 	// Set by the web UI via POST /api/daemon/start.
-	ReaderName     string
-	Tenant         store.Tenant
-	Config         *config.App
-	Rules          []api.Rule
-	Resolver       api.CategoryResolver
-	StateManager   *state.Manager
-	DiagnosticSink api.DiagnosticSink
-	RuntimeStore   ReaderRuntimeStore
+	ReaderName   string
+	Tenant       store.Tenant
+	Config       *config.App
+	Rules        []api.Rule
+	Resolver     api.CategoryResolver
+	StateManager *state.Manager
+	RuntimeStore ReaderRuntimeStore
 	// ForceRescan bypasses state deduplication for the current run.
 	// When true, StateManager should be nil — readers handle nil gracefully.
 	ForceRescan bool
@@ -117,7 +138,7 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 		Rules:          runCfg.Rules,
 		Resolver:       runCfg.Resolver,
 		StateManager:   runCfg.StateManager,
-		DiagnosticSink: runCfg.DiagnosticSink,
+		DiagnosticSink: r.diagnosticSink(runCfg.Tenant),
 		Logger:         r.logger.With("component", "reader", "provider", runCfg.ReaderName),
 	})
 	if err != nil {

@@ -28,7 +28,7 @@ type scheduledScanRunner struct {
 	resolver          api.CategoryResolver
 	st                daemonStore
 	runtimeStore      daemonRuntimeStore
-	diagnostics       api.DiagnosticSink
+	diagnostics       daemon.DiagnosticStore
 	transactionWriter store.TransactionBatchWriter
 	logger            *slog.Logger
 }
@@ -57,17 +57,22 @@ func (r *scheduledScanRunner) Run(ctx context.Context, tenant store.Tenant, read
 		}
 	}
 
-	runner := daemon.New(r.registry, r.transactionWriter, httpClient, r.logger)
+	runner := daemon.New(daemon.RunnerDeps{
+		Registry:          r.registry,
+		TransactionWriter: r.transactionWriter,
+		Diagnostics:       r.diagnostics,
+		HTTPClient:        httpClient,
+		Logger:            r.logger,
+	})
 	err = runner.Run(ctx, daemon.RunConfig{
-		ReaderName:     readerName,
-		Tenant:         tenant,
-		Config:         &runCfg,
-		Rules:          rules.MergeRules(r.systemRules, loadUserRules(ctx, r.st, tenant, r.logger)),
-		Resolver:       r.resolver,
-		StateManager:   state.NewDBManager(r.runtimeStore, tenant, r.logger),
-		DiagnosticSink: r.diagnostics,
-		RuntimeStore:   r.runtimeStore,
-		ForceRescan:    false,
+		ReaderName:   readerName,
+		Tenant:       tenant,
+		Config:       &runCfg,
+		Rules:        rules.MergeRules(r.systemRules, loadUserRules(ctx, r.st, tenant, r.logger)),
+		Resolver:     r.resolver,
+		StateManager: state.NewDBManager(r.runtimeStore, tenant, r.logger),
+		RuntimeStore: r.runtimeStore,
+		ForceRescan:  false,
 	})
 	if err != nil && oauth.IsInvalidGrant(err) {
 		return scanscheduler.NewInvalidGrantFailure(err)

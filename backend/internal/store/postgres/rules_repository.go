@@ -13,6 +13,8 @@ type rulesRepository struct {
 	pool *pgxpool.Pool
 }
 
+const importUserRulesConflictClause = `ON CONFLICT (tenant_id, name) WHERE tenant_id IS NOT NULL AND predefined = false`
+
 func newRulesRepository(deps repositoryDependencies) *rulesRepository {
 	return &rulesRepository{
 		pool: deps.pool,
@@ -50,9 +52,9 @@ func (r *rulesRepository) ListRules(ctx context.Context, tenant store.Tenant) ([
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+ruleColumns+`
 			 FROM rules
-			 WHERE predefined = true OR tenant_id IS NOT DISTINCT FROM $1
+			 WHERE predefined = true OR tenant_id = $1
 			 ORDER BY predefined, name`,
-		tenantIDParam(tenant))
+		tenant.ID)
 	if err != nil {
 		return nil, fmt.Errorf("listing rules: %w", err)
 	}
@@ -66,8 +68,8 @@ func (r *rulesRepository) ListRules(ctx context.Context, tenant store.Tenant) ([
 
 func (r *rulesRepository) GetRule(ctx context.Context, tenant store.Tenant, id string) (*store.RuleRow, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT `+ruleColumns+` FROM rules WHERE id = $1 AND (predefined = true OR tenant_id IS NOT DISTINCT FROM $2)`,
-		id, tenantIDParam(tenant))
+		`SELECT `+ruleColumns+` FROM rules WHERE id = $1 AND (predefined = true OR tenant_id = $2)`,
+		id, tenant.ID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching rule: %w", err)
 	}
@@ -90,7 +92,7 @@ func (r *rulesRepository) CreateRule(ctx context.Context, tenant store.Tenant, r
 			)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 			 RETURNING `+ruleColumns,
-		tenantIDParam(tenant), rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
+		tenant.ID, rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
 		rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
 		ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
 	)
@@ -120,11 +122,11 @@ func (r *rulesRepository) UpdateRule(ctx context.Context, tenant store.Tenant, i
 			 SET name=$2, sender_email=$3, sender_emails=$4, subject_contains=$5,
 			     amount_regex=$6, merchant_regex=$7, currency_regex=$8,
 			     transaction_source=$9, source_type=$10, source_label=$11, bank=$12, updated_at=NOW()
-			 WHERE id=$1 AND predefined = false AND tenant_id IS NOT DISTINCT FROM $13
+			 WHERE id=$1 AND predefined = false AND tenant_id = $13
 			 RETURNING `+ruleColumns,
 		id, rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
 		rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
-		ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank, tenantIDParam(tenant),
+		ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank, tenant.ID,
 	)
 	if err != nil {
 		if isRuleNameConflict(err) {
@@ -148,8 +150,8 @@ func (r *rulesRepository) UpdateRule(ctx context.Context, tenant store.Tenant, i
 
 func (r *rulesRepository) DeleteRule(ctx context.Context, tenant store.Tenant, id string) error {
 	tag, err := r.pool.Exec(ctx,
-		`DELETE FROM rules WHERE id=$1 AND predefined = false AND tenant_id IS NOT DISTINCT FROM $2`,
-		id, tenantIDParam(tenant))
+		`DELETE FROM rules WHERE id=$1 AND predefined = false AND tenant_id = $2`,
+		id, tenant.ID)
 	if err != nil {
 		return fmt.Errorf("deleting rule: %w", err)
 	}
@@ -185,14 +187,13 @@ func (r *rulesRepository) ImportUserRules(ctx context.Context, tenant store.Tena
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	conflictClause := importUserRulesConflictClause(tenant)
 	for _, rule := range rules {
 		_, err := tx.Exec(ctx, `
 				INSERT INTO rules
 				  (tenant_id, name, sender_email, sender_emails, subject_contains, amount_regex, merchant_regex,
 				   currency_regex, transaction_source, source_type, source_label, bank)
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-				`+conflictClause+` DO UPDATE SET
+				`+importUserRulesConflictClause+` DO UPDATE SET
 					sender_email       = EXCLUDED.sender_email,
 					sender_emails      = EXCLUDED.sender_emails,
 					subject_contains   = EXCLUDED.subject_contains,
@@ -204,7 +205,7 @@ func (r *rulesRepository) ImportUserRules(ctx context.Context, tenant store.Tena
 					source_label       = EXCLUDED.source_label,
 					bank               = EXCLUDED.bank,
 					updated_at         = NOW()`,
-			tenantIDParam(tenant), rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
+			tenant.ID, rule.Name, primarySender(rule), normalizedRuleSenders(rule), rule.SubjectContains,
 			rule.AmountRegex, rule.MerchantRegex, rule.CurrencyRegex,
 			ruleSourceLabel(rule), rule.SourceType, ruleSourceLabel(rule), rule.Bank,
 		)
@@ -213,11 +214,4 @@ func (r *rulesRepository) ImportUserRules(ctx context.Context, tenant store.Tena
 		}
 	}
 	return tx.Commit(ctx)
-}
-
-func importUserRulesConflictClause(tenant store.Tenant) string {
-	if tenantIDParam(tenant) == nil {
-		return "ON CONFLICT (name) WHERE tenant_id IS NULL AND predefined = false"
-	}
-	return "ON CONFLICT (tenant_id, name) WHERE tenant_id IS NOT NULL AND predefined = false"
 }

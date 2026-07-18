@@ -29,8 +29,8 @@ func newTaxonomyRepository(deps repositoryDependencies) *taxonomyRepository {
 func (r *taxonomyRepository) ListLabels(ctx context.Context, tenant store.Tenant) ([]store.Label, error) {
 	labels := []store.Label{}
 	rows, err := r.pool.Query(ctx,
-		`SELECT name, color, created_at FROM labels WHERE tenant_id IS NOT DISTINCT FROM $1 ORDER BY name`,
-		tenantIDParam(tenant),
+		`SELECT name, color, created_at FROM labels WHERE tenant_id = $1 ORDER BY name`,
+		tenant.ID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("listing labels: querying labels: %w", err)
@@ -52,8 +52,8 @@ func (r *taxonomyRepository) ListLabels(ctx context.Context, tenant store.Tenant
 
 func (r *taxonomyRepository) CreateLabel(ctx context.Context, tenant store.Tenant, name, color string) error {
 	_, err := r.pool.Exec(ctx,
-		labelUpsertSQL(tenant),
-		tenantIDParam(tenant), name, color,
+		labelUpsertSQL,
+		tenant.ID, name, color,
 	)
 	if err != nil {
 		return fmt.Errorf("creating label: executing label insert: %w", err)
@@ -61,19 +61,17 @@ func (r *taxonomyRepository) CreateLabel(ctx context.Context, tenant store.Tenan
 	return nil
 }
 
-func labelUpsertSQL(tenant store.Tenant) string {
-	if tenantIDParam(tenant) == nil {
-		return `INSERT INTO labels (tenant_id, name, color) VALUES ($1, $2, $3)
-			ON CONFLICT (name) WHERE tenant_id IS NULL DO NOTHING`
-	}
-	return `INSERT INTO labels (tenant_id, name, color) VALUES ($1, $2, $3)
-			ON CONFLICT (tenant_id, name) WHERE tenant_id IS NOT NULL DO NOTHING`
-}
+const labelUpsertSQL = `
+	INSERT INTO labels (tenant_id, name, color)
+	VALUES ($1, $2, $3)
+	ON CONFLICT (tenant_id, name) WHERE tenant_id IS NOT NULL
+	DO NOTHING
+`
 
 func (r *taxonomyRepository) UpdateLabel(ctx context.Context, tenant store.Tenant, name, color string) error {
 	tag, err := r.pool.Exec(ctx,
-		`UPDATE labels SET color = $1 WHERE name = $2 AND tenant_id IS NOT DISTINCT FROM $3`,
-		color, name, tenantIDParam(tenant),
+		`UPDATE labels SET color = $1 WHERE name = $2 AND tenant_id = $3`,
+		color, name, tenant.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating label: executing label update: %w", err)
@@ -95,23 +93,23 @@ func (r *taxonomyRepository) DeleteLabel(ctx context.Context, tenant store.Tenan
 		if _, err := tx.Exec(ctx, `
 			DELETE FROM transaction_label_sources tls
 			USING transactions t
-			WHERE tls.transaction_id = t.id AND tls.label = $1 AND t.tenant_id IS NOT DISTINCT FROM $2
-		`, name, tenantIDParam(tenant)); err != nil {
+			WHERE tls.transaction_id = t.id AND tls.label = $1 AND t.tenant_id = $2
+		`, name, tenant.ID); err != nil {
 			return fmt.Errorf("deleting label: deleting label sources: %w", err)
 		}
 		if _, err := tx.Exec(ctx, `
 			DELETE FROM transaction_labels tl
 			USING transactions t
-			WHERE tl.transaction_id = t.id AND tl.label = $1 AND t.tenant_id IS NOT DISTINCT FROM $2
-		`, name, tenantIDParam(tenant)); err != nil {
+			WHERE tl.transaction_id = t.id AND tl.label = $1 AND t.tenant_id = $2
+		`, name, tenant.ID); err != nil {
 			return fmt.Errorf("deleting label: deleting transaction labels: %w", err)
 		}
 	}
 
-	if _, err := tx.Exec(ctx, `DELETE FROM label_merchants WHERE label = $1 AND tenant_id IS NOT DISTINCT FROM $2`, name, tenantIDParam(tenant)); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM label_merchants WHERE label = $1 AND tenant_id = $2`, name, tenant.ID); err != nil {
 		return fmt.Errorf("deleting label: deleting merchant mappings: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM labels WHERE name = $1 AND tenant_id IS NOT DISTINCT FROM $2`, name, tenantIDParam(tenant)); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM labels WHERE name = $1 AND tenant_id = $2`, name, tenant.ID); err != nil {
 		return fmt.Errorf("deleting label: executing label delete: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -128,8 +126,8 @@ func (r *taxonomyRepository) ApplyLabelByMerchant(ctx context.Context, tenant st
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	_, err = tx.Exec(ctx,
-		labelMerchantUpsertSQL(tenant),
-		tenantIDParam(tenant), label, pattern,
+		labelMerchantUpsertSQL,
+		tenant.ID, label, pattern,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("storing label merchant mapping: %w", err)
@@ -140,9 +138,9 @@ func (r *taxonomyRepository) ApplyLabelByMerchant(ctx context.Context, tenant st
 		 SELECT id, $1, 'merchant', $2
 		 FROM transactions
 		 WHERE merchant_info ILIKE '%' || $2 || '%'
-		   AND tenant_id IS NOT DISTINCT FROM $3
+		   AND tenant_id = $3
 		 ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING`,
-		label, pattern, tenantIDParam(tenant),
+		label, pattern, tenant.ID,
 	); err != nil {
 		return 0, fmt.Errorf("storing merchant label sources: %w", err)
 	}
@@ -151,9 +149,9 @@ func (r *taxonomyRepository) ApplyLabelByMerchant(ctx context.Context, tenant st
 		`INSERT INTO transaction_labels (transaction_id, label)
 		 SELECT id, $1 FROM transactions
 		 WHERE merchant_info ILIKE '%' || $2 || '%'
-		   AND tenant_id IS NOT DISTINCT FROM $3
+		   AND tenant_id = $3
 		 ON CONFLICT (transaction_id, label) DO NOTHING`,
-		label, pattern, tenantIDParam(tenant),
+		label, pattern, tenant.ID,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("applying label by merchant: %w", err)
@@ -165,16 +163,12 @@ func (r *taxonomyRepository) ApplyLabelByMerchant(ctx context.Context, tenant st
 	return tag.RowsAffected(), nil
 }
 
-func labelMerchantUpsertSQL(tenant store.Tenant) string {
-	if tenantIDParam(tenant) == nil {
-		return `INSERT INTO label_merchants (tenant_id, label, merchant_pattern)
-		 VALUES ($1, $2, $3)
-		 ON CONFLICT (label, merchant_pattern) WHERE tenant_id IS NULL DO NOTHING`
-	}
-	return `INSERT INTO label_merchants (tenant_id, label, merchant_pattern)
-		 VALUES ($1, $2, $3)
-		 ON CONFLICT (tenant_id, label, merchant_pattern) WHERE tenant_id IS NOT NULL DO NOTHING`
-}
+const labelMerchantUpsertSQL = `
+	INSERT INTO label_merchants (tenant_id, label, merchant_pattern)
+	VALUES ($1, $2, $3)
+	ON CONFLICT (tenant_id, label, merchant_pattern) WHERE tenant_id IS NOT NULL
+	DO NOTHING
+`
 
 func (r *taxonomyRepository) RemoveLabelByMerchant(ctx context.Context, tenant store.Tenant, label, pattern string) (int64, error) {
 	tx, err := r.pool.Begin(ctx)
@@ -185,8 +179,8 @@ func (r *taxonomyRepository) RemoveLabelByMerchant(ctx context.Context, tenant s
 
 	if _, err := tx.Exec(ctx,
 		`DELETE FROM label_merchants
-		 WHERE label = $1 AND merchant_pattern = $2 AND tenant_id IS NOT DISTINCT FROM $3`,
-		label, pattern, tenantIDParam(tenant),
+		 WHERE label = $1 AND merchant_pattern = $2 AND tenant_id = $3`,
+		label, pattern, tenant.ID,
 	); err != nil {
 		return 0, fmt.Errorf("removing merchant label mapping: %w", err)
 	}
@@ -203,8 +197,8 @@ func (r *taxonomyRepository) RemoveLabelByMerchant(ctx context.Context, tenant s
 		   AND tls.label = $1
 		   AND tls.source_type = 'merchant'
 		   AND tls.merchant_pattern = $2
-		   AND t.tenant_id IS NOT DISTINCT FROM $3`,
-		label, pattern, tenantIDParam(tenant),
+		   AND t.tenant_id = $3`,
+		label, pattern, tenant.ID,
 	); err != nil {
 		return 0, fmt.Errorf("removing merchant label sources: %w", err)
 	}
@@ -228,8 +222,8 @@ func loadMerchantLabelTransactionIDs(ctx context.Context, tx pgx.Tx, tenant stor
 		WHERE tls.label = $1
 		  AND tls.source_type = 'merchant'
 		  AND tls.merchant_pattern = $2
-		  AND t.tenant_id IS NOT DISTINCT FROM $3
-	`, label, pattern, tenantIDParam(tenant))
+		  AND t.tenant_id = $3
+	`, label, pattern, tenant.ID)
 	if err != nil {
 		return nil, fmt.Errorf("loading affected transactions: %w", err)
 	}
@@ -291,9 +285,9 @@ func (r *taxonomyRepository) GetLabelMappings(ctx context.Context, tenant store.
 	rows, err := r.pool.Query(ctx, `
 			SELECT label, merchant_pattern
 			FROM label_merchants
-			WHERE tenant_id IS NOT DISTINCT FROM $1
+			WHERE tenant_id = $1
 			ORDER BY label, merchant_pattern
-		`, tenantIDParam(tenant))
+		`, tenant.ID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching label mappings: %w", err)
 	}
@@ -311,7 +305,7 @@ func (r *taxonomyRepository) GetLabelMappings(ctx context.Context, tenant store.
 
 func (r *taxonomyRepository) listTaxonomyItems(ctx context.Context, tenant store.Tenant, query, itemName string) ([]taxonomyItem, error) {
 	items := []taxonomyItem{}
-	rows, err := r.pool.Query(ctx, query, tenantIDParam(tenant))
+	rows, err := r.pool.Query(ctx, query, tenant.ID)
 	if err != nil {
 		return nil, fmt.Errorf("listing %ss: %w", itemName, err)
 	}
@@ -346,8 +340,8 @@ func (r *taxonomyRepository) ListCategories(ctx context.Context, tenant store.Te
 
 func (r *taxonomyRepository) CreateCategory(ctx context.Context, tenant store.Tenant, name, description string) error {
 	_, err := r.pool.Exec(ctx,
-		taxonomyItemUpsertSQL(tenant, "categories"),
-		tenantIDParam(tenant), name, description,
+		taxonomyItemUpsertSQL("categories"),
+		tenant.ID, name, description,
 	)
 	if err != nil {
 		return fmt.Errorf("creating category: %w", err)
@@ -362,11 +356,11 @@ func (r *taxonomyRepository) DeleteCategory(ctx context.Context, tenant store.Te
 		removeFromTransactions: removeFromTransactions,
 		spec: taxonomyDeleteSpec{
 			kind:                   "category",
-			selectDefaultSQL:       `SELECT is_default FROM categories WHERE name = $1 AND tenant_id IS NOT DISTINCT FROM $2`,
-			deleteEmptyMappingsSQL: `DELETE FROM merchant_categories WHERE category = $1 AND bucket IS NULL AND mcc_code IS NULL AND tenant_id IS NOT DISTINCT FROM $2`,
-			clearMappingsSQL:       `UPDATE merchant_categories SET category = NULL, updated_at = NOW() WHERE category = $1 AND tenant_id IS NOT DISTINCT FROM $2`,
-			clearTransactionsSQL:   `UPDATE transactions SET category = '', updated_at = NOW() WHERE category = $1 AND tenant_id IS NOT DISTINCT FROM $2`,
-			deleteSQL:              `DELETE FROM categories WHERE name = $1 AND tenant_id IS NOT DISTINCT FROM $2`,
+			selectDefaultSQL:       `SELECT is_default FROM categories WHERE name = $1 AND tenant_id = $2`,
+			deleteEmptyMappingsSQL: `DELETE FROM merchant_categories WHERE category = $1 AND bucket IS NULL AND mcc_code IS NULL AND tenant_id = $2`,
+			clearMappingsSQL:       `UPDATE merchant_categories SET category = NULL, updated_at = NOW() WHERE category = $1 AND tenant_id = $2`,
+			clearTransactionsSQL:   `UPDATE transactions SET category = '', updated_at = NOW() WHERE category = $1 AND tenant_id = $2`,
+			deleteSQL:              `DELETE FROM categories WHERE name = $1 AND tenant_id = $2`,
 		},
 	})
 }
@@ -390,8 +384,8 @@ func (r *taxonomyRepository) ListBuckets(ctx context.Context, tenant store.Tenan
 
 func (r *taxonomyRepository) CreateBucket(ctx context.Context, tenant store.Tenant, name, description string) error {
 	_, err := r.pool.Exec(ctx,
-		taxonomyItemUpsertSQL(tenant, "buckets"),
-		tenantIDParam(tenant), name, description,
+		taxonomyItemUpsertSQL("buckets"),
+		tenant.ID, name, description,
 	)
 	if err != nil {
 		return fmt.Errorf("creating bucket: %w", err)
@@ -406,20 +400,16 @@ func (r *taxonomyRepository) DeleteBucket(ctx context.Context, tenant store.Tena
 		removeFromTransactions: removeFromTransactions,
 		spec: taxonomyDeleteSpec{
 			kind:                   "bucket",
-			selectDefaultSQL:       `SELECT is_default FROM buckets WHERE name = $1 AND tenant_id IS NOT DISTINCT FROM $2`,
-			deleteEmptyMappingsSQL: `DELETE FROM merchant_categories WHERE bucket = $1 AND category IS NULL AND mcc_code IS NULL AND tenant_id IS NOT DISTINCT FROM $2`,
-			clearMappingsSQL:       `UPDATE merchant_categories SET bucket = NULL, updated_at = NOW() WHERE bucket = $1 AND tenant_id IS NOT DISTINCT FROM $2`,
-			clearTransactionsSQL:   `UPDATE transactions SET bucket = '', updated_at = NOW() WHERE bucket = $1 AND tenant_id IS NOT DISTINCT FROM $2`,
-			deleteSQL:              `DELETE FROM buckets WHERE name = $1 AND tenant_id IS NOT DISTINCT FROM $2`,
+			selectDefaultSQL:       `SELECT is_default FROM buckets WHERE name = $1 AND tenant_id = $2`,
+			deleteEmptyMappingsSQL: `DELETE FROM merchant_categories WHERE bucket = $1 AND category IS NULL AND mcc_code IS NULL AND tenant_id = $2`,
+			clearMappingsSQL:       `UPDATE merchant_categories SET bucket = NULL, updated_at = NOW() WHERE bucket = $1 AND tenant_id = $2`,
+			clearTransactionsSQL:   `UPDATE transactions SET bucket = '', updated_at = NOW() WHERE bucket = $1 AND tenant_id = $2`,
+			deleteSQL:              `DELETE FROM buckets WHERE name = $1 AND tenant_id = $2`,
 		},
 	})
 }
 
-func taxonomyItemUpsertSQL(tenant store.Tenant, table string) string {
-	if tenantIDParam(tenant) == nil {
-		return fmt.Sprintf(`INSERT INTO %s (tenant_id, name, description) VALUES ($1, $2, NULLIF($3,''))
-		 ON CONFLICT (name) WHERE tenant_id IS NULL DO NOTHING`, table)
-	}
+func taxonomyItemUpsertSQL(table string) string {
 	return fmt.Sprintf(`INSERT INTO %s (tenant_id, name, description) VALUES ($1, $2, NULLIF($3,''))
 		 ON CONFLICT (tenant_id, name) WHERE tenant_id IS NOT NULL DO NOTHING`, table)
 }
@@ -428,8 +418,8 @@ func globalOrTenantTaxonomyQuery(table string) string {
 	return fmt.Sprintf(`
 		SELECT DISTINCT ON (name) name, COALESCE(description,''), is_default
 		FROM %s
-		WHERE tenant_id IS NULL OR tenant_id IS NOT DISTINCT FROM $1
-		ORDER BY name, (tenant_id IS NOT DISTINCT FROM $1) DESC
+		WHERE tenant_id IS NULL OR tenant_id = $1
+		ORDER BY name, (tenant_id = $1) DESC
 	`, table)
 }
 
@@ -473,7 +463,7 @@ func (r *taxonomyRepository) deleteNamedTaxonomy(
 
 func ensureTaxonomyCanBeDeleted(ctx context.Context, tx pgx.Tx, tenant store.Tenant, name string, spec taxonomyDeleteSpec) error {
 	var isDefault bool
-	err := tx.QueryRow(ctx, spec.selectDefaultSQL, name, tenantIDParam(tenant)).Scan(&isDefault)
+	err := tx.QueryRow(ctx, spec.selectDefaultSQL, name, tenant.ID).Scan(&isDefault)
 	if err != nil {
 		return notFound("store.taxonomy.delete_" + spec.kind)
 	}
@@ -484,7 +474,7 @@ func ensureTaxonomyCanBeDeleted(ctx context.Context, tx pgx.Tx, tenant store.Ten
 }
 
 func execTaxonomyDelete(ctx context.Context, tx pgx.Tx, input taxonomyDeleteInput) error {
-	tenantParam := tenantIDParam(input.tenant)
+	tenantParam := input.tenant.ID
 	name := input.name
 	spec := input.spec
 	if _, err := tx.Exec(ctx, spec.deleteEmptyMappingsSQL, name, tenantParam); err != nil {

@@ -15,6 +15,8 @@ type communityRepository struct {
 	pool *pgxpool.Pool
 }
 
+const merchantCategoryConflictClause = `ON CONFLICT (tenant_id, fragment) WHERE tenant_id IS NOT NULL`
+
 type categorySnapshotEntry struct {
 	fragment string
 	category string
@@ -61,8 +63,8 @@ func (r *communityRepository) CategorizeMerchant(ctx context.Context, tenant sto
 	tag, err := tx.Exec(ctx,
 		`UPDATE transactions
 		 SET category = $2, bucket = $3, updated_at = NOW()
-		 WHERE merchant_info = $1 AND tenant_id IS NOT DISTINCT FROM $4`,
-		merchant, category, bucket, tenantIDParam(tenant),
+		 WHERE merchant_info = $1 AND tenant_id = $4`,
+		merchant, category, bucket, tenant.ID,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("updating transactions for merchant %q: %w", merchant, err)
@@ -76,8 +78,8 @@ func (r *communityRepository) CategorizeMerchant(ctx context.Context, tenant sto
 		 SET category    = EXCLUDED.category,
 		     bucket      = EXCLUDED.bucket,
 		     user_locked = true,
-		     updated_at  = NOW()`, merchantCategoryConflict(tenant)),
-		tenantIDParam(tenant), merchant, category, bucket,
+		     updated_at  = NOW()`, merchantCategoryConflictClause),
+		tenant.ID, merchant, category, bucket,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("upserting merchant category for %q: %w", merchant, err)
@@ -87,13 +89,6 @@ func (r *communityRepository) CategorizeMerchant(ctx context.Context, tenant sto
 		return 0, fmt.Errorf("committing categorize-merchant transaction: %w", err)
 	}
 	return rowsUpdated, nil
-}
-
-func merchantCategoryConflict(tenant store.Tenant) string {
-	if tenantIDParam(tenant) == nil {
-		return "ON CONFLICT (fragment) WHERE tenant_id IS NULL"
-	}
-	return "ON CONFLICT (tenant_id, fragment) WHERE tenant_id IS NOT NULL"
 }
 
 func (r *communityRepository) applyTaxonomyByMerchant(
@@ -110,8 +105,8 @@ func (r *communityRepository) applyTaxonomyByMerchant(
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	tag, err := tx.Exec(ctx,
-		fmt.Sprintf(`UPDATE transactions SET %s = $2, updated_at = NOW() WHERE merchant_info = $1 AND tenant_id IS NOT DISTINCT FROM $3`, column),
-		merchant, value, tenantIDParam(tenant),
+		fmt.Sprintf(`UPDATE transactions SET %s = $2, updated_at = NOW() WHERE merchant_info = $1 AND tenant_id = $3`, column),
+		merchant, value, tenant.ID,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("updating transactions for merchant %q: %w", merchant, err)
@@ -124,8 +119,8 @@ func (r *communityRepository) applyTaxonomyByMerchant(
 		 %s DO UPDATE
 		 SET %s = EXCLUDED.%s,
 		     user_locked = true,
-		     updated_at = NOW()`, column, merchantCategoryConflict(tenant), column, column),
-		tenantIDParam(tenant), merchant, value,
+		     updated_at = NOW()`, column, merchantCategoryConflictClause, column, column),
+		tenant.ID, merchant, value,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("upserting merchant taxonomy for %q: %w", merchant, err)
@@ -146,8 +141,8 @@ func (r *communityRepository) removeTaxonomyByMerchant(
 ) (int64, error) {
 	tag, err := r.pool.Exec(ctx,
 		fmt.Sprintf(`UPDATE merchant_categories SET %s = NULL, updated_at = NOW()
-			WHERE fragment = $1 AND %s = $2 AND tenant_id IS NOT DISTINCT FROM $3`, column, column),
-		merchant, value, tenantIDParam(tenant),
+			WHERE fragment = $1 AND %s = $2 AND tenant_id = $3`, column, column),
+		merchant, value, tenant.ID,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("removing merchant taxonomy for %q: %w", merchant, err)
@@ -155,8 +150,8 @@ func (r *communityRepository) removeTaxonomyByMerchant(
 	rowsUpdated := tag.RowsAffected()
 	_, err = r.pool.Exec(ctx,
 		`DELETE FROM merchant_categories
-		 WHERE fragment = $1 AND category IS NULL AND bucket IS NULL AND mcc_code IS NULL AND tenant_id IS NOT DISTINCT FROM $2`,
-		merchant, tenantIDParam(tenant),
+		 WHERE fragment = $1 AND category IS NULL AND bucket IS NULL AND mcc_code IS NULL AND tenant_id = $2`,
+		merchant, tenant.ID,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("pruning empty merchant taxonomy for %q: %w", merchant, err)
@@ -167,11 +162,11 @@ func (r *communityRepository) removeTaxonomyByMerchant(
 func (r *communityRepository) getTaxonomyMappings(ctx context.Context, tenant store.Tenant, column string) (map[string][]string, error) {
 	mappings := map[string][]string{}
 	rows, err := r.pool.Query(ctx, fmt.Sprintf(
-		`SELECT %s, fragment FROM merchant_categories WHERE tenant_id IS NOT DISTINCT FROM $1 AND %s IS NOT NULL ORDER BY %s, fragment`,
+		`SELECT %s, fragment FROM merchant_categories WHERE tenant_id = $1 AND %s IS NOT NULL ORDER BY %s, fragment`,
 		column,
 		column,
 		column,
-	), tenantIDParam(tenant))
+	), tenant.ID)
 	if err != nil {
 		return nil, fmt.Errorf("listing merchant taxonomy mappings: %w", err)
 	}
