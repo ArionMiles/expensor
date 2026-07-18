@@ -165,3 +165,24 @@ func TestAPIErrorFallbackUsesUnifiedErrorResponse(t *testing.T) {
 		})
 	}
 }
+
+func TestAPIErrorFallbackPreservesPathValuesForMatchedRoutes(t *testing.T) {
+	mux := http.NewServeMux()
+	var gotID string
+	mux.HandleFunc("GET /api/widgets/{id}", func(w http.ResponseWriter, r *http.Request) {
+		gotID = r.PathValue("id")
+		w.WriteHeader(http.StatusNoContent)
+	})
+	handler := apiErrorFallback(mux)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/widgets/widget-123", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusNoContent)
+	}
+	if gotID != "widget-123" {
+		t.Fatalf("path value = %q, want %q", gotID, "widget-123")
+	}
+}

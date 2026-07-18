@@ -172,7 +172,11 @@ func registerMerchantRoutes(mux *http.ServeMux, h *Handlers) {
 func apiErrorFallback(mux *http.ServeMux) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		handler, pattern := mux.Handler(r)
-		if pattern != "" || !isAPIPath(r.URL.Path) {
+		if pattern != "" {
+			mux.ServeHTTP(w, r)
+			return
+		}
+		if !isAPIPath(r.URL.Path) {
 			handler.ServeHTTP(w, r)
 			return
 		}
