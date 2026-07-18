@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { LoaderCircle, Sparkles, X } from 'lucide-react'
+import { ApiError } from '@/api/client'
 import type { RuleDraftValidationIssue } from '@/api/types'
 import {
   useActiveReader,
@@ -395,6 +396,23 @@ ${sample.body.replace(/\r\n/g, '\n')}`
       }))
       return
     }
+
+    if (error instanceof ApiError) {
+      const sourceErrors: Pick<FieldErrors, 'sourceType' | 'bank'> = {}
+      for (const validationError of error.validationErrors) {
+        if (validationError.location !== 'body') continue
+        if (validationError.field === 'source.type') {
+          sourceErrors.sourceType = validationError.message
+        }
+        if (validationError.field === 'source.bank') {
+          sourceErrors.bank = validationError.message
+        }
+      }
+      if (Object.keys(sourceErrors).length > 0) {
+        setFieldErrors((current) => ({ ...current, ...sourceErrors }))
+      }
+    }
+
     setFormError(error.message)
   }
 
@@ -634,6 +652,14 @@ ${sample.body.replace(/\r\n/g, '\n')}`
           aria-label={t('rules.editor.ruleSettings')}
           className="space-y-4 rounded-xl border border-border bg-card p-4"
         >
+          {formError && (
+            <div
+              role="alert"
+              className="rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {formError}
+            </div>
+          )}
           <section className="space-y-2 border-b border-border pb-4">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {t('rules.editor.subjectContains')}
@@ -780,9 +806,13 @@ ${sample.body.replace(/\r\n/g, '\n')}`
               value={form.sourceType}
               options={facets?.source_types ?? []}
               customValues={customTypes}
-              onChange={(value) => updateForm({ sourceType: value })}
+              onChange={(value) => {
+                updateForm({ sourceType: value })
+                setFieldErrors((current) => ({ ...current, sourceType: undefined }))
+              }}
               onAdd={(value) => setCustomTypes((current) => uniqueSorted([...current, value]))}
               addLabel={(value) => t('rules.editor.addOption', { value })}
+              error={fieldErrors.sourceType}
             />
             <h2 className="border-t border-border pt-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {t('rules.editor.bankSection')}
@@ -793,9 +823,13 @@ ${sample.body.replace(/\r\n/g, '\n')}`
               value={form.bank}
               options={facets?.banks ?? []}
               customValues={customBanks}
-              onChange={(value) => updateForm({ bank: value })}
+              onChange={(value) => {
+                updateForm({ bank: value })
+                setFieldErrors((current) => ({ ...current, bank: undefined }))
+              }}
               onAdd={(value) => setCustomBanks((current) => uniqueSorted([...current, value]))}
               addLabel={(value) => t('rules.editor.addOption', { value })}
+              error={fieldErrors.bank}
             />
           </section>
         </aside>
@@ -998,8 +1032,6 @@ ${sample.body.replace(/\r\n/g, '\n')}`
                 </p>
               )}
             </div>
-
-            {formError && <p className="text-xs text-destructive">{formError}</p>}
           </aside>
         </div>
       </div>

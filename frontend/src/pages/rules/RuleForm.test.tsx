@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DisplayProvider } from '@/contexts/DisplayContext'
 import { I18nProvider } from '@/i18n/I18nProvider'
 import { createTestQueryClient } from '@/test/render'
+import { ApiError } from '@/api/client'
 import { saveRuleEmailSearchDraft } from './emailSearchDraft'
 import { RuleForm } from './RuleForm'
 
@@ -534,6 +535,39 @@ describe('RuleForm diagnostics', () => {
     expect(screen.getByText('Rule name already exists.')).toBeInTheDocument()
     expect(title).toHaveClass('border-destructive')
     expect(screen.queryByText('rule name already exists')).not.toBeInTheDocument()
+  })
+
+  it('shows rule source validation failures on the type and bank fields', async () => {
+    const user = userEvent.setup()
+    queryMocks.createRule.mockImplementation((_body, options) =>
+      options?.onError?.(
+        new ApiError('Request validation failed.', 'request-1', [
+          { field: 'source.type', location: 'body', message: 'is required' },
+          { field: 'source.bank', location: 'body', message: 'is required' },
+        ]),
+      ),
+    )
+
+    renderRuleForm('/rules/new', '/rules/new')
+
+    await user.type(screen.getByRole('textbox', { name: 'Rule name' }), 'New rule')
+    await user.type(screen.getByLabelText('Add sender'), 'alerts@example.com{Enter}')
+    fireEvent.change(within(screen.getByLabelText('Rule settings')).getByLabelText('Amount'), {
+      target: { value: '([0-9.]+)' },
+    })
+    fireEvent.change(within(screen.getByLabelText('Rule settings')).getByLabelText('Merchant'), {
+      target: { value: '(.+)' },
+    })
+    await user.click(screen.getByRole('button', { name: 'Save Rule' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Request validation failed.')
+    expect(screen.getByLabelText('Type')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText('Type')).toHaveClass('border-destructive')
+    expect(screen.getByLabelText('Bank')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText('Bank')).toHaveClass('border-destructive')
+    expect(within(screen.getByLabelText('Rule settings')).getAllByText('is required')).toHaveLength(
+      2,
+    )
   })
 
   it('asks how to save existing rules and can start a retroactive scan', async () => {

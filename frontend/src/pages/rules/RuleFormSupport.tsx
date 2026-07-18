@@ -38,6 +38,8 @@ export interface FieldErrors {
   amountRegex?: string
   merchantRegex?: string
   sampleSender?: string
+  sourceType?: string
+  bank?: string
 }
 
 export const RULE_CONTRIBUTION_GUIDE_URL =
@@ -270,6 +272,7 @@ type ComboboxProps = {
   onChange: (value: string) => void
   onAdd: (value: string) => void
   addLabel: (value: string) => string
+  error?: string
 }
 
 export function SourceValueCombobox({
@@ -281,6 +284,7 @@ export function SourceValueCombobox({
   onChange,
   onAdd,
   addLabel,
+  error,
 }: ComboboxProps) {
   const [open, setOpen] = useState(false)
   const [readOnly, setReadOnly] = useState(true)
@@ -328,6 +332,7 @@ export function SourceValueCombobox({
     },
   })
   const highlighted = navigation.highlightedIndex
+  const errorID = `${label}-error`
 
   return (
     <div ref={containerRef}>
@@ -354,8 +359,14 @@ export function SourceValueCombobox({
           data-lpignore="true"
           data-form-type="other"
           aria-autocomplete="list"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorID : undefined}
           {...navigation.getComboboxProps({ listboxVisible: open && optionCount > 0 })}
-          className="w-full rounded-lg border border-border bg-input px-3 py-2 pr-8 text-sm text-foreground outline-none transition-colors focus:border-primary"
+          className={`w-full rounded-lg border bg-input px-3 py-2 pr-8 text-sm text-foreground outline-none transition-colors ${
+            error
+              ? 'border-destructive focus:border-destructive'
+              : 'border-border focus:border-primary'
+          }`}
         />
         <span
           aria-hidden="true"
@@ -403,6 +414,11 @@ export function SourceValueCombobox({
           </li>
         )}
       </ComboboxListbox>
+      {error && (
+        <p id={errorID} className="mt-1 text-xs text-destructive">
+          {error}
+        </p>
+      )}
     </div>
   )
 }
