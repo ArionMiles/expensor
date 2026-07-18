@@ -5,6 +5,10 @@
       { "value": "Credit Card", "origin": "predefined" },
       { "value": "Debit Card", "origin": "predefined" },
       { "value": "UPI", "origin": "predefined" },
+      {
+        "value": "HDFC UPI Rupay Credit card",
+        "origin": "custom"
+      },
       { "value": "Mobile App", "origin": "predefined" },
       { "value": "NetBanking", "origin": "predefined" }
     ],
@@ -95,6 +99,20 @@
       "merchant_regex": "Info:\\s*(.*?)\\.",
       "currency_regex": "",
       "source": { "type": "Debit Card", "label": "ICICI Debit Card", "bank": "ICICI" }
-    }
+    },
+    {
+      "name": "HDFC UPI Rupay CC",
+      "sender_emails": [
+        "alerts@hdfcbank.net","alerts@hdfcbank.bank.in"
+      ],
+      "subject_contains": "❗  You have done a UPI txn. Check details!",
+      "amount_regex": "Rs\\.\\s*([\\d,]+(?:\\.\\d+)?)",
+      "merchant_regex": "(?:to\\s+\\S+\\s+(.+?)\\s+on\\s+\\d{2}-\\d{2}-\\d{2}|Paid to\\s*<b>([^.@<]+))",
+      "currency_regex": "",
+      "source": {
+        "type": "HDFC UPI Rupay Credit card",
+        "bank": "HDFC",
+        "label": "HDFC HDFC UPI Rupay Credit card"
+      }
   ]
 }
