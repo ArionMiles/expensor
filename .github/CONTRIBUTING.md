@@ -14,7 +14,7 @@ Be respectful and constructive in issues, pull requests, and discussions.
 ├── deploy/                  # Public deployment assets, including Docker Compose
 ├── frontend/                # React + Vite + Tailwind web UI and frontend-owned content
 ├── tests/                   # Component, contract, local DB, and integration helpers
-├── docs/                    # Project notes, deployment docs, i18n docs, screenshots, and test docs
+├── docs/                    # Deployment docs, i18n guides, and screenshots
 └── Taskfile.yml             # Build, lint, test, and dev automation
 ```
 
