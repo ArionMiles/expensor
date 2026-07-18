@@ -11,6 +11,14 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
+// currentBaseCurrency returns the base currency from the DB, falling back to INR.
+func (h *Handlers) currentBaseCurrency(ctx context.Context, tenant store.Tenant) string {
+	if val, err := h.settingsStore.GetAppConfig(ctx, tenant, "base_currency"); err == nil && val != "" {
+		return val
+	}
+	return defaultBaseCurrency
+}
+
 // ListBanks returns the embedded bank color mappings.
 // GET /api/config/banks
 // @Summary List bank color mappings
