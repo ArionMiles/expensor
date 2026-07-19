@@ -234,13 +234,20 @@ type RuleImportResponse struct {
 }
 
 type LLMProviderInfoResponse struct {
-	Name         string                   `json:"name" example:"openai"`
-	DisplayName  string                   `json:"display_name" example:"OpenAI"`
-	Description  string                   `json:"description" example:"Connect an OpenAI API key for usage-billed LLM workflows with structured outputs."`
-	AuthType     string                   `json:"auth_type" example:"api_key"`
-	Capabilities []string                 `json:"capabilities" example:"text_generation,json_schema"`
-	ConfigSchema map[string]any           `json:"config_schema,omitempty"`
-	ModelOptions []LLMProviderModelOption `json:"model_options,omitempty"`
+	Name           string                   `json:"name" example:"openai"`
+	DisplayName    string                   `json:"display_name" example:"OpenAI"`
+	APIKeyURL      string                   `json:"api_key_url,omitempty" example:"https://platform.openai.com/api-keys"`
+	APIKeyLinkText string                   `json:"api_key_link_text,omitempty" example:"OpenAI dashboard"`
+	DataUse        LLMProviderDataUse       `json:"data_use"`
+	AuthType       string                   `json:"auth_type" example:"api_key"`
+	Capabilities   []string                 `json:"capabilities" example:"text_generation,json_schema"`
+	ConfigSchema   map[string]any           `json:"config_schema,omitempty"`
+	ModelOptions   []LLMProviderModelOption `json:"model_options,omitempty"`
+}
+
+type LLMProviderDataUse struct {
+	Mode      string `json:"mode" example:"no_training_by_default"`
+	PolicyURL string `json:"policy_url" example:"https://platform.openai.com/docs/models/default-usage-policies-by-endpoint"`
 }
 
 type LLMProviderModelOption struct {

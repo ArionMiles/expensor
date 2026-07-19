@@ -2,10 +2,13 @@
 package catalog
 
 import (
+	"bytes"
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
+	"net/url"
 	"strings"
 
 	"github.com/ArionMiles/expensor/backend/internal/llm"
@@ -20,7 +23,8 @@ const (
 	gmailGuidePath       = "content/readers/gmail/guide.json"
 	thunderbirdGuidePath = "content/readers/thunderbird/guide.json"
 	promptPath           = "content/llm/prompts"
-	openAIModelsPath     = "content/llm/providers/openai_models.json"
+	openAIProviderPath   = "content/llm/providers/openai.json"
+	geminiProviderPath   = "content/llm/providers/gemini.json"
 )
 
 //go:embed content
@@ -28,12 +32,12 @@ var contentFS embed.FS
 
 // Content is the validated, typed application content loaded at startup.
 type Content struct {
-	Seed               store.SeedContent
-	SystemRules        []api.Rule
-	BanksJSON          []byte
-	ReaderGuides       map[string][]byte
-	PromptCatalog      *llm.PromptCatalog
-	OpenAIModelOptions []llm.ModelOption
+	Seed          store.SeedContent
+	SystemRules   []api.Rule
+	BanksJSON     []byte
+	ReaderGuides  map[string][]byte
+	PromptCatalog *llm.PromptCatalog
+	LLMProviders  map[string]llm.ProviderMetadata
 }
 
 // Load parses and validates all bundled application content.
@@ -95,11 +99,12 @@ func loadFromFS(fsys fs.FS) (Content, error) {
 	if prompts.Len() == 0 {
 		return Content{}, invalid("llm prompt catalog is empty")
 	}
-	models, err := decode[[]llm.ModelOption](fsys, openAIModelsPath)
+	openAIProvider, err := loadLLMProvider(fsys, openAIProviderPath, "openai", true)
 	if err != nil {
 		return Content{}, err
 	}
-	if err := validateModels(models); err != nil {
+	geminiProvider, err := loadLLMProvider(fsys, geminiProviderPath, "gemini", false)
+	if err != nil {
 		return Content{}, err
 	}
 
@@ -115,8 +120,11 @@ func loadFromFS(fsys fs.FS) (Content, error) {
 			"gmail":       gmailGuide,
 			"thunderbird": thunderbirdGuide,
 		},
-		PromptCatalog:      prompts,
-		OpenAIModelOptions: models,
+		PromptCatalog: prompts,
+		LLMProviders: map[string]llm.ProviderMetadata{
+			openAIProvider.Name: openAIProvider,
+			geminiProvider.Name: geminiProvider,
+		},
 	}, nil
 }
 
@@ -187,16 +195,127 @@ func loadGuide(fsys fs.FS, name string) ([]byte, error) {
 	return body, nil
 }
 
-func validateModels(models []llm.ModelOption) error {
-	if len(models) == 0 {
-		return invalid("OpenAI model catalog is empty")
+type llmConfigSchema struct {
+	Type string `json:"type"`
+}
+
+type llmProviderCatalog struct {
+	Name           string            `json:"name"`
+	DisplayName    string            `json:"display_name"`
+	APIKeyURL      string            `json:"api_key_url"`
+	APIKeyLinkText string            `json:"api_key_link_text"`
+	DataUse        llm.DataUseSpec   `json:"data_use"`
+	Auth           llm.AuthSpec      `json:"auth"`
+	ConfigSchema   json.RawMessage   `json:"config_schema"`
+	ModelOptions   []llm.ModelOption `json:"model_options"`
+}
+
+func (entry llmProviderCatalog) metadata() llm.ProviderMetadata {
+	return llm.ProviderMetadata{
+		Name:           entry.Name,
+		DisplayName:    entry.DisplayName,
+		APIKeyURL:      entry.APIKeyURL,
+		APIKeyLinkText: entry.APIKeyLinkText,
+		DataUse:        entry.DataUse,
+		Auth:           entry.Auth,
+		ConfigSchema:   entry.ConfigSchema,
+		ModelOptions:   entry.ModelOptions,
 	}
-	for _, model := range models {
-		if blank(model.ID) || blank(model.DisplayName) || blank(model.Quality) || blank(model.Cost) {
-			return invalid("OpenAI model catalog contains an incomplete entry")
+}
+
+func loadLLMProvider(fsys fs.FS, path, expectedName string, requireBaseURL bool) (llm.ProviderMetadata, error) {
+	entry, err := decodeStrict[llmProviderCatalog](fsys, path)
+	if err != nil {
+		return llm.ProviderMetadata{}, err
+	}
+	provider := entry.metadata()
+	if err := validateLLMProvider(expectedName, provider, requireBaseURL); err != nil {
+		return llm.ProviderMetadata{}, err
+	}
+	return provider, nil
+}
+
+func validateLLMProvider(expectedName string, provider llm.ProviderMetadata, requireBaseURL bool) error {
+	prefix := expectedName + " provider catalog"
+	if provider.Name != expectedName {
+		return invalid(prefix + " has an unexpected provider name")
+	}
+	if blank(provider.DisplayName) || blank(provider.APIKeyLinkText) {
+		return invalid(prefix + " contains incomplete display metadata")
+	}
+	if !validHTTPSURL(provider.APIKeyURL) || !validHTTPSURL(provider.DataUse.PolicyURL) {
+		return invalid(prefix + " contains an invalid external URL")
+	}
+	switch provider.DataUse.Mode {
+	case llm.DataUseNoTrainingByDefault, llm.DataUseFreeTierImprovement:
+	default:
+		return invalid(prefix + " contains an unsupported data-use mode")
+	}
+	if provider.Auth.Type != llm.AuthTypeAPIKey || !provider.Auth.Required {
+		return invalid(prefix + " must require API-key authentication")
+	}
+	var schema llmConfigSchema
+	if err := json.Unmarshal(provider.ConfigSchema, &schema); err != nil {
+		return invalid(prefix + " contains an invalid configuration schema")
+	}
+	if schema.Type != "object" {
+		return invalid(prefix + " configuration schema must describe an object")
+	}
+	modelDefault, ok := llm.ConfigStringDefault(provider.ConfigSchema, "model")
+	if !ok {
+		return invalid(prefix + " configuration schema must declare a model default")
+	}
+	if requireBaseURL {
+		baseURL, ok := llm.ConfigStringDefault(provider.ConfigSchema, "base_url")
+		if !ok || !validHTTPSURL(baseURL) {
+			return invalid(prefix + " configuration schema must declare a valid base URL default")
 		}
 	}
+	return validateModels(provider.DisplayName, provider.ModelOptions, modelDefault)
+}
+
+func validateModels(provider string, models []llm.ModelOption, defaultModel string) error {
+	if len(models) == 0 {
+		return invalid(provider + " model catalog is empty")
+	}
+	recommended := 0
+	for _, model := range models {
+		if blank(model.ID) || blank(model.DisplayName) || blank(model.Quality) || blank(model.Cost) {
+			return invalid(provider + " model catalog contains an incomplete entry")
+		}
+		if model.Recommended {
+			recommended++
+			if model.ID != defaultModel {
+				return invalid(provider + " model catalog default and recommended model differ")
+			}
+		}
+	}
+	if recommended != 1 {
+		return invalid(provider + " model catalog must contain exactly one recommended model")
+	}
 	return nil
+}
+
+func validHTTPSURL(value string) bool {
+	parsed, err := url.ParseRequestURI(strings.TrimSpace(value))
+	return err == nil && parsed.Scheme == "https" && parsed.Host != ""
+}
+
+func decodeStrict[T any](fsys fs.FS, name string) (T, error) {
+	var value T
+	body, err := read(fsys, name)
+	if err != nil {
+		return value, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&value); err != nil {
+		return value, errors.E("catalog.load", errors.Internal, fmt.Sprintf("parsing %s", name), err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return value, invalid(fmt.Sprintf("%s contains trailing JSON data", name))
+	}
+	return value, nil
 }
 
 func decode[T any](fsys fs.FS, name string) (T, error) {

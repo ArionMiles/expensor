@@ -48,11 +48,50 @@ function mockOpenAISettings({
     http.get('/api/llm/providers', () =>
       HttpResponse.json([
         {
-          name: 'openai',
-          display_name: 'OpenAI',
-          description: 'OpenAI API',
+          name: 'gemini',
+          display_name: 'Gemini',
+          api_key_url: 'https://aistudio.google.com/app/api-keys',
+          api_key_link_text: 'Google AI dashboard',
+          data_use: {
+            mode: 'free_tier_improvement',
+            policy_url: 'https://ai.google.dev/gemini-api/terms',
+          },
           auth_type: 'api_key',
           capabilities: ['text_generation', 'json_schema'],
+          config_schema: {
+            type: 'object',
+            properties: { model: { type: 'string', default: 'gemini-3.5-flash' } },
+          },
+          model_options: [
+            {
+              id: 'gemini-3.5-flash',
+              display_name: 'Gemini 3.5 Flash',
+              quality: 'High',
+              cost: 'Higher',
+              description: 'Recommended for rule drafting.',
+              recommended: true,
+            },
+          ],
+        },
+        {
+          name: 'openai',
+          display_name: 'OpenAI',
+          api_key_url: 'https://platform.openai.com/api-keys',
+          api_key_link_text: 'OpenAI dashboard',
+          data_use: {
+            mode: 'no_training_by_default',
+            policy_url:
+              'https://platform.openai.com/docs/models/default-usage-policies-by-endpoint',
+          },
+          auth_type: 'api_key',
+          capabilities: ['text_generation', 'json_schema'],
+          config_schema: {
+            type: 'object',
+            properties: {
+              model: { type: 'string', default: 'gpt-5.4-mini' },
+              base_url: { type: 'string', default: 'https://api.openai.com/v1' },
+            },
+          },
           model_options: [
             {
               id: 'gpt-5.4-mini',
@@ -72,6 +111,16 @@ function mockOpenAISettings({
           ],
         },
       ]),
+    ),
+    http.get('/api/llm/providers/gemini/status', () =>
+      HttpResponse.json({
+        name: 'gemini',
+        config: {},
+        config_present: false,
+        credentials_stored: false,
+        active: false,
+        ready: false,
+      }),
     ),
     http.get('/api/llm/providers/openai/status', () =>
       HttpResponse.json({
@@ -392,6 +441,31 @@ describe('Settings', () => {
     expect(await screen.findByText('Copied!')).toBeInTheDocument()
   })
 
+  it('uses URL-backed provider tabs with keyboard navigation and provider-specific fields', async () => {
+    const user = userEvent.setup()
+    mockOpenAISettings()
+
+    renderSettings('/settings?tab=ai&provider=gemini')
+
+    const geminiTab = await screen.findByRole('tab', { name: 'Gemini' })
+    const openAITab = screen.getByRole('tab', { name: 'OpenAI' })
+    expect(geminiTab).toHaveAttribute('aria-selected', 'true')
+    expect(openAITab).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByRole('link', { name: 'Google AI dashboard' })).toHaveAttribute(
+      'href',
+      'https://aistudio.google.com/app/api-keys',
+    )
+    expect(screen.getByText(/Gemini unpaid-service content may be reviewed/)).toBeInTheDocument()
+    expect(screen.queryByText('Base URL')).not.toBeInTheDocument()
+
+    geminiTab.focus()
+    await user.keyboard('{ArrowRight}')
+
+    expect(await screen.findByRole('tab', { name: 'OpenAI', selected: true })).toHaveFocus()
+    expect(screen.getByText('Base URL')).toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('/settings?tab=ai&provider=openai')
+  })
+
   it('saves OpenAI settings and tests the connection with normalized config', async () => {
     const user = userEvent.setup()
     const requests: Array<{ path: string; body?: unknown }> = []
@@ -399,14 +473,11 @@ describe('Settings', () => {
 
     renderSettings('/settings?tab=ai')
 
-    expect(await screen.findByRole('heading', { name: 'OpenAI' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /OpenAI API docs/ })).toHaveAttribute(
+    expect(await screen.findByRole('tab', { name: 'OpenAI', selected: true })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'OpenAI dashboard' })).toHaveAttribute(
       'href',
-      'https://developers.openai.com/api/reference/overview',
+      'https://platform.openai.com/api-keys',
     )
-    expect(screen.queryByDisplayValue('https://api.openai.com/v1')).not.toBeInTheDocument()
-
-    await user.click(screen.getByText('https://api.openai.com/v1'))
     expect(screen.queryByDisplayValue('https://api.openai.com/v1')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Edit base URL' }))
@@ -421,6 +492,8 @@ describe('Settings', () => {
     ).toBeInTheDocument()
     await user.click(await screen.findByText('GPT-5.4'))
     await user.type(screen.getByLabelText('API key'), 'sk-test')
+    await user.hover(screen.getByRole('button', { name: 'Test' }))
+    expect(await screen.findByText('Test')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Test' }))
 
     await waitFor(() =>
@@ -442,11 +515,11 @@ describe('Settings', () => {
 
     renderSettings('/settings?tab=ai')
 
-    expect(await screen.findByRole('heading', { name: 'OpenAI' })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: 'OpenAI', selected: true })).toBeInTheDocument()
     await user.type(screen.getByLabelText('API key'), 'sk-test')
     await user.click(screen.getByRole('button', { name: 'Test' }))
 
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save and use' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Testing...' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Working...' })).not.toBeInTheDocument()
     expect(await screen.findByText('OpenAI connection is healthy.')).toBeInTheDocument()
@@ -459,10 +532,15 @@ describe('Settings', () => {
 
     renderSettings('/settings?tab=ai')
 
-    expect(await screen.findByText('Ready')).toBeInTheDocument()
+    expect(await screen.findByText('Active')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('••••••••••••••••')).toBeInTheDocument()
     expect(screen.queryByText('Stored encrypted in Expensor.')).not.toBeInTheDocument()
 
+    await user.hover(screen.getByRole('button', { name: 'Save and use' }))
+    expect(await screen.findByText('Save and use')).toBeInTheDocument()
+    await user.unhover(screen.getByRole('button', { name: 'Save and use' }))
+    await user.hover(screen.getByRole('button', { name: 'Disconnect' }))
+    expect(await screen.findByText('Disconnect')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Disconnect' }))
     expect(screen.getByRole('dialog', { name: 'Disconnect OpenAI?' })).toBeInTheDocument()
     await user.click(

@@ -516,6 +516,15 @@ definitions:
     required:
     - api_key
     type: object
+  httpapi.LLMProviderDataUse:
+    properties:
+      mode:
+        example: no_training_by_default
+        type: string
+      policy_url:
+        example: https://platform.openai.com/docs/models/default-usage-policies-by-endpoint
+        type: string
+    type: object
   httpapi.LLMProviderHealthResponse:
     properties:
       message:
@@ -527,6 +536,12 @@ definitions:
     type: object
   httpapi.LLMProviderInfoResponse:
     properties:
+      api_key_link_text:
+        example: OpenAI dashboard
+        type: string
+      api_key_url:
+        example: https://platform.openai.com/api-keys
+        type: string
       auth_type:
         example: api_key
         type: string
@@ -540,10 +555,8 @@ definitions:
       config_schema:
         additionalProperties: {}
         type: object
-      description:
-        example: Connect an OpenAI API key for usage-billed LLM workflows with structured
-          outputs.
-        type: string
+      data_use:
+        $ref: '#/definitions/httpapi.LLMProviderDataUse'
       display_name:
         example: OpenAI
         type: string

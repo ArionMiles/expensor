@@ -11,22 +11,51 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
-func TestNewClientRequiresAPIKeyAndAppliesDefaults(t *testing.T) {
-	_, err := NewClient(llm.ClientConfig{})
+func openAIMetadata(model, baseURL string) llm.ProviderMetadata {
+	return llm.ProviderMetadata{
+		DisplayName: "OpenAI",
+		ConfigSchema: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"model":{"type":"string","default":"` + model + `"},
+				"base_url":{"type":"string","default":"` + baseURL + `"}
+			}
+		}`),
+		ModelOptions: []llm.ModelOption{{ID: model, DisplayName: model, Quality: "High", Cost: "Medium", Recommended: true}},
+	}
+}
+
+func openAIProviderForTest(t *testing.T, model, baseURL string) llm.Provider {
+	t.Helper()
+	provider, err := Provider(openAIMetadata(model, baseURL))
+	if err != nil {
+		t.Fatalf("Provider() error = %v", err)
+	}
+	return provider
+}
+
+func TestProviderRequiresAPIKeyAndAppliesCatalogDefaults(t *testing.T) {
+	provider := openAIProviderForTest(t, "gpt-catalog", "https://catalog.openai.example/v1")
+	_, err := provider.NewClient(llm.ClientConfig{})
 	if err == nil {
-		t.Fatal("NewClient() error = nil, want missing API key error")
+		t.Fatal("NewClient error = nil, want missing API key error")
 	}
 
-	got, err := NewClient(llm.ClientConfig{Credentials: []byte(`{"api_key":" sk-test "}`)})
+	got, err := provider.NewClient(llm.ClientConfig{Credentials: []byte(`{"api_key":" sk-test "}`)})
 	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
+		t.Fatalf("NewClient error = %v", err)
 	}
 	client, ok := got.(*client)
 	if !ok {
 		t.Fatalf("client type = %T, want *client", got)
 	}
-	if client.apiKey != "sk-test" || client.model != defaultModel || client.baseURL != defaultBaseURL {
+	if client.apiKey != "sk-test" || client.model != "gpt-catalog" || client.baseURL != "https://catalog.openai.example/v1" {
 		t.Fatalf("client = %+v, want trimmed key and default model/base URL", client)
+	}
+	if provider.Metadata.Name != ProviderName || len(provider.Metadata.Capabilities) != 2 ||
+		provider.Metadata.Capabilities[0] != llm.CapabilityTextGeneration ||
+		provider.Metadata.Capabilities[1] != llm.CapabilityJSONSchema {
+		t.Fatalf("provider metadata = %#v, want OpenAI implementation capabilities", provider.Metadata)
 	}
 }
 
@@ -56,7 +85,8 @@ func TestCompleteUsesResponsesAPIWithStructuredOutputs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	got, err := NewClient(llm.ClientConfig{
+	provider := openAIProviderForTest(t, "gpt-default", "https://catalog.openai.example/v1")
+	got, err := provider.NewClient(llm.ClientConfig{
 		Config:      config,
 		Credentials: []byte(`{"api_key":"sk-test"}`),
 	})
@@ -132,7 +162,8 @@ func TestCompleteMapsOpenAIErrorResponses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	got, err := NewClient(llm.ClientConfig{
+	provider := openAIProviderForTest(t, "gpt-default", "https://catalog.openai.example/v1")
+	got, err := provider.NewClient(llm.ClientConfig{
 		Config:      config,
 		Credentials: []byte(`{"api_key":"sk-test"}`),
 	})

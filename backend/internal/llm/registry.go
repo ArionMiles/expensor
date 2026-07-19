@@ -25,6 +25,20 @@ type AuthSpec struct {
 	RequiredScopes []string `json:"required_scopes,omitempty"`
 }
 
+// DataUseMode describes how a provider may use API request content.
+type DataUseMode string
+
+const (
+	DataUseNoTrainingByDefault DataUseMode = "no_training_by_default"
+	DataUseFreeTierImprovement DataUseMode = "free_tier_improvement"
+)
+
+// DataUseSpec links provider metadata to its current data-use policy.
+type DataUseSpec struct {
+	Mode      DataUseMode `json:"mode"`
+	PolicyURL string      `json:"policy_url"`
+}
+
 // ModelOption describes one provider model preset exposed to setup UIs.
 type ModelOption struct {
 	ID          string `json:"id"`
@@ -37,13 +51,111 @@ type ModelOption struct {
 
 // ProviderMetadata describes an LLM provider for catalog display and routing.
 type ProviderMetadata struct {
-	Name         string          `json:"name"`
-	DisplayName  string          `json:"display_name,omitempty"`
-	Description  string          `json:"description,omitempty"`
-	Auth         AuthSpec        `json:"auth"`
-	ConfigSchema json.RawMessage `json:"config_schema,omitempty"`
-	Capabilities []Capability    `json:"capabilities"`
-	ModelOptions []ModelOption   `json:"model_options,omitempty"`
+	Name           string          `json:"name"`
+	DisplayName    string          `json:"display_name,omitempty"`
+	APIKeyURL      string          `json:"api_key_url,omitempty"`
+	APIKeyLinkText string          `json:"api_key_link_text,omitempty"`
+	DataUse        DataUseSpec     `json:"data_use"`
+	Auth           AuthSpec        `json:"auth"`
+	ConfigSchema   json.RawMessage `json:"config_schema,omitempty"`
+	Capabilities   []Capability    `json:"capabilities"`
+	ModelOptions   []ModelOption   `json:"model_options,omitempty"`
+}
+
+// ConfigStringDefault returns a string property's default from provider configuration metadata.
+func ConfigStringDefault(schema json.RawMessage, propertyName string) (string, bool) {
+	var document struct {
+		Properties map[string]struct {
+			Type    string          `json:"type"`
+			Default json.RawMessage `json:"default"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(schema, &document); err != nil {
+		return "", false
+	}
+	property, ok := document.Properties[propertyName]
+	if !ok || property.Type != "string" {
+		return "", false
+	}
+	var value string
+	if err := json.Unmarshal(property.Default, &value); err != nil {
+		return "", false
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", false
+	}
+	return value, true
+}
+
+// ValidateConfig checks persisted provider configuration against the fields declared by its catalog schema.
+func ValidateConfig(schema, config json.RawMessage) error {
+	const op = "llm.ValidateConfig"
+
+	var document struct {
+		Properties map[string]struct {
+			Type string `json:"type"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(schema, &document); err != nil {
+		return errors.E(op, errors.Internal, "decoding provider configuration schema", err)
+	}
+	var values map[string]json.RawMessage
+	if err := json.Unmarshal(config, &values); err != nil {
+		return errors.E(op, errors.InvalidInput, errors.User("Provider configuration must be a JSON object."), err)
+	}
+	if values == nil {
+		return errors.E(op, errors.InvalidInput, errors.User("Provider configuration must be a JSON object."))
+	}
+	for name, value := range values {
+		property, ok := document.Properties[name]
+		if !ok {
+			return errors.E(
+				op,
+				errors.InvalidInput,
+				errors.User(fmt.Sprintf("Provider configuration field %q is not supported.", name)),
+			)
+		}
+		if !configValueMatchesType(value, property.Type) {
+			return errors.E(
+				op,
+				errors.InvalidInput,
+				errors.User(fmt.Sprintf("Provider configuration field %q must be a %s.", name, property.Type)),
+			)
+		}
+	}
+	return nil
+}
+
+func configValueMatchesType(raw json.RawMessage, want string) bool {
+	var value any
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
+		return false
+	}
+	switch want {
+	case "string":
+		_, ok := value.(string)
+		return ok
+	case "boolean":
+		_, ok := value.(bool)
+		return ok
+	case "number":
+		_, ok := value.(json.Number)
+		return ok
+	case "integer":
+		number, ok := value.(json.Number)
+		return ok && !strings.ContainsAny(number.String(), ".eE")
+	case "array":
+		_, ok := value.([]any)
+		return ok
+	case "object":
+		_, ok := value.(map[string]any)
+		return ok
+	default:
+		return false
+	}
 }
 
 // Provider defines an LLM provider and the client it can construct.
