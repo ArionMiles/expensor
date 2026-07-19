@@ -73,11 +73,15 @@ func TestLLMProviderRuntimeLifecycle(t *testing.T) {
 		Cost        string `json:"cost"`
 	}
 	type provider struct {
-		Name         string        `json:"name"`
-		DisplayName  string        `json:"display_name"`
-		AuthType     string        `json:"auth_type"`
-		Capabilities []string      `json:"capabilities"`
-		ModelOptions []modelOption `json:"model_options"`
+		Name           string         `json:"name"`
+		DisplayName    string         `json:"display_name"`
+		APIKeyURL      string         `json:"api_key_url"`
+		APIKeyLinkText string         `json:"api_key_link_text"`
+		DataUse        map[string]any `json:"data_use"`
+		AuthType       string         `json:"auth_type"`
+		Capabilities   []string       `json:"capabilities"`
+		ConfigSchema   map[string]any `json:"config_schema"`
+		ModelOptions   []modelOption  `json:"model_options"`
 	}
 	type status struct {
 		Name              string          `json:"name"`
@@ -91,11 +95,20 @@ func TestLLMProviderRuntimeLifecycle(t *testing.T) {
 	providersResp := client.Get(t, "/api/llm/providers")
 	helpers.RequireStatus(t, providersResp, http.StatusOK)
 	providers := helpers.DecodeJSON[[]provider](t, providersResp)
-	if len(providers) != 1 || providers[0].Name != "openai" || providers[0].DisplayName != "OpenAI" {
+	if len(providers) != 2 || providers[0].Name != "gemini" || providers[1].Name != "openai" {
 		t.Fatalf("unexpected providers: %#v", providers)
 	}
-	if providers[0].AuthType != "api_key" || len(providers[0].ModelOptions) == 0 {
-		t.Fatalf("expected OpenAI API-key provider with model options, got %#v", providers[0])
+	gemini, openAI := providers[0], providers[1]
+	if gemini.DisplayName != "Gemini" || gemini.APIKeyLinkText != "Google AI dashboard" ||
+		gemini.DataUse["mode"] != "free_tier_improvement" || len(gemini.ModelOptions) == 0 {
+		t.Fatalf("unexpected Gemini provider metadata: %#v", gemini)
+	}
+	if _, ok := gemini.ConfigSchema["properties"].(map[string]any)["base_url"]; ok {
+		t.Fatalf("Gemini config schema unexpectedly exposes base_url: %#v", gemini.ConfigSchema)
+	}
+	if openAI.DisplayName != "OpenAI" || openAI.AuthType != "api_key" || openAI.APIKeyURL != "https://platform.openai.com/api-keys" ||
+		openAI.APIKeyLinkText != "OpenAI dashboard" || openAI.DataUse["mode"] != "no_training_by_default" || len(openAI.ModelOptions) == 0 {
+		t.Fatalf("unexpected OpenAI provider metadata: %#v", openAI)
 	}
 
 	cases := []struct {

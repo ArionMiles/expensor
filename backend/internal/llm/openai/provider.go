@@ -16,8 +16,6 @@ import (
 
 const (
 	ProviderName   = "openai"
-	defaultBaseURL = "https://api.openai.com/v1"
-	defaultModel   = "gpt-5.4-mini"
 	defaultTimeout = 60 * time.Second
 )
 
@@ -30,6 +28,11 @@ type providerConfig struct {
 	BaseURL string `json:"base_url"`
 }
 
+type clientDefaults struct {
+	Model   string
+	BaseURL string
+}
+
 type client struct {
 	apiKey     string
 	model      string
@@ -38,35 +41,34 @@ type client struct {
 }
 
 // Provider returns the OpenAI API-backed LLM provider registration.
-func Provider(modelOptions []llm.ModelOption) llm.Provider {
-	return llm.Provider{
-		Metadata: llm.ProviderMetadata{
-			Name:        ProviderName,
-			DisplayName: "OpenAI",
-			Description: "Connect an OpenAI API key for usage-billed LLM workflows with structured outputs.",
-			Auth: llm.AuthSpec{
-				Type:     llm.AuthTypeAPIKey,
-				Required: true,
-			},
-			ConfigSchema: json.RawMessage(`{
-				"type":"object",
-				"properties":{
-					"model":{"type":"string","default":"gpt-5.4-mini"},
-					"base_url":{"type":"string","default":"https://api.openai.com/v1"}
-				}
-			}`),
-			Capabilities: []llm.Capability{
-				llm.CapabilityTextGeneration,
-				llm.CapabilityJSONSchema,
-			},
-			ModelOptions: append([]llm.ModelOption(nil), modelOptions...),
-		},
-		NewClient: NewClient,
+func Provider(metadata llm.ProviderMetadata) (llm.Provider, error) {
+	const op = "llm.openai.Provider"
+
+	defaultModel, ok := llm.ConfigStringDefault(metadata.ConfigSchema, "model")
+	if !ok {
+		return llm.Provider{}, errors.E(op, errors.InvalidInput, "OpenAI provider metadata requires a model default")
 	}
+	defaultBaseURL, ok := llm.ConfigStringDefault(metadata.ConfigSchema, "base_url")
+	if !ok {
+		return llm.Provider{}, errors.E(op, errors.InvalidInput, "OpenAI provider metadata requires a base URL default")
+	}
+	defaults := clientDefaults{Model: defaultModel, BaseURL: defaultBaseURL}
+	metadata.Name = ProviderName
+	metadata.ConfigSchema = append(json.RawMessage(nil), metadata.ConfigSchema...)
+	metadata.ModelOptions = append([]llm.ModelOption(nil), metadata.ModelOptions...)
+	metadata.Capabilities = []llm.Capability{
+		llm.CapabilityTextGeneration,
+		llm.CapabilityJSONSchema,
+	}
+	return llm.Provider{
+		Metadata: metadata,
+		NewClient: func(input llm.ClientConfig) (llm.Client, error) {
+			return newClient(input, defaults)
+		},
+	}, nil
 }
 
-// NewClient builds an OpenAI API client from encrypted credentials and provider config.
-func NewClient(input llm.ClientConfig) (llm.Client, error) {
+func newClient(input llm.ClientConfig, defaults clientDefaults) (llm.Client, error) {
 	const op = "llm.openai.NewClient"
 
 	var creds credentials
@@ -79,7 +81,7 @@ func NewClient(input llm.ClientConfig) (llm.Client, error) {
 		return nil, errors.E(op, errors.FailedPrecondition, "OpenAI API key is not configured")
 	}
 
-	cfg := providerConfig{Model: defaultModel, BaseURL: defaultBaseURL}
+	cfg := providerConfig(defaults)
 	if len(input.Config) > 0 {
 		if err := json.Unmarshal(input.Config, &cfg); err != nil {
 			return nil, errors.E(op, errors.InvalidInput, "decoding OpenAI config", err)
@@ -87,11 +89,11 @@ func NewClient(input llm.ClientConfig) (llm.Client, error) {
 	}
 	cfg.Model = strings.TrimSpace(cfg.Model)
 	if cfg.Model == "" {
-		cfg.Model = defaultModel
+		cfg.Model = defaults.Model
 	}
 	cfg.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = defaultBaseURL
+		cfg.BaseURL = defaults.BaseURL
 	}
 
 	return &client{

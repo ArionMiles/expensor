@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
 import type {
   AdminUserPatch,
@@ -15,6 +15,7 @@ import type {
   ExtractionDiagnosticStatus,
   LoginRequest,
   LLMProviderConfig,
+  LLMProviderStatus,
   MonthlyBreakdownData,
   PasswordPatch,
   PreferencesPatch,
@@ -466,6 +467,32 @@ export function useLLMProviderStatus(name: string, enabled = true) {
   })
 }
 
+export function useLLMProviderStatuses(names: string[]) {
+  return useQueries({
+    queries: names.map((name) => ({
+      queryKey: queryKeys.llmProviderStatus(name),
+      queryFn: () => api.llm.status(name).then((response) => response.data),
+      enabled: name.length > 0,
+    })),
+  })
+}
+
+export function useActiveLLMProviderStatus() {
+  const providersQuery = useLLMProviders()
+  const providerNames = providersQuery.data?.map((provider) => provider.name) ?? []
+  const statusQueries = useLLMProviderStatuses(providerNames)
+  const statuses = statusQueries
+    .map((query) => query.data)
+    .filter((status): status is LLMProviderStatus => Boolean(status))
+  const activeStatus = statuses.find((status) => status.active)
+
+  return {
+    data: activeStatus,
+    provider: providersQuery.data?.find((provider) => provider.name === activeStatus?.name),
+    isLoading: providersQuery.isLoading || statusQueries.some((query) => query.isLoading),
+  }
+}
+
 export function useSaveLLMProviderConfig() {
   const qc = useQueryClient()
   return useMutation({
@@ -498,8 +525,8 @@ export function useActivateLLMProvider() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (name: string) => api.llm.activate(name).then((r) => r.data),
-    onSuccess: (_, name) => {
-      qc.invalidateQueries({ queryKey: queryKeys.llmProviderStatus(name) })
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.llmProviders })
     },
   })
 }
@@ -508,8 +535,8 @@ export function useDisconnectLLMProvider() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (name: string) => api.llm.disconnect(name),
-    onSuccess: (_, name) => {
-      qc.invalidateQueries({ queryKey: queryKeys.llmProviderStatus(name) })
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.llmProviders })
     },
   })
 }

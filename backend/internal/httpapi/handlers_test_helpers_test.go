@@ -1140,10 +1140,22 @@ func testLLMProviderWithFactory(
 	registry := llm.NewRegistry()
 	if err := registry.RegisterProvider(llm.Provider{
 		Metadata: llm.ProviderMetadata{
-			Name:         "openai",
-			DisplayName:  "OpenAI",
-			Description:  "OpenAI API provider",
-			Auth:         llm.AuthSpec{Type: llm.AuthTypeAPIKey, Required: true},
+			Name:           "openai",
+			DisplayName:    "OpenAI",
+			APIKeyURL:      "https://platform.openai.com/api-keys",
+			APIKeyLinkText: "OpenAI dashboard",
+			DataUse: llm.DataUseSpec{
+				Mode:      llm.DataUseNoTrainingByDefault,
+				PolicyURL: "https://platform.openai.com/docs/models/default-usage-policies-by-endpoint",
+			},
+			Auth: llm.AuthSpec{Type: llm.AuthTypeAPIKey, Required: true},
+			ConfigSchema: json.RawMessage(`{
+				"type":"object",
+				"properties":{
+					"model":{"type":"string","default":"gpt-5.4-mini"},
+					"base_url":{"type":"string","default":"https://api.openai.com/v1"}
+				}
+			}`),
 			Capabilities: []llm.Capability{llm.CapabilityTextGeneration, llm.CapabilityJSONSchema},
 			ModelOptions: []llm.ModelOption{{
 				ID:          "gpt-5.4-mini",

@@ -16,6 +16,9 @@ const queryMocks = vi.hoisted(() => ({
   draftPending: false,
   draftRule: vi.fn(),
   llmReady: true,
+  providerDisplayName: 'Gemini',
+  providerName: 'gemini',
+  userID: 'user-a',
   updateRule: vi.fn(),
   rescan: vi.fn(),
 }))
@@ -62,7 +65,12 @@ vi.mock('@/api/queries', () => ({
       buckets: [],
     },
   }),
-  useLLMProviderStatus: () => ({ data: { ready: queryMocks.llmReady } }),
+  useActiveLLMProviderStatus: () => ({
+    data: { name: queryMocks.providerName, ready: queryMocks.llmReady },
+    provider: { name: queryMocks.providerName, display_name: queryMocks.providerDisplayName },
+    isLoading: false,
+  }),
+  useSession: () => ({ data: { user_id: queryMocks.userID } }),
   useRescan: () => ({ mutate: queryMocks.rescan }),
   useRules: () => ({
     data: [
@@ -106,15 +114,33 @@ function renderRuleForm(route: string, path: string) {
   )
 }
 
+function installLocalStorage() {
+  const values = new Map<string, string>()
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+      clear: () => values.clear(),
+    },
+  })
+}
+
 describe('RuleForm diagnostics', () => {
   beforeEach(() => {
     queryMocks.activeReader = 'gmail'
     queryMocks.draftPending = false
     queryMocks.llmReady = true
+    queryMocks.providerDisplayName = 'Gemini'
+    queryMocks.providerName = 'gemini'
+    queryMocks.userID = 'user-a'
     queryMocks.createRule.mockReset()
     queryMocks.draftRule.mockReset()
     queryMocks.updateRule.mockReset()
     queryMocks.rescan.mockReset()
+    installLocalStorage()
+    window.localStorage.clear()
     sessionStorage.clear()
   })
 
@@ -244,6 +270,12 @@ describe('RuleForm diagnostics', () => {
       screen.getByRole('button', { name: 'Use AI to generate the extraction expressions' }),
     )
 
+    expect(screen.getByRole('dialog', { name: 'Review AI data sharing' })).toHaveTextContent(
+      'will be sent to Gemini',
+    )
+    expect(queryMocks.draftRule).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'I understand' }))
+
     expect(queryMocks.draftRule).toHaveBeenCalledTimes(1)
     expect(queryMocks.draftRule.mock.calls[0][0]).toMatchObject({
       subject_contains: 'Card spend approved',
@@ -330,6 +362,7 @@ describe('RuleForm diagnostics', () => {
     await user.click(
       screen.getByRole('button', { name: 'Use AI to generate the extraction expressions' }),
     )
+    await user.click(screen.getByRole('button', { name: 'I understand' }))
 
     expect(screen.getByRole('tab', { selected: true })).toHaveTextContent('Sample 2')
     expect(screen.getByRole('tab', { name: /Sample 2/ })).toHaveTextContent('1')
@@ -346,6 +379,89 @@ describe('RuleForm diagnostics', () => {
     const button = screen.getByRole('button', { name: 'AI is generating extraction expressions' })
     expect(button).toBeDisabled()
     expect(button.querySelector('.animate-spin')).toBeInTheDocument()
+  })
+
+  it('cancels the AI privacy reminder without drafting and shows it again', async () => {
+    const user = userEvent.setup()
+    renderRuleForm('/rules/new', '/rules/new')
+
+    await user.type(screen.getByLabelText('Email body'), 'INR 42.00 at Coffee')
+    await user.type(screen.getByLabelText('Expected amount'), '42.00')
+    await user.type(screen.getByLabelText('Expected merchant'), 'Coffee')
+
+    const aiButton = screen.getByRole('button', {
+      name: 'Use AI to generate the extraction expressions',
+    })
+    await user.click(aiButton)
+
+    const dialog = screen.getByRole('dialog', { name: 'Review AI data sharing' })
+    expect(dialog).toHaveTextContent('masks email addresses and 13–19-digit card-like numbers')
+    expect(dialog).toHaveTextContent('does not mask the amounts and merchants')
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    expect(queryMocks.draftRule).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: 'Review AI data sharing' })).not.toBeInTheDocument()
+
+    await user.click(aiButton)
+    expect(screen.getByRole('dialog', { name: 'Review AI data sharing' })).toBeInTheDocument()
+  })
+
+  it('persists the AI privacy reminder choice only for the current user and provider', async () => {
+    const user = userEvent.setup()
+    const firstRender = renderRuleForm('/rules/new', '/rules/new')
+
+    await user.type(screen.getByLabelText('Email body'), 'INR 42.00 at Coffee')
+    await user.type(screen.getByLabelText('Expected amount'), '42.00')
+    await user.type(screen.getByLabelText('Expected merchant'), 'Coffee')
+
+    const aiButton = screen.getByRole('button', {
+      name: 'Use AI to generate the extraction expressions',
+    })
+    await user.click(aiButton)
+    const dialog = screen.getByRole('dialog', { name: 'Review AI data sharing' })
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Do not remind me again' }))
+    await user.click(within(dialog).getByRole('button', { name: 'I understand' }))
+
+    expect(queryMocks.draftRule).toHaveBeenCalledTimes(1)
+    expect(
+      window.localStorage.getItem(
+        'expensor.rule-draft-ai-privacy-reminder-dismissed:user-a:gemini',
+      ),
+    ).toBe('true')
+
+    await user.click(aiButton)
+    expect(queryMocks.draftRule).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('dialog', { name: 'Review AI data sharing' })).not.toBeInTheDocument()
+
+    firstRender.unmount()
+    queryMocks.providerName = 'openai'
+    queryMocks.providerDisplayName = 'OpenAI'
+    const secondRender = renderRuleForm('/rules/new', '/rules/new')
+    await user.type(screen.getByLabelText('Email body'), 'INR 42.00 at Coffee')
+    await user.type(screen.getByLabelText('Expected amount'), '42.00')
+    await user.type(screen.getByLabelText('Expected merchant'), 'Coffee')
+    await user.click(
+      screen.getByRole('button', { name: 'Use AI to generate the extraction expressions' }),
+    )
+    expect(screen.getByRole('dialog', { name: 'Review AI data sharing' })).toHaveTextContent(
+      'will be sent to OpenAI',
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    secondRender.unmount()
+    queryMocks.providerName = 'gemini'
+    queryMocks.providerDisplayName = 'Gemini'
+    queryMocks.userID = 'user-b'
+    renderRuleForm('/rules/new', '/rules/new')
+    await user.type(screen.getByLabelText('Email body'), 'INR 42.00 at Coffee')
+    await user.type(screen.getByLabelText('Expected amount'), '42.00')
+    await user.type(screen.getByLabelText('Expected merchant'), 'Coffee')
+    await user.click(
+      screen.getByRole('button', { name: 'Use AI to generate the extraction expressions' }),
+    )
+    expect(screen.getByRole('dialog', { name: 'Review AI data sharing' })).toHaveTextContent(
+      'will be sent to Gemini',
+    )
   })
 
   it('explains that AI setup is required before drafting expressions', () => {

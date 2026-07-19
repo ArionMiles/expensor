@@ -5,13 +5,14 @@ import { ApiError } from '@/api/client'
 import type { RuleDraftValidationIssue } from '@/api/types'
 import {
   useActiveReader,
+  useActiveLLMProviderStatus,
   useCreateRule,
   useDraftRule,
   useExtractionDiagnostic,
   useFacets,
-  useLLMProviderStatus,
   useRescan,
   useRules,
+  useSession,
   useUpdateRule,
 } from '@/api/queries'
 import { ConfirmModal } from '@/components/ConfirmModal'
@@ -40,6 +41,29 @@ import {
 } from './RuleFormSupport'
 import type { FieldErrors, FormState, SampleState } from './RuleFormSupport'
 
+const AI_DRAFT_PRIVACY_REMINDER_KEY_PREFIX = 'expensor.rule-draft-ai-privacy-reminder-dismissed'
+
+function aiDraftPrivacyReminderKey(userID: string, providerName: string) {
+  return `${AI_DRAFT_PRIVACY_REMINDER_KEY_PREFIX}:${encodeURIComponent(userID)}:${encodeURIComponent(providerName)}`
+}
+
+function aiDraftPrivacyReminderDismissed(userID: string, providerName: string) {
+  try {
+    return window.localStorage.getItem(aiDraftPrivacyReminderKey(userID, providerName)) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function dismissAIDraftPrivacyReminder(userID: string, providerName: string) {
+  try {
+    window.localStorage.setItem(aiDraftPrivacyReminderKey(userID, providerName), 'true')
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function RuleForm() {
   const { t } = useI18n()
   const { id } = useParams<{ id: string }>()
@@ -53,8 +77,9 @@ export function RuleForm() {
   const rule = id ? rules.find((candidate) => candidate.id === id) : null
   const { data: diagnostic } = useExtractionDiagnostic(diagnosticID)
   const { data: activeReader = '' } = useActiveReader()
+  const { data: session } = useSession()
   const { data: facets } = useFacets()
-  const { data: llmStatus } = useLLMProviderStatus('openai')
+  const { data: llmStatus, provider: llmProvider } = useActiveLLMProviderStatus()
   const { handlers: aiTipHandlers, tip: aiTip } = useTooltip()
 
   const [form, setForm] = useState<FormState>(emptyForm)
@@ -71,6 +96,8 @@ export function RuleForm() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  const [aiPrivacyDialogOpen, setAIPrivacyDialogOpen] = useState(false)
+  const [skipAIPrivacyReminder, setSkipAIPrivacyReminder] = useState(false)
   const [draftApplied, setDraftApplied] = useState(false)
 
   const { mutate: createRule, isPending: creating } = useCreateRule()
@@ -316,6 +343,10 @@ ${sample.body.replace(/\r\n/g, '\n')}`
     : aiReady
       ? t('rules.editor.aiDraftTooltip')
       : t('rules.editor.aiDraftSetupNeeded')
+  const aiProviderName =
+    llmProvider?.display_name || llmStatus?.name || t('rules.editor.aiProviderFallback')
+  const aiProviderID = llmProvider?.name || llmStatus?.name || 'unknown'
+  const privacyReminderUserID = session?.user_id || 'unknown'
   const issueCountsBySample = useMemo(() => {
     const counts = new Map<number, number>()
     draftIssues.forEach((issue) => {
@@ -452,7 +483,7 @@ ${sample.body.replace(/\r\n/g, '\n')}`
     )
   }
 
-  const handleAIDraft = () => {
+  const runAIDraft = () => {
     setFormError('')
     setDraftIssues([])
     draftRule(
@@ -497,6 +528,14 @@ ${sample.body.replace(/\r\n/g, '\n')}`
         onError: (error) => setFormError(error.message),
       },
     )
+  }
+
+  const handleAIDraft = () => {
+    if (aiDraftPrivacyReminderDismissed(privacyReminderUserID, aiProviderID)) {
+      runAIDraft()
+      return
+    }
+    setAIPrivacyDialogOpen(true)
   }
 
   const handleSubmit = () => {
@@ -1088,6 +1127,38 @@ ${sample.body.replace(/\r\n/g, '\n')}`
             saveRule(false)
           }}
           onCancel={() => setSaveDialogOpen(false)}
+        />
+      )}
+      {aiPrivacyDialogOpen && (
+        <ConfirmModal
+          title={t('rules.editor.aiPrivacyTitle')}
+          message={
+            <div className="space-y-4">
+              <p>{t('rules.editor.aiPrivacyDescription', { provider: aiProviderName })}</p>
+              <label className="flex cursor-pointer items-center gap-2 text-foreground">
+                <input
+                  type="checkbox"
+                  checked={skipAIPrivacyReminder}
+                  onChange={(event) => setSkipAIPrivacyReminder(event.target.checked)}
+                  className="accent-primary"
+                />
+                <span>{t('rules.editor.aiPrivacyDoNotRemind')}</span>
+              </label>
+            </div>
+          }
+          confirmLabel={t('rules.editor.aiPrivacyConfirm')}
+          onConfirm={() => {
+            if (skipAIPrivacyReminder) {
+              void dismissAIDraftPrivacyReminder(privacyReminderUserID, aiProviderID)
+            }
+            setAIPrivacyDialogOpen(false)
+            setSkipAIPrivacyReminder(false)
+            runAIDraft()
+          }}
+          onCancel={() => {
+            setAIPrivacyDialogOpen(false)
+            setSkipAIPrivacyReminder(false)
+          }}
         />
       )}
       {aiTip}

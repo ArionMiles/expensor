@@ -23,13 +23,65 @@ func testProvider(name string, capabilities ...Capability) Provider {
 		Metadata: ProviderMetadata{
 			Name:         name,
 			DisplayName:  "Test Provider",
-			Description:  "Provider for tests",
 			Auth:         AuthSpec{Type: AuthTypeAPIKey, Required: true},
 			Capabilities: capabilities,
 		},
 		NewClient: func(ClientConfig) (Client, error) {
 			return stubClient{}, nil
 		},
+	}
+}
+
+func TestConfigStringDefault(t *testing.T) {
+	schema := json.RawMessage(`{
+		"type":"object",
+		"properties":{
+			"model":{"type":"string","default":" model-a "},
+			"count":{"type":"integer","default":1},
+			"empty":{"type":"string","default":" "}
+		}
+	}`)
+
+	if value, ok := ConfigStringDefault(schema, "model"); !ok || value != "model-a" {
+		t.Fatalf("ConfigStringDefault(model) = %q, %v, want model-a, true", value, ok)
+	}
+	for _, field := range []string{"count", "empty", "missing"} {
+		if value, ok := ConfigStringDefault(schema, field); ok || value != "" {
+			t.Fatalf("ConfigStringDefault(%s) = %q, %v, want empty, false", field, value, ok)
+		}
+	}
+	if value, ok := ConfigStringDefault(json.RawMessage(`{"bad"`), "model"); ok || value != "" {
+		t.Fatalf("ConfigStringDefault(invalid) = %q, %v, want empty, false", value, ok)
+	}
+}
+
+func TestValidateConfig(t *testing.T) {
+	schema := json.RawMessage(`{
+		"type":"object",
+		"properties":{
+			"model":{"type":"string"},
+			"max_tokens":{"type":"integer"},
+			"enabled":{"type":"boolean"}
+		}
+	}`)
+
+	if err := ValidateConfig(schema, json.RawMessage(`{"model":"model-a","max_tokens":128,"enabled":true}`)); err != nil {
+		t.Fatalf("ValidateConfig(valid) error = %v", err)
+	}
+	tests := []struct {
+		name   string
+		config string
+	}{
+		{name: "unknown field", config: `{"base_url":"https://attacker.invalid"}`},
+		{name: "wrong type", config: `{"max_tokens":"128"}`},
+		{name: "non-object", config: `[]`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := ValidateConfig(schema, json.RawMessage(tc.config)); errors.WhatKind(err) != errors.InvalidInput {
+				t.Fatalf("ValidateConfig(%s) error = %v, want invalid input", tc.config, err)
+			}
+		})
 	}
 }
 
