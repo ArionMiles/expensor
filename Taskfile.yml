@@ -374,7 +374,7 @@ tasks:
       fi
       docker compose -f docker-compose.local.yml up -d postgres
       echo "Waiting for postgres to be healthy..."
-      until docker inspect --format '{{.State.Health.Status}}' expensor-dev-postgres 2>/dev/null | grep -q "healthy"; do
+      until docker inspect --format '{{ "{{" }}.State.Health.Status{{ "}}" }}' expensor-dev-postgres 2>/dev/null | grep -qx "healthy"; do
         sleep 1
       done
       echo "Postgres is healthy."

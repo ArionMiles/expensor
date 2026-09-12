@@ -18,9 +18,10 @@ test('settings tab persists in the URL and on reload @mocked', async ({ gotoMock
 })
 
 test('AI settings can test an OpenAI API connection @mocked', async ({ gotoMocked, page }) => {
-  await gotoMocked('/settings?tab=ai')
+  await gotoMocked('/settings?tab=ai&provider=openai')
 
-  await expect(page.getByRole('heading', { name: 'OpenAI' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'OpenAI', selected: true })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Gemini', selected: false })).toBeVisible()
   await expect(page.getByText('Needs setup')).toBeVisible()
   await expect(page.locator('input[aria-label="Base URL"]')).toHaveCount(0)
 
