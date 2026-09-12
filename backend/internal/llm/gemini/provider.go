@@ -18,7 +18,7 @@ const (
 	ProviderName   = "gemini"
 	defaultBaseURL = "https://generativelanguage.googleapis.com/v1"
 	flashModel     = "gemini-3.5-flash"
-	flashLiteModel = "gemini-3.1-flash-lite"
+	flashLiteModel = "gemini-3.5-flash-lite"
 	defaultTimeout = 60 * time.Second
 )
 
@@ -226,12 +226,12 @@ func (c *client) interactionsPayload(req llm.Request) (interactionsRequest, erro
 			Temperature:     req.Temperature,
 		}
 	}
-	if req.Workflow == "provider_setup" && req.Purpose == "healthcheck" && supportsConfiguredThinkingLevel(c.model) {
+	if req.Workflow == "provider_setup" && req.Purpose == "healthcheck" && supportsMinimalThinkingLevel(c.model) {
 		if payload.GenerationConfig == nil {
 			payload.GenerationConfig = &interactionsGenerationConfig{}
 		}
 		payload.GenerationConfig.ThinkingLevel = "minimal"
-	} else if supportsConfiguredThinkingLevel(c.model) &&
+	} else if supportsLowThinkingLevel(c.model) &&
 		(req.ResponseFormat.Type == llm.ResponseFormatJSONSchema || req.ResponseFormat.Type == llm.ResponseFormatJSONObject) {
 		if payload.GenerationConfig == nil {
 			payload.GenerationConfig = &interactionsGenerationConfig{}
@@ -246,8 +246,17 @@ func (c *client) interactionsPayload(req llm.Request) (interactionsRequest, erro
 	return payload, nil
 }
 
-func supportsConfiguredThinkingLevel(model string) bool {
-	return model == flashModel || model == flashLiteModel
+func supportsMinimalThinkingLevel(model string) bool {
+	return model == "gemini-3.6-flash" || model == flashModel || model == flashLiteModel
+}
+
+func supportsLowThinkingLevel(model string) bool {
+	switch model {
+	case "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", flashModel, flashLiteModel:
+		return true
+	default:
+		return false
+	}
 }
 
 func geminiResponseFormat(format llm.ResponseFormat) (*interactionsResponseFormat, error) {

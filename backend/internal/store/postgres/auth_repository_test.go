@@ -122,6 +122,16 @@ func TestAuthRepositoryStoresOnlyTokenHashes(t *testing.T) {
 	if found == nil || found.UserID != admin.ID || found.Name != "cli" {
 		t.Fatalf("found = %#v", found)
 	}
+	if err := ts.MarkAccessTokenUsed(ctx, token.ID); err != nil {
+		t.Fatalf("MarkAccessTokenUsed() error = %v", err)
+	}
+	used, err := ts.FindAccessTokenByHash(ctx, "sha256:abc123")
+	if err != nil {
+		t.Fatalf("FindAccessTokenByHash() after use error = %v", err)
+	}
+	if used.LastUsedAt == nil {
+		t.Fatalf("used token = %#v, want last used timestamp", used)
+	}
 
 	if err := ts.RevokeAccessToken(ctx, token.ID, admin.ID); err != nil {
 		t.Fatalf("RevokeAccessToken() error = %v", err)

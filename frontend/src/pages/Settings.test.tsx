@@ -32,7 +32,7 @@ function renderSettings(route = '/settings') {
 function mockOpenAISettings({
   credentialsStored = false,
   ready = false,
-  model = 'gpt-5.4-mini',
+  model = 'gpt-5.6-terra',
   baseUrl = 'https://api.openai.com/v1',
   healthcheckDelayMs = 0,
   requests,
@@ -60,13 +60,13 @@ function mockOpenAISettings({
           capabilities: ['text_generation', 'json_schema'],
           config_schema: {
             type: 'object',
-            properties: { model: { type: 'string', default: 'gemini-3.5-flash' } },
+            properties: { model: { type: 'string', default: 'gemini-3.8-flash' } },
           },
           model_options: [
             {
-              id: 'gemini-3.5-flash',
-              display_name: 'Gemini 3.5 Flash',
-              quality: 'High',
+              id: 'gemini-3.8-flash',
+              display_name: 'Gemini 3.8 Flash',
+              quality: 'Highest',
               cost: 'Higher',
               description: 'Recommended for rule drafting.',
               recommended: true,
@@ -88,16 +88,16 @@ function mockOpenAISettings({
           config_schema: {
             type: 'object',
             properties: {
-              model: { type: 'string', default: 'gpt-5.4-mini' },
+              model: { type: 'string', default: 'gpt-5.6-terra' },
               base_url: { type: 'string', default: 'https://api.openai.com/v1' },
             },
           },
           model_options: [
             {
-              id: 'gpt-5.4-mini',
-              display_name: 'GPT-5.4 mini',
-              quality: 'Balanced',
-              cost: 'Lower',
+              id: 'gpt-5.6-terra',
+              display_name: 'GPT-5.6 Terra',
+              quality: 'High',
+              cost: 'Medium',
               description: 'Recommended for rule drafting.',
               recommended: true,
             },

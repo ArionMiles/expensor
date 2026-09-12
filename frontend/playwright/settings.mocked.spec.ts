@@ -30,7 +30,7 @@ test('AI settings can test an OpenAI API connection @mocked', async ({ gotoMocke
     'https://api.openai.com/v1',
   )
 
-  await expect(page.getByLabel('Model')).toHaveValue('GPT-5.4 mini')
+  await expect(page.getByLabel('Model')).toHaveValue('GPT-5.6 Terra')
   await page.getByLabel('API key').fill('sk-playwright')
   await page.getByRole('button', { name: 'Test' }).click()
 

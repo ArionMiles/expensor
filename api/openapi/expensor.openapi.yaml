@@ -498,7 +498,7 @@ definitions:
         example: https://api.openai.com/v1
         type: string
       model:
-        example: gpt-5.4-mini
+        example: gpt-5.6-terra
         type: string
     type: object
   httpapi.LLMProviderConfigSaveRequest:
@@ -571,20 +571,19 @@ definitions:
   httpapi.LLMProviderModelOption:
     properties:
       cost:
-        example: Lower
+        example: Medium
         type: string
       description:
-        example: 'Recommended for rule drafting: strong quality with lower per-use
-          cost.'
+        example: Recommended balance of intelligence and cost for rule drafting.
         type: string
       display_name:
-        example: GPT-5.4 mini
+        example: GPT-5.6 Terra
         type: string
       id:
-        example: gpt-5.4-mini
+        example: gpt-5.6-terra
         type: string
       quality:
-        example: Balanced
+        example: High
         type: string
       recommended:
         example: true

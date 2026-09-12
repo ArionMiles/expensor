@@ -3,6 +3,7 @@ package catalog
 import (
 	"encoding/json"
 	"io/fs"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -25,10 +26,12 @@ func TestLoadValidatesBundledContent(t *testing.T) {
 		t.Fatal("Load() returned incomplete LLM content")
 	}
 	assertBundledLLMProvider(t, content.LLMProviders["openai"], bundledLLMProviderExpectation{
-		displayName: "OpenAI", apiKeyLinkText: "OpenAI dashboard", defaultModel: "gpt-5.4-mini", wantBaseURL: true,
+		displayName: "OpenAI", apiKeyLinkText: "OpenAI dashboard", defaultModel: "gpt-5.6-terra", wantBaseURL: true,
+		modelIDs: []string{"gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-6-astra", "gpt-5.4-mini", "gpt-5.4", "gpt-5.5"},
 	})
 	assertBundledLLMProvider(t, content.LLMProviders["gemini"], bundledLLMProviderExpectation{
-		displayName: "Gemini", apiKeyLinkText: "Google AI dashboard", defaultModel: "gemini-3.5-flash",
+		displayName: "Gemini", apiKeyLinkText: "Google AI dashboard", defaultModel: "gemini-3.8-flash",
+		modelIDs: []string{"gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"},
 	})
 }
 
@@ -37,6 +40,7 @@ type bundledLLMProviderExpectation struct {
 	apiKeyLinkText string
 	defaultModel   string
 	wantBaseURL    bool
+	modelIDs       []string
 }
 
 func assertBundledLLMProvider(
@@ -63,6 +67,13 @@ func assertBundledLLMProvider(
 	}
 	if len(provider.ModelOptions) < 2 || !provider.ModelOptions[0].Recommended || provider.ModelOptions[0].ID != want.defaultModel {
 		t.Fatalf("model options = %#v, want recommended default first", provider.ModelOptions)
+	}
+	modelIDs := make([]string, 0, len(provider.ModelOptions))
+	for _, option := range provider.ModelOptions {
+		modelIDs = append(modelIDs, option.ID)
+	}
+	if !slices.Equal(modelIDs, want.modelIDs) {
+		t.Fatalf("model IDs = %q, want %q", modelIDs, want.modelIDs)
 	}
 }
 

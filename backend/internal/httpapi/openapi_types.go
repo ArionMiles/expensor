@@ -251,11 +251,11 @@ type LLMProviderDataUse struct {
 }
 
 type LLMProviderModelOption struct {
-	ID          string `json:"id" example:"gpt-5.4-mini"`
-	DisplayName string `json:"display_name" example:"GPT-5.4 mini"`
-	Quality     string `json:"quality" example:"Balanced"`
-	Cost        string `json:"cost" example:"Lower"`
-	Description string `json:"description,omitempty" example:"Recommended for rule drafting: strong quality with lower per-use cost."`
+	ID          string `json:"id" example:"gpt-5.6-terra"`
+	DisplayName string `json:"display_name" example:"GPT-5.6 Terra"`
+	Quality     string `json:"quality" example:"High"`
+	Cost        string `json:"cost" example:"Medium"`
+	Description string `json:"description,omitempty" example:"Recommended balance of intelligence and cost for rule drafting."`
 	Recommended bool   `json:"recommended,omitempty" example:"true"`
 }
 
@@ -273,7 +273,7 @@ type LLMProviderConfigSaveRequest struct {
 }
 
 type LLMProviderConfigRequest struct {
-	Model   string `json:"model" example:"gpt-5.4-mini"`
+	Model   string `json:"model" example:"gpt-5.6-terra"`
 	BaseURL string `json:"base_url" example:"https://api.openai.com/v1"`
 }
 

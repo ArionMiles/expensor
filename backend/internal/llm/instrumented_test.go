@@ -110,7 +110,7 @@ func TestInstrumentedClientRecordsHealthcheckFailure(t *testing.T) {
 func spanAttrs(attrs []attribute.KeyValue) map[string]string {
 	out := make(map[string]string, len(attrs))
 	for _, attr := range attrs {
-		out[string(attr.Key)] = attr.Value.Emit()
+		out[string(attr.Key)] = attr.Value.String()
 	}
 	return out
 }

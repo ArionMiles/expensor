@@ -109,6 +109,40 @@ func TestAuthMiddlewareBearerSetsRequestTenant(t *testing.T) {
 	if ms.lastAppConfigTenant.ID != "tenant-a" {
 		t.Fatalf("request tenant = %q, want tenant-a", ms.lastAppConfigTenant.ID)
 	}
+	if ms.markedAccessTokenUsedID != "token-a" {
+		t.Fatalf("marked access token = %q, want token-a", ms.markedAccessTokenUsedID)
+	}
+}
+
+func TestAuthMiddlewareBearerAllowsRequestWhenLastUsedUpdateFails(t *testing.T) {
+	raw, hash, err := auth.NewOpaqueToken(accessTokenPrefix)
+	if err != nil {
+		t.Fatalf("NewOpaqueToken() error = %v", err)
+	}
+	user := &store.User{ID: "user-a", TenantID: "tenant-a", Role: store.UserRoleUser}
+	ms := &mockStore{
+		appConfig:              map[string]string{"base_currency": "INR"},
+		accessTokensByHash:     map[string]*store.AccessToken{hash: {ID: "token-a", UserID: user.ID, TokenHash: hash}},
+		usersByID:              map[string]*store.User{user.ID: user},
+		markAccessTokenUsedErr: mockStoreErr("store.auth.mark_access_token_used", errStoreNotFound),
+	}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	mux := http.NewServeMux()
+	registerRoutes(mux, h)
+	handler := authMiddleware(h, mux)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/config/preferences", nil)
+	req.Header.Set("Authorization", "Bearer "+raw)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	if ms.markedAccessTokenUsedID != "token-a" {
+		t.Fatalf("marked access token = %q, want token-a", ms.markedAccessTokenUsedID)
+	}
 }
 
 func TestBootstrapCreatesAdminAndSessionCookie(t *testing.T) {

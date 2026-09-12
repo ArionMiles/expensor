@@ -296,6 +296,17 @@ func (r *authRepository) FindAccessTokenByHash(ctx context.Context, tokenHash st
 	return token, nil
 }
 
+func (r *authRepository) MarkAccessTokenUsed(ctx context.Context, id string) error {
+	tag, err := r.pool.Exec(ctx, `UPDATE access_tokens SET last_used_at = NOW() WHERE id = $1 AND revoked_at IS NULL`, id)
+	if err != nil {
+		return errors.E("postgres.auth.mark_access_token_used", "marking access token used", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return errors.E("store.auth.mark_access_token_used", errors.NotFound)
+	}
+	return nil
+}
+
 func (r *authRepository) RevokeAccessToken(ctx context.Context, id, userID string) error {
 	tag, err := r.pool.Exec(ctx, `UPDATE access_tokens SET revoked_at = NOW() WHERE id = $1 AND user_id = $2`, id, userID)
 	if err != nil {

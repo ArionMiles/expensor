@@ -91,6 +91,9 @@ func (h *Handlers) authenticateBearer(w http.ResponseWriter, r *http.Request, ra
 	if !ok {
 		return auth.Principal{}, false
 	}
+	if err := h.authStore.MarkAccessTokenUsed(r.Context(), token.ID); err != nil {
+		logError(r, responseRequestID(w), err)
+	}
 	return principalForUser(user, "bearer"), true
 }
 

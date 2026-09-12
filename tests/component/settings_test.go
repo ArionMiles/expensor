@@ -137,7 +137,7 @@ func TestLLMProviderRuntimeLifecycle(t *testing.T) {
 				if err := json.Unmarshal(raw, &config); err != nil {
 					t.Fatalf("decode config: %v", err)
 				}
-				if config["model"] != "gpt-5.4-mini" || config["base_url"] != "https://api.openai.com/v1" {
+				if config["model"] != "gpt-5.6-terra" || config["base_url"] != "https://api.openai.com/v1" {
 					t.Fatalf("unexpected config: %#v", config)
 				}
 			},
@@ -159,7 +159,7 @@ func TestLLMProviderRuntimeLifecycle(t *testing.T) {
 
 	saveConfig := client.JSON(t, http.MethodPut, "/api/llm/providers/openai/config", map[string]any{
 		"config": map[string]string{
-			"model":    "gpt-5.4-mini",
+			"model":    "gpt-5.6-terra",
 			"base_url": "https://api.openai.com/v1",
 		},
 	})

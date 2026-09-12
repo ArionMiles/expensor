@@ -181,6 +181,57 @@ func TestHealthCheckUsesMinimalThinking(t *testing.T) {
 	}
 }
 
+func TestInteractionsPayloadUsesSupportedThinkingLevels(t *testing.T) {
+	tests := []struct {
+		model           string
+		healthcheckWant string
+		structuredWant  string
+	}{
+		{model: "gemini-3.8-flash", structuredWant: "low"},
+		{model: "gemini-3.7-flash", structuredWant: "low"},
+		{model: "gemini-3.6-flash", healthcheckWant: "minimal", structuredWant: "low"},
+		{model: "gemini-3.5-flash", healthcheckWant: "minimal", structuredWant: "low"},
+		{model: "gemini-3.5-flash-lite", healthcheckWant: "minimal", structuredWant: "low"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.model, func(t *testing.T) {
+			client := &client{model: tc.model}
+			healthcheck, err := client.interactionsPayload(llm.Request{
+				Workflow: "provider_setup",
+				Purpose:  "healthcheck",
+				Messages: []llm.Message{{Role: llm.RoleUser, Content: "health"}},
+			})
+			if err != nil {
+				t.Fatalf("healthcheck payload error = %v", err)
+			}
+			if got := thinkingLevel(healthcheck.GenerationConfig); got != tc.healthcheckWant {
+				t.Fatalf("healthcheck thinking level = %q, want %q", got, tc.healthcheckWant)
+			}
+
+			structured, err := client.interactionsPayload(llm.Request{
+				Messages: []llm.Message{{Role: llm.RoleUser, Content: "extract"}},
+				ResponseFormat: llm.ResponseFormat{
+					Type:   llm.ResponseFormatJSONSchema,
+					Schema: json.RawMessage(`{"type":"object"}`),
+				},
+			})
+			if err != nil {
+				t.Fatalf("structured payload error = %v", err)
+			}
+			if got := thinkingLevel(structured.GenerationConfig); got != tc.structuredWant {
+				t.Fatalf("structured thinking level = %q, want %q", got, tc.structuredWant)
+			}
+		})
+	}
+}
+
+func thinkingLevel(config *interactionsGenerationConfig) string {
+	if config == nil {
+		return ""
+	}
+	return config.ThinkingLevel
+}
+
 func TestInteractionsPayloadValidatesUnsupportedInputs(t *testing.T) {
 	client := &client{model: flashModel}
 	tests := []struct {

@@ -156,6 +156,16 @@ func testAuth(ctx context.Context, t *testing.T, backend store.Backend) {
 	if _, err := backend.FindAccessTokenByHash(ctx, accessToken.TokenHash); err != nil {
 		t.Fatalf("FindAccessTokenByHash: %v", err)
 	}
+	if err := backend.MarkAccessTokenUsed(ctx, accessToken.ID); err != nil {
+		t.Fatalf("MarkAccessTokenUsed: %v", err)
+	}
+	tokens, err = backend.ListAccessTokens(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("ListAccessTokens after use: %v", err)
+	}
+	if tokens[0].LastUsedAt == nil {
+		t.Fatal("MarkAccessTokenUsed did not persist a timestamp")
+	}
 	if err := backend.RevokeAccessToken(ctx, accessToken.ID, user.ID); err != nil {
 		t.Fatalf("RevokeAccessToken: %v", err)
 	}

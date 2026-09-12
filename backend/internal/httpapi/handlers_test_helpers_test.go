@@ -190,6 +190,8 @@ type mockStore struct {
 	accessTokens               []store.AccessToken
 	listedAccessTokensUserID   string
 	accessTokensByHash         map[string]*store.AccessToken
+	markedAccessTokenUsedID    string
+	markAccessTokenUsedErr     error
 	revokedAccessTokenID       string
 	revokedAccessUserID        string
 	createdSetupToken          store.CreateAccountSetupTokenInput
@@ -341,6 +343,11 @@ func (m *mockStore) FindAccessTokenByHash(_ context.Context, tokenHash string) (
 		}
 	}
 	return nil, mockStoreErr("store.auth.find_access_token_by_hash", errStoreNotFound)
+}
+
+func (m *mockStore) MarkAccessTokenUsed(_ context.Context, id string) error {
+	m.markedAccessTokenUsedID = id
+	return m.markAccessTokenUsedErr
 }
 
 func (m *mockStore) RevokeAccessToken(_ context.Context, id, userID string) error {
@@ -1152,16 +1159,16 @@ func testLLMProviderWithFactory(
 			ConfigSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"model":{"type":"string","default":"gpt-5.4-mini"},
+					"model":{"type":"string","default":"gpt-5.6-terra"},
 					"base_url":{"type":"string","default":"https://api.openai.com/v1"}
 				}
 			}`),
 			Capabilities: []llm.Capability{llm.CapabilityTextGeneration, llm.CapabilityJSONSchema},
 			ModelOptions: []llm.ModelOption{{
-				ID:          "gpt-5.4-mini",
-				DisplayName: "GPT-5.4 mini",
-				Quality:     "Balanced",
-				Cost:        "Lower",
+				ID:          "gpt-5.6-terra",
+				DisplayName: "GPT-5.6 Terra",
+				Quality:     "High",
+				Cost:        "Medium",
 				Recommended: true,
 			}},
 		},

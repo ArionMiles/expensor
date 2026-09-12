@@ -16,25 +16,46 @@
     "properties": {
       "model": {
         "type": "string",
-        "default": "gemini-3.5-flash"
+        "default": "gemini-3.8-flash"
       }
     }
   },
   "model_options": [
     {
+      "id": "gemini-3.8-flash",
+      "display_name": "Gemini 3.8 Flash",
+      "quality": "Highest",
+      "cost": "Higher",
+      "description": "Recommended for difficult rule drafting and long-horizon workflows.",
+      "recommended": true
+    },
+    {
+      "id": "gemini-3.7-flash",
+      "display_name": "Gemini 3.7 Flash",
+      "quality": "High",
+      "cost": "Higher",
+      "description": "Fast, efficient model for everyday multi-step work."
+    },
+    {
+      "id": "gemini-3.6-flash",
+      "display_name": "Gemini 3.6 Flash",
+      "quality": "High",
+      "cost": "Higher",
+      "description": "Frontier intelligence optimized for speed and real-world tasks."
+    },
+    {
       "id": "gemini-3.5-flash",
       "display_name": "Gemini 3.5 Flash",
       "quality": "High",
       "cost": "Higher",
-      "description": "Recommended for rule drafting: the strongest stable Gemini Flash model.",
-      "recommended": true
+      "description": "Stable model for agentic execution and long-horizon tasks."
     },
     {
-      "id": "gemini-3.1-flash-lite",
-      "display_name": "Gemini 3.1 Flash-Lite",
+      "id": "gemini-3.5-flash-lite",
+      "display_name": "Gemini 3.5 Flash-Lite",
       "quality": "Balanced",
       "cost": "Lower",
-      "description": "Faster and less expensive for simpler extraction rules."
+      "description": "Cost-efficient choice for high-volume and simple extraction work."
     }
   ]
 }
