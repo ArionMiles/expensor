@@ -115,7 +115,7 @@ export const NAVIGATION_TARGETS: NavigationTarget[] = [
     subtitleKey: 'nav.settings.ai.subtitle',
     descriptionKey: 'nav.settings.ai.description',
     path: '/settings?tab=ai',
-    keywords: ['settings', 'ai', 'llm', 'openai', 'model'],
+    keywords: ['settings', 'ai', 'llm', 'openai', 'gemini', 'model'],
   },
   {
     id: 'settings-sync',

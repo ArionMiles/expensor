@@ -13,13 +13,15 @@ import (
 )
 
 type llmProviderInfoJSON struct {
-	Name         string            `json:"name"`
-	DisplayName  string            `json:"display_name"`
-	Description  string            `json:"description"`
-	AuthType     string            `json:"auth_type"`
-	Capabilities []llm.Capability  `json:"capabilities"`
-	ConfigSchema json.RawMessage   `json:"config_schema,omitempty"`
-	ModelOptions []llm.ModelOption `json:"model_options,omitempty"`
+	Name           string            `json:"name"`
+	DisplayName    string            `json:"display_name"`
+	APIKeyURL      string            `json:"api_key_url,omitempty"`
+	APIKeyLinkText string            `json:"api_key_link_text,omitempty"`
+	DataUse        llm.DataUseSpec   `json:"data_use"`
+	AuthType       string            `json:"auth_type"`
+	Capabilities   []llm.Capability  `json:"capabilities"`
+	ConfigSchema   json.RawMessage   `json:"config_schema,omitempty"`
+	ModelOptions   []llm.ModelOption `json:"model_options,omitempty"`
 }
 
 type llmProviderStatusJSON struct {
@@ -61,13 +63,15 @@ func (h *Handlers) ListLLMProviders(w http.ResponseWriter, _ *http.Request) {
 	for _, provider := range providers {
 		meta := provider.Metadata
 		out = append(out, llmProviderInfoJSON{
-			Name:         meta.Name,
-			DisplayName:  meta.DisplayName,
-			Description:  meta.Description,
-			AuthType:     string(meta.Auth.Type),
-			Capabilities: append([]llm.Capability(nil), meta.Capabilities...),
-			ConfigSchema: cloneRawJSON(meta.ConfigSchema),
-			ModelOptions: append([]llm.ModelOption(nil), meta.ModelOptions...),
+			Name:           meta.Name,
+			DisplayName:    meta.DisplayName,
+			APIKeyURL:      meta.APIKeyURL,
+			APIKeyLinkText: meta.APIKeyLinkText,
+			DataUse:        meta.DataUse,
+			AuthType:       string(meta.Auth.Type),
+			Capabilities:   append([]llm.Capability(nil), meta.Capabilities...),
+			ConfigSchema:   cloneRawJSON(meta.ConfigSchema),
+			ModelOptions:   append([]llm.ModelOption(nil), meta.ModelOptions...),
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -121,6 +125,10 @@ func (h *Handlers) SaveLLMProviderConfig(w http.ResponseWriter, r *http.Request)
 	}
 	if !json.Valid(body.Config) {
 		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid provider config JSON")))
+		return
+	}
+	if err := llm.ValidateConfig(provider.Metadata.ConfigSchema, body.Config); err != nil {
+		writeError(w, r, err)
 		return
 	}
 	if err := h.llmRuntimeStore.SetLLMProviderConfig(r.Context(), requestTenant(r), provider.Metadata.Name, body.Config); err != nil {

@@ -1,5 +1,10 @@
 import { http, HttpResponse } from 'msw'
-import type { ExtractionDiagnostic, ExtractionDiagnosticListStatus } from '@/api/types'
+import type {
+  ExtractionDiagnostic,
+  ExtractionDiagnosticListStatus,
+  LLMProviderInfo,
+  LLMProviderStatus,
+} from '@/api/types'
 import {
   buildAnnualHeatmapData,
   dashboardData,
@@ -121,9 +126,83 @@ const extractionDiagnostics: ExtractionDiagnostic[] = [
   },
 ]
 
-let openAIStatus = {
+const llmProviders = [
+  {
+    name: 'gemini',
+    display_name: 'Gemini',
+    api_key_url: 'https://aistudio.google.com/app/api-keys',
+    api_key_link_text: 'Google AI dashboard',
+    data_use: {
+      mode: 'free_tier_improvement',
+      policy_url: 'https://ai.google.dev/gemini-api/terms',
+    },
+    auth_type: 'api_key',
+    capabilities: ['text_generation', 'json_schema'],
+    config_schema: {
+      type: 'object',
+      properties: { model: { type: 'string', default: 'gemini-3.8-flash' } },
+    },
+    model_options: [
+      {
+        id: 'gemini-3.8-flash',
+        display_name: 'Gemini 3.8 Flash',
+        quality: 'Highest',
+        cost: 'Higher',
+        description: 'Recommended for rule drafting.',
+        recommended: true,
+      },
+    ],
+  },
+  {
+    name: 'openai',
+    display_name: 'OpenAI',
+    api_key_url: 'https://platform.openai.com/api-keys',
+    api_key_link_text: 'OpenAI dashboard',
+    data_use: {
+      mode: 'no_training_by_default',
+      policy_url: 'https://platform.openai.com/docs/models/default-usage-policies-by-endpoint',
+    },
+    auth_type: 'api_key',
+    capabilities: ['text_generation', 'json_schema'],
+    config_schema: {
+      type: 'object',
+      properties: {
+        model: { type: 'string', default: 'gpt-5.6-terra' },
+        base_url: { type: 'string', default: 'https://api.openai.com/v1' },
+      },
+    },
+    model_options: [
+      {
+        id: 'gpt-5.6-terra',
+        display_name: 'GPT-5.6 Terra',
+        quality: 'High',
+        cost: 'Medium',
+        description: 'Recommended for rule drafting.',
+        recommended: true,
+      },
+      {
+        id: 'gpt-5.4',
+        display_name: 'GPT-5.4',
+        quality: 'High',
+        cost: 'Medium',
+        description: 'Use when drafts need more reasoning headroom.',
+      },
+    ],
+  },
+] satisfies LLMProviderInfo[]
+
+const geminiStatus = {
+  name: 'gemini',
+  config: { model: 'gemini-3.8-flash' },
+  config_present: false,
+  credentials_stored: false,
+  active: false,
+  ready: false,
+} satisfies LLMProviderStatus
+
+let openAIStatus: LLMProviderStatus = {
   name: 'openai',
-  config: { model: 'gpt-5.4-mini', base_url: 'https://api.openai.com/v1' },
+  config: { model: 'gpt-5.6-terra', base_url: 'https://api.openai.com/v1' },
   config_present: false,
   credentials_stored: false,
   active: false,
@@ -344,34 +423,8 @@ export const handlers = [
       ready: true,
     }),
   ),
-  http.get('/api/llm/providers', () =>
-    HttpResponse.json([
-      {
-        name: 'openai',
-        display_name: 'OpenAI',
-        description: 'OpenAI API provider',
-        auth_type: 'api_key',
-        capabilities: ['text_generation', 'json_schema'],
-        model_options: [
-          {
-            id: 'gpt-5.4-mini',
-            display_name: 'GPT-5.4 mini',
-            quality: 'Balanced',
-            cost: 'Lower',
-            description: 'Recommended for rule drafting.',
-            recommended: true,
-          },
-          {
-            id: 'gpt-5.4',
-            display_name: 'GPT-5.4',
-            quality: 'High',
-            cost: 'Medium',
-            description: 'Use when drafts need more reasoning headroom.',
-          },
-        ],
-      },
-    ]),
-  ),
+  http.get('/api/llm/providers', () => HttpResponse.json(llmProviders)),
+  http.get('/api/llm/providers/gemini/status', () => HttpResponse.json(geminiStatus)),
   http.get('/api/llm/providers/openai/status', () => HttpResponse.json(openAIStatus)),
   http.put('/api/llm/providers/openai/config', async ({ request }) => {
     const body = (await request.json()) as { config?: { model?: string; base_url?: string } }
@@ -399,7 +452,7 @@ export const handlers = [
   http.delete('/api/llm/providers/openai', () => {
     openAIStatus = {
       name: 'openai',
-      config: { model: 'gpt-5.4-mini', base_url: 'https://api.openai.com/v1' },
+      config: { model: 'gpt-5.6-terra', base_url: 'https://api.openai.com/v1' },
       config_present: false,
       credentials_stored: false,
       active: false,

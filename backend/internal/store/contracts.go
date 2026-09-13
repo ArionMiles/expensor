@@ -25,6 +25,7 @@ type AuthStore interface {
 	CreateAccessToken(ctx context.Context, input CreateAccessTokenInput) (*AccessToken, error)
 	ListAccessTokens(ctx context.Context, userID string) ([]AccessToken, error)
 	FindAccessTokenByHash(ctx context.Context, tokenHash string) (*AccessToken, error)
+	MarkAccessTokenUsed(ctx context.Context, id string) error
 	RevokeAccessToken(ctx context.Context, id, userID string) error
 	CreateAccountSetupToken(ctx context.Context, input CreateAccountSetupTokenInput) (*AccountSetupToken, error)
 	FindAccountSetupTokenByHash(ctx context.Context, tokenHash string) (*AccountSetupToken, error)

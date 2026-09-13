@@ -203,6 +203,15 @@ func (s *Store) FindAccessTokenByHash(ctx context.Context, tokenHash string) (*s
 	return token, err
 }
 
+func (s *Store) MarkAccessTokenUsed(ctx context.Context, id string) error {
+	ctx, span := s.scope.Start(ctx, "store.auth.mark_access_token_used")
+	defer span.End()
+
+	err := s.auth.MarkAccessTokenUsed(ctx, id)
+	s.recordOperation(ctx, "auth.mark_access_token_used", err)
+	return err
+}
+
 func (s *Store) RevokeAccessToken(ctx context.Context, id, userID string) error {
 	ctx, span := s.scope.Start(ctx, "store.auth.revoke_access_token")
 	defer span.End()

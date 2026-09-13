@@ -187,6 +187,42 @@ func TestRuleDraftServiceReturnsValidatedDraft(t *testing.T) {
 	}
 }
 
+func TestRuleDraftServiceRedactsPromptDataAndPreservesSenderEmails(t *testing.T) {
+	client := &queuedRuleDraftClient{responses: []string{draftJSON(t, matchingDraft())}}
+	service := newRuleDraftServiceForTest(t, client, ruleDraftPromptCatalog(t))
+	input := validRuleDraftInput()
+	input.Current.Name = "Owner owner@example.com"
+	input.Current.Notes = "Card 4111 1111 1111 1111 belongs to owner@example.com"
+	input.Samples[0].Sender = "sample@example.com"
+	input.Samples[0].Body = "INR 1522.00 spent at Amazon with 4111-1111-1111-1111; receipt owner@example.com"
+
+	result, err := service.DraftRule(context.Background(), store.Tenant{ID: "tenant-a"}, input)
+	if err != nil {
+		t.Fatalf("DraftRule() error = %v", err)
+	}
+	if len(client.requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(client.requests))
+	}
+	promptParts := make([]string, 0, len(client.requests[0].Messages))
+	for _, message := range client.requests[0].Messages {
+		promptParts = append(promptParts, message.Content)
+	}
+	prompt := strings.Join(promptParts, "")
+	for _, sensitive := range []string{"owner@example.com", "sample@example.com", "4111 1111 1111 1111", "4111-1111-1111-1111"} {
+		if strings.Contains(prompt, sensitive) {
+			t.Fatalf("prompt contains sensitive value %q: %s", sensitive, prompt)
+		}
+	}
+	for _, required := range []string{"[REDACTED]", "1522.00", "Amazon"} {
+		if !strings.Contains(prompt, required) {
+			t.Fatalf("prompt = %q, want %q preserved", prompt, required)
+		}
+	}
+	if strings.Join(result.Draft.SenderEmails, ",") != "alerts@example.com,sample@example.com" {
+		t.Fatalf("sender emails = %#v, want original normalized senders", result.Draft.SenderEmails)
+	}
+}
+
 func TestRuleDraftServiceRepairsInvalidDraftBeforeReturning(t *testing.T) {
 	first := matchingDraft()
 	first.AmountRegex = `INR\s+([0-9]+)`

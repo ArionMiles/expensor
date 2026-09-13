@@ -407,11 +407,20 @@ export interface RuleDocument {
 export interface LLMProviderInfo {
   name: string
   display_name: string
-  description: string
   auth_type: 'api_key' | 'oauth' | 'none'
   capabilities: string[]
+  api_key_url?: string
+  api_key_link_text?: string
+  data_use: LLMProviderDataUse
   config_schema?: Record<string, unknown>
   model_options?: LLMProviderModelOption[]
+}
+
+export type LLMProviderDataUseMode = 'no_training_by_default' | 'free_tier_improvement'
+
+export interface LLMProviderDataUse {
+  mode: LLMProviderDataUseMode
+  policy_url: string
 }
 
 export interface LLMProviderModelOption {

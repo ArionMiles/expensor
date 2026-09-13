@@ -1,37 +1,61 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   useActivateLLMProvider,
   useDisconnectLLMProvider,
   useHealthCheckLLMProvider,
-  useLLMProviderStatus,
+  useLLMProviderStatuses,
   useLLMProviders,
   useSaveLLMProviderConfig,
   useSaveLLMProviderCredentials,
 } from '@/api/queries'
-import type { LLMProviderModelOption } from '@/api/types'
+import type { LLMProviderInfo, LLMProviderModelOption, LLMProviderStatus } from '@/api/types'
 import { ComboboxListbox, comboboxOptionClass, useComboboxNavigation } from '@/components/Combobox'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { useTooltip } from '@/hooks/useTooltip'
 import { useI18n } from '@/i18n/I18nProvider'
 import { cn } from '@/lib/utils'
-import { AlertCircle, CheckCircle2, ExternalLink, KeyRound, Pencil, Unplug } from 'lucide-react'
+import {
+  AlertCircle,
+  CheckCircle2,
+  CircleDot,
+  ExternalLink,
+  KeyRound,
+  Pencil,
+  PlugZap,
+  Save,
+  ShieldCheck,
+  Unplug,
+} from 'lucide-react'
 
-const OPENAI_PROVIDER = 'openai'
-const DEFAULT_MODEL = 'gpt-5.4-mini'
-const DEFAULT_BASE_URL = 'https://api.openai.com/v1'
-const OPENAI_API_DOCS_URL = 'https://developers.openai.com/api/reference/overview'
+const PREFERRED_PROVIDER = 'openai'
 
-function StatusPill({ ready }: { ready: boolean }) {
+function StatusPill({ status }: { status?: LLMProviderStatus }) {
   const { t } = useI18n()
+  const active = status?.active ?? false
+  const configured = status?.credentials_stored ?? false
+
   return (
     <span
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium',
-        ready ? 'border-green-500/40 text-green-500' : 'border-warning/40 text-warning',
+        active && 'border-green-500/40 text-green-500',
+        !active && configured && 'border-primary/40 text-primary',
+        !active && !configured && 'border-warning/40 text-warning',
       )}
     >
-      {ready ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
-      {ready ? t('settings.ai.statusReady') : t('settings.ai.statusNeedsSetup')}
+      {active ? (
+        <CheckCircle2 size={13} />
+      ) : configured ? (
+        <CircleDot size={13} />
+      ) : (
+        <AlertCircle size={13} />
+      )}
+      {active
+        ? t('settings.ai.statusActive')
+        : configured
+          ? t('settings.ai.statusConfigured')
+          : t('settings.ai.statusNeedsSetup')}
     </span>
   )
 }
@@ -51,16 +75,28 @@ function displayModelValue(modelID: string, options: LLMProviderModelOption[]) {
   return options.find((option) => option.id === modelID)?.display_name ?? modelID
 }
 
+function schemaDefault(provider: LLMProviderInfo, field: string) {
+  const properties = provider.config_schema?.properties
+  if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return ''
+  const property = (properties as Record<string, unknown>)[field]
+  if (!property || typeof property !== 'object' || Array.isArray(property)) return ''
+  const value = (property as Record<string, unknown>).default
+  return typeof value === 'string' ? value : ''
+}
+
 function ModelCombobox({
+  provider,
   value,
   options,
   onChange,
 }: {
+  provider: LLMProviderInfo
   value: string
   options: LLMProviderModelOption[]
   onChange: (value: string) => void
 }) {
   const { t } = useI18n()
+  const inputID = useId()
   const { handlers: chipTipHandlers, tip: chipTip } = useTooltip()
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -108,13 +144,13 @@ function ModelCombobox({
 
   return (
     <div ref={containerRef}>
-      <label className="block text-sm text-muted-foreground" htmlFor="openai-model-input">
+      <label className="block text-sm text-muted-foreground" htmlFor={inputID}>
         {t('settings.ai.model')}
       </label>
       <div className="relative mt-1">
         <input
           ref={inputRef}
-          id="openai-model-input"
+          id={inputID}
           value={value}
           onChange={(event) => {
             onChange(event.target.value)
@@ -140,7 +176,7 @@ function ModelCombobox({
         anchorRef={inputRef}
         containerRef={containerRef}
         listboxId={navigation.listboxId}
-        label={t('settings.ai.modelOptions')}
+        label={t('settings.ai.modelOptions', { provider: provider.display_name })}
         onOpenChange={setOpen}
         className="rounded-lg p-1 text-sm text-card-foreground shadow-xl"
       >
@@ -202,27 +238,57 @@ function ModelCombobox({
   )
 }
 
-export function AISettings() {
+function DataUseNotice({ provider }: { provider: LLMProviderInfo }) {
   const { t } = useI18n()
-  const { handlers: disconnectTipHandlers, tip: disconnectTip } = useTooltip()
-  const { data: providers = [], isLoading: providersLoading } = useLLMProviders()
-  const provider = providers.find((candidate) => candidate.name === OPENAI_PROVIDER)
-  const { data: status, isLoading: statusLoading } = useLLMProviderStatus(
-    OPENAI_PROVIDER,
-    Boolean(provider),
+  const detail =
+    provider.data_use.mode === 'free_tier_improvement'
+      ? t('settings.ai.dataUseFreeTier')
+      : t('settings.ai.dataUseNoTraining')
+
+  return (
+    <div className="border-l-2 border-warning/50 pl-3">
+      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+        <ShieldCheck size={15} aria-hidden="true" className="text-warning" />
+        {t('settings.ai.dataUseTitle')}
+      </div>
+      <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">{detail}</p>
+      <a
+        href={provider.data_use.policy_url}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+      >
+        {t('settings.ai.dataPolicy', { provider: provider.display_name })}
+        <ExternalLink aria-hidden="true" size={12} />
+      </a>
+    </div>
   )
+}
+
+function ProviderSettingsForm({
+  provider,
+  status,
+}: {
+  provider: LLMProviderInfo
+  status?: LLMProviderStatus
+}) {
+  const { t } = useI18n()
+  const { handlers: actionTipHandlers, tip: actionTip } = useTooltip()
   const saveConfig = useSaveLLMProviderConfig()
   const saveCredentials = useSaveLLMProviderCredentials()
   const healthcheck = useHealthCheckLLMProvider()
   const activate = useActivateLLMProvider()
   const disconnect = useDisconnectLLMProvider()
 
-  const modelOptions = useMemo(() => provider?.model_options ?? [], [provider?.model_options])
+  const modelOptions = useMemo(() => provider.model_options ?? [], [provider.model_options])
+  const schemaModel = schemaDefault(provider, 'model')
   const defaultModel =
-    modelOptions.find((option) => option.recommended)?.id || modelOptions[0]?.id || DEFAULT_MODEL
+    modelOptions.find((option) => option.recommended)?.id || modelOptions[0]?.id || schemaModel
+  const defaultBaseURL = schemaDefault(provider, 'base_url')
+  const supportsCustomBaseURL = defaultBaseURL !== ''
 
   const [modelInput, setModelInput] = useState(displayModelValue(defaultModel, modelOptions))
-  const [baseURL, setBaseURL] = useState(DEFAULT_BASE_URL)
+  const [baseURL, setBaseURL] = useState(defaultBaseURL)
   const [baseURLEditing, setBaseURLEditing] = useState(false)
   const [apiKey, setAPIKey] = useState('')
   const [message, setMessage] = useState('')
@@ -232,10 +298,9 @@ export function AISettings() {
   const baseURLRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (!status?.config) return
-    setModelInput(displayModelValue(status.config.model || defaultModel, modelOptions))
-    setBaseURL(status.config.base_url || DEFAULT_BASE_URL)
-  }, [defaultModel, modelOptions, status?.config])
+    setModelInput(displayModelValue(status?.config.model || defaultModel, modelOptions))
+    setBaseURL(status?.config.base_url || defaultBaseURL)
+  }, [defaultBaseURL, defaultModel, modelOptions, status?.config])
 
   const busy =
     saveConfig.isPending ||
@@ -245,15 +310,16 @@ export function AISettings() {
     disconnect.isPending
 
   const saveInputs = async () => {
+    const config = {
+      model: resolveModelID(modelInput, modelOptions, defaultModel),
+      ...(supportsCustomBaseURL ? { base_url: baseURL.trim() || defaultBaseURL } : {}),
+    }
     await saveConfig.mutateAsync({
-      name: OPENAI_PROVIDER,
-      config: {
-        model: resolveModelID(modelInput, modelOptions, defaultModel),
-        base_url: baseURL.trim() || DEFAULT_BASE_URL,
-      },
+      name: provider.name,
+      config,
     })
     if (apiKey.trim()) {
-      await saveCredentials.mutateAsync({ name: OPENAI_PROVIDER, apiKey: apiKey.trim() })
+      await saveCredentials.mutateAsync({ name: provider.name, apiKey: apiKey.trim() })
       setAPIKey('')
     }
   }
@@ -264,10 +330,14 @@ export function AISettings() {
     setActiveAction('save')
     try {
       await saveInputs()
-      await activate.mutateAsync(OPENAI_PROVIDER)
-      setMessage(t('settings.ai.saved'))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('settings.ai.saveFailed'))
+      await activate.mutateAsync(provider.name)
+      setMessage(t('settings.ai.saved', { provider: provider.display_name }))
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : t('settings.ai.saveFailed', { provider: provider.display_name }),
+      )
     } finally {
       setActiveAction(null)
     }
@@ -279,10 +349,16 @@ export function AISettings() {
     setActiveAction('test')
     try {
       await saveInputs()
-      const result = await healthcheck.mutateAsync(OPENAI_PROVIDER)
-      setMessage(result.message || t('settings.ai.healthcheckPassed'))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('settings.ai.healthcheckFailed'))
+      const result = await healthcheck.mutateAsync(provider.name)
+      setMessage(
+        result.message || t('settings.ai.healthcheckPassed', { provider: provider.display_name }),
+      )
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : t('settings.ai.healthcheckFailed', { provider: provider.display_name }),
+      )
     } finally {
       setActiveAction(null)
     }
@@ -292,98 +368,85 @@ export function AISettings() {
     setError('')
     setMessage('')
     try {
-      await disconnect.mutateAsync(OPENAI_PROVIDER)
+      await disconnect.mutateAsync(provider.name)
       setConfirmDisconnect(false)
-      setMessage(t('settings.ai.disconnected'))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('settings.ai.disconnectFailed'))
+      setMessage(t('settings.ai.disconnected', { provider: provider.display_name }))
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : t('settings.ai.disconnectFailed', { provider: provider.display_name }),
+      )
     }
   }
 
-  if (providersLoading || statusLoading) {
-    return <p className="text-xs text-muted-foreground">{t('settings.ai.loading')}</p>
-  }
-
-  if (!provider) {
-    return <p className="text-sm text-destructive">{t('settings.ai.providerMissing')}</p>
-  }
-
   const credentialsStored = status?.credentials_stored ?? false
-  const ready = status?.ready ?? false
-  const requiresAPIKey = !credentialsStored && !apiKey.trim()
+  const requiresAPIKey = provider.auth_type === 'api_key' && !credentialsStored && !apiKey.trim()
+  const [apiKeyHelpPrefix, apiKeyHelpSuffix] = t('settings.ai.apiKeyHelp').split('{dashboard}')
+  const saveLabel = activeAction === 'save' ? t('settings.ai.saving') : t('settings.ai.saveAndUse')
+  const testLabel = activeAction === 'test' ? t('settings.ai.testing') : t('settings.ai.test')
 
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h2 className="text-sm font-medium text-foreground">{provider.display_name}</h2>
-          <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">
-            {t('settings.ai.description')}
-          </p>
-          <a
-            href={OPENAI_API_DOCS_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-          >
-            {t('settings.ai.apiDocs')}
-            <ExternalLink aria-hidden="true" size={12} />
-          </a>
-          <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">
-            {t('settings.ai.compatibleDescription')}
-          </p>
+          {provider.api_key_url && provider.api_key_link_text && (
+            <p className="text-xs text-muted-foreground">
+              {apiKeyHelpPrefix}
+              <a
+                href={provider.api_key_url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+              >
+                {provider.api_key_link_text}
+                <ExternalLink aria-hidden="true" size={12} />
+              </a>
+              {apiKeyHelpSuffix}
+            </p>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <StatusPill ready={ready} />
-          {credentialsStored && (
-            <button
-              type="button"
-              onClick={() => setConfirmDisconnect(true)}
-              disabled={busy}
-              aria-label={t('settings.ai.disconnect')}
-              {...disconnectTipHandlers(t('settings.ai.disconnect'))}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Unplug size={16} aria-hidden="true" />
-            </button>
-          )}
+          <StatusPill status={status} />
         </div>
       </div>
 
       <div className="grid max-w-3xl gap-5">
-        <div>
-          <span className="block text-sm text-muted-foreground">{t('settings.ai.baseUrl')}</span>
-          <div className="mt-1 flex items-center rounded-md border border-border bg-input focus-within:border-primary focus-within:ring-1 focus-within:ring-ring">
-            {baseURLEditing ? (
-              <input
-                ref={baseURLRef}
-                aria-label={t('settings.ai.baseUrl')}
-                value={baseURL}
-                onChange={(event) => {
-                  setBaseURL(event.target.value)
-                  setError('')
-                  setMessage('')
+        {supportsCustomBaseURL && (
+          <div>
+            <span className="block text-sm text-muted-foreground">{t('settings.ai.baseUrl')}</span>
+            <div className="mt-1 flex items-center rounded-md border border-border bg-input focus-within:border-primary focus-within:ring-1 focus-within:ring-ring">
+              {baseURLEditing ? (
+                <input
+                  ref={baseURLRef}
+                  aria-label={t('settings.ai.baseUrl')}
+                  value={baseURL}
+                  onChange={(event) => {
+                    setBaseURL(event.target.value)
+                    setError('')
+                    setMessage('')
+                  }}
+                  className="min-w-0 flex-1 bg-transparent px-3 py-2 font-mono text-sm text-foreground focus:outline-none"
+                />
+              ) : (
+                <span className="min-w-0 flex-1 select-none truncate px-3 py-2 font-mono text-sm text-muted-foreground">
+                  {baseURL}
+                </span>
+              )}
+              <button
+                type="button"
+                aria-label={t('settings.ai.editBaseUrl')}
+                onClick={() => {
+                  setBaseURLEditing(true)
+                  window.setTimeout(() => baseURLRef.current?.focus(), 0)
                 }}
-                className="min-w-0 flex-1 bg-transparent px-3 py-2 font-mono text-sm text-foreground focus:outline-none"
-              />
-            ) : (
-              <span className="min-w-0 flex-1 select-none truncate px-3 py-2 font-mono text-sm text-muted-foreground">
-                {baseURL}
-              </span>
-            )}
-            <button
-              type="button"
-              aria-label={t('settings.ai.editBaseUrl')}
-              onClick={() => {
-                setBaseURLEditing(true)
-                window.setTimeout(() => baseURLRef.current?.focus(), 0)
-              }}
-              className="mr-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
-            >
-              <Pencil size={14} aria-hidden="true" />
-            </button>
+                className="mr-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                <Pencil size={14} aria-hidden="true" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         <label className="block text-sm text-muted-foreground">
           {t('settings.ai.apiKey')}
@@ -404,49 +467,204 @@ export function AISettings() {
               className="min-w-0 flex-1 bg-transparent font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
           </div>
-          {!credentialsStored && (
-            <span className="mt-1 block text-xs text-muted-foreground">
-              {t('settings.ai.apiKeyHint')}
-            </span>
-          )}
+          <span className="mt-1 block text-xs text-muted-foreground">
+            {credentialsStored ? t('settings.ai.apiKeyStoredHint') : t('settings.ai.apiKeyHint')}
+          </span>
         </label>
 
-        <ModelCombobox value={modelInput} options={modelOptions} onChange={setModelInput} />
+        <ModelCombobox
+          provider={provider}
+          value={modelInput}
+          options={modelOptions}
+          onChange={setModelInput}
+        />
       </div>
 
+      <DataUseNotice provider={provider} />
+
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={busy || requiresAPIKey}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {activeAction === 'save' ? t('settings.ai.saving') : t('common.save')}
-        </button>
-        <button
-          type="button"
-          onClick={handleHealthcheck}
-          disabled={busy || requiresAPIKey}
-          className="rounded-md border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {activeAction === 'test' ? t('settings.ai.testing') : t('settings.ai.test')}
-        </button>
+        <span className="inline-flex" {...actionTipHandlers(saveLabel)}>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={busy || requiresAPIKey}
+            aria-label={saveLabel}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Save size={16} aria-hidden="true" />
+          </button>
+        </span>
+        <span className="inline-flex" {...actionTipHandlers(testLabel)}>
+          <button
+            type="button"
+            onClick={handleHealthcheck}
+            disabled={busy || requiresAPIKey}
+            aria-label={testLabel}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <PlugZap size={16} aria-hidden="true" />
+          </button>
+        </span>
+        {credentialsStored && (
+          <span className="inline-flex" {...actionTipHandlers(t('settings.ai.disconnect'))}>
+            <button
+              type="button"
+              onClick={() => setConfirmDisconnect(true)}
+              disabled={busy}
+              aria-label={t('settings.ai.disconnect')}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-destructive hover:bg-destructive/5 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Unplug size={16} aria-hidden="true" />
+            </button>
+          </span>
+        )}
       </div>
 
       {message && <p className="text-xs text-green-500">{message}</p>}
       {error && <p className="text-xs text-destructive">{error}</p>}
-      {disconnectTip}
+      {actionTip}
 
       {confirmDisconnect && (
         <ConfirmModal
-          title={t('settings.ai.disconnectTitle')}
-          message={t('settings.ai.disconnectMessage')}
+          title={t('settings.ai.disconnectTitle', { provider: provider.display_name })}
+          message={t('settings.ai.disconnectMessage', { provider: provider.display_name })}
           confirmLabel={t('settings.ai.disconnect')}
           variant="destructive"
           onConfirm={handleDisconnect}
           onCancel={() => setConfirmDisconnect(false)}
         />
       )}
+    </div>
+  )
+}
+
+export function AISettings() {
+  const { t } = useI18n()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { data: providers = [], isLoading: providersLoading } = useLLMProviders()
+  const providerNames = useMemo(() => providers.map((provider) => provider.name), [providers])
+  const statusQueries = useLLMProviderStatuses(providerNames)
+  const statuses = statusQueries
+    .map((query) => query.data)
+    .filter((status): status is LLMProviderStatus => Boolean(status))
+  const statusesLoading = statusQueries.some((query) => query.isLoading)
+  const requestedProvider = searchParams.get('provider')
+  const activeProvider = statuses.find((status) => status.active)?.name
+  const selectedProviderName =
+    providers.find((provider) => provider.name === requestedProvider)?.name ||
+    activeProvider ||
+    providers.find((provider) => provider.name === PREFERRED_PROVIDER)?.name ||
+    providers[0]?.name ||
+    ''
+  const selectedProvider = providers.find((provider) => provider.name === selectedProviderName)
+  const selectedStatus = statuses.find((status) => status.name === selectedProviderName)
+
+  const selectProvider = (name: string) => {
+    const next = new URLSearchParams(searchParams)
+    next.set('provider', name)
+    setSearchParams(next, { replace: true })
+  }
+
+  const handleProviderTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let nextIndex: number | undefined
+    if (event.key === 'ArrowLeft') nextIndex = (index - 1 + providers.length) % providers.length
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % providers.length
+    if (event.key === 'Home') nextIndex = 0
+    if (event.key === 'End') nextIndex = providers.length - 1
+    if (nextIndex === undefined) return
+
+    event.preventDefault()
+    const nextProvider = providers[nextIndex]
+    selectProvider(nextProvider.name)
+    window.setTimeout(
+      () => document.getElementById(`llm-provider-tab-${nextProvider.name}`)?.focus(),
+      0,
+    )
+  }
+
+  useEffect(() => {
+    if (providersLoading || statusesLoading || !selectedProviderName) return
+    if (requestedProvider === selectedProviderName) return
+    const next = new URLSearchParams(searchParams)
+    next.set('provider', selectedProviderName)
+    setSearchParams(next, { replace: true })
+  }, [
+    providersLoading,
+    requestedProvider,
+    searchParams,
+    selectedProviderName,
+    setSearchParams,
+    statusesLoading,
+  ])
+
+  if (providersLoading || statusesLoading) {
+    return <p className="text-xs text-muted-foreground">{t('settings.ai.loading')}</p>
+  }
+
+  if (!selectedProvider) {
+    return <p className="text-sm text-destructive">{t('settings.ai.providerMissing')}</p>
+  }
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          {t('settings.ai.providerLabel')}
+        </p>
+        <div
+          className="mt-2 flex flex-wrap gap-1 border-b border-border"
+          role="tablist"
+          aria-label={t('settings.ai.providerLabel')}
+        >
+          {providers.map((provider, index) => {
+            const status = statuses.find((candidate) => candidate.name === provider.name)
+            const selected = provider.name === selectedProviderName
+            return (
+              <button
+                key={provider.name}
+                id={`llm-provider-tab-${provider.name}`}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                aria-controls={`llm-provider-panel-${provider.name}`}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => selectProvider(provider.name)}
+                onKeyDown={(event) => handleProviderTabKeyDown(event, index)}
+                className={cn(
+                  '-mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm transition-colors',
+                  selected
+                    ? 'border-primary font-medium text-foreground'
+                    : 'border-transparent text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <span
+                  className={cn(
+                    'h-1.5 w-1.5 rounded-full',
+                    status?.active
+                      ? 'bg-green-500'
+                      : status?.credentials_stored
+                        ? 'bg-primary'
+                        : 'bg-muted-foreground/50',
+                  )}
+                />
+                {provider.display_name}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div
+        id={`llm-provider-panel-${selectedProvider.name}`}
+        role="tabpanel"
+        aria-labelledby={`llm-provider-tab-${selectedProvider.name}`}
+      >
+        <ProviderSettingsForm
+          key={selectedProvider.name}
+          provider={selectedProvider}
+          status={selectedStatus}
+        />
+      </div>
     </div>
   )
 }

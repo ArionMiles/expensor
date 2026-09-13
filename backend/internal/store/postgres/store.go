@@ -205,6 +205,10 @@ func (s *Store) FindAccessTokenByHash(ctx context.Context, tokenHash string) (*s
 	return s.auth.FindAccessTokenByHash(ctx, tokenHash)
 }
 
+func (s *Store) MarkAccessTokenUsed(ctx context.Context, id string) error {
+	return s.auth.MarkAccessTokenUsed(ctx, id)
+}
+
 func (s *Store) RevokeAccessToken(ctx context.Context, id, userID string) error {
 	return s.auth.RevokeAccessToken(ctx, id, userID)
 }

@@ -134,7 +134,8 @@ func (s *RuleDraftService) requestDraft(
 ) (RuleDraft, string, error) {
 	const op = "assistant.RuleDraftService.requestDraft"
 
-	contextJSON, err := ruleDraftContextJSON(input, repairNote)
+	promptInput := redactRuleDraftInput(input)
+	contextJSON, err := ruleDraftContextJSON(promptInput, llm.RedactText(repairNote, llm.DefaultRedactionPolicy()))
 	if err != nil {
 		return RuleDraft{}, "", errors.E(op, err)
 	}
@@ -166,8 +167,51 @@ func (s *RuleDraftService) requestDraft(
 			err,
 		)
 	}
+	draft.SenderEmails = ruleDraftSenderEmails(input)
 	draft.normalize()
 	return draft, response.Text, nil
+}
+
+func redactRuleDraftInput(input RuleDraftInput) RuleDraftInput {
+	policy := llm.DefaultRedactionPolicy()
+	redact := func(value string) string {
+		return llm.RedactText(value, policy)
+	}
+	input.Current.SenderEmails = append([]string(nil), input.Current.SenderEmails...)
+	input.Samples = append([]Sample(nil), input.Samples...)
+
+	input.Current.Name = redact(input.Current.Name)
+	for i, sender := range input.Current.SenderEmails {
+		input.Current.SenderEmails[i] = redact(sender)
+	}
+	input.Current.SubjectContains = redact(input.Current.SubjectContains)
+	input.Current.AmountRegex = redact(input.Current.AmountRegex)
+	input.Current.MerchantRegex = redact(input.Current.MerchantRegex)
+	input.Current.CurrencyRegex = redact(input.Current.CurrencyRegex)
+	input.Current.Source.Type = redact(input.Current.Source.Type)
+	input.Current.Source.Label = redact(input.Current.Source.Label)
+	input.Current.Source.Bank = redact(input.Current.Source.Bank)
+	input.Current.Notes = redact(input.Current.Notes)
+
+	for i := range input.Samples {
+		sample := &input.Samples[i]
+		sample.Name = redact(sample.Name)
+		sample.Sender = redact(sample.Sender)
+		sample.Subject = redact(sample.Subject)
+		sample.Body = redact(sample.Body)
+		sample.Expected.Amount = redact(sample.Expected.Amount)
+		sample.Expected.Merchant = redact(sample.Expected.Merchant)
+		sample.Expected.Currency = redact(sample.Expected.Currency)
+	}
+	return input
+}
+
+func ruleDraftSenderEmails(input RuleDraftInput) []string {
+	senders := append([]string(nil), input.Current.SenderEmails...)
+	for _, sample := range input.Samples {
+		senders = append(senders, sample.Sender)
+	}
+	return normalizedStrings(senders)
 }
 
 func normalizeRuleDraftInput(input RuleDraftInput) (RuleDraftInput, error) {

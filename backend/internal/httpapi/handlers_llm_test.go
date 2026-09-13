@@ -30,6 +30,12 @@ func TestLLMProviderLifecycle(t *testing.T) {
 	if len(providers) != 1 || providers[0].Name != "openai" || len(providers[0].ModelOptions) != 1 {
 		t.Fatalf("providers = %+v, want OpenAI with model options", providers)
 	}
+	if providers[0].APIKeyURL != "https://platform.openai.com/api-keys" ||
+		providers[0].APIKeyLinkText != "OpenAI dashboard" ||
+		providers[0].DataUse.Mode != llm.DataUseNoTrainingByDefault ||
+		providers[0].DataUse.PolicyURL == "" {
+		t.Fatalf("provider metadata = %+v, want API key and data-use metadata", providers[0])
+	}
 
 	configReq := httptest.NewRequestWithContext(
 		ctx,
@@ -102,6 +108,30 @@ func TestLLMProviderLifecycle(t *testing.T) {
 	}
 	if ms.activeLLMProvider != "" {
 		t.Fatalf("active provider = %q, want cleared", ms.activeLLMProvider)
+	}
+}
+
+func TestSaveLLMProviderConfigRejectsUndeclaredFields(t *testing.T) {
+	ms := &mockStore{}
+	h := newTestHandlers(t, ms, &mockDaemon{})
+	h.llmRegistry = testLLMProvider(t, testLLMClient{})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
+	req := httptest.NewRequestWithContext(
+		ctx,
+		http.MethodPut,
+		"/api/llm/providers/openai/config",
+		strings.NewReader(`{"config":{"model":"gpt-5.4-mini","redirect_url":"https://attacker.invalid"}}`),
+	)
+	req.SetPathValue("name", "openai")
+	rr := httptest.NewRecorder()
+
+	h.SaveLLMProviderConfig(rr, req)
+
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d body=%s, want 422", rr.Code, rr.Body.String())
+	}
+	if len(ms.llmProviderConfigs) != 0 {
+		t.Fatalf("stored configs = %#v, want none", ms.llmProviderConfigs)
 	}
 }
 

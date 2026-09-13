@@ -190,6 +190,8 @@ type mockStore struct {
 	accessTokens               []store.AccessToken
 	listedAccessTokensUserID   string
 	accessTokensByHash         map[string]*store.AccessToken
+	markedAccessTokenUsedID    string
+	markAccessTokenUsedErr     error
 	revokedAccessTokenID       string
 	revokedAccessUserID        string
 	createdSetupToken          store.CreateAccountSetupTokenInput
@@ -341,6 +343,11 @@ func (m *mockStore) FindAccessTokenByHash(_ context.Context, tokenHash string) (
 		}
 	}
 	return nil, mockStoreErr("store.auth.find_access_token_by_hash", errStoreNotFound)
+}
+
+func (m *mockStore) MarkAccessTokenUsed(_ context.Context, id string) error {
+	m.markedAccessTokenUsedID = id
+	return m.markAccessTokenUsedErr
 }
 
 func (m *mockStore) RevokeAccessToken(_ context.Context, id, userID string) error {
@@ -1140,16 +1147,28 @@ func testLLMProviderWithFactory(
 	registry := llm.NewRegistry()
 	if err := registry.RegisterProvider(llm.Provider{
 		Metadata: llm.ProviderMetadata{
-			Name:         "openai",
-			DisplayName:  "OpenAI",
-			Description:  "OpenAI API provider",
-			Auth:         llm.AuthSpec{Type: llm.AuthTypeAPIKey, Required: true},
+			Name:           "openai",
+			DisplayName:    "OpenAI",
+			APIKeyURL:      "https://platform.openai.com/api-keys",
+			APIKeyLinkText: "OpenAI dashboard",
+			DataUse: llm.DataUseSpec{
+				Mode:      llm.DataUseNoTrainingByDefault,
+				PolicyURL: "https://platform.openai.com/docs/models/default-usage-policies-by-endpoint",
+			},
+			Auth: llm.AuthSpec{Type: llm.AuthTypeAPIKey, Required: true},
+			ConfigSchema: json.RawMessage(`{
+				"type":"object",
+				"properties":{
+					"model":{"type":"string","default":"gpt-5.6-terra"},
+					"base_url":{"type":"string","default":"https://api.openai.com/v1"}
+				}
+			}`),
 			Capabilities: []llm.Capability{llm.CapabilityTextGeneration, llm.CapabilityJSONSchema},
 			ModelOptions: []llm.ModelOption{{
-				ID:          "gpt-5.4-mini",
-				DisplayName: "GPT-5.4 mini",
-				Quality:     "Balanced",
-				Cost:        "Lower",
+				ID:          "gpt-5.6-terra",
+				DisplayName: "GPT-5.6 Terra",
+				Quality:     "High",
+				Cost:        "Medium",
 				Recommended: true,
 			}},
 		},

@@ -29,15 +29,7 @@ export function renderWithProviders(ui: ReactElement, { route = '/' }: { route?:
       <QueryClientProvider client={queryClient}>
         <I18nProvider>
           <DisplayProvider>
-            <MemoryRouter
-              initialEntries={[route]}
-              future={{
-                v7_startTransition: true,
-                v7_relativeSplatPath: true,
-              }}
-            >
-              {ui}
-            </MemoryRouter>
+            <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
           </DisplayProvider>
         </I18nProvider>
       </QueryClientProvider>,
