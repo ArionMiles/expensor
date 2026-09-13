@@ -55,7 +55,7 @@ tests/.env
 .worktrees/
 
 # Local brainstorming companion artifacts
-.superpowers/
+.agentdesk/
 
 # Claude
 .claude/settings.local.json
