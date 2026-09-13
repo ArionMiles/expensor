@@ -77,6 +77,13 @@ tasks:
       - task: lint:be
       - task: lint:fe
 
+  check:go-version:
+    summary: Verify runtime Go version pins are synchronized.
+    desc: >-
+      Checks that the Dockerfile and component/contract Compose images use the
+      same Go version as backend/go.mod.
+    cmd: scripts/versions/check-go.sh
+
   # ── TESTING ──────────────────────────────────────────────────────────────────
 
   test:be:

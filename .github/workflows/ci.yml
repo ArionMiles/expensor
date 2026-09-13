@@ -52,6 +52,9 @@ jobs:
         with:
           fetch-depth: 0  # Required for --new-from-rev to work
 
+      - name: Verify runtime Go versions are synchronized
+        run: ../scripts/versions/check-go.sh
+
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
