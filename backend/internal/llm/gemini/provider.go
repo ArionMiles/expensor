@@ -43,7 +43,7 @@ func Provider(metadata llm.ProviderMetadata) (llm.Provider, error) {
 
 	defaultModel, ok := llm.ConfigStringDefault(metadata.ConfigSchema, "model")
 	if !ok {
-		return llm.Provider{}, errors.E(op, errors.InvalidInput, "Gemini provider metadata requires a model default")
+		return llm.Provider{}, errors.B.Op(op).KindInvalidInput().Text("Gemini provider metadata requires a model default").Build()
 	}
 	metadata.Name = ProviderName
 	metadata.ConfigSchema = append(json.RawMessage(nil), metadata.ConfigSchema...)
@@ -66,11 +66,11 @@ func newClient(input llm.ClientConfig, defaultModel string) (llm.Client, error) 
 	var creds credentials
 	if len(input.Credentials) > 0 {
 		if err := json.Unmarshal(input.Credentials, &creds); err != nil {
-			return nil, errors.E(op, errors.InvalidInput, "decoding Gemini credentials", err)
+			return nil, errors.B.Op(op).KindInvalidInput().Text("decoding Gemini credentials").Err(err).Build()
 		}
 	}
 	if strings.TrimSpace(creds.APIKey) == "" {
-		return nil, errors.E(op, errors.FailedPrecondition, "Gemini API key is not configured")
+		return nil, errors.B.Op(op).KindFailedPrecondition().Text("Gemini API key is not configured").Build()
 	}
 
 	cfg := providerConfig{Model: defaultModel}
@@ -78,7 +78,7 @@ func newClient(input llm.ClientConfig, defaultModel string) (llm.Client, error) 
 		decoder := json.NewDecoder(bytes.NewReader(input.Config))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&cfg); err != nil {
-			return nil, errors.E(op, errors.InvalidInput, "decoding Gemini config", err)
+			return nil, errors.B.Op(op).KindInvalidInput().Text("decoding Gemini config").Err(err).Build()
 		}
 	}
 	cfg.Model = strings.TrimSpace(cfg.Model)
@@ -120,13 +120,13 @@ func (c *client) HealthCheck(ctx context.Context) error {
 		},
 	})
 	if err != nil {
-		return errors.E(op, err)
+		return errors.B.Op(op).Err(err).Build()
 	}
 	var out struct {
 		OK bool `json:"ok"`
 	}
 	if err := json.Unmarshal([]byte(resp.Text), &out); err != nil || !out.OK {
-		return errors.E(op, errors.BadGateway, "Gemini healthcheck returned an invalid structured response")
+		return errors.B.Op(op).KindBadGateway().Text("Gemini healthcheck returned an invalid structured response").Build()
 	}
 	return nil
 }
@@ -136,44 +136,44 @@ func (c *client) Complete(ctx context.Context, req llm.Request) (llm.Response, e
 
 	payload, err := c.interactionsPayload(req)
 	if err != nil {
-		return llm.Response{}, errors.E(op, err)
+		return llm.Response{}, errors.B.Op(op).Err(err).Build()
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return llm.Response{}, errors.E(op, errors.Internal, "building Gemini request", err)
+		return llm.Response{}, errors.B.Op(op).KindInternal().Text("building Gemini request").Err(err).Build()
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/interactions", bytes.NewReader(body))
 	if err != nil {
-		return llm.Response{}, errors.E(op, errors.Internal, "building Gemini request", err)
+		return llm.Response{}, errors.B.Op(op).KindInternal().Text("building Gemini request").Err(err).Build()
 	}
 	httpReq.Header.Set("x-goog-api-key", c.apiKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	httpResp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return llm.Response{}, errors.E(op, errors.Unavailable, "calling Gemini", err)
+		return llm.Response{}, errors.B.Op(op).KindUnavailable().Text("calling Gemini").Err(err).Build()
 	}
 	defer httpResp.Body.Close()
 
 	respBody, err := io.ReadAll(io.LimitReader(httpResp.Body, 4<<20))
 	if err != nil {
-		return llm.Response{}, errors.E(op, errors.BadGateway, "reading Gemini response", err)
+		return llm.Response{}, errors.B.Op(op).KindBadGateway().Text("reading Gemini response").Err(err).Build()
 	}
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
-		return llm.Response{}, errors.E(op, geminiProviderError(httpResp.StatusCode, respBody))
+		return llm.Response{}, errors.B.Op(op).Err(geminiProviderError(httpResp.StatusCode, respBody)).Build()
 	}
 
 	var resp interactionsResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return llm.Response{}, errors.E(op, errors.BadGateway, "decoding Gemini response", err)
+		return llm.Response{}, errors.B.Op(op).KindBadGateway().Text("decoding Gemini response").Err(err).Build()
 	}
 	if resp.Status != "completed" {
-		return llm.Response{}, errors.E(op, geminiInteractionStatusError(resp.Status))
+		return llm.Response{}, errors.B.Op(op).Err(geminiInteractionStatusError(resp.Status)).Build()
 	}
 	text := responseText(resp)
 	if text == "" {
-		return llm.Response{}, errors.E(op, errors.BadGateway, "Gemini response did not include output text")
+		return llm.Response{}, errors.B.Op(op).KindBadGateway().Text("Gemini response did not include output text").Build()
 	}
 	return llm.Response{
 		Text:         text,
@@ -187,7 +187,7 @@ func (c *client) interactionsPayload(req llm.Request) (interactionsRequest, erro
 	const op = "llm.gemini.interactionsPayload"
 
 	if len(req.Tools) > 0 {
-		return interactionsRequest{}, errors.E(op, errors.InvalidInput, "Gemini tool requests are not supported")
+		return interactionsRequest{}, errors.B.Op(op).KindInvalidInput().Text("Gemini tool requests are not supported").Build()
 	}
 	systemMessages := make([]string, 0, 1)
 	userMessages := make([]string, 0, len(req.Messages))
@@ -202,15 +202,12 @@ func (c *client) interactionsPayload(req llm.Request) (interactionsRequest, erro
 		case llm.RoleUser:
 			userMessages = append(userMessages, content)
 		default:
-			return interactionsRequest{}, errors.E(
-				op,
-				errors.InvalidInput,
-				fmt.Sprintf("unsupported Gemini message role %q", message.Role),
-			)
+			return interactionsRequest{}, errors.B.Op(op).KindInvalidInput().Textf("unsupported Gemini message role %q", message.Role).Build()
+
 		}
 	}
 	if len(userMessages) == 0 {
-		return interactionsRequest{}, errors.E(op, errors.InvalidInput, "Gemini request requires at least one non-empty user message")
+		return interactionsRequest{}, errors.B.Op(op).KindInvalidInput().Text("Gemini request requires at least one non-empty user message").Build()
 	}
 
 	store := false
@@ -240,7 +237,7 @@ func (c *client) interactionsPayload(req llm.Request) (interactionsRequest, erro
 	}
 	format, err := geminiResponseFormat(req.ResponseFormat)
 	if err != nil {
-		return interactionsRequest{}, errors.E(op, err)
+		return interactionsRequest{}, errors.B.Op(op).Err(err).Build()
 	}
 	payload.ResponseFormat = format
 	return payload, nil
@@ -267,11 +264,11 @@ func geminiResponseFormat(format llm.ResponseFormat) (*interactionsResponseForma
 		return nil, nil
 	case llm.ResponseFormatJSONSchema:
 		if len(format.Schema) == 0 || !json.Valid(format.Schema) {
-			return nil, errors.E(op, errors.InvalidInput, "json_schema response format requires a valid schema")
+			return nil, errors.B.Op(op).KindInvalidInput().Text("json_schema response format requires a valid schema").Build()
 		}
 		var schema map[string]any
 		if err := json.Unmarshal(format.Schema, &schema); err != nil {
-			return nil, errors.E(op, errors.InvalidInput, "decoding json_schema response format", err)
+			return nil, errors.B.Op(op).KindInvalidInput().Text("decoding json_schema response format").Err(err).Build()
 		}
 		return &interactionsResponseFormat{Type: "text", MIMEType: "application/json", Schema: schema}, nil
 	case llm.ResponseFormatJSONObject:
@@ -281,7 +278,7 @@ func geminiResponseFormat(format llm.ResponseFormat) (*interactionsResponseForma
 			Schema:   map[string]any{"type": "object"},
 		}, nil
 	default:
-		return nil, errors.E(op, errors.InvalidInput, fmt.Sprintf("unsupported Gemini response format %q", format.Type))
+		return nil, errors.B.Op(op).KindInvalidInput().Textf("unsupported Gemini response format %q", format.Type).Build()
 	}
 }
 
@@ -304,15 +301,12 @@ func geminiInteractionStatusError(status string) error {
 	detail := "Gemini interaction returned status=" + safeInteractionStatus(status)
 	switch status {
 	case "budget_exceeded":
-		return errors.E(
-			errors.ResourceExhausted,
-			errors.User("Gemini token budget was exceeded. Choose a smaller request or try again."),
-			detail,
-		)
+		return errors.B.KindResourceExhausted().UserMsg("Gemini token budget was exceeded. Choose a smaller request or try again.").Text(detail).Build()
+
 	case "incomplete":
-		return errors.E(errors.BadGateway, errors.User("Gemini returned an incomplete response. Try again."), detail)
+		return errors.B.KindBadGateway().UserMsg("Gemini returned an incomplete response. Try again.").Text(detail).Build()
 	default:
-		return errors.E(errors.BadGateway, errors.User("Gemini could not complete the request."), detail)
+		return errors.B.KindBadGateway().UserMsg("Gemini could not complete the request.").Text(detail).Build()
 	}
 }
 
@@ -341,40 +335,28 @@ func geminiProviderError(status int, body []byte) error {
 	}
 	detail := geminiProviderFailureDetail(status, parsed.Error.Status, reason)
 	if reason == "API_KEY_INVALID" || status == http.StatusUnauthorized {
-		return errors.E(errors.Unauthenticated, errors.User("Gemini API key was rejected. Check the key and try again."), detail)
+		return errors.B.KindUnauthenticated().UserMsg("Gemini API key was rejected. Check the key and try again.").Text(detail).Build()
 	}
 	if reason == "SERVICE_DISABLED" || parsed.Error.Status == "FAILED_PRECONDITION" {
-		return errors.E(
-			errors.Conflict,
-			errors.User("Gemini API access is unavailable for this project or region. Check availability or enable billing."),
-			detail,
-		)
+		return errors.B.
+			KindConflict().
+			UserMsg("Gemini API access is unavailable for this project or region. Check availability or enable billing.").
+			Text(detail).
+			Build()
 	}
 	if status == http.StatusForbidden {
-		return errors.E(
-			errors.Unauthenticated,
-			errors.User("Gemini API key was rejected or lacks permission for this model."),
-			detail,
-		)
+		return errors.B.KindUnauthenticated().UserMsg("Gemini API key was rejected or lacks permission for this model.").Text(detail).Build()
 	}
 	if status == http.StatusNotFound {
-		return errors.E(errors.Conflict, errors.User("Gemini model is unavailable. Choose another model and try again."), detail)
+		return errors.B.KindConflict().UserMsg("Gemini model is unavailable. Choose another model and try again.").Text(detail).Build()
 	}
 	if status == http.StatusTooManyRequests || parsed.Error.Status == "RESOURCE_EXHAUSTED" {
-		return errors.E(
-			errors.ResourceExhausted,
-			errors.User("Gemini quota or rate limit was exceeded. Wait a moment or check billing."),
-			detail,
-		)
+		return errors.B.KindResourceExhausted().UserMsg("Gemini quota or rate limit was exceeded. Wait a moment or check billing.").Text(detail).Build()
 	}
 	if status >= http.StatusInternalServerError {
-		return errors.E(errors.BadGateway, errors.User("Gemini is temporarily unavailable. Try again shortly."), detail)
+		return errors.B.KindBadGateway().UserMsg("Gemini is temporarily unavailable. Try again shortly.").Text(detail).Build()
 	}
-	return errors.E(
-		errors.BadGateway,
-		errors.User("Gemini rejected the request. Check the configured model and try again."),
-		detail,
-	)
+	return errors.B.KindBadGateway().UserMsg("Gemini rejected the request. Check the configured model and try again.").Text(detail).Build()
 }
 
 func geminiProviderFailureDetail(status int, providerStatus, reason string) string {

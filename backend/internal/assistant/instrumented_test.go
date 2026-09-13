@@ -87,11 +87,7 @@ func TestInstrumentedRuleDrafterRecordsSanitizedErrors(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	scope := observability.NewScope(logger, "test/assistant")
 	drafter := NewInstrumentedRuleDrafter(instrumentedRuleDrafterStub{
-		err: errors.E(
-			"assistant.RuleDraftService.requestDraft",
-			KindRuleDraftInvalidOutput,
-			stderrors.New("raw provider output contained sensitive data"),
-		),
+		err: errors.B.Op("assistant.RuleDraftService.requestDraft").Kind(KindRuleDraftInvalidOutput).Err(stderrors.New("raw provider output contained sensitive data")).Build(),
 	}, scope, logger)
 
 	_, err := drafter.DraftRule(context.Background(), store.Tenant{ID: "tenant-a"}, RuleDraftInput{

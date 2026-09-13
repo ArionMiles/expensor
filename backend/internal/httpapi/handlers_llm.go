@@ -124,7 +124,7 @@ func (h *Handlers) SaveLLMProviderConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if !json.Valid(body.Config) {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid provider config JSON")))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg("invalid provider config JSON").Build())
 		return
 	}
 	if err := llm.ValidateConfig(provider.Metadata.ConfigSchema, body.Config); err != nil {
@@ -257,13 +257,13 @@ func (h *Handlers) DisconnectLLMProvider(w http.ResponseWriter, r *http.Request)
 
 func (h *Handlers) llmProviderByPath(w http.ResponseWriter, r *http.Request) (llm.Provider, bool) {
 	if h.llmRegistry == nil {
-		writeError(w, r, errors.E(errors.NotFound, errors.User("LLM providers are not configured")))
+		writeError(w, r, errors.B.KindNotFound().UserMsg("LLM providers are not configured").Build())
 		return llm.Provider{}, false
 	}
 	name := r.PathValue("name")
 	provider, err := h.llmRegistry.GetProvider(name)
 	if err != nil {
-		writeError(w, r, errors.E(errors.NotFound, errors.User("LLM provider not found"), err))
+		writeError(w, r, errors.B.KindNotFound().UserMsg("LLM provider not found").Err(err).Build())
 		return llm.Provider{}, false
 	}
 	return provider, true
@@ -313,7 +313,7 @@ func (h *Handlers) llmProviderClientFromRuntime(w http.ResponseWriter, r *http.R
 		return llm.Provider{}, nil, false
 	}
 	if !found {
-		writeError(w, r, errors.E(errors.Conflict, errors.User("LLM provider credentials are not configured")))
+		writeError(w, r, errors.B.KindConflict().UserMsg("LLM provider credentials are not configured").Build())
 		return llm.Provider{}, nil, false
 	}
 	client, err := provider.NewClient(llm.ClientConfig{
@@ -321,11 +321,7 @@ func (h *Handlers) llmProviderClientFromRuntime(w http.ResponseWriter, r *http.R
 		Credentials: cloneRawJSON(credentials),
 	})
 	if err != nil {
-		writeError(w, r, errors.E(
-			errors.Conflict,
-			errors.User("LLM provider configuration is invalid."),
-			err,
-		))
+		writeError(w, r, errors.B.KindConflict().UserMsg("LLM provider configuration is invalid.").Err(err).Build())
 		return llm.Provider{}, nil, false
 	}
 	client = llm.NewInstrumentedClient(

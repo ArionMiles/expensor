@@ -67,7 +67,7 @@ func (h *Handlers) DiscoverMailboxes(w http.ResponseWriter, r *http.Request) {
 	profile := query.Profile
 	if _, err := os.Stat(profile); err != nil {
 		if os.IsNotExist(err) {
-			writeError(w, r, errors.E(errors.NotFound, errors.User("profile directory not found")))
+			writeError(w, r, errors.B.KindNotFound().UserMsg("profile directory not found").Build())
 		} else {
 			writeError(w, r, err)
 		}
@@ -102,7 +102,7 @@ func (h *Handlers) GetProviderGuide(w http.ResponseWriter, r *http.Request) {
 	}
 	guideData := provider.Metadata.SetupGuide
 	if len(guideData) == 0 {
-		writeError(w, r, errors.E(errors.NotFound, errors.User("no setup guide available for this provider")))
+		writeError(w, r, errors.B.KindNotFound().UserMsg("no setup guide available for this provider").Build())
 		return
 	}
 	var guide plugins.ProviderGuide

@@ -64,13 +64,13 @@ func (h *Handlers) SaveReaderConfig(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxCredentialsSize)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("failed to read body"), err))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg("failed to read body").Err(err).Build())
 		return
 	}
 
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid JSON body"), err))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg("invalid JSON body").Err(err).Build())
 		return
 	}
 

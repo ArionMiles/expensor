@@ -85,7 +85,7 @@ func New(ctx context.Context, deps Dependencies) (*Service, error) {
 		scope = observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/internal/community")
 	}
 	if deps.Store == nil || deps.Runtime == nil {
-		return nil, errors.E("community.new", errors.FailedPrecondition, "community store dependencies are required")
+		return nil, errors.B.Op("community.new").KindFailedPrecondition().Text("community store dependencies are required").Build()
 	}
 	if existing, err := deps.Runtime.GetCommunityURL(ctx); err != nil || existing == "" {
 		if setErr := deps.Runtime.SetCommunityURL(ctx, deps.Config.URL); setErr != nil {
@@ -237,18 +237,18 @@ func (s *Service) fetchJSON(ctx context.Context, path string, dest any) error {
 	url := strings.TrimRight(s.config.URL, "/") + "/" + path
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return errors.E("community.fetch", errors.InvalidArgument, "building request", err)
+		return errors.B.Op("community.fetch").KindInvalidArgument().Text("building request").Err(err).Build()
 	}
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return errors.E("community.fetch", errors.Unavailable, "fetching community content", err)
+		return errors.B.Op("community.fetch").KindUnavailable().Text("fetching community content").Err(err).Build()
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return errors.E("community.fetch", errors.BadGateway, "unexpected community content status")
+		return errors.B.Op("community.fetch").KindBadGateway().Text("unexpected community content status").Build()
 	}
 	if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
-		return errors.E("community.fetch", errors.InvalidInput, "decoding community content", err)
+		return errors.B.Op("community.fetch").KindInvalidInput().Text("decoding community content").Err(err).Build()
 	}
 	return nil
 }

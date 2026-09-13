@@ -93,20 +93,20 @@ func (s *RuleDraftService) DraftRule(ctx context.Context, tenant store.Tenant, i
 	const op = "assistant.RuleDraftService.DraftRule"
 
 	if s == nil || s.router == nil {
-		return RuleDraftResult{}, errors.E(op, llm.KindNoProviderConfigured, "no llm provider configured")
+		return RuleDraftResult{}, errors.B.Op(op).Kind(llm.KindNoProviderConfigured).Text("no llm provider configured").Build()
 	}
 	normalized, err := normalizeRuleDraftInput(input)
 	if err != nil {
-		return RuleDraftResult{}, errors.E(op, err)
+		return RuleDraftResult{}, errors.B.Op(op).Err(err).Build()
 	}
 	prompt, ok := s.router.PromptCatalog().Get(ruleDraftWorkflow, ruleDraftPurpose)
 	if !ok {
-		return RuleDraftResult{}, errors.E(op, KindRuleDraftPromptMissing, "rule draft prompt is not configured")
+		return RuleDraftResult{}, errors.B.Op(op).Kind(KindRuleDraftPromptMissing).Text("rule draft prompt is not configured").Build()
 	}
 
 	draft, raw, err := s.requestDraft(ctx, tenant, prompt, normalized, "")
 	if err != nil {
-		return RuleDraftResult{}, errors.E(op, err)
+		return RuleDraftResult{}, errors.B.Op(op).Err(err).Build()
 	}
 	matches, issues := validateRuleDraft(normalized.Samples, draft)
 	if len(issues) == 0 {
@@ -116,7 +116,7 @@ func (s *RuleDraftService) DraftRule(ctx context.Context, tenant store.Tenant, i
 	repairNote := fmt.Sprintf("The previous draft failed validation: %s. Previous draft JSON: %s", formatRuleDraftIssues(issues), raw)
 	draft, _, repairErr := s.requestDraft(ctx, tenant, prompt, normalized, repairNote)
 	if repairErr != nil {
-		return RuleDraftResult{}, errors.E(op, repairErr)
+		return RuleDraftResult{}, errors.B.Op(op).Err(repairErr).Build()
 	}
 	matches, issues = validateRuleDraft(normalized.Samples, draft)
 	if len(issues) > 0 {
@@ -137,7 +137,7 @@ func (s *RuleDraftService) requestDraft(
 	promptInput := redactRuleDraftInput(input)
 	contextJSON, err := ruleDraftContextJSON(promptInput, llm.RedactText(repairNote, llm.DefaultRedactionPolicy()))
 	if err != nil {
-		return RuleDraft{}, "", errors.E(op, err)
+		return RuleDraft{}, "", errors.B.Op(op).Err(err).Build()
 	}
 	messages := renderPromptMessages(prompt.Messages, map[string]string{
 		"rule_context_json": contextJSON,
@@ -156,16 +156,11 @@ func (s *RuleDraftService) requestDraft(
 		},
 	})
 	if err != nil {
-		return RuleDraft{}, "", errors.E(op, err)
+		return RuleDraft{}, "", errors.B.Op(op).Err(err).Build()
 	}
 	var draft RuleDraft
 	if err := json.Unmarshal([]byte(response.Text), &draft); err != nil {
-		return RuleDraft{}, response.Text, errors.E(
-			op,
-			KindRuleDraftInvalidOutput,
-			errors.User("rule draft response could not be parsed"),
-			err,
-		)
+		return RuleDraft{}, response.Text, errors.B.Op(op).Kind(KindRuleDraftInvalidOutput).UserMsg("rule draft response could not be parsed").Err(err).Build()
 	}
 	draft.SenderEmails = ruleDraftSenderEmails(input)
 	draft.normalize()
@@ -241,7 +236,7 @@ func normalizeRuleDraftInput(input RuleDraftInput) (RuleDraftInput, error) {
 	}
 	if len(samples) == 0 {
 		msg := "add at least one email sample"
-		return RuleDraftInput{}, errors.E(op, KindRuleDraftInvalidInput, errors.User(msg), msg)
+		return RuleDraftInput{}, errors.B.Op(op).Kind(KindRuleDraftInvalidInput).UserMsg(msg).Text(msg).Build()
 	}
 	hasExpected := false
 	for _, sample := range samples {
@@ -252,7 +247,7 @@ func normalizeRuleDraftInput(input RuleDraftInput) (RuleDraftInput, error) {
 	}
 	if !hasExpected {
 		msg := "add expected amount and merchant to at least one sample"
-		return RuleDraftInput{}, errors.E(op, KindRuleDraftInvalidInput, errors.User(msg), msg)
+		return RuleDraftInput{}, errors.B.Op(op).Kind(KindRuleDraftInvalidInput).UserMsg(msg).Text(msg).Build()
 	}
 	input.Samples = samples
 	return input, nil
@@ -303,7 +298,7 @@ func ruleDraftContextJSON(input RuleDraftInput, repairNote string) (string, erro
 	}
 	body, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
-		return "", errors.E("assistant.rule_draft.rule_draft_context_json", "encoding rule draft prompt context", err)
+		return "", errors.B.Op("assistant.rule_draft.rule_draft_context_json").Text("encoding rule draft prompt context").Err(err).Build()
 	}
 	return string(body), nil
 }

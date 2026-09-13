@@ -2,7 +2,6 @@ package observability
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"go.opentelemetry.io/otel"
@@ -49,7 +48,7 @@ func Setup(ctx context.Context, cfg config.Observability) (SetupResult, error) {
 		return SetupResult{Shutdown: noopShutdown, Logger: logger, LogLevel: logLevel}, nil
 	}
 	if exporter != ExporterOTLP {
-		return SetupResult{}, errors.E("observability.setup", errors.InvalidArgument, fmt.Sprintf("unsupported observability exporter %q", cfg.Exporter))
+		return SetupResult{}, errors.B.Op("observability.setup").KindInvalidArgument().Textf("unsupported observability exporter %q", cfg.Exporter).Build()
 	}
 
 	res, err := newResource(cfg)
@@ -108,7 +107,7 @@ func newResource(cfg config.Observability) (*resource.Resource, error) {
 		),
 	)
 	if err != nil {
-		return nil, errors.E("observability.new_resource", "creating telemetry resource", err)
+		return nil, errors.B.Op("observability.new_resource").Text("creating telemetry resource").Err(err).Build()
 	}
 	return res, nil
 }
@@ -124,7 +123,7 @@ func newTracerProvider(ctx context.Context, cfg config.Observability, res *resou
 
 	exporter, err := otlptracegrpc.New(ctx, opts...)
 	if err != nil {
-		return nil, errors.E("observability.new_tracer_provider", "creating otlp trace exporter", err)
+		return nil, errors.B.Op("observability.new_tracer_provider").Text("creating otlp trace exporter").Err(err).Build()
 	}
 	return sdktrace.NewTracerProvider(sdktrace.WithResource(res), sdktrace.WithBatcher(exporter)), nil
 }
@@ -140,7 +139,7 @@ func newMeterProvider(ctx context.Context, cfg config.Observability, res *resour
 
 	exporter, err := otlpmetricgrpc.New(ctx, opts...)
 	if err != nil {
-		return nil, errors.E("observability.new_meter_provider", "creating otlp metric exporter", err)
+		return nil, errors.B.Op("observability.new_meter_provider").Text("creating otlp metric exporter").Err(err).Build()
 	}
 	return sdkmetric.NewMeterProvider(
 		sdkmetric.WithResource(res),

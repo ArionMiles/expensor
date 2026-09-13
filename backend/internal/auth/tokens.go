@@ -16,12 +16,12 @@ const opaqueTokenBytes = 32
 func NewOpaqueToken(prefix string) (raw, hash string, err error) {
 	prefix = strings.TrimSpace(prefix)
 	if prefix == "" {
-		return "", "", errors.E(errors.InvalidInput, "token prefix cannot be blank")
+		return "", "", errors.B.KindInvalidInput().Text("token prefix cannot be blank").Build()
 	}
 
 	random := make([]byte, opaqueTokenBytes)
 	if _, err := rand.Read(random); err != nil {
-		return "", "", errors.E("auth.tokens.new_opaque_token", "generating token", err)
+		return "", "", errors.B.Op("auth.tokens.new_opaque_token").Text("generating token").Err(err).Build()
 	}
 
 	raw = prefix + "_" + base64.RawURLEncoding.EncodeToString(random)

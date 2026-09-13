@@ -38,14 +38,14 @@ func Run(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger) error {
 
 	logger.Debug("running embedded migrations")
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return errors.E("postgres.migrations.run", errors.Internal, "applying migrations", err)
+		return errors.B.Op("postgres.migrations.run").KindInternal().Text("applying migrations").Err(err).Build()
 	}
 	return nil
 }
 
 func ensureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	if _, err := pool.Exec(ctx, `CREATE SCHEMA IF NOT EXISTS expensor`); err != nil {
-		return errors.E("postgres.migrations.ensure_schema", errors.Internal, "creating expensor schema", err)
+		return errors.B.Op("postgres.migrations.ensure_schema").KindInternal().Text("creating expensor schema").Err(err).Build()
 	}
 	return nil
 }
@@ -55,7 +55,7 @@ func newMigrator(pool *pgxpool.Pool) (*migrate.Migrate, error) {
 	source, err := iofs.New(FS, ".")
 	if err != nil {
 		_ = db.Close()
-		return nil, errors.E("postgres.migrations.new", errors.Internal, "creating embedded migration source", err)
+		return nil, errors.B.Op("postgres.migrations.new").KindInternal().Text("creating embedded migration source").Err(err).Build()
 	}
 
 	driver, err := pgdriver.WithInstance(db, &pgdriver.Config{
@@ -63,13 +63,13 @@ func newMigrator(pool *pgxpool.Pool) (*migrate.Migrate, error) {
 	})
 	if err != nil {
 		_ = db.Close()
-		return nil, errors.E("postgres.migrations.new", errors.Internal, "creating postgres migration driver", err)
+		return nil, errors.B.Op("postgres.migrations.new").KindInternal().Text("creating postgres migration driver").Err(err).Build()
 	}
 
 	m, err := migrate.NewWithInstance("iofs", source, "pgx5", driver)
 	if err != nil {
 		_ = db.Close()
-		return nil, errors.E("postgres.migrations.new", errors.Internal, "initializing migrate", err)
+		return nil, errors.B.Op("postgres.migrations.new").KindInternal().Text("initializing migrate").Err(err).Build()
 	}
 	return m, nil
 }

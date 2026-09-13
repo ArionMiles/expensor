@@ -42,22 +42,22 @@ func NewFromJSONAndStore(ctx context.Context, input StoreClientInput) (*http.Cli
 
 	config, err := google.ConfigFromJSON(input.SecretJSON, input.Scopes...)
 	if err != nil {
-		return nil, errors.E(op, errors.InvalidInput, "parsing client secret", err)
+		return nil, errors.B.Op(op).KindInvalidInput().Text("parsing client secret").Err(err).Build()
 	}
 	if input.Store == nil {
-		return nil, errors.E(op, errors.Internal, "token store is nil")
+		return nil, errors.B.Op(op).KindInternal().Text("token store is nil").Build()
 	}
 
 	tokenJSON, ok, err := input.Store.GetReaderToken(ctx, input.Tenant, input.Reader)
 	if err != nil {
-		return nil, errors.E(op, "loading token for reader "+input.Reader, err)
+		return nil, errors.B.Op(op).Text("loading token for reader " + input.Reader).Err(err).Build()
 	}
 	if !ok {
-		return nil, errors.E(op, KindTokenMissing, errors.User("provider is not authenticated"), "reader token missing")
+		return nil, errors.B.Op(op).Kind(KindTokenMissing).UserMsg("provider is not authenticated").Text("reader token missing").Build()
 	}
 	tok := &oauth2.Token{}
 	if err := json.Unmarshal(tokenJSON, tok); err != nil {
-		return nil, errors.E(op, errors.InvalidInput, "parsing token for reader "+input.Reader, err)
+		return nil, errors.B.Op(op).KindInvalidInput().Text("parsing token for reader " + input.Reader).Err(err).Build()
 	}
 
 	tokenSource := &persistingStoreTokenSource{
@@ -68,7 +68,7 @@ func NewFromJSONAndStore(ctx context.Context, input StoreClientInput) (*http.Cli
 		tokenSource: config.TokenSource(ctx, tok),
 	}
 	if _, err := tokenSource.Token(); err != nil {
-		return nil, errors.E(op, errors.FailedPrecondition, "refreshing token for reader "+input.Reader, err)
+		return nil, errors.B.Op(op).KindFailedPrecondition().Text("refreshing token for reader " + input.Reader).Err(err).Build()
 	}
 	return oauth2.NewClient(ctx, tokenSource), nil
 }
@@ -108,7 +108,7 @@ func GetOAuthConfig(secretJSON []byte, redirectURL string, scopes ...string) (*o
 
 	config, err := google.ConfigFromJSON(secretJSON, scopes...)
 	if err != nil {
-		return nil, errors.E(op, errors.InvalidInput, "parsing client secret", err)
+		return nil, errors.B.Op(op).KindInvalidInput().Text("parsing client secret").Err(err).Build()
 	}
 
 	config.RedirectURL = redirectURL

@@ -41,19 +41,19 @@ func TestScanRunnerMapsSharedScanFailures(t *testing.T) {
 	}{
 		{
 			name:       "reader",
-			cause:      apperrors.E(daemon.KindReaderNotConfigured, "missing"),
+			cause:      apperrors.B.Kind(daemon.KindReaderNotConfigured).Text("missing").Build(),
 			kind:       daemon.KindReaderNotConfigured,
 			publicText: "Complete reader setup to continue scanning.",
 		},
 		{
 			name:       "credentials",
-			cause:      apperrors.E(oauth.KindCredentialsMissing, "missing"),
+			cause:      apperrors.B.Kind(oauth.KindCredentialsMissing).Text("missing").Build(),
 			kind:       oauth.KindCredentialsMissing,
 			publicText: "Upload reader credentials to continue scanning.",
 		},
 		{
 			name:       "token",
-			cause:      apperrors.E(oauth.KindTokenMissing, "missing"),
+			cause:      apperrors.B.Kind(oauth.KindTokenMissing).Text("missing").Build(),
 			kind:       oauth.KindTokenMissing,
 			publicText: "Connect your reader account to continue scanning.",
 		},

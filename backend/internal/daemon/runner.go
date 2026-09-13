@@ -127,7 +127,7 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 	provider, err := r.registry.GetProvider(runCfg.ReaderName)
 	if err != nil {
 		runErr = err
-		return apperrors.E("daemon.run", apperrors.Internal, "creating reader", err)
+		return apperrors.B.Op("daemon.run").KindInternal().Text("creating reader").Err(err).Build()
 	}
 	reader, err := provider.NewReader(plugins.ProviderInput{
 		HTTPClient:     r.httpClient,
@@ -141,7 +141,7 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 	})
 	if err != nil {
 		runErr = err
-		return apperrors.E("daemon.run", apperrors.Internal, "creating reader", err)
+		return apperrors.B.Op("daemon.run").KindInternal().Text("creating reader").Err(err).Build()
 	}
 
 	ingestionCfg := store.IngestionConfig{Tenant: runCfg.Tenant}
@@ -152,7 +152,7 @@ func (r *Runner) Run(ctx context.Context, runCfg RunConfig) error {
 	sink, err := newTransactionSink(r.transactionWriter, ingestionCfg, r.logger.With("component", "transaction_ingestion"))
 	if err != nil {
 		runErr = err
-		return apperrors.E("daemon.run", apperrors.Internal, "creating transaction sink", err)
+		return apperrors.B.Op("daemon.run").KindInternal().Text("creating transaction sink").Err(err).Build()
 	}
 
 	// Create transaction and acknowledgment channels

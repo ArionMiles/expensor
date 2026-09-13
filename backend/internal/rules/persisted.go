@@ -40,17 +40,17 @@ func LoadPersisted(ctx context.Context, st PersistedStore, tenant store.Tenant, 
 func compilePersisted(row store.RuleRow) (api.Rule, error) {
 	amount, err := regexp.Compile(row.AmountRegex)
 	if err != nil {
-		return api.Rule{}, errors.E("rules.compile_persisted", errors.InvalidInput, "amount_regex", err)
+		return api.Rule{}, errors.B.Op("rules.compile_persisted").KindInvalidInput().Text("amount_regex").Err(err).Build()
 	}
 	merchant, err := regexp.Compile(row.MerchantRegex)
 	if err != nil {
-		return api.Rule{}, errors.E("rules.compile_persisted", errors.InvalidInput, "merchant_regex", err)
+		return api.Rule{}, errors.B.Op("rules.compile_persisted").KindInvalidInput().Text("merchant_regex").Err(err).Build()
 	}
 	var currency *regexp.Regexp
 	if row.CurrencyRegex != "" {
 		currency, err = regexp.Compile(row.CurrencyRegex)
 		if err != nil {
-			return api.Rule{}, errors.E("rules.compile_persisted", errors.InvalidInput, "currency_regex", err)
+			return api.Rule{}, errors.B.Op("rules.compile_persisted").KindInvalidInput().Text("currency_regex").Err(err).Build()
 		}
 	}
 	return api.Rule{

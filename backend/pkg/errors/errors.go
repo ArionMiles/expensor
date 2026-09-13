@@ -40,52 +40,101 @@ var (
 type Error struct {
 	Op      string
 	Kind    Kind
-	Message string
+	Text    string
 	UserMsg string
+	Data    any
 	Err     error
 }
+
+// Builder explicitly assembles an application error.
+type Builder struct {
+	op      string
+	kind    Kind
+	text    string
+	userMsg string
+	data    any
+	err     error
+}
+
+// B is the empty application error builder.
+var B Builder
+
+// Op sets the logical operation.
+func (b Builder) Op(op string) Builder {
+	b.op = op
+	return b
+}
+
+// Kind sets the application error kind.
+func (b Builder) Kind(kind Kind) Builder {
+	b.kind = kind
+	return b
+}
+
+// Text sets internal diagnostic text.
+func (b Builder) Text(text string) Builder {
+	b.text = text
+	return b
+}
+
+// Textf formats and sets internal diagnostic text.
+func (b Builder) Textf(format string, args ...any) Builder {
+	b.text = fmt.Sprintf(format, args...)
+	return b
+}
+
+// UserMsg sets text that is safe to expose to callers.
+func (b Builder) UserMsg(message string) Builder {
+	b.userMsg = message
+	return b
+}
+
+// Data sets structured error-specific context.
+func (b Builder) Data(data any) Builder {
+	b.data = data
+	return b
+}
+
+// Err adds an underlying error.
+func (b Builder) Err(err error) Builder {
+	b.err = Join(b.err, err)
+	return b
+}
+
+// Build creates an application error from the builder values.
+func (b Builder) Build() *Error {
+	err := &Error{
+		Op:      b.op,
+		Kind:    b.kind,
+		Text:    b.text,
+		UserMsg: b.userMsg,
+		Data:    b.data,
+		Err:     b.err,
+	}
+	err.promote()
+	return err
+}
+
+func (b Builder) KindInvalidArgument() Builder    { return b.Kind(InvalidArgument) }
+func (b Builder) KindInvalidInput() Builder       { return b.Kind(InvalidInput) }
+func (b Builder) KindUnauthenticated() Builder    { return b.Kind(Unauthenticated) }
+func (b Builder) KindPermissionDenied() Builder   { return b.Kind(PermissionDenied) }
+func (b Builder) KindNotFound() Builder           { return b.Kind(NotFound) }
+func (b Builder) KindMethodNotAllowed() Builder   { return b.Kind(MethodNotAllowed) }
+func (b Builder) KindConflict() Builder           { return b.Kind(Conflict) }
+func (b Builder) KindFailedPrecondition() Builder { return b.Kind(FailedPrecondition) }
+func (b Builder) KindPayloadTooLarge() Builder    { return b.Kind(PayloadTooLarge) }
+func (b Builder) KindResourceExhausted() Builder  { return b.Kind(ResourceExhausted) }
+func (b Builder) KindInternal() Builder           { return b.Kind(Internal) }
+func (b Builder) KindUnimplemented() Builder      { return b.Kind(Unimplemented) }
+func (b Builder) KindUnavailable() Builder        { return b.Kind(Unavailable) }
+func (b Builder) KindCanceled() Builder           { return b.Kind(Canceled) }
+func (b Builder) KindDeadlineExceeded() Builder   { return b.Kind(DeadlineExceeded) }
+func (b Builder) KindBadGateway() Builder         { return b.Kind(BadGateway) }
 
 // KindCarrier is implemented by custom error types that can provide an application kind.
 type KindCarrier interface {
 	ErrorKind() Kind
-}
-
-// UserMessage is safe to expose to callers.
-type UserMessage string
-
-// E builds an application error. Arguments are interpreted by type.
-func E(args ...any) error {
-	var e Error
-	for _, arg := range args {
-		switch v := arg.(type) {
-		case nil:
-		case Kind:
-			e.Kind = v
-		case UserMessage:
-			e.UserMsg = string(v)
-		case string:
-			if e.isEmpty() {
-				e.Op = v
-			} else {
-				e.Message = v
-			}
-		case error:
-			e.Err = Join(e.Err, v)
-		default:
-			e.Message = fmt.Sprint(v)
-		}
-	}
-	e.promote()
-	return &e
-}
-
-func (e *Error) isEmpty() bool {
-	return e.Op == "" && e.Kind == Unknown && e.Message == "" && e.UserMsg == "" && e.Err == nil
-}
-
-// User returns a user-facing message option.
-func User(message string) UserMessage {
-	return UserMessage(message)
 }
 
 // Unwrap returns the result of calling err's Unwrap method, if any.
@@ -113,8 +162,8 @@ func (e *Error) Error() string {
 	if e.Op != "" {
 		parts = append(parts, e.Op)
 	}
-	if e.Message != "" {
-		parts = append(parts, e.Message)
+	if e.Text != "" {
+		parts = append(parts, e.Text)
 	} else if e.Kind != Unknown {
 		kindText := e.Kind.String()
 		if e.Err == nil || e.Err.Error() != kindText {

@@ -8,7 +8,7 @@ func ValidateDiagnosticFilterStatus(status string) error {
 	case DiagnosticStatusOpen, DiagnosticStatusResolved, DiagnosticStatusIgnored, DiagnosticStatusAll:
 		return nil
 	default:
-		return errors.E("store.diagnostics.validate_filter_status", errors.InvalidInput, "invalid diagnostic status")
+		return errors.B.Op("store.diagnostics.validate_filter_status").KindInvalidInput().Text("invalid diagnostic status").Build()
 	}
 }
 
@@ -17,6 +17,6 @@ func ValidateDiagnosticUpdateStatus(status string) error {
 	case DiagnosticStatusOpen, DiagnosticStatusResolved, DiagnosticStatusIgnored:
 		return nil
 	default:
-		return errors.E("store.diagnostics.validate_update_status", errors.InvalidInput, "invalid diagnostic status")
+		return errors.B.Op("store.diagnostics.validate_update_status").KindInvalidInput().Text("invalid diagnostic status").Build()
 	}
 }

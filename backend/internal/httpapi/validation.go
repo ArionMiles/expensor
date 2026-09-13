@@ -157,7 +157,7 @@ func decodeAndValidateJSON[T any](
 func decodeJSONRequest[T any](w http.ResponseWriter, r *http.Request) (T, bool) {
 	var request T
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid JSON body"), err))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg("invalid JSON body").Err(err).Build())
 		return request, false
 	}
 	return request, true

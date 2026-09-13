@@ -30,12 +30,12 @@ const (
 )
 
 var (
-	errStoreNotFound                = errors.E(errors.NotFound, "not found")
-	errStoreConflict                = errors.E(errors.Conflict, "conflict")
-	errStoreAccessTokenNameConflict = errors.E(errors.Conflict, errors.User("Token test already exists."), "access token name conflict")
-	errStoreUserEmailConflict       = errors.E(errors.Conflict, errors.User("User b@example.com already exists."), "user email conflict")
-	errStoreRuleNameConflict        = errors.E(errors.Conflict, errors.User("rule name already exists"), "rule name conflict")
-	errStoreDiagnosticConflict      = errors.E(errors.Conflict, errors.User("open extraction diagnostic already exists"), "diagnostic conflict")
+	errStoreNotFound                = errors.B.KindNotFound().Text("not found").Build()
+	errStoreConflict                = errors.B.KindConflict().Text("conflict").Build()
+	errStoreAccessTokenNameConflict = errors.B.KindConflict().UserMsg("Token test already exists.").Text("access token name conflict").Build()
+	errStoreUserEmailConflict       = errors.B.KindConflict().UserMsg("User b@example.com already exists.").Text("user email conflict").Build()
+	errStoreRuleNameConflict        = errors.B.KindConflict().UserMsg("rule name already exists").Text("rule name conflict").Build()
+	errStoreDiagnosticConflict      = errors.B.KindConflict().UserMsg("open extraction diagnostic already exists").Text("diagnostic conflict").Build()
 )
 
 type mockDaemon struct {
@@ -79,7 +79,7 @@ func mockStoreErr(op string, err error) error {
 		return nil
 	}
 	if errors.WhatKind(err) != errors.Unknown {
-		return errors.E(op, err)
+		return errors.B.Op(op).Err(err).Build()
 	}
 	return err
 }
@@ -634,7 +634,7 @@ func (m *mockStore) SetReaderConfig(_ context.Context, tenant store.Tenant, read
 	return nil
 }
 
-func (m *mockStore) GetReaderConfig(_ context.Context, tenant store.Tenant, reader string) (json.RawMessage, bool, error) {
+func (m *mockStore) GetReaderConfig(_ context.Context, tenant store.Tenant, reader string) (config json.RawMessage, ok bool, err error) {
 	cfg, ok := m.readerConfigs[m.readerRuntimeKey(tenant, reader)]
 	return append(json.RawMessage(nil), cfg...), ok, nil
 }
@@ -662,7 +662,11 @@ func (m *mockStore) SetLLMProviderConfig(_ context.Context, tenant store.Tenant,
 	return nil
 }
 
-func (m *mockStore) GetLLMProviderConfig(_ context.Context, tenant store.Tenant, provider string) (json.RawMessage, bool, error) {
+func (m *mockStore) GetLLMProviderConfig(
+	_ context.Context,
+	tenant store.Tenant,
+	provider string,
+) (config json.RawMessage, ok bool, err error) {
 	cfg, ok := m.llmProviderConfigs[m.llmProviderRuntimeKey(tenant, provider)]
 	return append(json.RawMessage(nil), cfg...), ok, nil
 }

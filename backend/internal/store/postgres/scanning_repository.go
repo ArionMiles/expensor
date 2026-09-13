@@ -27,7 +27,7 @@ func (r *scanningRepository) GetSchedulerConfig(ctx context.Context) (store.Sche
 		WHERE id = true
 	`).Scan(&cfg.MaxConcurrentScans, &cfg.UpdatedAt)
 	if err != nil {
-		return store.SchedulerConfig{}, errors.E("postgres.scanning.get_scheduler_config", "getting scheduler config", err)
+		return store.SchedulerConfig{}, errors.B.Op("postgres.scanning.get_scheduler_config").Text("getting scheduler config").Err(err).Build()
 	}
 	return cfg, nil
 }
@@ -37,7 +37,7 @@ func (r *scanningRepository) PatchSchedulerConfig(ctx context.Context, patch sto
 		return r.GetSchedulerConfig(ctx)
 	}
 	if *patch.MaxConcurrentScans < 1 || *patch.MaxConcurrentScans > 64 {
-		return store.SchedulerConfig{}, errors.E(errors.InvalidInput, "max concurrent scans must be between 1 and 64")
+		return store.SchedulerConfig{}, errors.B.KindInvalidInput().Text("max concurrent scans must be between 1 and 64").Build()
 	}
 	var cfg store.SchedulerConfig
 	err := r.pool.QueryRow(ctx, `
@@ -47,7 +47,7 @@ func (r *scanningRepository) PatchSchedulerConfig(ctx context.Context, patch sto
 		RETURNING max_concurrent_scans, updated_at
 	`, *patch.MaxConcurrentScans).Scan(&cfg.MaxConcurrentScans, &cfg.UpdatedAt)
 	if err != nil {
-		return store.SchedulerConfig{}, errors.E("postgres.scanning.patch_scheduler_config", "patching scheduler config", err)
+		return store.SchedulerConfig{}, errors.B.Op("postgres.scanning.patch_scheduler_config").Text("patching scheduler config").Err(err).Build()
 	}
 	return cfg, nil
 }
@@ -65,7 +65,7 @@ func (r *scanningRepository) EnsureScanningStateForTenant(ctx context.Context, t
 		ON CONFLICT (tenant_id) DO NOTHING
 	`, tenantID)
 	if err != nil {
-		return errors.E("postgres.scanning.ensure_scanning_state_for_tenant", "ensuring scanning state for tenant", err)
+		return errors.B.Op("postgres.scanning.ensure_scanning_state_for_tenant").Text("ensuring scanning state for tenant").Err(err).Build()
 	}
 	return nil
 }
@@ -89,7 +89,7 @@ func (r *scanningRepository) ListRunnableScanningStates(ctx context.Context) ([]
 		ORDER BY updated_at, tenant_id
 	`)
 	if err != nil {
-		return nil, errors.E("postgres.scanning.list_runnable_scanning_states", "listing runnable scanning states", err)
+		return nil, errors.B.Op("postgres.scanning.list_runnable_scanning_states").Text("listing runnable scanning states").Err(err).Build()
 	}
 	defer rows.Close()
 
@@ -102,7 +102,7 @@ func (r *scanningRepository) ListRunnableScanningStates(ctx context.Context) ([]
 		states = append(states, state)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, errors.E("postgres.scanning.list_runnable_scanning_states", "iterating runnable scanning states", err)
+		return nil, errors.B.Op("postgres.scanning.list_runnable_scanning_states").Text("iterating runnable scanning states").Err(err).Build()
 	}
 	return states, nil
 }
@@ -115,7 +115,7 @@ func (r *scanningRepository) ListScanningStates(ctx context.Context) ([]store.Te
 		ORDER BY updated_at DESC, tenant_id
 	`)
 	if err != nil {
-		return nil, errors.E("postgres.scanning.list_scanning_states", "listing scanning states", err)
+		return nil, errors.B.Op("postgres.scanning.list_scanning_states").Text("listing scanning states").Err(err).Build()
 	}
 	defer rows.Close()
 
@@ -128,7 +128,7 @@ func (r *scanningRepository) ListScanningStates(ctx context.Context) ([]store.Te
 		states = append(states, state)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, errors.E("postgres.scanning.list_scanning_states", "iterating scanning states", err)
+		return nil, errors.B.Op("postgres.scanning.list_scanning_states").Text("iterating scanning states").Err(err).Build()
 	}
 	return states, nil
 }
@@ -157,7 +157,7 @@ func (r *scanningRepository) SetActiveScanningReader(ctx context.Context, tenant
 		    updated_at = now()
 	`, tenantID, reader, state)
 	if err != nil {
-		return errors.E("postgres.scanning.set_active_scanning_reader", "setting active scanning reader", err)
+		return errors.B.Op("postgres.scanning.set_active_scanning_reader").Text("setting active scanning reader").Err(err).Build()
 	}
 	return nil
 }
@@ -182,7 +182,7 @@ func (r *scanningRepository) ClearActiveScanningReader(ctx context.Context, tena
 		    updated_at = now()
 	`, tenantID)
 	if err != nil {
-		return errors.E("postgres.scanning.clear_active_scanning_reader", "clearing active scanning reader", err)
+		return errors.B.Op("postgres.scanning.clear_active_scanning_reader").Text("clearing active scanning reader").Err(err).Build()
 	}
 	return nil
 }
@@ -207,7 +207,7 @@ func (r *scanningRepository) SetScanningEnabled(ctx context.Context, tenant stor
 		WHERE tenant_id = $1
 	`, tenantID, enabled)
 	if err != nil {
-		return errors.E("postgres.scanning.set_scanning_enabled", "setting scanning enabled", err)
+		return errors.B.Op("postgres.scanning.set_scanning_enabled").Text("setting scanning enabled").Err(err).Build()
 	}
 	return nil
 }
@@ -238,7 +238,7 @@ func (r *scanningRepository) UpdateScanningState(ctx context.Context, tenant sto
 		update.LastStoppedAt, update.LastFailedAt, update.NextRetryAt, retryCount,
 	)
 	if err != nil {
-		return errors.E("postgres.scanning.update_scanning_state", "updating scanning state", err)
+		return errors.B.Op("postgres.scanning.update_scanning_state").Text("updating scanning state").Err(err).Build()
 	}
 	return nil
 }
@@ -256,9 +256,9 @@ func (r *scanningRepository) fetchScanningState(ctx context.Context, tenant stor
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return store.TenantScanningState{}, errors.E("store.scanning.get_state", errors.NotFound)
+			return store.TenantScanningState{}, errors.B.Op("store.scanning.get_state").KindNotFound().Build()
 		}
-		return store.TenantScanningState{}, errors.E("postgres.scanning.fetch_scanning_state", "getting scanning state", err)
+		return store.TenantScanningState{}, errors.B.Op("postgres.scanning.fetch_scanning_state").Text("getting scanning state").Err(err).Build()
 	}
 	return state, nil
 }
@@ -270,7 +270,7 @@ func scanTenantScanningState(row pgx.Row) (store.TenantScanningState, error) {
 		&state.LastStartedAt, &state.LastStoppedAt, &state.LastFailedAt, &state.NextRetryAt, &state.RetryCount, &state.UpdatedAt,
 	)
 	if err != nil {
-		return store.TenantScanningState{}, errors.E("postgres.scanning.scan_tenant_scanning_state", "scanning tenant scanning state", err)
+		return store.TenantScanningState{}, errors.B.Op("postgres.scanning.scan_tenant_scanning_state").Text("scanning tenant scanning state").Err(err).Build()
 	}
 	return state, nil
 }
@@ -278,7 +278,7 @@ func scanTenantScanningState(row pgx.Row) (store.TenantScanningState, error) {
 func requireTenantID(tenant store.Tenant) (string, error) {
 	tenantID := strings.TrimSpace(tenant.ID)
 	if tenantID == "" {
-		return "", errors.E(errors.InvalidInput, "tenant id is required")
+		return "", errors.B.KindInvalidInput().Text("tenant id is required").Build()
 	}
 	return tenantID, nil
 }

@@ -185,9 +185,9 @@ func apiErrorFallback(mux *http.ServeMux) http.Handler {
 		handler.ServeHTTP(probe, r)
 		switch probe.status {
 		case http.StatusNotFound:
-			writeError(w, r, errors.E(errors.NotFound, errors.User("API endpoint not found.")))
+			writeError(w, r, errors.B.KindNotFound().UserMsg("API endpoint not found.").Build())
 		case http.StatusMethodNotAllowed:
-			writeError(w, r, errors.E(errors.MethodNotAllowed, errors.User("Method not allowed.")))
+			writeError(w, r, errors.B.KindMethodNotAllowed().UserMsg("Method not allowed.").Build())
 		default:
 			handler.ServeHTTP(w, r)
 		}

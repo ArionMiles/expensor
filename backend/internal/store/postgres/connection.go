@@ -14,7 +14,7 @@ const SearchPath = "expensor,public"
 func ParsePoolConfig(connStr string) (*pgxpool.Config, error) {
 	cfg, err := pgxpool.ParseConfig(connStr)
 	if err != nil {
-		return nil, errors.E("postgres.connection.parse", errors.InvalidArgument, "parsing connection string", err)
+		return nil, errors.B.Op("postgres.connection.parse").KindInvalidArgument().Text("parsing connection string").Err(err).Build()
 	}
 	if cfg.ConnConfig.RuntimeParams == nil {
 		cfg.ConnConfig.RuntimeParams = map[string]string{}

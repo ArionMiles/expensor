@@ -69,7 +69,7 @@ type Controller struct {
 // NewController constructs an interactive daemon controller.
 func NewController(deps ControllerDependencies) (*Controller, error) {
 	if deps.Context == nil || deps.Scanner == nil || deps.Store == nil {
-		return nil, errors.E("daemon.controller.new", errors.FailedPrecondition, "controller dependencies are required")
+		return nil, errors.B.Op("daemon.controller.new").KindFailedPrecondition().Text("controller dependencies are required").Build()
 	}
 	logger := deps.Logger
 	if logger == nil {
@@ -203,11 +203,11 @@ func (c *Controller) Close(ctx context.Context) error {
 		select {
 		case <-c.workerDone:
 		case <-ctx.Done():
-			return errors.E("daemon.controller.close", ctx.Err())
+			return errors.B.Op("daemon.controller.close").Err(ctx.Err()).Build()
 		}
 	}
 	if err := c.stopCurrent(ctx); err != nil {
-		return errors.E("daemon.controller.close", err)
+		return errors.B.Op("daemon.controller.close").Err(err).Build()
 	}
 	return nil
 }

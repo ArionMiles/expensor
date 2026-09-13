@@ -52,11 +52,11 @@ func newApp(ctx context.Context, opts Options, openStore func(context.Context, S
 	}
 	content, err := catalog.Load()
 	if err != nil {
-		return nil, errors.E("app.new", errors.Internal, "loading bundled content", err)
+		return nil, errors.B.Op("app.new").KindInternal().Text("loading bundled content").Err(err).Build()
 	}
 	registry := plugins.NewRegistry()
 	if err := registerReaders(registry, content.ReaderGuides); err != nil {
-		return nil, errors.E("app.new", err)
+		return nil, errors.B.Op("app.new").Err(err).Build()
 	}
 	logger.Info("plugins registered", "providers", len(registry.ListProviders()))
 	logger.Info("loaded embedded content", "rules", len(content.SystemRules), "mcc_codes", len(content.Seed.MCCEntries),
@@ -65,7 +65,7 @@ func newApp(ctx context.Context, opts Options, openStore func(context.Context, S
 
 	storeRuntime, err := openStore(ctx, StoreOptions{Database: opts.Config.Database, Security: opts.Config.Security, Logger: logger})
 	if err != nil {
-		return nil, errors.E("app.new", "opening store", err)
+		return nil, errors.B.Op("app.new").Text("opening store").Err(err).Build()
 	}
 	constructed := false
 	defer func() {
@@ -75,7 +75,7 @@ func newApp(ctx context.Context, opts Options, openStore func(context.Context, S
 	}()
 	resolver, err := storeRuntime.Seed(ctx, content.Seed)
 	if err != nil {
-		return nil, errors.E("app.new", errors.Internal, "seeding startup content", err)
+		return nil, errors.B.Op("app.new").KindInternal().Text("seeding startup content").Err(err).Build()
 	}
 	st := storeRuntime.Store
 	llmComponents, err := newLLMRuntime(content, st, logger)
@@ -90,11 +90,11 @@ func newApp(ctx context.Context, opts Options, openStore func(context.Context, S
 		Store: st, Diagnostics: st, TransactionWriter: storeRuntime.Ingestion, Logger: logger,
 	})
 	if err != nil {
-		return nil, errors.E("app.new", err)
+		return nil, errors.B.Op("app.new").Err(err).Build()
 	}
 	controller, err := daemon.NewController(daemon.ControllerDependencies{Context: ctx, Scanner: scanService, Store: st, Logger: logger})
 	if err != nil {
-		return nil, errors.E("app.new", err)
+		return nil, errors.B.Op("app.new").Err(err).Build()
 	}
 	schedulerScope := observability.NewScope(logger.With("component", "scheduler"),
 		"github.com/ArionMiles/expensor/backend/internal/daemon/scheduler")
@@ -108,13 +108,13 @@ func newApp(ctx context.Context, opts Options, openStore func(context.Context, S
 		Logger:         logger.With("component", "scheduler"),
 	})
 	if err != nil {
-		return nil, errors.E("app.new", "constructing scan scheduler", err)
+		return nil, errors.B.Op("app.new").Text("constructing scan scheduler").Err(err).Build()
 	}
 	communityService, err := community.New(ctx, community.Dependencies{
 		Config: opts.Config.Community, Store: st, Runtime: st, Resolver: controller, Logger: logger,
 	})
 	if err != nil {
-		return nil, errors.E("app.new", err)
+		return nil, errors.B.Op("app.new").Err(err).Build()
 	}
 	server := newHTTPServer(httpDependencies{
 		config: opts.Config, content: content, registry: registry, llm: llmComponents, store: st,
@@ -139,7 +139,7 @@ func (a *App) Run(ctx context.Context) error {
 	a.runMu.Lock()
 	if a.runStarted {
 		a.runMu.Unlock()
-		return errors.E("app.run", errors.FailedPrecondition, "application already started")
+		return errors.B.Op("app.run").KindFailedPrecondition().Text("application already started").Build()
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	a.runStarted = true
@@ -152,7 +152,7 @@ func (a *App) Run(ctx context.Context) error {
 	go a.runWorker(runCtx, "community sync", a.communityRun)
 	a.logger.Info("multi-tenant scanning scheduler started")
 	if err := a.serverRun(runCtx); err != nil && !errors.Is(err, context.Canceled) {
-		return errors.E("app.run", errors.Unavailable, "HTTP server failed", err)
+		return errors.B.Op("app.run").KindUnavailable().Text("HTTP server failed").Err(err).Build()
 	}
 	return nil
 }

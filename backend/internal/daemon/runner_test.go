@@ -111,7 +111,7 @@ func testAppConfig() *config.App {
 	return &config.App{Database: config.Database{BatchSize: 10, FlushInterval: 30 * time.Second}}
 }
 
-func (m *mockRuntimeStore) GetReaderConfig(ctx context.Context, _ store.Tenant, reader string) (json.RawMessage, bool, error) {
+func (m *mockRuntimeStore) GetReaderConfig(ctx context.Context, _ store.Tenant, reader string) (rawConfig json.RawMessage, ok bool, err error) {
 	return m.readerConfig, m.hasConfig, m.err
 }
 

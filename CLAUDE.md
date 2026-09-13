@@ -26,7 +26,7 @@ When fixing GitHub-reported vulnerabilities, read the GitHub Security Advisory o
 
 ### Backend code health
 
-Production Go code must use `backend/pkg/errors`. Outside `*_test.go` files and `backend/pkg/errors` itself, do not import the standard-library `errors` package or call `fmt.Errorf`. Use `errors.E` with a stable operation name and useful kind when wrapping failures at package/application boundaries; leaf validation errors may use a kind and message without an operation when the exact message is part of the existing contract. Use the project package's `Is`, `As`, `Join`, and `Unwrap` helpers for error-chain operations. Golangci-lint enforces these restrictions.
+Production Go code must use `backend/pkg/errors`. Outside `*_test.go` files and `backend/pkg/errors` itself, do not import the standard-library `errors` package or call `fmt.Errorf`. Use `errors.B` with a stable operation name and useful kind when wrapping failures at package/application boundaries; leaf validation errors may use a kind and text without an operation when the exact text is part of the existing contract. Use the project package's `Is`, `As`, `Join`, and `Unwrap` helpers for error-chain operations. Golangci-lint enforces these restrictions.
 
 Do not add optional plugin interfaces for required metadata. If every reader must provide it, put it in the main metadata struct.
 

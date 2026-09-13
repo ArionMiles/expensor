@@ -519,7 +519,7 @@ func (h *Handlers) taxonomyCleanupFlag(w http.ResponseWriter, r *http.Request) (
 	var body TaxonomyCleanupRequest
 	if r.Body != nil {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-			writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid JSON body"), err))
+			writeError(w, r, errors.B.KindInvalidArgument().UserMsg("invalid JSON body").Err(err).Build())
 			return false, false
 		}
 	}
@@ -607,7 +607,7 @@ func (h *Handlers) handleTaxonomyMerchant(
 	name := r.PathValue("name")
 	pattern := r.PathValue("pattern")
 	if name == "" || pattern == "" {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("taxonomy name and merchant pattern are required")))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg("taxonomy name and merchant pattern are required").Build())
 		return
 	}
 	count, err := action.update(r.Context(), name, pattern)

@@ -342,7 +342,7 @@ func (h *Handlers) DeleteRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existing.Predefined {
-		writeError(w, r, errors.E(errors.PermissionDenied, errors.User("predefined rules cannot be deleted")))
+		writeError(w, r, errors.B.KindPermissionDenied().UserMsg("predefined rules cannot be deleted").Build())
 		return
 	}
 	if err := h.ruleStore.DeleteRule(r.Context(), requestTenant(r), id); err != nil {
@@ -400,11 +400,11 @@ func (h *Handlers) ImportRules(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 5<<20)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid JSON body"), err))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg("invalid JSON body").Err(err).Build())
 		return
 	}
 	if !json.Valid(body) {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid JSON body")))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg("invalid JSON body").Build())
 		return
 	}
 	doc, err := rules.ParseDocument(body)

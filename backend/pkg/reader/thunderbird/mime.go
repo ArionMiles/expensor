@@ -27,14 +27,14 @@ func ExtractBody(msg *mail.Message) (string, error) {
 		// No content type, try to read as plain text
 		body, err := io.ReadAll(msg.Body)
 		if err != nil {
-			return "", errors.E("thunderbird.mime.extract_body", "reading body", err)
+			return "", errors.B.Op("thunderbird.mime.extract_body").Text("reading body").Err(err).Build()
 		}
 		return string(body), nil
 	}
 
 	mediaType, params, err := mime.ParseMediaType(contentType)
 	if err != nil {
-		return "", errors.E("thunderbird.mime.extract_body", "parsing content type", err)
+		return "", errors.B.Op("thunderbird.mime.extract_body").Text("parsing content type").Err(err).Build()
 	}
 
 	// Handle single-part messages
@@ -45,7 +45,7 @@ func ExtractBody(msg *mail.Message) (string, error) {
 	// Handle multipart messages
 	boundary, ok := params["boundary"]
 	if !ok {
-		return "", errors.E(errors.InvalidInput, "multipart message missing boundary")
+		return "", errors.B.KindInvalidInput().Text("multipart message missing boundary").Build()
 	}
 
 	return extractMultipart(msg.Body, boundary, mediaType)
@@ -62,7 +62,7 @@ func extractSinglePart(body io.Reader, mediaType string, params map[string]strin
 	// Read body
 	data, err := io.ReadAll(body)
 	if err != nil {
-		return "", errors.E("thunderbird.mime.extract_single_part", "reading body", err)
+		return "", errors.B.Op("thunderbird.mime.extract_single_part").Text("reading body").Err(err).Build()
 	}
 
 	// Decode based on content transfer encoding
@@ -90,7 +90,7 @@ func extractMultipart(body io.Reader, boundary, mediaType string) (string, error
 			break
 		}
 		if err != nil {
-			return "", errors.E("thunderbird.mime.extract_multipart", "reading part", err)
+			return "", errors.B.Op("thunderbird.mime.extract_multipart").Text("reading part").Err(err).Build()
 		}
 		processPart(part, mediaType, &htmlParts, &textParts)
 	}
@@ -165,7 +165,7 @@ func extractPartBody(part *multipart.Part, mediaType string, params map[string]s
 	// Read content
 	data, err := io.ReadAll(reader)
 	if err != nil {
-		return "", errors.E("thunderbird.mime.extract_part_body", "reading part", err)
+		return "", errors.B.Op("thunderbird.mime.extract_part_body").Text("reading part").Err(err).Build()
 	}
 
 	// Decode charset; fall back to raw content if decoding fails.
@@ -220,7 +220,7 @@ func decodeCharset(data []byte, charset string) (string, error) {
 		return string(decoded), nil
 	default:
 		// Unknown charset, return as-is
-		return string(data), errors.E(errors.InvalidInput, fmt.Sprintf("unsupported charset: %s", charset))
+		return string(data), errors.B.KindInvalidInput().Textf("unsupported charset: %s", charset).Build()
 	}
 }
 

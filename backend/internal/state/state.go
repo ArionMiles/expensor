@@ -63,10 +63,10 @@ func (m *Manager) IsProcessed(ctx context.Context, msgKey string) bool {
 // MarkProcessed marks a message as processed.
 func (m *Manager) MarkProcessed(ctx context.Context, msgKey string) error {
 	if m.store == nil {
-		return errors.E(errors.FailedPrecondition, "processed message state store is nil")
+		return errors.B.KindFailedPrecondition().Text("processed message state store is nil").Build()
 	}
 	if err := m.store.MarkMessageProcessed(ctx, m.tenant, msgKey, time.Now()); err != nil {
-		return errors.E("state.mark_processed", "marking message processed in DB", err)
+		return errors.B.Op("state.mark_processed").Text("marking message processed in DB").Err(err).Build()
 	}
 	return nil
 }

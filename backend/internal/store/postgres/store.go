@@ -77,7 +77,7 @@ func newStore(ctx context.Context, cfg config.Postgres, security config.Security
 
 	poolCfg, err := ParsePoolConfig(connStr)
 	if err != nil {
-		return nil, errors.E("postgres.store.open", errors.InvalidArgument, "parsing store connection string", err)
+		return nil, errors.B.Op("postgres.store.open").KindInvalidArgument().Text("parsing store connection string").Err(err).Build()
 	}
 
 	poolCfg.MaxConns = cfg.MaxPoolSize
@@ -87,7 +87,7 @@ func newStore(ctx context.Context, cfg config.Postgres, security config.Security
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
-		return nil, errors.E("postgres.store.open", errors.Unavailable, "creating store pool", err)
+		return nil, errors.B.Op("postgres.store.open").KindUnavailable().Text("creating store pool").Err(err).Build()
 	}
 
 	var secretBox *auth.SecretBox
@@ -95,7 +95,7 @@ func newStore(ctx context.Context, cfg config.Postgres, security config.Security
 		secretBox, err = auth.NewSecretBox(security.SecretKey)
 		if err != nil {
 			pool.Close()
-			return nil, errors.E("postgres.store.open", errors.InvalidArgument, "creating store secret box", err)
+			return nil, errors.B.Op("postgres.store.open").KindInvalidArgument().Text("creating store secret box").Err(err).Build()
 		}
 	}
 
@@ -107,7 +107,7 @@ func newStore(ctx context.Context, cfg config.Postgres, security config.Security
 // HealthCheck verifies the store can communicate with PostgreSQL.
 func (s *Store) HealthCheck(ctx context.Context) error {
 	if err := s.pool.Ping(ctx); err != nil {
-		return errors.E("postgres.store.health_check", errors.Unavailable, "pinging store database", err)
+		return errors.B.Op("postgres.store.health_check").KindUnavailable().Text("pinging store database").Err(err).Build()
 	}
 	return nil
 }
@@ -389,7 +389,7 @@ func (s *Store) SetReaderConfig(ctx context.Context, tenant store.Tenant, reader
 }
 
 // GetReaderConfig returns tenant reader-specific configuration JSON.
-func (s *Store) GetReaderConfig(ctx context.Context, tenant store.Tenant, reader string) (json.RawMessage, bool, error) {
+func (s *Store) GetReaderConfig(ctx context.Context, tenant store.Tenant, reader string) (rawConfig json.RawMessage, ok bool, err error) {
 	return s.runtime.GetReaderConfig(ctx, tenant, reader)
 }
 
@@ -399,7 +399,11 @@ func (s *Store) SetLLMProviderConfig(ctx context.Context, tenant store.Tenant, p
 }
 
 // GetLLMProviderConfig returns tenant LLM provider-specific configuration JSON.
-func (s *Store) GetLLMProviderConfig(ctx context.Context, tenant store.Tenant, provider string) (json.RawMessage, bool, error) {
+func (s *Store) GetLLMProviderConfig(
+	ctx context.Context,
+	tenant store.Tenant,
+	provider string,
+) (rawConfig json.RawMessage, ok bool, err error) {
 	return s.runtime.GetLLMProviderConfig(ctx, tenant, provider)
 }
 

@@ -24,25 +24,25 @@ func newLLMRuntime(content catalog.Content, st *instrumented.Store, logger *slog
 	registry := llm.NewRegistry()
 	geminiMetadata, ok := content.LLMProviders[geminiProvider.ProviderName]
 	if !ok {
-		return llmRuntime{}, errors.E("app.llm.new", errors.Internal, "Gemini provider metadata is not configured")
+		return llmRuntime{}, errors.B.Op("app.llm.new").KindInternal().Text("Gemini provider metadata is not configured").Build()
 	}
 	gemini, err := geminiProvider.Provider(geminiMetadata)
 	if err != nil {
-		return llmRuntime{}, errors.E("app.llm.new", errors.Internal, "building Gemini provider", err)
+		return llmRuntime{}, errors.B.Op("app.llm.new").KindInternal().Text("building Gemini provider").Err(err).Build()
 	}
 	if err := registry.RegisterProvider(gemini); err != nil {
-		return llmRuntime{}, errors.E("app.llm.new", errors.Internal, "registering Gemini provider", err)
+		return llmRuntime{}, errors.B.Op("app.llm.new").KindInternal().Text("registering Gemini provider").Err(err).Build()
 	}
 	openAIMetadata, ok := content.LLMProviders[openaiProvider.ProviderName]
 	if !ok {
-		return llmRuntime{}, errors.E("app.llm.new", errors.Internal, "OpenAI provider metadata is not configured")
+		return llmRuntime{}, errors.B.Op("app.llm.new").KindInternal().Text("OpenAI provider metadata is not configured").Build()
 	}
 	openAI, err := openaiProvider.Provider(openAIMetadata)
 	if err != nil {
-		return llmRuntime{}, errors.E("app.llm.new", errors.Internal, "building OpenAI provider", err)
+		return llmRuntime{}, errors.B.Op("app.llm.new").KindInternal().Text("building OpenAI provider").Err(err).Build()
 	}
 	if err := registry.RegisterProvider(openAI); err != nil {
-		return llmRuntime{}, errors.E("app.llm.new", errors.Internal, "registering OpenAI provider", err)
+		return llmRuntime{}, errors.B.Op("app.llm.new").KindInternal().Text("registering OpenAI provider").Err(err).Build()
 	}
 	llmLogger := logger.With("component", "llm")
 	llmScope := observability.NewScope(llmLogger, "github.com/ArionMiles/expensor/backend/internal/llm")

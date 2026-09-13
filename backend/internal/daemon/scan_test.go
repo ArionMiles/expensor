@@ -35,7 +35,7 @@ func (s *scanStoreStub) ListRules(context.Context, store.Tenant) ([]store.RuleRo
 func (s *scanStoreStub) GetAppConfig(_ context.Context, _ store.Tenant, key string) (string, error) {
 	value, ok := s.appConfig[key]
 	if !ok {
-		return "", errors.E(errors.NotFound, "not found")
+		return "", errors.B.KindNotFound().Text("not found").Build()
 	}
 	return value, nil
 }
@@ -56,7 +56,7 @@ func (*scanStoreStub) GetReaderToken(context.Context, store.Tenant, string) (tok
 	return nil, false, nil
 }
 func (*scanStoreStub) SetReaderToken(context.Context, store.Tenant, string, []byte) error { return nil }
-func (s *scanStoreStub) GetReaderConfig(context.Context, store.Tenant, string) (json.RawMessage, bool, error) {
+func (s *scanStoreStub) GetReaderConfig(context.Context, store.Tenant, string) (rawConfig json.RawMessage, ok bool, err error) {
 	return s.readerConfig, s.hasConfig, nil
 }
 

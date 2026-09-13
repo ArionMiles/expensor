@@ -550,11 +550,11 @@ func (s *Store) SetReaderConfig(ctx context.Context, tenant store.Tenant, reader
 	return err
 }
 
-func (s *Store) GetReaderConfig(ctx context.Context, tenant store.Tenant, reader string) (json.RawMessage, bool, error) {
+func (s *Store) GetReaderConfig(ctx context.Context, tenant store.Tenant, reader string) (config json.RawMessage, found bool, err error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.get_reader_config")
 	defer span.End()
 
-	config, found, err := s.runtime.GetReaderConfig(ctx, tenant, reader)
+	config, found, err = s.runtime.GetReaderConfig(ctx, tenant, reader)
 	s.recordOperation(ctx, "runtime.get_reader_config", err)
 	return config, found, err
 }
@@ -568,11 +568,15 @@ func (s *Store) SetLLMProviderConfig(ctx context.Context, tenant store.Tenant, p
 	return err
 }
 
-func (s *Store) GetLLMProviderConfig(ctx context.Context, tenant store.Tenant, provider string) (json.RawMessage, bool, error) {
+func (s *Store) GetLLMProviderConfig(
+	ctx context.Context,
+	tenant store.Tenant,
+	provider string,
+) (config json.RawMessage, found bool, err error) {
 	ctx, span := s.scope.Start(ctx, "store.runtime.get_llm_provider_config")
 	defer span.End()
 
-	config, found, err := s.runtime.GetLLMProviderConfig(ctx, tenant, provider)
+	config, found, err = s.runtime.GetLLMProviderConfig(ctx, tenant, provider)
 	s.recordOperation(ctx, "runtime.get_llm_provider_config", err)
 	return config, found, err
 }

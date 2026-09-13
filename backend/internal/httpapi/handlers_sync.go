@@ -18,7 +18,7 @@ import (
 // @Router /config/sync [post]
 func (h *Handlers) TriggerSync(w http.ResponseWriter, r *http.Request) {
 	if h.community == nil {
-		writeError(w, r, errors.E(errors.Unavailable, errors.User("sync not configured")))
+		writeError(w, r, errors.B.KindUnavailable().UserMsg("sync not configured").Build())
 		return
 	}
 	go h.community.Trigger()

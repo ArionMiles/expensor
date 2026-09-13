@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"fmt"
 	"io/fs"
 	"path"
 	"sort"
@@ -50,7 +49,7 @@ func LoadPromptCatalog(fsys fs.FS, dir string) (*PromptCatalog, error) {
 		if errors.Is(err, fs.ErrNotExist) {
 			return catalog, nil
 		}
-		return nil, errors.E("llm.prompts.load_prompt_catalog", fmt.Sprintf("reading prompt catalog %q", dir), err)
+		return nil, errors.B.Op("llm.prompts.load_prompt_catalog").Textf("reading prompt catalog %q", dir).Err(err).Build()
 	}
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -62,21 +61,21 @@ func LoadPromptCatalog(fsys fs.FS, dir string) (*PromptCatalog, error) {
 		}
 		body, err := fs.ReadFile(fsys, path.Join(dir, name))
 		if err != nil {
-			return nil, errors.E("llm.prompts.load_prompt_catalog", fmt.Sprintf("reading prompt %q", name), err)
+			return nil, errors.B.Op("llm.prompts.load_prompt_catalog").Textf("reading prompt %q", name).Err(err).Build()
 		}
 		var prompt PromptDefinition
 		if err := yaml.Unmarshal(body, &prompt); err != nil {
-			return nil, errors.E("llm.prompts.load_prompt_catalog", fmt.Sprintf("parsing prompt %q", name), err)
+			return nil, errors.B.Op("llm.prompts.load_prompt_catalog").Textf("parsing prompt %q", name).Err(err).Build()
 		}
 		if err := prompt.validate(name); err != nil {
 			return nil, err
 		}
 		key := promptKey{workflow: prompt.Workflow, purpose: prompt.Purpose}
 		if existing, ok := catalog.prompts[key]; ok {
-			return nil, errors.E(
-				errors.InvalidInput,
-				fmt.Sprintf("duplicate prompt for workflow %q purpose %q: %s and %s", key.workflow, key.purpose, existing.ID, prompt.ID),
-			)
+			return nil, errors.B.
+				KindInvalidInput().
+				Textf("duplicate prompt for workflow %q purpose %q: %s and %s", key.workflow, key.purpose, existing.ID, prompt.ID).
+				Build()
 		}
 		catalog.prompts[key] = prompt
 	}
@@ -120,19 +119,19 @@ func (c *PromptCatalog) List() []PromptDefinition {
 
 func (p PromptDefinition) validate(filename string) error {
 	if strings.TrimSpace(p.ID) == "" {
-		return errors.E(errors.InvalidInput, fmt.Sprintf("prompt %q id is required", filename))
+		return errors.B.KindInvalidInput().Textf("prompt %q id is required", filename).Build()
 	}
 	if p.Version <= 0 {
-		return errors.E(errors.InvalidInput, fmt.Sprintf("prompt %q version must be positive", filename))
+		return errors.B.KindInvalidInput().Textf("prompt %q version must be positive", filename).Build()
 	}
 	if strings.TrimSpace(p.Workflow) == "" {
-		return errors.E(errors.InvalidInput, fmt.Sprintf("prompt %q workflow is required", filename))
+		return errors.B.KindInvalidInput().Textf("prompt %q workflow is required", filename).Build()
 	}
 	if strings.TrimSpace(p.Purpose) == "" {
-		return errors.E(errors.InvalidInput, fmt.Sprintf("prompt %q purpose is required", filename))
+		return errors.B.KindInvalidInput().Textf("prompt %q purpose is required", filename).Build()
 	}
 	if len(p.Messages) == 0 {
-		return errors.E(errors.InvalidInput, fmt.Sprintf("prompt %q requires at least one message", filename))
+		return errors.B.KindInvalidInput().Textf("prompt %q requires at least one message", filename).Build()
 	}
 	return nil
 }
