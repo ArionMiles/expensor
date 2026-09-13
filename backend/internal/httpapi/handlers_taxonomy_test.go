@@ -143,11 +143,7 @@ func TestListCategories_Success(t *testing.T) {
 }
 
 func TestDeleteCategory_DefaultRejected(t *testing.T) {
-	ms := &mockStore{catsErr: errors.E(
-		errors.Conflict,
-		errors.User("The default category cannot be deleted."),
-		"cannot delete default category \"food\"",
-	)}
+	ms := &mockStore{catsErr: errors.B.KindConflict().UserMsg("The default category cannot be deleted.").Text("cannot delete default category \"food\"").Build()}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/config/categories/food", nil)
 	req.SetPathValue("name", "food")

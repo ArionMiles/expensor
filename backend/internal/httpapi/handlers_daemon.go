@@ -26,7 +26,7 @@ import (
 // @Router /daemon/start [post]
 func (h *Handlers) StartDaemon(w http.ResponseWriter, r *http.Request) {
 	if h.daemon == nil {
-		writeError(w, r, errors.E(errors.Unimplemented, errors.User("daemon start not configured")))
+		writeError(w, r, errors.B.KindUnimplemented().UserMsg("daemon start not configured").Build())
 		return
 	}
 
@@ -35,7 +35,7 @@ func (h *Handlers) StartDaemon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.registry.GetProvider(body.Reader); err != nil {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User(fmt.Sprintf("reader %q not found", body.Reader)), err))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg(fmt.Sprintf("reader %q not found", body.Reader)).Err(err).Build())
 		return
 	}
 
@@ -64,12 +64,12 @@ func (h *Handlers) Rescan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.registry.GetProvider(body.Reader); err != nil {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User(fmt.Sprintf("reader %q not found", body.Reader)), err))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg(fmt.Sprintf("reader %q not found", body.Reader)).Err(err).Build())
 		return
 	}
 
 	if h.daemon == nil {
-		writeError(w, r, errors.E(errors.Unimplemented, errors.User("rescan not configured")))
+		writeError(w, r, errors.B.KindUnimplemented().UserMsg("rescan not configured").Build())
 		return
 	}
 	h.daemon.Rescan(daemon.RunRequest{Tenant: requestTenant(r), Reader: body.Reader})

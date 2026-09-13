@@ -1,7 +1,6 @@
 package thunderbird
 
 import (
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -21,34 +20,34 @@ func FindProfiles() ([]string, error) {
 	case "darwin":
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return nil, errors.E("thunderbird.profile.find_profiles", "getting home directory", err)
+			return nil, errors.B.Op("thunderbird.profile.find_profiles").Text("getting home directory").Err(err).Build()
 		}
 		baseDir = filepath.Join(homeDir, "Library", "Thunderbird", "Profiles")
 	case "linux":
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return nil, errors.E("thunderbird.profile.find_profiles", "getting home directory", err)
+			return nil, errors.B.Op("thunderbird.profile.find_profiles").Text("getting home directory").Err(err).Build()
 		}
 		baseDir = filepath.Join(homeDir, ".thunderbird")
 	case "windows":
 		appData := os.Getenv("APPDATA")
 		if appData == "" {
-			return nil, errors.E(errors.FailedPrecondition, "APPDATA environment variable not set")
+			return nil, errors.B.KindFailedPrecondition().Text("APPDATA environment variable not set").Build()
 		}
 		baseDir = filepath.Join(appData, "Thunderbird", "Profiles")
 	default:
-		return nil, errors.E(errors.FailedPrecondition, fmt.Sprintf("unsupported platform: %s", runtime.GOOS))
+		return nil, errors.B.KindFailedPrecondition().Textf("unsupported platform: %s", runtime.GOOS).Build()
 	}
 
 	// Check if base directory exists
 	if _, err := os.Stat(baseDir); os.IsNotExist(err) { //nolint:gosec // G703: path from OS-determined Thunderbird directory, not user HTTP input
-		return nil, errors.E(errors.NotFound, fmt.Sprintf("thunderbird directory not found: %s", baseDir))
+		return nil, errors.B.KindNotFound().Textf("thunderbird directory not found: %s", baseDir).Build()
 	}
 
 	// Find all profile directories
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
-		return nil, errors.E("thunderbird.profile.find_profiles", "reading thunderbird directory", err)
+		return nil, errors.B.Op("thunderbird.profile.find_profiles").Text("reading thunderbird directory").Err(err).Build()
 	}
 
 	for _, entry := range entries {
@@ -59,7 +58,7 @@ func FindProfiles() ([]string, error) {
 	}
 
 	if len(profileDirs) == 0 {
-		return nil, errors.E(errors.NotFound, fmt.Sprintf("no thunderbird profiles found in %s", baseDir))
+		return nil, errors.B.KindNotFound().Textf("no thunderbird profiles found in %s", baseDir).Build()
 	}
 
 	return profileDirs, nil
@@ -68,12 +67,12 @@ func FindProfiles() ([]string, error) {
 // FindMailboxes finds the file paths for the specified mailboxes in a profile.
 func FindMailboxes(profilePath string, mailboxNames []string) (map[string]string, error) {
 	if profilePath == "" {
-		return nil, errors.E(errors.InvalidInput, "profile path is empty")
+		return nil, errors.B.KindInvalidInput().Text("profile path is empty").Build()
 	}
 
 	// Verify profile path exists
 	if _, err := os.Stat(profilePath); os.IsNotExist(err) {
-		return nil, errors.E(errors.NotFound, fmt.Sprintf("profile path does not exist: %s", profilePath))
+		return nil, errors.B.KindNotFound().Textf("profile path does not exist: %s", profilePath).Build()
 	}
 
 	mailboxPaths := make(map[string]string)
@@ -84,7 +83,7 @@ func FindMailboxes(profilePath string, mailboxNames []string) (map[string]string
 	for _, mailboxName := range mailboxNames {
 		path, found := findMailboxInDirs(mailboxName, mailDirs)
 		if !found {
-			return nil, errors.E(errors.NotFound, fmt.Sprintf("mailbox not found: %s in profile %s", mailboxName, profilePath))
+			return nil, errors.B.KindNotFound().Textf("mailbox not found: %s in profile %s", mailboxName, profilePath).Build()
 		}
 		mailboxPaths[mailboxName] = path
 	}
@@ -141,10 +140,10 @@ func pathExists(path string) bool {
 // Results are deduplicated and sorted alphabetically.
 func ListMailboxes(profilePath string) ([]string, error) {
 	if profilePath == "" {
-		return nil, errors.E(errors.InvalidInput, "profile path is empty")
+		return nil, errors.B.KindInvalidInput().Text("profile path is empty").Build()
 	}
 	if _, err := os.Stat(profilePath); os.IsNotExist(err) {
-		return nil, errors.E(errors.NotFound, fmt.Sprintf("profile path does not exist: %s", profilePath))
+		return nil, errors.B.KindNotFound().Textf("profile path does not exist: %s", profilePath).Build()
 	}
 
 	dirs := collectMailDirs(profilePath)

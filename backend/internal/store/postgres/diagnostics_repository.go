@@ -54,7 +54,7 @@ func newDiagnosticsRepository(deps repositoryDependencies) *diagnosticsRepositor
 
 func (r *diagnosticsRepository) RecordExtractionDiagnostic(ctx context.Context, tenant store.Tenant, diagnostic api.ExtractionDiagnostic) error {
 	if tenant.ID == "" {
-		return errors.E("postgres.diagnostics.record_extraction", errors.InvalidInput, "tenant is required")
+		return errors.B.Op("postgres.diagnostics.record_extraction").KindInvalidInput().Text("tenant is required").Build()
 	}
 
 	_, err := r.pool.Exec(ctx, recordExtractionDiagnosticSQL,
@@ -76,7 +76,7 @@ func (r *diagnosticsRepository) RecordExtractionDiagnostic(ctx context.Context, 
 		diagnosticFailureReasons(diagnostic.FailureReasons),
 	)
 	if err != nil {
-		return errors.E("postgres.diagnostics.record_extraction_diagnostic", "recording extraction diagnostic", err)
+		return errors.B.Op("postgres.diagnostics.record_extraction_diagnostic").Text("recording extraction diagnostic").Err(err).Build()
 	}
 	return nil
 }
@@ -105,12 +105,12 @@ func (r *diagnosticsRepository) ListExtractionDiagnostics(
 
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, errors.E("postgres.diagnostics.list_extraction_diagnostics", "listing extraction diagnostics", err)
+		return nil, errors.B.Op("postgres.diagnostics.list_extraction_diagnostics").Text("listing extraction diagnostics").Err(err).Build()
 	}
 	defer rows.Close()
 	result, err := scanDiagnosticRows(rows)
 	if err != nil {
-		return nil, errors.E("postgres.diagnostics.list_extraction_diagnostics", "listing extraction diagnostics", err)
+		return nil, errors.B.Op("postgres.diagnostics.list_extraction_diagnostics").Text("listing extraction diagnostics").Err(err).Build()
 	}
 	return result, nil
 }
@@ -121,15 +121,15 @@ func (r *diagnosticsRepository) GetExtractionDiagnostic(ctx context.Context, ten
 		id, tenant.ID,
 	)
 	if err != nil {
-		return nil, errors.E("postgres.diagnostics.get_extraction_diagnostic", "fetching extraction diagnostic", err)
+		return nil, errors.B.Op("postgres.diagnostics.get_extraction_diagnostic").Text("fetching extraction diagnostic").Err(err).Build()
 	}
 	defer rows.Close()
 	result, err := scanDiagnosticRows(rows)
 	if err != nil {
-		return nil, errors.E("postgres.diagnostics.get_extraction_diagnostic", "fetching extraction diagnostic", err)
+		return nil, errors.B.Op("postgres.diagnostics.get_extraction_diagnostic").Text("fetching extraction diagnostic").Err(err).Build()
 	}
 	if len(result) == 0 {
-		return nil, errors.E("store.diagnostics.get", errors.NotFound, errors.User("extraction diagnostic not found"))
+		return nil, errors.B.Op("store.diagnostics.get").KindNotFound().UserMsg("extraction diagnostic not found").Build()
 	}
 	return &result[0], nil
 }
@@ -156,33 +156,33 @@ func (r *diagnosticsRepository) UpdateExtractionDiagnosticStatus(
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, errors.E(
-				"store.diagnostics.update_status",
-				errors.Conflict,
-				errors.User("open extraction diagnostic already exists"),
-				"open diagnostic already exists for reader/message/rule: diagnostic conflict",
-				err,
-			)
+			return nil, errors.B.
+				Op("store.diagnostics.update_status").
+				KindConflict().
+				UserMsg("open extraction diagnostic already exists").
+				Text("open diagnostic already exists for reader/message/rule: diagnostic conflict").
+				Err(err).
+				Build()
 		}
-		return nil, errors.E("postgres.diagnostics.update_extraction_diagnostic_status", "updating extraction diagnostic status", err)
+		return nil, errors.B.Op("postgres.diagnostics.update_extraction_diagnostic_status").Text("updating extraction diagnostic status").Err(err).Build()
 	}
 	defer rows.Close()
 	result, err := scanDiagnosticRows(rows)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, errors.E(
-				"store.diagnostics.update_status",
-				errors.Conflict,
-				errors.User("open extraction diagnostic already exists"),
-				"open diagnostic already exists for reader/message/rule: diagnostic conflict",
-				err,
-			)
+			return nil, errors.B.
+				Op("store.diagnostics.update_status").
+				KindConflict().
+				UserMsg("open extraction diagnostic already exists").
+				Text("open diagnostic already exists for reader/message/rule: diagnostic conflict").
+				Err(err).
+				Build()
 		}
-		return nil, errors.E("postgres.diagnostics.update_extraction_diagnostic_status", "updating extraction diagnostic status", err)
+		return nil, errors.B.Op("postgres.diagnostics.update_extraction_diagnostic_status").Text("updating extraction diagnostic status").Err(err).Build()
 	}
 	if len(result) == 0 {
-		return nil, errors.E("store.diagnostics.update_status", errors.NotFound, errors.User("extraction diagnostic not found"))
+		return nil, errors.B.Op("store.diagnostics.update_status").KindNotFound().UserMsg("extraction diagnostic not found").Build()
 	}
 	return &result[0], nil
 }

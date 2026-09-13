@@ -20,16 +20,16 @@ type transactionSink struct {
 
 func newTransactionSink(writer store.TransactionBatchWriter, cfg store.IngestionConfig, logger *slog.Logger) (*transactionSink, error) {
 	if writer == nil {
-		return nil, errors.E("daemon.transaction_sink.new", errors.FailedPrecondition, "transaction batch writer is required")
+		return nil, errors.B.Op("daemon.transaction_sink.new").KindFailedPrecondition().Text("transaction batch writer is required").Build()
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
 	if cfg.BatchSize <= 0 {
-		return nil, errors.E("daemon.transaction_sink.new", errors.InvalidInput, "transaction batch size must be positive")
+		return nil, errors.B.Op("daemon.transaction_sink.new").KindInvalidInput().Text("transaction batch size must be positive").Build()
 	}
 	if cfg.FlushInterval <= 0 {
-		return nil, errors.E("daemon.transaction_sink.new", errors.InvalidInput, "transaction flush interval must be positive")
+		return nil, errors.B.Op("daemon.transaction_sink.new").KindInvalidInput().Text("transaction flush interval must be positive").Build()
 	}
 	return &transactionSink{
 		writer:        writer,

@@ -118,19 +118,19 @@ func NewRegistry() *Registry {
 func (r *Registry) RegisterProvider(provider Provider) error {
 	name := provider.Metadata.Name
 	if strings.TrimSpace(name) == "" {
-		return errors.E(errors.InvalidInput, "provider name is required")
+		return errors.B.KindInvalidInput().Text("provider name is required").Build()
 	}
 	if provider.NewReader == nil {
-		return errors.E(errors.InvalidInput, fmt.Sprintf("provider %q reader factory is required", name))
+		return errors.B.KindInvalidInput().Textf("provider %q reader factory is required", name).Build()
 	}
 	if provider.NewEmailSearcher == nil {
-		return errors.E(errors.InvalidInput, fmt.Sprintf("provider %q email searcher factory is required", name))
+		return errors.B.KindInvalidInput().Textf("provider %q email searcher factory is required", name).Build()
 	}
 	if len(provider.Metadata.SetupGuide) > 0 && !json.Valid(provider.Metadata.SetupGuide) {
-		return errors.E(errors.InvalidInput, fmt.Sprintf("provider %q setup guide must be valid JSON", name))
+		return errors.B.KindInvalidInput().Textf("provider %q setup guide must be valid JSON", name).Build()
 	}
 	if _, exists := r.providers[name]; exists {
-		return errors.E(errors.Conflict, fmt.Sprintf("provider %q already registered", name))
+		return errors.B.KindConflict().Textf("provider %q already registered", name).Build()
 	}
 	r.providers[name] = provider
 	return nil
@@ -141,11 +141,8 @@ func (r *Registry) GetProvider(name string) (Provider, error) {
 	provider, exists := r.providers[name]
 	if !exists {
 		message := fmt.Sprintf("provider %q not found", name)
-		return Provider{}, errors.E(
-			errors.NotFound,
-			errors.User(message),
-			message,
-		)
+		return Provider{}, errors.B.KindNotFound().UserMsg(message).Text(message).Build()
+
 	}
 	return provider, nil
 }

@@ -12,7 +12,7 @@ const passwordHashCost = bcrypt.DefaultCost
 func HashPassword(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), passwordHashCost)
 	if err != nil {
-		return "", errors.E("auth.password.hash_password", "hashing password", err)
+		return "", errors.B.Op("auth.password.hash_password").Text("hashing password").Err(err).Build()
 	}
 	return string(hash), nil
 }
@@ -20,7 +20,7 @@ func HashPassword(password string) (string, error) {
 // VerifyPassword compares password with a stored bcrypt hash.
 func VerifyPassword(hash, password string) error {
 	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)); err != nil {
-		return errors.E("auth.password.verify_password", "verifying password", err)
+		return errors.B.Op("auth.password.verify_password").Text("verifying password").Err(err).Build()
 	}
 	return nil
 }

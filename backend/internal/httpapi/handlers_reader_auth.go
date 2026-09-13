@@ -54,7 +54,7 @@ func (h *Handlers) UploadCredentials(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !provider.Metadata.Auth.RequiresCredentialsUpload {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User(fmt.Sprintf("provider %q does not require credentials upload", name))))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg(fmt.Sprintf("provider %q does not require credentials upload", name)).Build())
 		return
 	}
 
@@ -63,7 +63,7 @@ func (h *Handlers) UploadCredentials(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			writeError(w, r, errors.E(errors.PayloadTooLarge, errors.User("file too large (max 5 MB)"), err))
+			writeError(w, r, errors.B.KindPayloadTooLarge().UserMsg("file too large (max 5 MB)").Err(err).Build())
 		} else {
 			writeError(w, r, err)
 		}
@@ -77,15 +77,13 @@ func (h *Handlers) UploadCredentials(w http.ResponseWriter, r *http.Request) {
 		Installed json.RawMessage `json:"installed"`
 	}
 	if err := json.Unmarshal(body, &creds); err != nil {
-		writeError(w, r, errors.E(errors.InvalidInput, errors.User("file is not valid JSON"), err))
+		writeError(w, r, errors.B.KindInvalidInput().UserMsg("file is not valid JSON").Err(err).Build())
 		return
 	}
 	if creds.Web == nil && creds.Installed == nil {
-		writeError(w, r, errors.E(
-			errors.InvalidInput,
-			errors.User(`invalid credentials file: expected a Google OAuth2 client_secret.json with a "web" or "installed"`+
-				` top-level key — download it from Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client IDs`),
-		))
+		writeError(w, r, errors.B.KindInvalidInput().UserMsg(`invalid credentials file: expected a Google OAuth2 client_secret.json with a "web" or "installed"`+
+			` top-level key — download it from Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client IDs`).Build(),
+		)
 		return
 	}
 
@@ -157,7 +155,7 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if provider.Metadata.Auth.Type != plugins.AuthTypeOAuth {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User(fmt.Sprintf("provider %q does not use OAuth", name))))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg(fmt.Sprintf("provider %q does not use OAuth", name)).Build())
 		return
 	}
 
@@ -169,7 +167,7 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
-		writeError(w, r, errors.E(errors.FailedPrecondition, errors.User("credentials not uploaded — upload client credentials first")))
+		writeError(w, r, errors.B.KindFailedPrecondition().UserMsg("credentials not uploaded — upload client credentials first").Build())
 		return
 	}
 
@@ -178,7 +176,7 @@ func (h *Handlers) AuthStart(w http.ResponseWriter, r *http.Request) {
 	h.logger.Debug("building OAuth config", "reader", name, "redirect_url", redirectURL, "scopes", scopes)
 	oauthCfg, err := oauth.GetOAuthConfig(secretJSON, redirectURL, scopes...)
 	if err != nil {
-		writeError(w, r, errors.E(errors.User("Provider credentials could not be parsed."), err))
+		writeError(w, r, errors.B.UserMsg("Provider credentials could not be parsed.").Err(err).Build())
 		return
 	}
 
@@ -221,38 +219,38 @@ func (h *Handlers) exchangeAndSaveToken(ctx context.Context, tenant store.Tenant
 
 	provider, err := h.registry.GetProvider(name)
 	if err != nil {
-		return errors.E(op, errors.NotFound, fmt.Sprintf("reader %q is no longer registered", name), err)
+		return errors.B.Op(op).KindNotFound().Textf("reader %q is no longer registered", name).Err(err).Build()
 	}
 
 	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(ctx, tenant, name)
 	if err != nil {
-		return errors.E("httpapi.handlers_readers.exchange_and_save_token", "failed to load credentials", err)
+		return errors.B.Op("httpapi.handlers_readers.exchange_and_save_token").Text("failed to load credentials").Err(err).Build()
 	}
 	if !ok {
-		return errors.E(
-			op,
-			oauth.KindCredentialsMissing,
-			errors.User("credentials not uploaded — upload client credentials first"),
-			"credentials file missing",
-		)
+		return errors.B.
+			Op(op).
+			Kind(oauth.KindCredentialsMissing).
+			UserMsg("credentials not uploaded — upload client credentials first").
+			Text("credentials file missing").
+			Build()
 	}
 
 	oauthCfg, err := oauth.GetOAuthConfig(secretJSON, redirectURL, provider.Metadata.Auth.RequiredScopes...)
 	if err != nil {
-		return errors.E("httpapi.handlers_readers.exchange_and_save_token", "failed to parse credentials", err)
+		return errors.B.Op("httpapi.handlers_readers.exchange_and_save_token").Text("failed to parse credentials").Err(err).Build()
 	}
 
 	tok, err := oauthCfg.Exchange(ctx, code)
 	if err != nil {
-		return errors.E("httpapi.handlers_readers.exchange_and_save_token", "token exchange failed", err)
+		return errors.B.Op("httpapi.handlers_readers.exchange_and_save_token").Text("token exchange failed").Err(err).Build()
 	}
 
 	tokenJSON, err := json.Marshal(tok) //nolint:gosec // OAuth tokens are intentionally serialized into the runtime store.
 	if err != nil {
-		return errors.E("httpapi.handlers_readers.exchange_and_save_token", "failed to marshal token", err)
+		return errors.B.Op("httpapi.handlers_readers.exchange_and_save_token").Text("failed to marshal token").Err(err).Build()
 	}
 	if err := h.readerRuntimeStore.SetReaderToken(ctx, tenant, name, tokenJSON); err != nil {
-		return errors.E("httpapi.handlers_readers.exchange_and_save_token", "failed to save token", err)
+		return errors.B.Op("httpapi.handlers_readers.exchange_and_save_token").Text("failed to save token").Err(err).Build()
 	}
 	h.queueReaderScanning(ctx, tenant, name)
 	h.restartReaderDaemonAfterAuth(tenant, name)
@@ -290,14 +288,14 @@ func (h *Handlers) AuthCallback(w http.ResponseWriter, r *http.Request) {
 	name := entry.readerName
 	h.logger.Debug("OAuth callback received", "state_valid", ok, "reader", name, "has_code", code != "")
 	if !ok || time.Now().After(entry.expiresAt) {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid or expired OAuth state")))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg("invalid or expired OAuth state").Build())
 		return
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
 	tenant, tenantOK := entryTenant(entry, requestTenant(r))
 	if !tenantOK {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid or expired OAuth state")))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg("invalid or expired OAuth state").Build())
 		return
 	}
 	if err := h.exchangeAndSaveToken(r.Context(), tenant, name, code, redirectURL); err != nil {
@@ -360,7 +358,7 @@ func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 
 	parsed, err := url.Parse(body.URL)
 	if err != nil {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("Invalid URL."), err))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg("Invalid URL.").Err(err).Build())
 		return
 	}
 
@@ -368,11 +366,11 @@ func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 	state := parsed.Query().Get("state")
 
 	if code == "" {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("url is missing the \"code\" query parameter")))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg("url is missing the \"code\" query parameter").Build())
 		return
 	}
 	if state == "" {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("url is missing the \"state\" query parameter")))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg("url is missing the \"state\" query parameter").Build())
 		return
 	}
 
@@ -384,14 +382,14 @@ func (h *Handlers) AuthExchange(w http.ResponseWriter, r *http.Request) {
 	h.mu.Unlock()
 
 	if !ok || time.Now().After(entry.expiresAt) {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid or expired OAuth state")))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg("invalid or expired OAuth state").Build())
 		return
 	}
 
 	redirectURL := h.baseURL + "/api/auth/callback"
 	tenant, tenantOK := entryTenant(entry, requestTenant(r))
 	if !tenantOK {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid or expired OAuth state")))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg("invalid or expired OAuth state").Build())
 		return
 	}
 	if err := h.exchangeAndSaveToken(r.Context(), tenant, name, code, redirectURL); err != nil {
@@ -471,18 +469,22 @@ func (h *Handlers) resolveOAuthTokenState(ctx context.Context, tenant store.Tena
 
 	secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(ctx, tenant, name)
 	if err != nil {
-		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, errors.E(
-			"httpapi.handlers_readers.resolve_o_auth_token_state", "loading credentials for token refresh", err,
-		)
+		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, errors.B.
+			Op("httpapi.handlers_readers.resolve_o_auth_token_state").
+			Text("loading credentials for token refresh").
+			Err(err).
+			Build()
 	}
 	if !ok {
 		return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, nil
 	}
 	oauthCfg, err := oauth.GetOAuthConfig(secretJSON, h.baseURL+"/api/auth/callback", scopes...)
 	if err != nil {
-		return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, errors.E(
-			"httpapi.handlers_readers.resolve_o_auth_token_state", "parsing credentials for token refresh", err,
-		)
+		return oauthTokenState{authState: authStateReauthorizationRequired, expiry: expiry}, errors.B.
+			Op("httpapi.handlers_readers.resolve_o_auth_token_state").
+			Text("parsing credentials for token refresh").
+			Err(err).
+			Build()
 	}
 	refreshed, err := oauthCfg.TokenSource(ctx, &tok).Token()
 	if err != nil {
@@ -494,14 +496,18 @@ func (h *Handlers) resolveOAuthTokenState(ctx context.Context, tenant store.Tena
 	}
 	refreshedJSON, err := json.Marshal(refreshed) //nolint:gosec // OAuth tokens are intentionally serialized into the runtime store.
 	if err != nil {
-		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, errors.E(
-			"httpapi.handlers_readers.resolve_o_auth_token_state", "marshaling refreshed token", err,
-		)
+		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, errors.B.
+			Op("httpapi.handlers_readers.resolve_o_auth_token_state").
+			Text("marshaling refreshed token").
+			Err(err).
+			Build()
 	}
 	if err := h.readerRuntimeStore.SetReaderToken(ctx, tenant, name, refreshedJSON); err != nil {
-		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, errors.E(
-			"httpapi.handlers_readers.resolve_o_auth_token_state", "saving refreshed token", err,
-		)
+		return oauthTokenState{authState: authStateRefreshPending, expiry: expiry}, errors.B.
+			Op("httpapi.handlers_readers.resolve_o_auth_token_state").
+			Text("saving refreshed token").
+			Err(err).
+			Build()
 	}
 	return oauthTokenState{authenticated: true, authState: authStateConnected, expiry: tokenExpiry(*refreshed)}, nil
 }
@@ -597,7 +603,7 @@ func (h *Handlers) RevokeToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	} else if !ok {
-		writeError(w, r, errors.E(errors.NotFound, errors.User("no token found")))
+		writeError(w, r, errors.B.KindNotFound().UserMsg("no token found").Build())
 		return
 	}
 	if err := h.readerRuntimeStore.DeleteReaderToken(r.Context(), requestTenant(r), name); err != nil {
@@ -625,7 +631,7 @@ func (h *Handlers) RevokeToken(w http.ResponseWriter, r *http.Request) {
 func generateState(readerName string) (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		return "", errors.E("httpapi.handlers_readers.generate_state", "generating OAuth state", err)
+		return "", errors.B.Op("httpapi.handlers_readers.generate_state").Text("generating OAuth state").Err(err).Build()
 	}
 	return fmt.Sprintf("reader:%s:%s", readerName, hex.EncodeToString(b)), nil
 }

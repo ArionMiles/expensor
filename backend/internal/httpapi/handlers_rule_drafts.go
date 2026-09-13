@@ -96,7 +96,7 @@ type ruleDraftIssueJSON struct {
 // @Router /rule-drafts [post]
 func (h *Handlers) CreateRuleDraft(w http.ResponseWriter, r *http.Request) {
 	if h.ruleDrafts == nil {
-		writeError(w, r, errors.E(errors.Unavailable, errors.User("rule drafting is not configured")))
+		writeError(w, r, errors.B.KindUnavailable().UserMsg("rule drafting is not configured").Build())
 		return
 	}
 	body, ok := decodeAndValidateJSON[ruleDraftRequestJSON](h, w, r)

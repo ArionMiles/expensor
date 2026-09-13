@@ -236,10 +236,10 @@ func loadConfigFile(cfg *App) error {
 		if errors.Is(err, os.ErrNotExist) && !explicit {
 			return nil
 		}
-		return errors.E("config.load_file", errors.InvalidArgument, "loading config file", err)
+		return errors.B.Op("config.load_file").KindInvalidArgument().Text("loading config file").Err(err).Build()
 	}
 	if _, err := toml.DecodeFile(path, cfg); err != nil {
-		return errors.E("config.load_file", errors.InvalidArgument, "loading config file", err)
+		return errors.B.Op("config.load_file").KindInvalidArgument().Text("loading config file").Err(err).Build()
 	}
 	return nil
 }
@@ -270,7 +270,7 @@ func applyEnvOverrides(cfg *App) error {
 			return nil
 		}
 		if err := setConfigField(field, value); err != nil {
-			return errors.E("config.env", errors.InvalidArgument, fmt.Sprintf("parsing %s", key), err)
+			return errors.B.Op("config.env").KindInvalidArgument().Textf("parsing %s", key).Err(err).Build()
 		}
 		return nil
 	})
@@ -283,7 +283,7 @@ func applyDefaults(cfg *App) error {
 			return nil
 		}
 		if err := setConfigField(field, value); err != nil {
-			return errors.E("config.defaults", errors.InvalidArgument, fmt.Sprintf("applying default for %s", configFieldName(structField)), err)
+			return errors.B.Op("config.defaults").KindInvalidArgument().Textf("applying default for %s", configFieldName(structField)).Err(err).Build()
 		}
 		return nil
 	})
@@ -356,7 +356,7 @@ func setConfigField(field reflect.Value, raw string) error {
 		}
 		field.SetBool(parsed)
 	default:
-		return errors.E("config.set_field", errors.InvalidArgument, fmt.Sprintf("unsupported config field type %s", field.Type()))
+		return errors.B.Op("config.set_field").KindInvalidArgument().Textf("unsupported config field type %s", field.Type()).Build()
 	}
 	return nil
 }
@@ -364,21 +364,21 @@ func setConfigField(field reflect.Value, raw string) error {
 func validate(cfg *App) error {
 	validate := validator.New()
 	if err := validate.Struct(cfg); err != nil {
-		return errors.E("config.validate", errors.InvalidArgument, validationMessage(cfg, err), err)
+		return errors.B.Op("config.validate").KindInvalidArgument().Text(validationMessage(cfg, err)).Err(err).Build()
 	}
 	if cfg.Database.Backend == DatabaseBackendPostgres {
 		if strings.TrimSpace(cfg.Database.Postgres.Host) == "" {
-			return errors.E("config.validate", errors.InvalidArgument, "POSTGRES_HOST is required when EXPENSOR_DB_BACKEND=postgres")
+			return errors.B.Op("config.validate").KindInvalidArgument().Text("POSTGRES_HOST is required when EXPENSOR_DB_BACKEND=postgres").Build()
 		}
 		if strings.TrimSpace(cfg.Database.Postgres.Database) == "" {
-			return errors.E("config.validate", errors.InvalidArgument, "POSTGRES_DB is required when EXPENSOR_DB_BACKEND=postgres")
+			return errors.B.Op("config.validate").KindInvalidArgument().Text("POSTGRES_DB is required when EXPENSOR_DB_BACKEND=postgres").Build()
 		}
 		if strings.TrimSpace(cfg.Database.Postgres.User) == "" {
-			return errors.E("config.validate", errors.InvalidArgument, "POSTGRES_USER is required when EXPENSOR_DB_BACKEND=postgres")
+			return errors.B.Op("config.validate").KindInvalidArgument().Text("POSTGRES_USER is required when EXPENSOR_DB_BACKEND=postgres").Build()
 		}
 	}
 	if cfg.Scheduler.BaseRetryDelay > cfg.Scheduler.MaxRetryDelay {
-		return errors.E(errors.InvalidArgument, "EXPENSOR_SCHEDULER_BASE_RETRY_DELAY must not exceed EXPENSOR_SCHEDULER_MAX_RETRY_DELAY")
+		return errors.B.KindInvalidArgument().Text("EXPENSOR_SCHEDULER_BASE_RETRY_DELAY must not exceed EXPENSOR_SCHEDULER_MAX_RETRY_DELAY").Build()
 	}
 	return nil
 }
@@ -424,27 +424,27 @@ func loadSecretKey(security *Security) error {
 	rawKey, hasRawKey := os.LookupEnv("EXPENSOR_SECRET_KEY")
 	hasKeyFile := strings.TrimSpace(security.SecretKeyFile) != ""
 	if hasRawKey && hasKeyFile {
-		return errors.E("config.security", errors.InvalidArgument, "set exactly one of EXPENSOR_SECRET_KEY or EXPENSOR_SECRET_KEY_FILE")
+		return errors.B.Op("config.security").KindInvalidArgument().Text("set exactly one of EXPENSOR_SECRET_KEY or EXPENSOR_SECRET_KEY_FILE").Build()
 	}
 	if !hasRawKey && !hasKeyFile {
-		return errors.E("config.security", errors.InvalidArgument, "set exactly one of EXPENSOR_SECRET_KEY or EXPENSOR_SECRET_KEY_FILE")
+		return errors.B.Op("config.security").KindInvalidArgument().Text("set exactly one of EXPENSOR_SECRET_KEY or EXPENSOR_SECRET_KEY_FILE").Build()
 	}
 
 	encoded := rawKey
 	if hasKeyFile {
 		data, err := os.ReadFile(security.SecretKeyFile)
 		if err != nil {
-			return errors.E("config.security", errors.InvalidArgument, "reading EXPENSOR_SECRET_KEY_FILE", err)
+			return errors.B.Op("config.security").KindInvalidArgument().Text("reading EXPENSOR_SECRET_KEY_FILE").Err(err).Build()
 		}
 		encoded = string(data)
 	}
 
 	key, err := base64.StdEncoding.DecodeString(strings.TrimSpace(encoded))
 	if err != nil {
-		return errors.E("config.security", errors.InvalidArgument, "EXPENSOR_SECRET_KEY must be base64-encoded 32-byte key material")
+		return errors.B.Op("config.security").KindInvalidArgument().Text("EXPENSOR_SECRET_KEY must be base64-encoded 32-byte key material").Build()
 	}
 	if len(key) != 32 {
-		return errors.E("config.security", errors.InvalidArgument, fmt.Sprintf("EXPENSOR_SECRET_KEY decoded length is %d bytes, want 32", len(key)))
+		return errors.B.Op("config.security").KindInvalidArgument().Textf("EXPENSOR_SECRET_KEY decoded length is %d bytes, want 32", len(key)).Build()
 	}
 	security.SecretKey = key
 	return nil

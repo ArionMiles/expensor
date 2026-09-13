@@ -209,7 +209,7 @@ func TestGetTransaction_Found(t *testing.T) {
 }
 
 func TestGetTransaction_NotFound(t *testing.T) {
-	st := &mockStore{getErr: errors.E(errors.NotFound, errors.User("transaction not found"))}
+	st := &mockStore{getErr: errors.B.KindNotFound().UserMsg("transaction not found").Build()}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/transactions/22222222-2222-2222-2222-222222222222", nil)
@@ -307,7 +307,7 @@ func TestUpdateTransaction_MuteReasonOnly(t *testing.T) {
 }
 
 func TestUpdateTransaction_NotFound(t *testing.T) {
-	st := &mockStore{updateTxErr: errors.E(errors.NotFound, errors.User("transaction not found"))}
+	st := &mockStore{updateTxErr: errors.B.KindNotFound().UserMsg("transaction not found").Build()}
 	h := newTestHandlers(t, st, &mockDaemon{})
 
 	body := `{"description":"x"}`

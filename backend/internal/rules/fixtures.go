@@ -2,7 +2,6 @@ package rules
 
 import (
 	"bytes"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -58,7 +57,7 @@ func LoadEmailFixtures(dir string) ([]EmailFixture, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, errors.E("rules.fixtures.load_email_fixtures", "walking email fixtures", err)
+		return nil, errors.B.Op("rules.fixtures.load_email_fixtures").Text("walking email fixtures").Err(err).Build()
 	}
 	sort.Slice(fixtures, func(i, j int) bool {
 		return fixtures[i].TestName < fixtures[j].TestName
@@ -70,42 +69,39 @@ func loadEmailFixture(path string) (EmailFixture, error) {
 	base := filepath.Base(path)
 	testName := strings.TrimSuffix(base, ruleFixtureExtension)
 	if !fixtureNamePattern.MatchString(testName) {
-		return EmailFixture{}, errors.E(
-			errors.InvalidInput,
-			fmt.Sprintf("fixture %q must match <bank>_<source-type>_<case>.rule.fixture", base),
-		)
+		return EmailFixture{}, errors.B.KindInvalidInput().Textf("fixture %q must match <bank>_<source-type>_<case>.rule.fixture", base).Build()
 	}
 	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
-		return EmailFixture{}, errors.E("rules.fixtures.load_email_fixture", fmt.Sprintf("reading fixture %q", path), err)
+		return EmailFixture{}, errors.B.Op("rules.fixtures.load_email_fixture").Textf("reading fixture %q", path).Err(err).Build()
 	}
 	frontMatter, body, err := splitEmailFixture(data)
 	if err != nil {
-		return EmailFixture{}, errors.E("rules.fixtures.load_email_fixture", fmt.Sprintf("parsing fixture %q", path), err)
+		return EmailFixture{}, errors.B.Op("rules.fixtures.load_email_fixture").Textf("parsing fixture %q", path).Err(err).Build()
 	}
 	var fixture EmailFixture
 	if err := yaml.Unmarshal(frontMatter, &fixture); err != nil {
-		return EmailFixture{}, errors.E("rules.fixtures.load_email_fixture", fmt.Sprintf("parsing fixture %q", path), err)
+		return EmailFixture{}, errors.B.Op("rules.fixtures.load_email_fixture").Textf("parsing fixture %q", path).Err(err).Build()
 	}
 	fixture.Body = string(body)
 	fixture.TestName = testName
 	if err := validateEmailFixture(fixture); err != nil {
-		return EmailFixture{}, errors.E("rules.fixtures.load_email_fixture", fmt.Sprintf("validating fixture %q", path), err)
+		return EmailFixture{}, errors.B.Op("rules.fixtures.load_email_fixture").Textf("validating fixture %q", path).Err(err).Build()
 	}
 	return fixture, nil
 }
 
 func splitEmailFixture(data []byte) ([]byte, []byte, error) {
 	if len(data) == 0 {
-		return nil, nil, errors.E(errors.InvalidInput, "fixture is empty")
+		return nil, nil, errors.B.KindInvalidInput().Text("fixture is empty").Build()
 	}
 
 	firstLineEnd := bytes.IndexByte(data, '\n')
 	if firstLineEnd == -1 {
-		return nil, nil, errors.E(errors.InvalidInput, "fixture must start with a front matter delimiter")
+		return nil, nil, errors.B.KindInvalidInput().Text("fixture must start with a front matter delimiter").Build()
 	}
 	if !isDelimiterLine(data[:firstLineEnd]) {
-		return nil, nil, errors.E(errors.InvalidInput, "fixture must start with a front matter delimiter")
+		return nil, nil, errors.B.KindInvalidInput().Text("fixture must start with a front matter delimiter").Build()
 	}
 
 	frontMatterStart := firstLineEnd + 1
@@ -121,7 +117,7 @@ func splitEmailFixture(data []byte) ([]byte, []byte, error) {
 		offset = lineEnd + 1
 	}
 
-	return nil, nil, errors.E(errors.InvalidInput, "fixture must include a closing front matter delimiter")
+	return nil, nil, errors.B.KindInvalidInput().Text("fixture must include a closing front matter delimiter").Build()
 }
 
 func isDelimiterLine(line []byte) bool {
@@ -131,22 +127,22 @@ func isDelimiterLine(line []byte) bool {
 
 func validateEmailFixture(fixture EmailFixture) error {
 	if strings.TrimSpace(fixture.Rule) == "" {
-		return errors.E(errors.InvalidInput, "rule is required")
+		return errors.B.KindInvalidInput().Text("rule is required").Build()
 	}
 	if strings.TrimSpace(fixture.Sender) == "" {
-		return errors.E(errors.InvalidInput, "sender is required")
+		return errors.B.KindInvalidInput().Text("sender is required").Build()
 	}
 	if strings.TrimSpace(fixture.Subject) == "" {
-		return errors.E(errors.InvalidInput, "subject is required")
+		return errors.B.KindInvalidInput().Text("subject is required").Build()
 	}
 	if strings.TrimSpace(fixture.Body) == "" {
-		return errors.E(errors.InvalidInput, "body is required")
+		return errors.B.KindInvalidInput().Text("body is required").Build()
 	}
 	if strings.TrimSpace(fixture.Expected.Merchant) == "" {
-		return errors.E(errors.InvalidInput, "expected.merchant is required")
+		return errors.B.KindInvalidInput().Text("expected.merchant is required").Build()
 	}
 	if strings.TrimSpace(fixture.Expected.Currency) == "" {
-		return errors.E(errors.InvalidInput, "expected.currency is required")
+		return errors.B.KindInvalidInput().Text("expected.currency is required").Build()
 	}
 	return nil
 }

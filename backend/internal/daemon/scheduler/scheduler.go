@@ -65,16 +65,16 @@ type Config struct {
 
 func New(cfg Config) (*Scheduler, error) {
 	if cfg.PollInterval <= 0 {
-		return nil, errors.E(errors.InvalidInput, "scheduler poll interval must be positive")
+		return nil, errors.B.KindInvalidInput().Text("scheduler poll interval must be positive").Build()
 	}
 	if cfg.BaseRetryDelay <= 0 {
-		return nil, errors.E(errors.InvalidInput, "scheduler base retry delay must be positive")
+		return nil, errors.B.KindInvalidInput().Text("scheduler base retry delay must be positive").Build()
 	}
 	if cfg.MaxRetryDelay <= 0 {
-		return nil, errors.E(errors.InvalidInput, "scheduler maximum retry delay must be positive")
+		return nil, errors.B.KindInvalidInput().Text("scheduler maximum retry delay must be positive").Build()
 	}
 	if cfg.BaseRetryDelay > cfg.MaxRetryDelay {
-		return nil, errors.E(errors.InvalidInput, "scheduler base retry delay must not exceed maximum retry delay")
+		return nil, errors.B.KindInvalidInput().Text("scheduler base retry delay must not exceed maximum retry delay").Build()
 	}
 	clock := cfg.Clock
 	if clock == nil {
@@ -99,10 +99,10 @@ func New(cfg Config) (*Scheduler, error) {
 // Start runs the scheduler loop until ctx is canceled.
 func (s *Scheduler) Start(ctx context.Context) error {
 	if s.store == nil {
-		return errors.E(errors.FailedPrecondition, "scheduler store is nil")
+		return errors.B.KindFailedPrecondition().Text("scheduler store is nil").Build()
 	}
 	if s.runner == nil {
-		return errors.E(errors.FailedPrecondition, "scheduler runner is nil")
+		return errors.B.KindFailedPrecondition().Text("scheduler runner is nil").Build()
 	}
 	if err := s.Reconcile(ctx); err != nil {
 		s.logger.Error("initial scheduler reconcile failed", "error", err)

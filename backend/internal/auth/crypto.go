@@ -4,7 +4,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"fmt"
 	"io"
 
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
@@ -29,15 +28,15 @@ type SecretBox struct {
 // NewSecretBox creates a SecretBox from a 32-byte key.
 func NewSecretBox(key []byte) (*SecretBox, error) {
 	if len(key) != SecretKeySize {
-		return nil, errors.E(errors.InvalidInput, fmt.Sprintf("secret key must be %d bytes", SecretKeySize))
+		return nil, errors.B.KindInvalidInput().Textf("secret key must be %d bytes", SecretKeySize).Build()
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, errors.E("auth.crypto.new_secret_box", "creating AES cipher", err)
+		return nil, errors.B.Op("auth.crypto.new_secret_box").Text("creating AES cipher").Err(err).Build()
 	}
 	aead, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, errors.E("auth.crypto.new_secret_box", "creating GCM", err)
+		return nil, errors.B.Op("auth.crypto.new_secret_box").Text("creating GCM").Err(err).Build()
 	}
 	return &SecretBox{aead: aead}, nil
 }
@@ -45,11 +44,11 @@ func NewSecretBox(key []byte) (*SecretBox, error) {
 // Seal encrypts plaintext and authenticates associated data.
 func (b *SecretBox) Seal(plaintext []byte, associated SecretAssociatedData) ([]byte, error) {
 	if b == nil || b.aead == nil {
-		return nil, errors.E(errors.FailedPrecondition, "secret box is not initialized")
+		return nil, errors.B.KindFailedPrecondition().Text("secret box is not initialized").Build()
 	}
 	nonce := make([]byte, b.aead.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, errors.E("auth.crypto.seal", "generating nonce", err)
+		return nil, errors.B.Op("auth.crypto.seal").Text("generating nonce").Err(err).Build()
 	}
 	out := make([]byte, 0, len(nonce)+len(plaintext)+b.aead.Overhead())
 	out = append(out, nonce...)
@@ -60,16 +59,16 @@ func (b *SecretBox) Seal(plaintext []byte, associated SecretAssociatedData) ([]b
 // Open decrypts ciphertext only when associated data matches.
 func (b *SecretBox) Open(ciphertext []byte, associated SecretAssociatedData) ([]byte, error) {
 	if b == nil || b.aead == nil {
-		return nil, errors.E(errors.FailedPrecondition, "secret box is not initialized")
+		return nil, errors.B.KindFailedPrecondition().Text("secret box is not initialized").Build()
 	}
 	nonceSize := b.aead.NonceSize()
 	if len(ciphertext) < nonceSize {
-		return nil, errors.E(errors.InvalidInput, "ciphertext too short")
+		return nil, errors.B.KindInvalidInput().Text("ciphertext too short").Build()
 	}
 	nonce, sealed := ciphertext[:nonceSize], ciphertext[nonceSize:]
 	plaintext, err := b.aead.Open(nil, nonce, sealed, associated.bytes())
 	if err != nil {
-		return nil, errors.E("auth.crypto.open", "decrypting secret", err)
+		return nil, errors.B.Op("auth.crypto.open").Text("decrypting secret").Err(err).Build()
 	}
 	return plaintext, nil
 }

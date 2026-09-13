@@ -141,11 +141,7 @@ func TestActivateLLMProviderMapsQuotaErrors(t *testing.T) {
 		llmProviderCredentials: map[string][]byte{"tenant-a/openai": []byte(`{"api_key":"sk-test"}`)},
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
-	h.llmRegistry = testLLMProvider(t, testLLMClient{healthErr: errors.E(
-		errors.ResourceExhausted,
-		errors.User("OpenAI API quota is unavailable. Add billing credits or choose another LLM provider."),
-		"raw provider quota message",
-	)})
+	h.llmRegistry = testLLMProvider(t, testLLMClient{healthErr: errors.B.KindResourceExhausted().UserMsg("OpenAI API quota is unavailable. Add billing credits or choose another LLM provider.").Text("raw provider quota message").Build()})
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/llm/providers/openai/activate", nil)
 	req.SetPathValue("name", "openai")
@@ -171,7 +167,7 @@ func TestActivateLLMProviderDoesNotExposeClientConstructionError(t *testing.T) {
 	}
 	h := newTestHandlers(t, ms, &mockDaemon{})
 	h.llmRegistry = testLLMProviderWithFactory(t, func(llm.ClientConfig) (llm.Client, error) {
-		return nil, errors.E(errors.FailedPrecondition, "raw credential parsing detail")
+		return nil, errors.B.KindFailedPrecondition().Text("raw credential parsing detail").Build()
 	})
 	ctx := auth.WithPrincipal(context.Background(), auth.Principal{UserID: "user-a", TenantID: "tenant-a", Role: auth.RoleUser})
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/llm/providers/openai/activate", nil)

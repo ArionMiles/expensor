@@ -20,7 +20,7 @@ func requestTenant(r *http.Request) store.Tenant {
 func uuidPathValue(w http.ResponseWriter, r *http.Request, name, label string) (string, bool) {
 	value := r.PathValue(name)
 	if _, err := uuid.Parse(value); err != nil {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User("invalid "+label+" id"), err))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg("invalid "+label+" id").Err(err).Build())
 		return "", false
 	}
 	return value, true

@@ -51,7 +51,7 @@ func (h *Handlers) PatchScanningSettings(w http.ResponseWriter, r *http.Request)
 		reader := strings.TrimSpace(*body.ActiveReader)
 		if reader != "" {
 			if _, err := h.registry.GetProvider(reader); err != nil {
-				writeError(w, r, errors.E(errors.InvalidArgument, errors.User(fmt.Sprintf("reader %q not found", reader)), err))
+				writeError(w, r, errors.B.KindInvalidArgument().UserMsg(fmt.Sprintf("reader %q not found", reader)).Err(err).Build())
 				return
 			}
 			if err := h.scanningStore.SetActiveScanningReader(r.Context(), tenant, reader); err != nil {
@@ -105,11 +105,11 @@ func (h *Handlers) CreateScanningRescan(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if _, err := h.registry.GetProvider(body.Reader); err != nil {
-		writeError(w, r, errors.E(errors.InvalidArgument, errors.User(fmt.Sprintf("reader %q not found", body.Reader)), err))
+		writeError(w, r, errors.B.KindInvalidArgument().UserMsg(fmt.Sprintf("reader %q not found", body.Reader)).Err(err).Build())
 		return
 	}
 	if h.daemon == nil {
-		writeError(w, r, errors.E(errors.Unimplemented, errors.User("rescan not configured")))
+		writeError(w, r, errors.B.KindUnimplemented().UserMsg("rescan not configured").Build())
 		return
 	}
 	h.daemon.Rescan(daemon.RunRequest{Tenant: requestTenant(r), Reader: body.Reader})

@@ -24,23 +24,23 @@ func newSeederRepository(rules *rulesRepository, community *communityRepository,
 func (r *seederRepository) Seed(ctx context.Context, content store.SeedContent) (api.CategoryResolver, error) {
 	systemRuleRows := buildSystemRuleRows(content.Rules)
 	if err := r.rules.SeedPredefinedRules(ctx, systemRuleRows); err != nil {
-		return nil, errors.E("postgres.seeder.seed", errors.Internal, "seeding predefined rules", err)
+		return nil, errors.B.Op("postgres.seeder.seed").KindInternal().Text("seeding predefined rules").Err(err).Build()
 	}
 	r.logger.Info("predefined rules seeded", "count", len(systemRuleRows))
 
 	if err := r.community.SeedMCCCodes(ctx, content.MCCEntries); err != nil {
-		return nil, errors.E("postgres.seeder.seed", errors.Internal, "seeding MCC codes", err)
+		return nil, errors.B.Op("postgres.seeder.seed").KindInternal().Text("seeding MCC codes").Err(err).Build()
 	}
 	if _, err := r.community.SeedMerchantCategories(ctx, content.MerchantCategories); err != nil {
-		return nil, errors.E("postgres.seeder.seed", errors.Internal, "seeding merchant categories", err)
+		return nil, errors.B.Op("postgres.seeder.seed").KindInternal().Text("seeding merchant categories").Err(err).Build()
 	}
 	if err := r.community.SeedMCCCategories(ctx, uniqueCategoryNames(content.MCCEntries)); err != nil {
-		return nil, errors.E("postgres.seeder.seed", errors.Internal, "seeding MCC category names", err)
+		return nil, errors.B.Op("postgres.seeder.seed").KindInternal().Text("seeding MCC category names").Err(err).Build()
 	}
 
 	resolver, err := r.community.LoadCategorySnapshot(ctx)
 	if err != nil {
-		return nil, errors.E("postgres.seeder.seed", errors.Internal, "loading category snapshot", err)
+		return nil, errors.B.Op("postgres.seeder.seed").KindInternal().Text("loading category snapshot").Err(err).Build()
 	}
 	r.logger.Info("category resolver loaded")
 	return resolver, nil

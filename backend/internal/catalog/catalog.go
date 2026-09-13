@@ -52,7 +52,7 @@ func loadFromFS(fsys fs.FS) (Content, error) {
 	}
 	doc, err := rules.ParseDocument(rulesBody)
 	if err != nil {
-		return Content{}, errors.E("catalog.load", errors.Internal, "parsing bundled rules", err)
+		return Content{}, errors.B.Op("catalog.load").KindInternal().Text("parsing bundled rules").Err(err).Build()
 	}
 	if len(doc.Rules) == 0 {
 		return Content{}, invalid("bundled rules are empty")
@@ -78,7 +78,7 @@ func loadFromFS(fsys fs.FS) (Content, error) {
 	}
 	var bankEntries []bankEntry
 	if err := json.Unmarshal(banks, &bankEntries); err != nil {
-		return Content{}, errors.E("catalog.load", errors.Internal, "parsing bundled banks", err)
+		return Content{}, errors.B.Op("catalog.load").KindInternal().Text("parsing bundled banks").Err(err).Build()
 	}
 	if err := validateBanks(bankEntries); err != nil {
 		return Content{}, err
@@ -94,7 +94,7 @@ func loadFromFS(fsys fs.FS) (Content, error) {
 	}
 	prompts, err := llm.LoadPromptCatalog(fsys, promptPath)
 	if err != nil {
-		return Content{}, errors.E("catalog.load", errors.Internal, "loading llm prompts", err)
+		return Content{}, errors.B.Op("catalog.load").KindInternal().Text("loading llm prompts").Err(err).Build()
 	}
 	if prompts.Len() == 0 {
 		return Content{}, invalid("llm prompt catalog is empty")
@@ -177,7 +177,7 @@ func loadGuide(fsys fs.FS, name string) ([]byte, error) {
 	}
 	var guide plugins.ProviderGuide
 	if err := json.Unmarshal(body, &guide); err != nil {
-		return nil, errors.E("catalog.load", errors.Internal, fmt.Sprintf("parsing %s", name), err)
+		return nil, errors.B.Op("catalog.load").KindInternal().Textf("parsing %s", name).Err(err).Build()
 	}
 	if len(guide.Sections) == 0 {
 		return nil, invalid(fmt.Sprintf("%s has no sections", name))
@@ -310,7 +310,7 @@ func decodeStrict[T any](fsys fs.FS, name string) (T, error) {
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&value); err != nil {
-		return value, errors.E("catalog.load", errors.Internal, fmt.Sprintf("parsing %s", name), err)
+		return value, errors.B.Op("catalog.load").KindInternal().Textf("parsing %s", name).Err(err).Build()
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		return value, invalid(fmt.Sprintf("%s contains trailing JSON data", name))
@@ -325,7 +325,7 @@ func decode[T any](fsys fs.FS, name string) (T, error) {
 		return value, err
 	}
 	if err := json.Unmarshal(body, &value); err != nil {
-		return value, errors.E("catalog.load", errors.Internal, fmt.Sprintf("parsing %s", name), err)
+		return value, errors.B.Op("catalog.load").KindInternal().Textf("parsing %s", name).Err(err).Build()
 	}
 	return value, nil
 }
@@ -333,13 +333,13 @@ func decode[T any](fsys fs.FS, name string) (T, error) {
 func read(fsys fs.FS, name string) ([]byte, error) {
 	body, err := fs.ReadFile(fsys, name)
 	if err != nil {
-		return nil, errors.E("catalog.load", errors.Internal, fmt.Sprintf("reading %s", name), err)
+		return nil, errors.B.Op("catalog.load").KindInternal().Textf("reading %s", name).Err(err).Build()
 	}
 	return body, nil
 }
 
 func invalid(message string) error {
-	return errors.E("catalog.load", errors.Internal, message)
+	return errors.B.Op("catalog.load").KindInternal().Text(message).Build()
 }
 
 func blank(value string) bool {

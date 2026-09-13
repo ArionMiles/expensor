@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/ArionMiles/expensor/backend/internal/observability"
@@ -77,7 +76,7 @@ func (s Store) Close() {
 // Seed persists bundled startup content through the configured backend.
 func (s Store) Seed(ctx context.Context, content store.SeedContent) (api.CategoryResolver, error) {
 	if s.Seeder == nil {
-		return nil, errors.E("app.store.seed", errors.FailedPrecondition, "store backend does not support startup seeding")
+		return nil, errors.B.Op("app.store.seed").KindFailedPrecondition().Text("store backend does not support startup seeding").Build()
 	}
 	return s.Seeder.Seed(ctx, content)
 }
@@ -91,9 +90,9 @@ func openStoreBackend(ctx context.Context, opts StoreOptions) (store.Backend, er
 			Logger:   opts.Logger,
 		})
 	case "", config.DatabaseBackendSQLite:
-		return nil, errors.E("app.store.new", errors.FailedPrecondition, "sqlite database backend is not supported yet")
+		return nil, errors.B.Op("app.store.new").KindFailedPrecondition().Text("sqlite database backend is not supported yet").Build()
 	default:
-		return nil, errors.E("app.store.new", errors.InvalidArgument, fmt.Sprintf("unsupported database backend %q", opts.Database.Backend))
+		return nil, errors.B.Op("app.store.new").KindInvalidArgument().Textf("unsupported database backend %q", opts.Database.Backend).Build()
 	}
 }
 

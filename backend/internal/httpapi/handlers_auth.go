@@ -185,11 +185,11 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 		if errors.WhatKind(err) != errors.NotFound {
 			logError(r, responseRequestID(w), err)
 		}
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("invalid email or password")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("invalid email or password").Build())
 		return
 	}
 	if user.DisabledAt != nil || auth.VerifyPassword(user.PasswordHash, body.Password) != nil {
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("invalid email or password")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("invalid email or password").Build())
 		return
 	}
 	if !h.createSessionCookie(w, r, user) {
@@ -261,7 +261,7 @@ func (h *Handlers) GetProfile(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("authentication required").Build())
 		return
 	}
 	body, ok := decodeAndValidateJSON[updateProfileRequest](h, w, r)
@@ -275,7 +275,7 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	user, err := h.authStore.UpdateUser(r.Context(), principal.UserID, input)
 	if err != nil {
 		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
+			writeError(w, r, errors.B.KindUnauthenticated().UserMsg("authentication required").Build())
 			return
 		}
 		writeError(w, r, err)
@@ -305,7 +305,7 @@ func (h *Handlers) UpdatePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if auth.VerifyPassword(user.PasswordHash, body.CurrentPassword) != nil {
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("current password is incorrect")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("current password is incorrect").Build())
 		return
 	}
 	passwordHash, err := auth.HashPassword(body.NewPassword)
@@ -315,7 +315,7 @@ func (h *Handlers) UpdatePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.authStore.UpdateUserPassword(r.Context(), user.ID, store.UpdateUserPasswordInput{PasswordHash: passwordHash}); err != nil {
 		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
+			writeError(w, r, errors.B.KindUnauthenticated().UserMsg("authentication required").Build())
 			return
 		}
 		writeError(w, r, err)
@@ -340,7 +340,7 @@ func (h *Handlers) UpdatePassword(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) CreateAccessToken(w http.ResponseWriter, r *http.Request) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("authentication required").Build())
 		return
 	}
 	body, ok := decodeAndValidateJSON[createAccessTokenRequest](h, w, r)
@@ -377,7 +377,7 @@ func (h *Handlers) CreateAccessToken(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) ListAccessTokens(w http.ResponseWriter, r *http.Request) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("authentication required").Build())
 		return
 	}
 	tokens, err := h.authStore.ListAccessTokens(r.Context(), principal.UserID)
@@ -404,7 +404,7 @@ func (h *Handlers) ListAccessTokens(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) RevokeAccessToken(w http.ResponseWriter, r *http.Request) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("authentication required").Build())
 		return
 	}
 	if err := h.authStore.RevokeAccessToken(r.Context(), r.PathValue("id"), principal.UserID); err != nil {
@@ -498,7 +498,7 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("authentication required").Build())
 		return
 	}
 	body, ok := decodeAndValidateJSON[updateUserRequest](h, w, r)
@@ -511,11 +511,11 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := r.PathValue("id")
 	if input.Role != nil && userID == principal.UserID {
-		writeError(w, r, errors.E(errors.PermissionDenied, errors.User("cannot change your own role")))
+		writeError(w, r, errors.B.KindPermissionDenied().UserMsg("cannot change your own role").Build())
 		return
 	}
 	if input.Disabled != nil && *input.Disabled && userID == principal.UserID {
-		writeError(w, r, errors.E(errors.PermissionDenied, errors.User("cannot disable your own account")))
+		writeError(w, r, errors.B.KindPermissionDenied().UserMsg("cannot disable your own account").Build())
 		return
 	}
 	user, err := h.authStore.UpdateUser(r.Context(), userID, input)
@@ -542,12 +542,12 @@ func (h *Handlers) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("authentication required").Build())
 		return
 	}
 	userID := r.PathValue("id")
 	if userID == principal.UserID {
-		writeError(w, r, errors.E(errors.PermissionDenied, errors.User("cannot delete your own account")))
+		writeError(w, r, errors.B.KindPermissionDenied().UserMsg("cannot delete your own account").Build())
 		return
 	}
 	if err := h.authStore.DeleteUser(r.Context(), userID); err != nil {
@@ -580,7 +580,7 @@ func (h *Handlers) CreateSetupToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.TrimSpace(user.PasswordHash) != "" {
-		writeError(w, r, errors.E(errors.Conflict, errors.User("account already set up")))
+		writeError(w, r, errors.B.KindConflict().UserMsg("account already set up").Build())
 		return
 	}
 	raw, hash, err := auth.NewOpaqueToken(setupTokenPrefix)
@@ -651,7 +651,7 @@ func (h *Handlers) CompleteAccountSetup(w http.ResponseWriter, r *http.Request) 
 	})
 	if err != nil {
 		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, r, errors.E(errors.Unauthenticated, errors.User("invalid or expired setup token")))
+			writeError(w, r, errors.B.KindUnauthenticated().UserMsg("invalid or expired setup token").Build())
 			return
 		}
 		writeError(w, r, err)
@@ -666,7 +666,7 @@ func (h *Handlers) CompleteAccountSetup(w http.ResponseWriter, r *http.Request) 
 func (h *Handlers) accountSetupUserFromToken(w http.ResponseWriter, r *http.Request) (*store.User, bool) {
 	tokenValue := strings.TrimSpace(r.URL.Query().Get("token"))
 	if tokenValue == "" {
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("invalid or expired setup token")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("invalid or expired setup token").Build())
 		return nil, false
 	}
 	setupToken, err := h.authStore.FindAccountSetupTokenByHash(r.Context(), auth.HashOpaqueToken(tokenValue))
@@ -675,20 +675,20 @@ func (h *Handlers) accountSetupUserFromToken(w http.ResponseWriter, r *http.Requ
 			writeError(w, r, err)
 			return nil, false
 		}
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("invalid or expired setup token")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("invalid or expired setup token").Build())
 		return nil, false
 	}
 	user, err := h.authStore.FindUserByID(r.Context(), setupToken.UserID)
 	if err != nil {
 		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, r, errors.E(errors.Unauthenticated, errors.User("invalid or expired setup token")))
+			writeError(w, r, errors.B.KindUnauthenticated().UserMsg("invalid or expired setup token").Build())
 			return nil, false
 		}
 		writeError(w, r, err)
 		return nil, false
 	}
 	if strings.TrimSpace(user.PasswordHash) != "" {
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("invalid or expired setup token")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("invalid or expired setup token").Build())
 		return nil, false
 	}
 	return user, true
@@ -716,13 +716,13 @@ func (h *Handlers) createSessionCookie(w http.ResponseWriter, r *http.Request, u
 func (h *Handlers) currentUser(w http.ResponseWriter, r *http.Request) (*store.User, bool) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("authentication required").Build())
 		return nil, false
 	}
 	user, err := h.authStore.FindUserByID(r.Context(), principal.UserID)
 	if err != nil {
 		if errors.WhatKind(err) == errors.NotFound {
-			writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
+			writeError(w, r, errors.B.KindUnauthenticated().UserMsg("authentication required").Build())
 			return nil, false
 		}
 		writeError(w, r, err)
@@ -846,11 +846,11 @@ func applyProfileUserUpdates(
 func requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("authentication required").Build())
 		return false
 	}
 	if principal.Role != auth.RoleAdmin {
-		writeError(w, r, errors.E(errors.PermissionDenied, errors.User("admin role required")))
+		writeError(w, r, errors.B.KindPermissionDenied().UserMsg("admin role required").Build())
 		return false
 	}
 	return true

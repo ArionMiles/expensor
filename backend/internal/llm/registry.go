@@ -98,30 +98,22 @@ func ValidateConfig(schema, config json.RawMessage) error {
 		} `json:"properties"`
 	}
 	if err := json.Unmarshal(schema, &document); err != nil {
-		return errors.E(op, errors.Internal, "decoding provider configuration schema", err)
+		return errors.B.Op(op).KindInternal().Text("decoding provider configuration schema").Err(err).Build()
 	}
 	var values map[string]json.RawMessage
 	if err := json.Unmarshal(config, &values); err != nil {
-		return errors.E(op, errors.InvalidInput, errors.User("Provider configuration must be a JSON object."), err)
+		return errors.B.Op(op).KindInvalidInput().UserMsg("Provider configuration must be a JSON object.").Err(err).Build()
 	}
 	if values == nil {
-		return errors.E(op, errors.InvalidInput, errors.User("Provider configuration must be a JSON object."))
+		return errors.B.Op(op).KindInvalidInput().UserMsg("Provider configuration must be a JSON object.").Build()
 	}
 	for name, value := range values {
 		property, ok := document.Properties[name]
 		if !ok {
-			return errors.E(
-				op,
-				errors.InvalidInput,
-				errors.User(fmt.Sprintf("Provider configuration field %q is not supported.", name)),
-			)
+			return errors.B.Op(op).KindInvalidInput().UserMsg(fmt.Sprintf("Provider configuration field %q is not supported.", name)).Build()
 		}
 		if !configValueMatchesType(value, property.Type) {
-			return errors.E(
-				op,
-				errors.InvalidInput,
-				errors.User(fmt.Sprintf("Provider configuration field %q must be a %s.", name, property.Type)),
-			)
+			return errors.B.Op(op).KindInvalidInput().UserMsg(fmt.Sprintf("Provider configuration field %q must be a %s.", name, property.Type)).Build()
 		}
 	}
 	return nil
@@ -177,12 +169,12 @@ func (p Provider) RequireCapabilities(required ...Capability) error {
 	}
 	for _, capability := range required {
 		if _, ok := available[capability]; !ok {
-			return errors.E(
-				op,
-				KindCapabilityUnsupported,
-				errors.User("The active LLM provider does not support the requested operation."),
-				fmt.Sprintf("llm capability unsupported: %s", capability),
-			)
+			return errors.B.
+				Op(op).
+				Kind(KindCapabilityUnsupported).
+				UserMsg("The active LLM provider does not support the requested operation.").
+				Textf("llm capability unsupported: %s", capability).
+				Build()
 		}
 	}
 	return nil
@@ -204,21 +196,21 @@ func (r *Registry) RegisterProvider(provider Provider) error {
 
 	name := strings.TrimSpace(provider.Metadata.Name)
 	if name == "" {
-		return errors.E(op, errors.InvalidInput, "llm provider name is required")
+		return errors.B.Op(op).KindInvalidInput().Text("llm provider name is required").Build()
 	}
 	if provider.NewClient == nil {
-		return errors.E(op, errors.InvalidInput, fmt.Sprintf("llm provider %q client factory is required", name))
+		return errors.B.Op(op).KindInvalidInput().Textf("llm provider %q client factory is required", name).Build()
 	}
 	if len(provider.Metadata.ConfigSchema) > 0 && !json.Valid(provider.Metadata.ConfigSchema) {
-		return errors.E(op, errors.InvalidInput, fmt.Sprintf("llm provider %q config schema must be valid JSON", name))
+		return errors.B.Op(op).KindInvalidInput().Textf("llm provider %q config schema must be valid JSON", name).Build()
 	}
 	for _, option := range provider.Metadata.ModelOptions {
 		if strings.TrimSpace(option.ID) == "" {
-			return errors.E(op, errors.InvalidInput, fmt.Sprintf("llm provider %q model option id is required", name))
+			return errors.B.Op(op).KindInvalidInput().Textf("llm provider %q model option id is required", name).Build()
 		}
 	}
 	if _, exists := r.providers[name]; exists {
-		return errors.E(op, errors.Conflict, fmt.Sprintf("llm provider %q already registered", name))
+		return errors.B.Op(op).KindConflict().Textf("llm provider %q already registered", name).Build()
 	}
 	provider.Metadata.Name = name
 	r.providers[name] = provider
@@ -231,7 +223,7 @@ func (r *Registry) GetProvider(name string) (Provider, error) {
 
 	provider, ok := r.providers[name]
 	if !ok {
-		return Provider{}, errors.E(op, errors.NotFound, fmt.Sprintf("llm provider %q not found", name))
+		return Provider{}, errors.B.Op(op).KindNotFound().Textf("llm provider %q not found", name).Build()
 	}
 	return provider, nil
 }

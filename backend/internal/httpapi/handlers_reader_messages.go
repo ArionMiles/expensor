@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	"github.com/ArionMiles/expensor/backend/internal/oauth"
@@ -60,7 +59,7 @@ func (h *Handlers) newEmailSearcher(ctx context.Context, tenant store.Tenant, na
 
 	provider, err := h.registry.GetProvider(name)
 	if err != nil {
-		return nil, errors.E(op, errors.NotFound, fmt.Sprintf("reader %q is no longer registered", name), err)
+		return nil, errors.B.Op(op).KindNotFound().Textf("reader %q is no longer registered", name).Err(err).Build()
 	}
 
 	var httpClient *http.Client
@@ -68,15 +67,10 @@ func (h *Handlers) newEmailSearcher(ctx context.Context, tenant store.Tenant, na
 	if meta.Auth.Type == plugins.AuthTypeOAuth {
 		secretJSON, ok, err := h.readerRuntimeStore.GetReaderSecret(ctx, tenant, name)
 		if err != nil {
-			return nil, errors.E("httpapi.handlers_readers.new_email_searcher", fmt.Sprintf("loading credentials for provider %q", name), err)
+			return nil, errors.B.Op("httpapi.handlers_readers.new_email_searcher").Textf("loading credentials for provider %q", name).Err(err).Build()
 		}
 		if !ok {
-			return nil, errors.E(
-				op,
-				oauth.KindCredentialsMissing,
-				errors.User("provider is not authenticated"),
-				"credentials file missing",
-			)
+			return nil, errors.B.Op(op).Kind(oauth.KindCredentialsMissing).UserMsg("provider is not authenticated").Text("credentials file missing").Build()
 		}
 		httpClient, err = oauth.NewFromJSONAndStore(ctx, oauth.StoreClientInput{
 			SecretJSON: secretJSON,
@@ -92,7 +86,7 @@ func (h *Handlers) newEmailSearcher(ctx context.Context, tenant store.Tenant, na
 
 	readerConfig, _, err := h.readerRuntimeStore.GetReaderConfig(ctx, tenant, name)
 	if err != nil {
-		return nil, errors.E("httpapi.handlers_readers.new_email_searcher", fmt.Sprintf("loading provider config for %q", name), err)
+		return nil, errors.B.Op("httpapi.handlers_readers.new_email_searcher").Textf("loading provider config for %q", name).Err(err).Build()
 	}
 	return provider.NewEmailSearcher(plugins.ProviderInput{
 		HTTPClient:   httpClient,

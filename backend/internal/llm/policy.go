@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 
@@ -52,7 +51,7 @@ func EnforceResultLimits(payload []byte, limits ResultLimits) error {
 	const op = "llm.EnforceResultLimits"
 
 	if limits.MaxBytes > 0 && len(payload) > limits.MaxBytes {
-		return errors.E(op, errors.InvalidInput, fmt.Sprintf("llm result too large: %d bytes exceeds %d", len(payload), limits.MaxBytes))
+		return errors.B.Op(op).KindInvalidInput().Textf("llm result too large: %d bytes exceeds %d", len(payload), limits.MaxBytes).Build()
 	}
 	return nil
 }
@@ -78,19 +77,19 @@ func ValidateMutationSafety(policy MutationPolicy, mutations []MutationRequest) 
 		return nil
 	}
 	if !policy.AllowMutations {
-		return errors.E(op, errors.InvalidInput, "llm mutation is not allowed: mutations are disabled")
+		return errors.B.Op(op).KindInvalidInput().Text("llm mutation is not allowed: mutations are disabled").Build()
 	}
 	resources := stringSet(policy.AllowedResources)
 	operations := stringSet(policy.AllowedOperations)
 	for _, mutation := range mutations {
 		if len(resources) > 0 {
 			if _, ok := resources[strings.TrimSpace(mutation.Resource)]; !ok {
-				return errors.E(op, errors.InvalidInput, fmt.Sprintf("llm mutation is not allowed: resource %q", mutation.Resource))
+				return errors.B.Op(op).KindInvalidInput().Textf("llm mutation is not allowed: resource %q", mutation.Resource).Build()
 			}
 		}
 		if len(operations) > 0 {
 			if _, ok := operations[strings.TrimSpace(mutation.Operation)]; !ok {
-				return errors.E(op, errors.InvalidInput, fmt.Sprintf("llm mutation is not allowed: operation %q", mutation.Operation))
+				return errors.B.Op(op).KindInvalidInput().Textf("llm mutation is not allowed: operation %q", mutation.Operation).Build()
 			}
 		}
 	}

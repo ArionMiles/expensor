@@ -59,7 +59,7 @@ func scanDiagnosticRows(rows pgx.Rows) ([]store.ExtractionDiagnosticRow, error) 
 			&row.UpdatedAt,
 			&resolvedAt,
 		); err != nil {
-			return nil, errors.E("postgres.scan.scan_diagnostic_rows", "scanning extraction diagnostic", err)
+			return nil, errors.B.Op("postgres.scan.scan_diagnostic_rows").Text("scanning extraction diagnostic").Err(err).Build()
 		}
 		if ruleID.Valid {
 			row.RuleID = &ruleID.String
@@ -95,7 +95,7 @@ func scanTransactions(rows pgx.Rows) ([]store.Transaction, error) {
 			&legacySource, &sourceType, &sourceLabel, &bank,
 			&t.Description, &t.Muted, &t.MutedByMerchant, &t.MuteReason, &t.CreatedAt, &t.UpdatedAt,
 		); err != nil {
-			return nil, errors.E("postgres.scan.scan_transactions", "scanning transaction row", err)
+			return nil, errors.B.Op("postgres.scan.scan_transactions").Text("scanning transaction row").Err(err).Build()
 		}
 		if sourceLabel == "" {
 			sourceLabel = legacySource
@@ -105,7 +105,7 @@ func scanTransactions(rows pgx.Rows) ([]store.Transaction, error) {
 		txns = append(txns, t)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, errors.E("postgres.scan.scan_transactions", "iterating transaction rows", err)
+		return nil, errors.B.Op("postgres.scan.scan_transactions").Text("iterating transaction rows").Err(err).Build()
 	}
 	return txns, nil
 }
@@ -125,7 +125,7 @@ func scanRuleRows(rows pgx.Rows) ([]store.RuleRow, error) {
 			&r.TransactionSource, &r.SourceType, &r.SourceLabel, &r.Bank, &r.Predefined,
 			&r.CreatedAt, &r.UpdatedAt,
 		); err != nil {
-			return nil, errors.E("postgres.scan.scan_rule_rows", "scanning rule row", err)
+			return nil, errors.B.Op("postgres.scan.scan_rule_rows").Text("scanning rule row").Err(err).Build()
 		}
 		result = append(result, r)
 	}

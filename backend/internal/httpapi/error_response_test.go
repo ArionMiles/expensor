@@ -16,7 +16,7 @@ func TestWriteErrorUsesUserMessageAndRequestID(t *testing.T) {
 	rr.Header().Set(requestIDHeader, "7b08e51d-8e8f-4b4a-9c14-fd1ff4c823b3")
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/transactions/1", nil)
 
-	writeError(rr, req, apperrors.E(apperrors.NotFound, apperrors.User("transaction not found")))
+	writeError(rr, req, apperrors.B.KindNotFound().UserMsg("transaction not found").Build())
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusNotFound)
@@ -38,7 +38,7 @@ func TestWriteErrorHidesUnexpectedError(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/transactions/1", nil)
 
-	writeError(rr, req, apperrors.E(apperrors.Internal, stderrors.New("database password leaked")))
+	writeError(rr, req, apperrors.B.KindInternal().Err(stderrors.New("database password leaked")).Build())
 
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusInternalServerError)
@@ -57,7 +57,7 @@ func TestWriteErrorHidesClientErrorWithoutUserMessage(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/transactions/1", nil)
 
-	writeError(rr, req, apperrors.E(apperrors.InvalidArgument, stderrors.New("invalid internal state")))
+	writeError(rr, req, apperrors.B.KindInvalidArgument().Err(stderrors.New("invalid internal state")).Build())
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusBadRequest)

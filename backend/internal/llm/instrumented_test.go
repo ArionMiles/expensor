@@ -41,7 +41,7 @@ func TestInstrumentedClientRecordsCompleteSpanAndSanitizedErrorLog(t *testing.T)
 	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	scope := observability.NewScope(logger, "test/llm")
 	client := NewInstrumentedClient(instrumentedClientStub{
-		err: errors.E(errors.ResourceExhausted, errors.User("OpenAI API quota is unavailable."), stderrors.New("quota failed for sensitive account detail")),
+		err: errors.B.KindResourceExhausted().UserMsg("OpenAI API quota is unavailable.").Err(stderrors.New("quota failed for sensitive account detail")).Build(),
 	}, "openai", scope, logger)
 
 	_, err := client.Complete(context.Background(), Request{

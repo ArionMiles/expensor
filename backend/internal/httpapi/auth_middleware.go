@@ -58,7 +58,7 @@ func (h *Handlers) authenticateRequest(w http.ResponseWriter, r *http.Request) (
 	if token, ok := bearerToken(r.Header.Get("Authorization")); ok {
 		return h.authenticateBearer(w, r, token)
 	}
-	writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
+	writeError(w, r, errors.B.KindUnauthenticated().UserMsg("authentication required").Build())
 	return auth.Principal{}, false
 }
 
@@ -68,7 +68,7 @@ func (h *Handlers) authenticateSession(w http.ResponseWriter, r *http.Request, r
 		if err != nil && errors.WhatKind(err) != errors.NotFound {
 			logError(r, responseRequestID(w), err)
 		}
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("authentication required").Build())
 		return auth.Principal{}, false
 	}
 	user, ok := h.authenticatedUser(w, r, session.UserID)
@@ -84,7 +84,7 @@ func (h *Handlers) authenticateBearer(w http.ResponseWriter, r *http.Request, ra
 		if err != nil && errors.WhatKind(err) != errors.NotFound {
 			logError(r, responseRequestID(w), err)
 		}
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("authentication required").Build())
 		return auth.Principal{}, false
 	}
 	user, ok := h.authenticatedUser(w, r, token.UserID)
@@ -103,11 +103,11 @@ func (h *Handlers) authenticatedUser(w http.ResponseWriter, r *http.Request, use
 		if errors.WhatKind(err) != errors.NotFound {
 			logError(r, responseRequestID(w), err)
 		}
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("authentication required").Build())
 		return nil, false
 	}
 	if user.DisabledAt != nil {
-		writeError(w, r, errors.E(errors.Unauthenticated, errors.User("authentication required")))
+		writeError(w, r, errors.B.KindUnauthenticated().UserMsg("authentication required").Build())
 		return nil, false
 	}
 	return user, true

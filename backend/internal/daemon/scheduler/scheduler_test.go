@@ -76,9 +76,7 @@ func TestRunTenantMapsAuthFailureToNeedsAuth(t *testing.T) {
 	fakeStore := newFakeStore([]store.TenantScanningState{
 		{TenantID: "tenant-a", ActiveReader: "gmail", Enabled: true, State: store.ScanningStateQueued},
 	})
-	runner := &staticRunner{err: apperrors.E(
-		apperrors.User("Reconnect your reader account to continue scanning."), errors.New("oauth2: invalid_grant"),
-	)}
+	runner := &staticRunner{err: apperrors.B.UserMsg("Reconnect your reader account to continue scanning.").Err(errors.New("oauth2: invalid_grant")).Build()}
 	scheduler := newScheduler(t, Config{Store: fakeStore, Runner: runner, Clock: fixedClock{now: now}})
 
 	if err := scheduler.Reconcile(context.Background()); err != nil {
@@ -104,30 +102,24 @@ func TestRunTenantMapsStructuredFailuresToScanState(t *testing.T) {
 	}{
 		{
 			name: "reader not configured",
-			err: apperrors.E(
-				apperrors.User("Complete reader setup to continue scanning."),
-				apperrors.E(daemon.KindReaderNotConfigured, "reader config is incomplete"),
-			),
+			err:  apperrors.B.UserMsg("Complete reader setup to continue scanning.").Err(apperrors.B.Kind(daemon.KindReaderNotConfigured).Text("reader config is incomplete").Build()).Build(),
+
 			state:         store.ScanningStateReaderNotConfigured,
 			reason:        store.ScanningReasonReaderNotConfigured,
 			publicMessage: "Complete reader setup to continue scanning.",
 		},
 		{
 			name: "missing credentials",
-			err: apperrors.E(
-				apperrors.User("Upload reader credentials to continue scanning."),
-				apperrors.E(oauth.KindCredentialsMissing, "reader credentials missing"),
-			),
+			err:  apperrors.B.UserMsg("Upload reader credentials to continue scanning.").Err(apperrors.B.Kind(oauth.KindCredentialsMissing).Text("reader credentials missing").Build()).Build(),
+
 			state:         store.ScanningStateNeedsAuth,
 			reason:        store.ScanningReasonMissingCredentials,
 			publicMessage: "Upload reader credentials to continue scanning.",
 		},
 		{
 			name: "missing token",
-			err: apperrors.E(
-				apperrors.User("Connect your reader account to continue scanning."),
-				apperrors.E(oauth.KindTokenMissing, "reader token missing"),
-			),
+			err:  apperrors.B.UserMsg("Connect your reader account to continue scanning.").Err(apperrors.B.Kind(oauth.KindTokenMissing).Text("reader token missing").Build()).Build(),
+
 			state:         store.ScanningStateNeedsAuth,
 			reason:        store.ScanningReasonMissingToken,
 			publicMessage: "Connect your reader account to continue scanning.",
@@ -160,9 +152,7 @@ func TestRunTenantPrefersReaderSetupFailureOverInvalidGrant(t *testing.T) {
 	fakeStore := newFakeStore([]store.TenantScanningState{
 		{TenantID: "tenant-a", ActiveReader: "gmail", Enabled: true, State: store.ScanningStateQueued},
 	})
-	runner := NewScanRunner(&scannerStub{err: apperrors.E(
-		daemon.KindReaderNotConfigured, errors.New("oauth2: invalid_grant"),
-	)})
+	runner := NewScanRunner(&scannerStub{err: apperrors.B.Kind(daemon.KindReaderNotConfigured).Err(errors.New("oauth2: invalid_grant")).Build()})
 	scheduler := newScheduler(t, Config{Store: fakeStore, Runner: runner})
 	if err := scheduler.Reconcile(context.Background()); err != nil {
 		t.Fatalf("Reconcile: %v", err)

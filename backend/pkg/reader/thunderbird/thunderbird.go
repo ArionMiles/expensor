@@ -3,7 +3,6 @@ package thunderbird
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/mail"
@@ -82,7 +81,7 @@ func New(cfg Config, logger *slog.Logger) (*Reader, error) {
 	// Find mailbox paths
 	mailboxPaths, err := FindMailboxes(cfg.ProfilePath, cfg.Mailboxes)
 	if err != nil {
-		return nil, errors.E("thunderbird.new", "finding mailboxes", err)
+		return nil, errors.B.Op("thunderbird.new").Text("finding mailboxes").Err(err).Build()
 	}
 
 	logger.Info("found mailboxes", "count", len(mailboxPaths), "paths", mailboxPaths)
@@ -292,7 +291,7 @@ type thunderbirdMessageSearchInput struct {
 func (r *Reader) searchMailbox(ctx context.Context, input thunderbirdMessageSearchInput) error {
 	file, err := os.Open(input.mailboxPath)
 	if err != nil {
-		return errors.E("thunderbird.search_mailbox", fmt.Sprintf("opening mailbox %q", input.mailboxName), err)
+		return errors.B.Op("thunderbird.search_mailbox").Textf("opening mailbox %q", input.mailboxName).Err(err).Build()
 	}
 	defer file.Close()
 
@@ -309,7 +308,7 @@ func (r *Reader) searchMailbox(ctx context.Context, input thunderbirdMessageSear
 			return nil
 		}
 		if err != nil {
-			return errors.E("thunderbird.search_mailbox", fmt.Sprintf("reading mailbox %q", input.mailboxName), err)
+			return errors.B.Op("thunderbird.search_mailbox").Textf("reading mailbox %q", input.mailboxName).Err(err).Build()
 		}
 
 		msg, err := mail.ReadMessage(msgReader)
@@ -336,7 +335,7 @@ func thunderbirdMessageSample(msg *mail.Message, mailboxPath, subject string) (a
 	messageID := msg.Header.Get("Message-Id")
 	body, err := ExtractBody(msg)
 	if err != nil {
-		return api.EmailSearchResult{}, errors.E("thunderbird.thunderbird_message_sample", "extracting body", err)
+		return api.EmailSearchResult{}, errors.B.Op("thunderbird.thunderbird_message_sample").Text("extracting body").Err(err).Build()
 	}
 	body = strings.TrimRight(body, "\r\n")
 	var receivedAt *time.Time
@@ -370,7 +369,7 @@ func (r *Reader) scanMailbox(ctx context.Context, mailboxName, mailboxPath strin
 
 	file, err := os.Open(mailboxPath)
 	if err != nil {
-		return errors.E("thunderbird.scan_mailbox", "opening mailbox", err)
+		return errors.B.Op("thunderbird.scan_mailbox").Text("opening mailbox").Err(err).Build()
 	}
 	defer file.Close()
 
@@ -500,7 +499,7 @@ func (r *Reader) extractTransaction(ctx context.Context, msg *mail.Message, rule
 	// Extract body
 	body, err := ExtractBody(msg)
 	if err != nil {
-		return nil, errors.E("thunderbird.extract_transaction", "extracting body", err)
+		return nil, errors.B.Op("thunderbird.extract_transaction").Text("extracting body").Err(err).Build()
 	}
 
 	// Parse date

@@ -86,7 +86,7 @@ func New(httpClient *http.Client, cfg Config, logger *slog.Logger) (*Reader, err
 	// The actual API calls later use the context passed to Read()
 	client, err := gmail.NewService(context.Background(), option.WithHTTPClient(httpClient))
 	if err != nil {
-		return nil, errors.E("gmail.new", "creating gmail service", err)
+		return nil, errors.B.Op("gmail.new").Text("creating gmail service").Err(err).Build()
 	}
 
 	interval := cfg.Interval
@@ -421,7 +421,7 @@ func (r *Reader) Search(ctx context.Context, query api.EmailSearchQuery) ([]api.
 		return callErr
 	})
 	if err != nil {
-		return nil, errors.E("gmail.search", "listing messages for subject search", err)
+		return nil, errors.B.Op("gmail.search").Text("listing messages for subject search").Err(err).Build()
 	}
 	if resp == nil {
 		return []api.EmailSearchResult{}, nil
@@ -453,7 +453,7 @@ func (r *Reader) getMessage(ctx context.Context, msgID string) (*gmail.Message, 
 		return callErr
 	})
 	if err != nil {
-		return nil, errors.E("gmail.get_message", "getting message", err)
+		return nil, errors.B.Op("gmail.get_message").Text("getting message").Err(err).Build()
 	}
 	return msg, nil
 }
@@ -484,7 +484,7 @@ func handleListMessagesError(ctx context.Context, logger *slog.Logger, ruleName 
 		return ctx.Err()
 	}
 	logAPIError(logger, "failed to list messages", err)
-	return errors.E("gmail.handle_list_messages_error", fmt.Sprintf("listing messages for rule %q", ruleName), err)
+	return errors.B.Op("gmail.handle_list_messages_error").Textf("listing messages for rule %q", ruleName).Err(err).Build()
 }
 
 func (r *Reader) processRuleMessages(

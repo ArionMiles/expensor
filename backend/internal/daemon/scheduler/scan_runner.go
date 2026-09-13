@@ -32,15 +32,14 @@ func (r *ScanRunner) Run(ctx context.Context, tenant store.Tenant, reader string
 	}
 	switch kind := errors.WhatKind(err); {
 	case kind == daemon.KindReaderNotConfigured:
-		return errors.E(op, errors.User("Complete reader setup to continue scanning."), err)
+		return errors.B.Op(op).UserMsg("Complete reader setup to continue scanning.").Err(err).Build()
 	case kind == oauth.KindCredentialsMissing:
-		return errors.E(op, errors.User("Upload reader credentials to continue scanning."), err)
+		return errors.B.Op(op).UserMsg("Upload reader credentials to continue scanning.").Err(err).Build()
 	case kind == oauth.KindTokenMissing:
-		return errors.E(op, errors.User("Connect your reader account to continue scanning."), err)
+		return errors.B.Op(op).UserMsg("Connect your reader account to continue scanning.").Err(err).Build()
 	case oauth.IsInvalidGrant(err):
-		return errors.E(
-			op, errors.FailedPrecondition, errors.User("Reconnect your reader account to continue scanning."), err,
-		)
+		return errors.B.Op(op).KindFailedPrecondition().UserMsg("Reconnect your reader account to continue scanning.").Err(err).Build()
+
 	default:
 		return err
 	}

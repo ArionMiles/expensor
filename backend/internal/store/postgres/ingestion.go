@@ -42,7 +42,7 @@ func (w *ingestionRepository) Write(ctx context.Context, batch store.IngestionBa
 	// Start a transaction
 	tx, err := w.pool.Begin(ctx) // TODO: Can we have a WithTx(...) context manager pattern here?
 	if err != nil {
-		return apperrors.E("postgres.ingestion.write", apperrors.Internal, "beginning transaction", err)
+		return apperrors.B.Op("postgres.ingestion.write").KindInternal().Text("beginning transaction").Err(err).Build()
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -104,37 +104,37 @@ func (w *ingestionRepository) Write(ctx context.Context, batch store.IngestionBa
 	for i := 0; i < len(transactions); i++ {
 		if err := batchResults.QueryRow().Scan(&txnIDs[i]); err != nil {
 			_ = batchResults.Close()
-			return apperrors.E("postgres.ingestion.write", apperrors.Internal, fmt.Sprintf("inserting transaction %d", i), err)
+			return apperrors.B.Op("postgres.ingestion.write").KindInternal().Textf("inserting transaction %d", i).Err(err).Build()
 		}
 	}
 
 	// Close batch results before executing more queries on the transaction
 	if err := batchResults.Close(); err != nil {
-		return apperrors.E("postgres.ingestion.write", apperrors.Internal, "closing batch results", err)
+		return apperrors.B.Op("postgres.ingestion.write").KindInternal().Text("closing batch results").Err(err).Build()
 	}
 
 	// Second: Insert labels (now safe to use tx.Exec)
 	for i, txn := range transactions {
 		if len(txn.Labels) > 0 {
 			if err := w.insertLabels(ctx, tx, txnIDs[i], txn.Labels); err != nil {
-				return apperrors.E("postgres.ingestion.write", apperrors.Internal, fmt.Sprintf("inserting labels for transaction %s", txnIDs[i]), err)
+				return apperrors.B.Op("postgres.ingestion.write").KindInternal().Textf("inserting labels for transaction %s", txnIDs[i]).Err(err).Build()
 			}
 		}
 	}
 
 	if err := w.applyMerchantLabels(ctx, tx, txnIDs); err != nil {
-		return apperrors.E("postgres.ingestion.write", apperrors.Internal, "auto-applying merchant labels", err)
+		return apperrors.B.Op("postgres.ingestion.write").KindInternal().Text("auto-applying merchant labels").Err(err).Build()
 	}
 	if err := w.applyMerchantCategories(ctx, tx, txnIDs); err != nil {
-		return apperrors.E("postgres.ingestion.write", apperrors.Internal, "auto-applying merchant categories", err)
+		return apperrors.B.Op("postgres.ingestion.write").KindInternal().Text("auto-applying merchant categories").Err(err).Build()
 	}
 	if err := w.applyMutedMerchants(ctx, tx, txnIDs); err != nil {
-		return apperrors.E("postgres.ingestion.write", apperrors.Internal, "auto-muting transactions", err)
+		return apperrors.B.Op("postgres.ingestion.write").KindInternal().Text("auto-muting transactions").Err(err).Build()
 	}
 
 	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
-		return apperrors.E("postgres.ingestion.write", apperrors.Internal, "committing transaction", err)
+		return apperrors.B.Op("postgres.ingestion.write").KindInternal().Text("committing transaction").Err(err).Build()
 	}
 
 	return nil
@@ -241,7 +241,7 @@ func (w *ingestionRepository) insertLabels(ctx context.Context, tx pgx.Tx, txnID
 		SELECT $1, unnest($2::text[]), 'manual', ''
 		ON CONFLICT (transaction_id, label, source_type, merchant_pattern) DO NOTHING
 	`, txnID, labels); err != nil {
-		return apperrors.E("postgres.ingestion.labels", apperrors.Internal, "executing label source insert", err)
+		return apperrors.B.Op("postgres.ingestion.labels").KindInternal().Text("executing label source insert").Err(err).Build()
 	}
 
 	if _, err := tx.Exec(ctx, `
@@ -249,7 +249,7 @@ func (w *ingestionRepository) insertLabels(ctx context.Context, tx pgx.Tx, txnID
 		SELECT $1, unnest($2::text[])
 		ON CONFLICT (transaction_id, label) DO NOTHING
 	`, txnID, labels); err != nil {
-		return apperrors.E("postgres.ingestion.labels", apperrors.Internal, "executing label insert", err)
+		return apperrors.B.Op("postgres.ingestion.labels").KindInternal().Text("executing label insert").Err(err).Build()
 	}
 
 	return nil

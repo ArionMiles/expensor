@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -85,7 +84,7 @@ type scanRunner interface {
 // NewScanService constructs the shared scan execution service.
 func NewScanService(deps ScanDependencies) (*ScanService, error) {
 	if deps.Registry == nil || deps.Store == nil || deps.TransactionWriter == nil {
-		return nil, errors.E("daemon.scan.new", errors.FailedPrecondition, "scan dependencies are required")
+		return nil, errors.B.Op("daemon.scan.new").KindFailedPrecondition().Text("scan dependencies are required").Build()
 	}
 	logger := deps.Logger
 	if logger == nil {
@@ -103,7 +102,7 @@ func NewScanService(deps ScanDependencies) (*ScanService, error) {
 func (s *ScanService) Run(ctx context.Context, request ScanRequest) error {
 	provider, err := s.registry.GetProvider(request.Reader)
 	if err != nil {
-		return errors.E("daemon.scan.run", KindReaderNotConfigured, "reader is not registered", err)
+		return errors.B.Op("daemon.scan.run").Kind(KindReaderNotConfigured).Text("reader is not registered").Err(err).Build()
 	}
 	if err := s.ensureReaderReady(ctx, request.Tenant, provider); err != nil {
 		return err
@@ -132,7 +131,7 @@ func (s *ScanService) Run(ctx context.Context, request ScanRequest) error {
 		Resolver: s.resolverSnapshot(), StateManager: stateManager, RuntimeStore: s.store, ForceRescan: forceRescan,
 	})
 	if err != nil {
-		return errors.E("daemon.scan.run", err)
+		return errors.B.Op("daemon.scan.run").Err(err).Build()
 	}
 	return nil
 }
@@ -141,7 +140,7 @@ func (s *ScanService) Run(ctx context.Context, request ScanRequest) error {
 func (s *ScanService) RefreshResolver(ctx context.Context) error {
 	resolver, err := s.store.LoadCategorySnapshot(ctx)
 	if err != nil {
-		return errors.E("daemon.scan.refresh_resolver", errors.Internal, "loading category snapshot", err)
+		return errors.B.Op("daemon.scan.refresh_resolver").KindInternal().Text("loading category snapshot").Err(err).Build()
 	}
 	s.resolverMu.Lock()
 	s.resolver = resolver
@@ -176,10 +175,10 @@ func (s *ScanService) ensureReaderReady(ctx context.Context, tenant store.Tenant
 	}
 	rawConfig, ok, err := s.store.GetReaderConfig(ctx, tenant, metadata.Name)
 	if err != nil {
-		return errors.E("daemon.scan.reader_ready", err)
+		return errors.B.Op("daemon.scan.reader_ready").Err(err).Build()
 	}
 	if !ok || !readerConfigHasRequiredFields(rawConfig, metadata.ConfigSchema) {
-		return errors.E("daemon.scan.reader_ready", KindReaderNotConfigured, fmt.Sprintf("reader %q config is incomplete", metadata.Name))
+		return errors.B.Op("daemon.scan.reader_ready").Kind(KindReaderNotConfigured).Textf("reader %q config is incomplete", metadata.Name).Build()
 	}
 	return nil
 }
@@ -187,23 +186,23 @@ func (s *ScanService) ensureReaderReady(ctx context.Context, tenant store.Tenant
 func (s *ScanService) oauthClient(ctx context.Context, tenant store.Tenant, reader string) (*http.Client, error) {
 	scopes, err := s.registry.GetAllScopes(reader)
 	if err != nil {
-		return nil, errors.E("daemon.scan.oauth_client", KindReaderNotConfigured, "resolving reader scopes", err)
+		return nil, errors.B.Op("daemon.scan.oauth_client").Kind(KindReaderNotConfigured).Text("resolving reader scopes").Err(err).Build()
 	}
 	if len(scopes) == 0 {
 		return nil, nil
 	}
 	secretJSON, ok, err := s.store.GetReaderSecret(ctx, tenant, reader)
 	if err != nil {
-		return nil, errors.E("daemon.scan.oauth_client", err)
+		return nil, errors.B.Op("daemon.scan.oauth_client").Err(err).Build()
 	}
 	if !ok {
-		return nil, errors.E("daemon.scan.oauth_client", oauth.KindCredentialsMissing, "reader credentials missing")
+		return nil, errors.B.Op("daemon.scan.oauth_client").Kind(oauth.KindCredentialsMissing).Text("reader credentials missing").Build()
 	}
 	client, err := oauth.NewFromJSONAndStore(ctx, oauth.StoreClientInput{
 		SecretJSON: secretJSON, Store: s.store, Tenant: tenant, Reader: reader, Scopes: scopes,
 	})
 	if err != nil {
-		return nil, errors.E("daemon.scan.oauth_client", err)
+		return nil, errors.B.Op("daemon.scan.oauth_client").Err(err).Build()
 	}
 	return client, nil
 }
