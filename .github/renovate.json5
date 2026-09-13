@@ -1,0 +1,93 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "**/vendor/**",
+    "**/examples/**",
+    "**/__tests__/**",
+    "**/test/**",
+    "**/__fixtures__/**"
+  ],
+  "timezone": "UTC",
+  "schedule": ["before 5am on Monday"],
+  "labels": ["dependencies"],
+  "assignees": ["ArionMiles"],
+  "reviewers": ["ArionMiles"],
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": "deps",
+  "prConcurrentLimit": 11,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "addLabels": ["security"],
+    "prConcurrentLimit": 5
+  },
+  "packageRules": [
+    {
+      "description": "Prepare and label Go module updates",
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["require", "indirect", "replace", "tool"],
+      "addLabels": ["go"],
+      "postUpdateOptions": ["gomodTidy"]
+    },
+    {
+      "description": "Keep indirect Go dependencies up to date",
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["indirect"],
+      "enabled": true
+    },
+    {
+      "description": "Group non-breaking Go dependency updates",
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["require", "indirect", "replace", "tool"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "Go dependencies",
+      "groupSlug": "go-dependencies"
+    },
+    {
+      "description": "Keep go-header below its incompatible v1 API",
+      "matchManagers": ["gomod"],
+      "matchDepNames": ["github.com/denis-tingaikin/go-header"],
+      "allowedVersions": "<1.0.0"
+    },
+    {
+      "description": "Label GitHub Actions updates",
+      "matchManagers": ["github-actions"],
+      "addLabels": ["github-actions"],
+      "semanticCommitScope": "ci"
+    },
+    {
+      "description": "Label container image updates",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "addLabels": ["docker"],
+      "semanticCommitScope": "docker"
+    },
+    {
+      "description": "Allow Renovate to update the primary Go directive",
+      "matchManagers": ["gomod"],
+      "matchDepNames": ["go"],
+      "matchDepTypes": ["golang"],
+      "matchFileNames": ["backend/go.mod"],
+      "rangeStrategy": "bump"
+    },
+    {
+      "description": "Update every runtime Go version in one pull request",
+      "matchManagers": ["gomod", "dockerfile", "docker-compose"],
+      "matchDepNames": ["go", "golang"],
+      "matchFileNames": [
+        "Dockerfile",
+        "backend/go.mod",
+        "tests/component/docker-compose.yml",
+        "tests/contract/docker-compose.yml"
+      ],
+      "groupName": "Go toolchain",
+      "groupSlug": "go-toolchain",
+      // Five extracted updates: go.mod, Dockerfile, two component services, and contract runner.
+      "minimumGroupSize": 5,
+      "addLabels": ["go", "docker"],
+      "semanticCommitScope": "go"
+    }
+  ]
+}
