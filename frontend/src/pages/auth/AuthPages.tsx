@@ -64,18 +64,10 @@ function AuthSurface({
     return (
       <main className="flex min-h-screen items-center justify-center bg-background px-6 py-8 text-foreground">
         <div data-testid="auth-centered-surface" className="w-full max-w-md">
+          <div data-testid="auth-form-logo" className="mb-6 flex justify-center">
+            <img src="/brand/expensor-logo.svg" alt="Expensor" className="h-16 w-auto" />
+          </div>
           <div className="rounded-lg border border-border bg-card px-5 py-6 shadow-sm sm:px-7">
-            <div data-testid="auth-form-logo" className="mb-8 flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card">
-                <img
-                  src="/brand/expensor-wallet.svg"
-                  alt=""
-                  aria-hidden="true"
-                  className="h-6 w-6"
-                />
-              </span>
-              <img src="/brand/expensor-wordmark.svg" alt="Expensor" className="h-8 w-auto" />
-            </div>
             {children}
           </div>
         </div>
@@ -88,16 +80,8 @@ function AuthSurface({
       <div className="mx-auto grid min-h-screen w-full max-w-5xl items-center gap-8 px-6 py-8 lg:grid-cols-[1fr_1px_0.9fr] lg:gap-12 lg:px-10">
         <section className="hidden max-w-md lg:block">
           <div>
-            <div className="mb-10 flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card">
-                <img
-                  src="/brand/expensor-wallet.svg"
-                  alt=""
-                  aria-hidden="true"
-                  className="h-6 w-6"
-                />
-              </span>
-              <img src="/brand/expensor-wordmark.svg" alt="Expensor" className="h-8 w-auto" />
+            <div className="mb-10 flex items-center">
+              <img src="/brand/expensor-logo.svg" alt="Expensor" className="h-16 w-auto" />
             </div>
             <p className="mb-3 text-xs font-medium uppercase tracking-wider text-primary">
               {t(copy.eyebrow)}
@@ -119,11 +103,8 @@ function AuthSurface({
         />
 
         <div className="mx-auto w-full max-w-md">
-          <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <span className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card">
-              <img src="/brand/expensor-wallet.svg" alt="" aria-hidden="true" className="h-6 w-6" />
-            </span>
-            <img src="/brand/expensor-wordmark.svg" alt="Expensor" className="h-8 w-auto" />
+          <div className="mb-8 flex items-center lg:hidden">
+            <img src="/brand/expensor-logo.svg" alt="Expensor" className="h-16 w-auto" />
           </div>
           <div className="rounded-lg border border-border bg-card px-5 py-6 shadow-sm sm:px-7">
             {children}
@@ -650,16 +631,18 @@ export function AvatarPicker({
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { t } = useI18n()
   const location = useLocation()
+  const bootstrapRoute = location.pathname === '/bootstrap'
   const publicPath = useMemo(
     () => ['/login', '/bootstrap', '/account-setup'].includes(location.pathname),
     [location.pathname],
   )
   const bootstrap = useBootstrapStatus()
-  const session = useSession(!publicPath && bootstrap.data?.required === false)
+  const sessionRequired = bootstrap.data?.required === false && (!publicPath || bootstrapRoute)
+  const session = useSession(sessionRequired)
 
   if (
     bootstrap.isLoading ||
-    (!publicPath && bootstrap.data?.required === false && session.isLoading)
+    (sessionRequired && (session.isLoading || (bootstrapRoute && session.isFetching)))
   ) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -668,8 +651,20 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     )
   }
 
+  if (bootstrap.isError) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <span className="font-mono text-xs text-destructive">{t('auth.error.requestFailed')}</span>
+      </div>
+    )
+  }
+
   if (bootstrap.data?.required && location.pathname !== '/bootstrap') {
     return <Navigate to="/bootstrap" replace />
+  }
+
+  if (bootstrapRoute && bootstrap.data?.required === false) {
+    return <Navigate to={session.data ? '/' : '/login'} replace />
   }
 
   if (!publicPath && bootstrap.data?.required === false && session.isError) {
