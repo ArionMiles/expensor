@@ -85,6 +85,9 @@ func TestAuthRepositoryBootstrapAndSessionLifecycle(t *testing.T) {
 	if errors.WhatKind(err) != errors.Conflict {
 		t.Fatalf("second bootstrap error = %v, want Conflict kind", err)
 	}
+	if got := errors.UserMsg(err); got != "bootstrap is already complete for this instance" {
+		t.Fatalf("second bootstrap user message = %q", got)
+	}
 }
 
 func TestAuthRepositoryStoresOnlyTokenHashes(t *testing.T) {

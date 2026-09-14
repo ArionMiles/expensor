@@ -78,6 +78,102 @@ describe('App first-run routing', () => {
 })
 
 describe('App auth routing', () => {
+  it('redirects anonymous users away from bootstrap after initialization', async () => {
+    window.history.pushState({}, '', '/bootstrap')
+    server.use(
+      http.get('/api/bootstrap', () => HttpResponse.json({ required: false })),
+      http.get('/api/session', () =>
+        HttpResponse.json({ error: 'authentication required' }, { status: 401 }),
+      ),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Sign in' }, routeWait)).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/login')
+    expect(
+      screen.queryByRole('heading', { name: 'Initialize this Expensor instance' }),
+    ).not.toBeInTheDocument()
+  }, 15_000)
+
+  it('redirects authenticated users away from bootstrap after initialization', async () => {
+    window.history.pushState({}, '', '/bootstrap')
+    server.use(
+      http.get('/api/bootstrap', () => HttpResponse.json({ required: false })),
+      http.get('/api/session', () =>
+        HttpResponse.json({
+          user_id: 'admin',
+          tenant_id: 'admin',
+          email: 'admin@example.com',
+          display_name: 'Admin',
+          role: 'admin',
+          avatar_key: 'default',
+        }),
+      ),
+      http.get('/api/config/setup-status', () =>
+        HttpResponse.json({ required: false, missing: [] }),
+      ),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard' }, routeWait)).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/')
+    expect(
+      screen.queryByRole('heading', { name: 'Initialize this Expensor instance' }),
+    ).not.toBeInTheDocument()
+  }, 15_000)
+
+  it('does not render bootstrap when bootstrap status fails', async () => {
+    window.history.pushState({}, '', '/bootstrap')
+    server.use(
+      http.get('/api/bootstrap', () =>
+        HttpResponse.json({ error: 'request failed' }, { status: 500 }),
+      ),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('Request failed', {}, routeWait)).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/bootstrap')
+    expect(
+      screen.queryByRole('heading', { name: 'Initialize this Expensor instance' }),
+    ).not.toBeInTheDocument()
+  }, 15_000)
+
+  it('revalidates a cached session before redirecting from bootstrap', async () => {
+    let sessionRequested = false
+    let releaseSession: () => void = () => {}
+    const sessionPending = new Promise<void>((resolve) => {
+      releaseSession = resolve
+    })
+    queryClient.setQueryData(['auth', 'session'], {
+      user_id: 'admin',
+      tenant_id: 'admin',
+      email: 'admin@example.com',
+      display_name: 'Admin',
+      role: 'admin',
+      avatar_key: 'default',
+    })
+    window.history.pushState({}, '', '/bootstrap')
+    server.use(
+      http.get('/api/bootstrap', () => HttpResponse.json({ required: false })),
+      http.get('/api/session', async () => {
+        sessionRequested = true
+        await sessionPending
+        return HttpResponse.json({ error: 'authentication required' }, { status: 401 })
+      }),
+    )
+
+    render(<App />)
+
+    await waitFor(() => expect(sessionRequested).toBe(true))
+    expect(window.location.pathname).toBe('/bootstrap')
+    releaseSession()
+    expect(await screen.findByRole('heading', { name: 'Sign in' }, routeWait)).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/login')
+  }, 15_000)
+
   it('redirects anonymous users to login and returns to the requested page after sign in', async () => {
     const user = userEvent.setup()
     let loggedIn = false
@@ -121,6 +217,9 @@ describe('App auth routing', () => {
     expect(await screen.findByRole('heading', { name: 'Sign in' }, routeWait)).toBeInTheDocument()
     expect(screen.getByTestId('auth-centered-surface')).toBeInTheDocument()
     expect(screen.getByTestId('auth-form-logo')).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('auth-form-logo')).getByRole('img', { name: 'Expensor' }),
+    ).toHaveAttribute('src', '/brand/expensor-logo.svg')
     expect(screen.queryByText('Instance access')).not.toBeInTheDocument()
     expect(screen.queryByText('Sign in to Expensor')).not.toBeInTheDocument()
     expect(screen.queryByText('First run setup')).not.toBeInTheDocument()

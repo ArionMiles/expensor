@@ -67,18 +67,16 @@ describe('Sidebar', () => {
     expect(screen.getByLabelText('Expensor home')).toHaveAttribute('href', '/')
     expect(container.querySelector('img[src="/brand/expensor-wordmark.svg"]')).toBeInTheDocument()
     expect(screen.getByLabelText('Expensor home')).toContainElement(
-      container.querySelector('img[src="/brand/expensor-wallet.svg"]'),
+      container.querySelector('img[src="/brand/expensor-mark.svg"]'),
     )
   })
 
-  it('uses the wallet icon for the collapsed sidebar toggle', () => {
+  it('uses the manta mark for the collapsed sidebar toggle', () => {
     const onToggle = vi.fn()
     const { container } = renderWithProviders(<Sidebar collapsed={true} onToggle={onToggle} />)
 
     const button = screen.getByRole('button', { name: /Open sidebar \((⌘|Ctrl) \+ \.\)/ })
-    expect(button).toContainElement(
-      container.querySelector('img[src="/brand/expensor-wallet.svg"]'),
-    )
+    expect(button).toContainElement(container.querySelector('img[src="/brand/expensor-mark.svg"]'))
   })
 
   it('shows the sidebar shortcut on the expanded sidebar toggle', () => {

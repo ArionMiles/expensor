@@ -43,7 +43,7 @@ func (r *authRepository) CreateBootstrapAdmin(ctx context.Context, input store.C
 		return nil, errors.B.Op("postgres.auth.create_bootstrap_admin").Text("counting users for bootstrap").Err(err).Build()
 	}
 	if existingUsers > 0 {
-		return nil, errors.B.Op("store.auth.create_bootstrap_admin").KindConflict().UserMsg("bootstrap unavailable").Build()
+		return nil, errors.B.Op("store.auth.create_bootstrap_admin").KindConflict().UserMsg("bootstrap is already complete for this instance").Build()
 	}
 
 	user, err := insertUser(ctx, tx, store.CreateUserInput{

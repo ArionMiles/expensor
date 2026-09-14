@@ -1,4 +1,6 @@
-<h1 align="center">Expensor</h1>
+<h1 align="center">
+  <img src="frontend/public/brand/expensor-logo.svg" alt="Expensor" width="425">
+</h1>
 
 <p align="center">
   Email-driven personal finance tracking with PostgreSQL-backed transaction analytics.

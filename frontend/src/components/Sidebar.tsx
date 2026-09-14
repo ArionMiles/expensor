@@ -114,19 +114,19 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           <NavLink
             to="/"
             aria-label="Expensor home"
-            className="flex min-w-0 flex-1 items-end gap-2"
+            className="flex min-w-0 flex-1 items-center gap-2"
           >
             <img
-              src="/brand/expensor-wallet.svg"
+              src="/brand/expensor-mark.svg"
               alt=""
               aria-hidden="true"
-              className="h-6 w-6 flex-shrink-0"
+              className="h-6 w-8 flex-shrink-0"
             />
             <img
               src="/brand/expensor-wordmark.svg"
               alt=""
               aria-hidden="true"
-              className="h-6 w-auto max-w-[132px] translate-y-[5px]"
+              className="h-6 w-auto max-w-[112px]"
             />
           </NavLink>
         )}
@@ -139,7 +139,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
         >
           {collapsed ? (
-            <img src="/brand/expensor-wallet.svg" alt="" aria-hidden="true" className="h-4 w-4" />
+            <img src="/brand/expensor-mark.svg" alt="" aria-hidden="true" className="h-4 w-auto" />
           ) : (
             <PanelLeft size={15} />
           )}
