@@ -64,15 +64,15 @@ tasks:
     cmd: go tool golangci-lint --config=".golangci-prod.toml" --max-same-issues=0 --max-issues-per-linter=0 run ./...
 
   lint:fe:
-    summary: Type-check frontend TypeScript source files.
-    desc: Runs the frontend TypeScript compiler in no-emit mode to catch type errors.
+    summary: Type-check and lint frontend source files.
+    desc: Runs the TypeScript compiler and ESLint over the frontend source tree.
     dir: frontend
     deps: [frontend:install]
     cmd: npm run lint
 
   lint:
-    summary: Lint all source files (Go local config + TypeScript).
-    desc: Runs local backend linting and frontend type checking together.
+    summary: Lint all backend and frontend source files.
+    desc: Runs local backend linting plus frontend type checking and ESLint.
     cmds:
       - task: lint:be
       - task: lint:fe
@@ -202,16 +202,6 @@ tasks:
       - docker compose -f tests/component/docker-compose.yml run --quiet-pull --rm seed
       - cd frontend && VITE_API_PROXY_TARGET=http://127.0.0.1:18080 npm run test:e2e:smoke
       - docker compose -f tests/component/docker-compose.yml down -v --remove-orphans
-
-  screenshots:readme:
-    summary: Generate the README dashboard screenshot.
-    desc: >-
-      Builds the frontend preview app, serves it through Playwright, loads the
-      deterministic anonymized screenshot fixture, and writes
-      docs/screenshots/dashboard-light.png.
-    dir: frontend
-    deps: [frontend:install]
-    cmd: npm run screenshot:readme
 
   screenshots:review:
     summary: Start the seeded screenshot review stack.

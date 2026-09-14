@@ -164,6 +164,7 @@ function AccountModal({
 
   return createPortal(
     <div
+      role="presentation"
       className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 px-4 backdrop-blur-sm"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose()
@@ -423,17 +424,15 @@ export function AccountSettings() {
     setCreatingToken(false)
   }
 
-  const clearAccountAction = () => {
+  useEffect(() => {
+    if (!session || searchParams.get('action') !== 'create-token') return
+    createToken.reset()
+    setTokenName('')
+    setCreatingToken(true)
     const next = new URLSearchParams(searchParams)
     next.delete('action')
     setSearchParams(next, { replace: true })
-  }
-
-  useEffect(() => {
-    if (!session || searchParams.get('action') !== 'create-token') return
-    openCreateToken()
-    clearAccountAction()
-  }, [session?.user_id, searchParams, setSearchParams])
+  }, [createToken, searchParams, session, setSearchParams])
 
   const copyToken = async () => {
     if (!newToken) return
@@ -798,17 +797,17 @@ export function AdminUsersSection() {
     setCreatingUser(false)
   }
 
-  const clearAccountAction = () => {
+  useEffect(() => {
+    if (searchParams.get('action') !== 'create-user') return
+    createUser.reset()
+    setupToken.reset()
+    setCreatedInvite(null)
+    setCreatedInviteCopied(false)
+    setCreatingUser(true)
     const next = new URLSearchParams(searchParams)
     next.delete('action')
     setSearchParams(next, { replace: true })
-  }
-
-  useEffect(() => {
-    if (searchParams.get('action') !== 'create-user') return
-    openCreateUser()
-    clearAccountAction()
-  }, [searchParams, setSearchParams])
+  }, [createUser, searchParams, setSearchParams, setupToken])
 
   const copyCreatedInvite = async () => {
     if (!createdInvite) return

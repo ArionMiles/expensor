@@ -513,22 +513,27 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
 
   return (
     <>
-      <button
-        ref={btnRef}
-        onClick={() => (open ? setOpen(false) : openPicker())}
+      <div
         className={cn(
           'flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs transition-colors',
           hasRange
             ? 'border-primary bg-primary/10 text-primary'
             : 'border-border bg-secondary text-muted-foreground hover:text-foreground',
         )}
-        aria-label="Select date range"
-        aria-expanded={open}
       >
-        <span>{formatRange(value.from, value.to)}</span>
+        <button
+          ref={btnRef}
+          type="button"
+          onClick={() => (open ? setOpen(false) : openPicker())}
+          className="focus:outline-none"
+          aria-label="Select date range"
+          aria-expanded={open}
+        >
+          {formatRange(value.from, value.to)}
+        </button>
         {hasRange && (
-          <span
-            role="button"
+          <button
+            type="button"
             aria-label="Clear date range"
             onClick={(e) => {
               e.stopPropagation()
@@ -537,9 +542,9 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
             className="ml-1 grid h-4 w-4 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-primary/15 hover:text-primary"
           >
             <X size={12} strokeWidth={2.5} />
-          </span>
+          </button>
         )}
-      </button>
+      </div>
 
       {open &&
         dropdownPos &&

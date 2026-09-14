@@ -32,6 +32,7 @@ export function LabelChip({ label, color, onRemove, className }: LabelChipProps)
         <button
           onClick={onRemove}
           aria-label={`Remove label ${label}`}
+          className="opacity-60 transition-opacity hover:opacity-100 focus:opacity-100"
           style={{
             background: 'none',
             border: 'none',
@@ -39,14 +40,7 @@ export function LabelChip({ label, color, onRemove, className }: LabelChipProps)
             cursor: 'pointer',
             padding: '0',
             lineHeight: 1,
-            opacity: 0.6,
             fontSize: '13px',
-          }}
-          onMouseOver={(e) => {
-            ;(e.currentTarget as HTMLButtonElement).style.opacity = '1'
-          }}
-          onMouseOut={(e) => {
-            ;(e.currentTarget as HTMLButtonElement).style.opacity = '0.6'
           }}
         >
           ×

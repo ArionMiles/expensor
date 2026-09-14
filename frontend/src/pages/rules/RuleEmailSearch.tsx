@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ChevronDown, Search, X } from 'lucide-react'
 import { useActiveReader, useSearchReaderMessages } from '@/api/queries'
@@ -238,7 +238,7 @@ export function RuleEmailSearch() {
   }, [activeReader, limit, searchMessages, subjectQuery])
 
   const results = data?.results ?? []
-  const selected = useMemo(() => selectedMessages(results, selectedIDs), [results, selectedIDs])
+  const selected = selectedMessages(results, selectedIDs)
 
   const submitSearch = () => {
     const nextQuery = inputValue.trim()

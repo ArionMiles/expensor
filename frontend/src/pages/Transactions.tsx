@@ -121,7 +121,7 @@ export function Transactions() {
       },
       { replace: true },
     )
-  }, []) // intentionally empty — runs once on mount to consume the navigation hint
+  }, [searchParams, setSearchParams])
 
   // Sync debounced search to URL (skip the initial mount to avoid a spurious write).
   useEffect(() => {
@@ -139,7 +139,7 @@ export function Transactions() {
       },
       { replace: true },
     )
-  }, [debouncedSearch])
+  }, [debouncedSearch, setSearchParams])
 
   const { data: facets } = useFacets()
 
@@ -175,7 +175,8 @@ export function Transactions() {
   const { mutate: bulkIgnoreMerchants, isPending: isBulkIgnoringMerchants } =
     useBulkIgnoreMerchants()
 
-  const transactions = data?.transactions ?? []
+  const transactionPage = data?.transactions
+  const transactions = transactionPage ?? []
   const total = data?.total ?? 0
   const totalAmount = data?.total_amount ?? 0
   const baseCurrency = data?.base_currency ?? 'INR'
@@ -185,12 +186,12 @@ export function Transactions() {
   const [bulkReason, setBulkReason] = useState('')
 
   useEffect(() => {
-    const currentPageIDs = new Set(transactions.map((tx) => tx.id))
+    const currentPageIDs = new Set((transactionPage ?? []).map((tx) => tx.id))
     if (selectionAnchorIdRef.current && !currentPageIDs.has(selectionAnchorIdRef.current)) {
       selectionAnchorIdRef.current = null
     }
     setSelectedIds((prev) => new Set([...prev].filter((id) => currentPageIDs.has(id))))
-  }, [transactions])
+  }, [transactionPage])
 
   const selectedTransactions = transactions.filter((tx) => selectedIds.has(tx.id))
   const selectedMerchantPatterns = [

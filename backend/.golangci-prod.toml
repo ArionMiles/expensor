@@ -59,7 +59,8 @@ deny = [
 [linters.settings.forbidigo]
 analyze-types = true
 forbid = [
-  { pattern = '^fmt\.Errorf$', pkg = '^fmt$', msg = 'use pkg/errors.E' }
+  { pattern = '^fmt\.Errorf$', pkg = '^fmt$', msg = 'use pkg/errors.B' },
+  { pattern = '^os\.(Getenv|LookupEnv)$', pkg = '^os$', msg = 'read application environment through pkg/config' }
 ]
 
 [linters.settings.gocognit]
@@ -345,6 +346,13 @@ linters = [
   'forbidigo'
 ]
 path = '(^|/)(pkg/errors/.*|.*_test\.go)$'
+
+[[linters.exclusions.rules]]
+linters = [
+  'forbidigo'
+]
+path = '(^|/)pkg/(config/.*|reader/thunderbird/profile\.go)$'
+text = 'read application environment through pkg/config'
 
 [issues]
 uniq-by-line = true

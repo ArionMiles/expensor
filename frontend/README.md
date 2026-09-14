@@ -98,50 +98,13 @@ This project has a custom dark-themed design language. Native browser controls b
 | ❌ Never use | ✅ Use instead |
 |---|---|
 | `<select>` | `InlineSelect` from `@/components/InlineSelect` |
-| `<datalist>` | Custom combobox with styled `<ul>` dropdown (see `SourceCombobox` in `pages/rules/RuleForm.tsx`) |
+| `<datalist>` | `Combobox` from `@/components/Combobox` |
 | `confirm()` / `alert()` / `prompt()` | `ConfirmModal` from `@/components/ConfirmModal` |
 | `title="..."` attribute (browser tooltip) | CSS `group-hover:block` div or `position:fixed` with `onMouseEnter` state |
 
-#### Custom combobox pattern (for free-text + suggestions)
+#### Shared combobox pattern
 
-```tsx
-function MyCombobox({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: string[] }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
-  const filtered = options.filter((o) => o.toLowerCase().includes(value.toLowerCase()))
-
-  return (
-    <div ref={ref} className="relative">
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setOpen(true)}
-        className="w-full rounded border border-border bg-input px-2 py-1.5 text-sm"
-      />
-      {open && filtered.length > 0 && (
-        <ul className="absolute left-0 top-full z-50 mt-0.5 w-full overflow-y-auto rounded-md border border-border bg-card shadow-lg">
-          {filtered.map((opt) => (
-            <li key={opt} onMouseDown={() => { onChange(opt); setOpen(false) }}
-              className="cursor-pointer px-3 py-1.5 text-sm text-foreground hover:bg-accent">
-              {opt}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
-```
+Use `src/components/Combobox.tsx` for combobox, autocomplete, dropdown, and listbox mechanics. It owns body-portal rendering, positioning, outside-click handling, keyboard navigation, highlighted options, and ARIA wiring. Page components may own filtering, labels, API calls, create-option behavior, and domain rendering. Extend the shared primitive only for broadly reusable behavior.
 
 #### Overflow clipping — tooltips, dropdowns, popovers (CRITICAL RULE)
 
@@ -189,6 +152,18 @@ Disabled form elements do not fire `mouseenter`/`mouseleave` in browsers. Wrap t
 ```
 
 ### Component Patterns
+
+#### Document titles
+
+Route titles must match visible page state. Plain routes use the page title, and tabbed routes use `Page - Active Tab`. Update `src/lib/documentTitle.ts` and its tests when adding routes or tabs.
+
+#### Copy actions
+
+Use an icon-only button with an accessible label. In dense or unclear contexts, show a fixed, portaled tooltip on hover and focus. Change its text to `Copied!` only after the clipboard write succeeds. Show copied values inline only when users must inspect them, such as a one-time token.
+
+#### Transient two-choice prompts
+
+Use `SlideNotification` from `@/components/SlideNotification` for auto-dismissing prompts with two actions. Do not place absolute prompts inside table cells or other clipping containers.
 
 #### Cards / Panels
 ```tsx
@@ -354,12 +329,5 @@ Contributor guide: [../docs/i18n/adding-translations.md](../docs/i18n/adding-tra
 - Refreshing the page restores the same view
 - Duplicating the tab shares the correct state
 - Browser back/forward navigate between states
-
-**Already implemented:** `Transactions` page (all filters + pagination + sort), the setup `Wizard` (step is derived from reader state), and the onboarding wizard reader selection.
-
-**Not yet implemented (future work):**
-- `Settings` tabs (appearance / categories / buckets / labels / muted / daemon / webhooks) — currently `useState`, loses active tab on refresh
-- `Rules` page — no tab state currently, but any future sub-views should use URL params
-- `Dashboard` — selected year on the annual heatmap is local state
 
 When adding any new tabbed or filterable view, use `useSearchParams` from `react-router-dom` instead of `useState` for any state the user might want to share or return to. The `Transactions` page is the reference implementation.

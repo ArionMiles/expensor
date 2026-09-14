@@ -11,12 +11,6 @@ Current screenshots:
 
 The README hero uses `transactions-light.png`.
 
-Legacy mocked dashboard fixture:
-
-```bash
-task screenshots:readme
-```
-
 Seeded review stack:
 
 ```bash
@@ -46,4 +40,4 @@ so the dashboard can use its default current-month view without calendar-month
 edits. The capture starts the seeded Thunderbird daemon and waits for the
 `daemon running` status before taking dashboard screenshots.
 
-Keep screenshot data deterministic so screenshots can be regenerated when the UI changes.
+Keep screenshot data deterministic so screenshots can be regenerated when the UI changes. Use realistic merchant names and balanced distributions across categories, buckets, labels, banks, and source types so captures remain representative.

@@ -186,15 +186,17 @@ export function CommandPalette({
 
   return createPortal(
     <div
+      role="presentation"
       className="fixed inset-0 z-50 flex items-start justify-center bg-background/50 px-4 pt-[12vh] backdrop-blur-sm"
-      onClick={onClose}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
         className="w-full max-w-2xl rounded-2xl border border-border bg-card shadow-2xl"
-        onClick={(event) => event.stopPropagation()}
       >
         <div className="border-b border-border px-4 py-3">
           <input
