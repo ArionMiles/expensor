@@ -63,7 +63,7 @@ For a persistent Compose setup, create a `.env` file next to `docker-compose.yml
 EXPENSOR_SECRET_KEY=base64-encoded-key-here
 ```
 
-If you are running from a cloned repository, `task secrets:generate` prints a valid base64-encoded 32-byte key. See [docs/deployment/secrets.md](docs/deployment/secrets.md) for file-based secret configuration and backup guidance.
+If you are running from a cloned repository, `task secrets:generate` prints a valid base64-encoded 32-byte key.
 
 ### Custom PostgreSQL Password
 

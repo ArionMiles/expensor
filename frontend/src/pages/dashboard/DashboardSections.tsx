@@ -854,13 +854,27 @@ function BarChart({
               : undefined
 
           return (
-            <div
+            <button
+              type="button"
               key={d.period}
               className={[
-                'group flex flex-1 flex-col items-center gap-0.5',
+                'group flex flex-1 flex-col items-center gap-0.5 bg-transparent p-0 text-inherit',
                 clickable ? 'cursor-pointer' : '',
               ].join(' ')}
               onClick={() => onBarClick?.(d.period)}
+              aria-label={`${labelFormat(d.period)}: ${formatCurrency(d.amount, currency)}, ${d.count} transactions`}
+              onFocus={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                setTooltip({
+                  x: rect.left + rect.width / 2,
+                  y: rect.top,
+                  label: labelFormat(d.period),
+                  amount: d.amount,
+                  count: d.count,
+                  delta,
+                })
+              }}
+              onBlur={() => setTooltip(null)}
               onMouseEnter={(e) =>
                 setTooltip({
                   x: e.clientX,
@@ -897,7 +911,7 @@ function BarChart({
                   {labelFormat(d.period)}
                 </span>
               )}
-            </div>
+            </button>
           )
         })}
       </div>
@@ -994,11 +1008,24 @@ function DailySpendChart({
           {visible.map((d) => {
             const pct = (d.amount / maxAmount) * 100
             return (
-              <div
+              <button
+                type="button"
                 key={d.period}
-                className="group flex flex-1 items-end"
+                className="group flex flex-1 items-end border-0 bg-transparent p-0"
                 style={{ height: '100%', cursor: onBarClick ? 'pointer' : 'default' }}
                 onClick={() => onBarClick?.(d.period)}
+                aria-label={`${formatDateShort(d.period, undefined, locale)}: ${formatCurrency(d.amount, currency)}, ${d.count} transactions`}
+                onFocus={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect()
+                  setTooltip({
+                    x: rect.left + rect.width / 2,
+                    y: rect.top,
+                    label: formatDateShort(d.period, undefined, locale),
+                    amount: d.amount,
+                    count: d.count,
+                  })
+                }}
+                onBlur={() => setTooltip(null)}
                 onMouseEnter={(e) =>
                   setTooltip({
                     x: e.clientX,
@@ -1017,7 +1044,7 @@ function DailySpendChart({
                   className="w-full rounded-t-sm bg-primary/50 transition-colors group-hover:bg-primary"
                   style={{ height: `${Math.max(pct, 2)}%` }}
                 />
-              </div>
+              </button>
             )
           })}
         </div>

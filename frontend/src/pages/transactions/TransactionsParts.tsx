@@ -172,6 +172,7 @@ export function IgnoreReasonModal({
 
   return createPortal(
     <div
+      role="presentation"
       className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onCancel()
