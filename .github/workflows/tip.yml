@@ -59,7 +59,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           labels: |
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
-            org.opencontainers.image.description=Expense tracker that reads Gmail and Thunderbird emails and writes to PostgreSQL
+            org.opencontainers.image.description=Email-driven personal finance tracker with SQLite and PostgreSQL storage
             org.opencontainers.image.licenses=AGPL-3.0
             org.opencontainers.image.vendor=ArionMiles
             org.opencontainers.image.documentation=https://github.com/ArionMiles/expensor#readme

@@ -1,6 +1,6 @@
 # Release workflow
 # Triggered when a new tag is pushed (v*.*.*)
-# Builds and publishes a multi-platform Docker image, then creates a GitHub release.
+# Builds container and native artifacts, then creates a GitHub release.
 
 name: Release
 
@@ -34,6 +34,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref }}
+          fetch-depth: 0
 
       - name: Lowercase image name
         run: echo "IMAGE_NAME=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
@@ -51,30 +54,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern=v{{version}}
-            type=semver,pattern=v{{major}}.{{minor}}
-            type=semver,pattern=v{{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern=v{{version}},value=${{ steps.version.outputs.VERSION }}
+            type=semver,pattern=v{{major}}.{{minor}},value=${{ steps.version.outputs.VERSION }}
+            type=semver,pattern=v{{major}},value=${{ steps.version.outputs.VERSION }}
+            type=raw,value=latest,enable=${{ !contains(steps.version.outputs.VERSION, '-') }}
           labels: |
-            org.opencontainers.image.description=Expense tracker that reads Gmail and Thunderbird emails and writes to PostgreSQL
+            org.opencontainers.image.description=Email-driven personal finance tracker with SQLite and PostgreSQL storage
             org.opencontainers.image.licenses=AGPL-3.0
             org.opencontainers.image.vendor=ArionMiles
             org.opencontainers.image.documentation=https://github.com/ArionMiles/expensor#readme
-
-      - name: Get version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          fi
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
@@ -91,58 +94,81 @@ jobs:
           provenance: false
           sbom: false
 
-  # Create GitHub Release
-  create-release:
-    name: Create GitHub Release
-    needs: [build-docker]
-    runs-on: ubuntu-latest
+  build-native:
+    name: Build Native Archives
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref }}
           fetch-depth: 0
 
       - name: Get version
         id: version
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+            echo "VERSION=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
           else
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Generate release notes
-        id: notes
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build native archives
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: release-artifacts
+          build-args: VERSION=${{ steps.version.outputs.VERSION }}
+          outputs: type=local,dest=dist/release
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Upload native archives
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-release-artifacts
+          path: dist/release
+          if-no-files-found: error
+
+  # Create GitHub Release
+  create-release:
+    name: Create GitHub Release
+    needs: [build-docker, build-native]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref }}
+          fetch-depth: 0
+
+      - name: Get version
+        id: version
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          PREV_TAG=$(git describe --tags --abbrev=0 ${VERSION}^ 2>/dev/null || echo "")
-
-          if [ -z "$PREV_TAG" ]; then
-            CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${VERSION})
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
           else
-            CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${PREV_TAG}..${VERSION})
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
           fi
 
-          cat > release_notes.md <<EOF
-          ## What's Changed
-
-          ${CHANGELOG}
-
-          ## Installation
-
-          \`\`\`bash
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}
-          \`\`\`
-
-          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${VERSION}
-          EOF
+      - name: Download native archives
+        uses: actions/download-artifact@v8
+        with:
+          name: native-release-artifacts
+          path: dist/release
 
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.version.outputs.VERSION }}
           name: Release ${{ steps.version.outputs.VERSION }}
-          body_path: release_notes.md
+          generate_release_notes: true
+          files: |
+            dist/release/*
+            install.sh
           draft: false
           prerelease: ${{ contains(steps.version.outputs.VERSION, '-') }}
         env:
@@ -150,11 +176,12 @@ jobs:
 
       - name: Post release summary
         run: |
-          cat >> $GITHUB_STEP_SUMMARY <<EOF
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
           # Release ${{ steps.version.outputs.VERSION }} Published
 
           ## Artifacts
           - Docker image: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}\`
+          - Native archives and checksums: [release assets](https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.VERSION }})
 
           ## Links
           - [Release Page](https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.VERSION }})

@@ -198,6 +198,10 @@ func (r *authRepository) CreateSession(ctx context.Context, input store.CreateSe
 		RETURNING id, user_id, token_hash, created_at, expires_at, last_used_at, revoked_at
 	`, input.UserID, input.TokenHash, input.ExpiresAt))
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, errors.B.Op("store.auth.create_session").KindConflict().Text("session hash conflict").Err(err).Build()
+		}
 		return nil, errors.B.Op("postgres.auth.create_session").Text("creating session").Err(err).Build()
 	}
 	return session, nil
@@ -321,6 +325,10 @@ func (r *authRepository) CreateAccountSetupToken(ctx context.Context, input stor
 		RETURNING id, user_id, token_hash, created_at, expires_at, used_at
 	`, input.UserID, input.TokenHash, input.ExpiresAt))
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, errors.B.Op("store.auth.create_account_setup_token").KindConflict().Text("account setup token hash conflict").Err(err).Build()
+		}
 		return nil, errors.B.Op("postgres.auth.create_account_setup_token").Text("creating account setup token").Err(err).Build()
 	}
 	return token, nil

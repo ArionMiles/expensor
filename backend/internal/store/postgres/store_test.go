@@ -35,6 +35,14 @@ type testStore struct {
 	tenantErr  error
 }
 
+type testPostgres struct {
+	cfg      config.Postgres
+	security config.Security
+	logger   *slog.Logger
+	control  *Store
+	cleanup  func()
+}
+
 // newTestStore spins up a Postgres container, runs the schema migration, and
 // returns a connected Store. The returned cleanup function terminates the container.
 func newTestStore(t *testing.T) *testStore {
@@ -43,6 +51,27 @@ func newTestStore(t *testing.T) *testStore {
 }
 
 func newTestStoreWithLogger(t *testing.T, logs *bytes.Buffer) *testStore {
+	t.Helper()
+	db := newTestPostgres(t, logs)
+	st := db.newMigratedStore(t)
+
+	ts := &testStore{
+		Store: st,
+		logs:  logs,
+	}
+	testStores.Store(st, ts)
+	var cleanupOnce sync.Once
+	ts.cleanup = func() {
+		cleanupOnce.Do(func() {
+			testStores.Delete(st)
+			st.Close()
+			db.cleanup()
+		})
+	}
+	return ts
+}
+
+func newTestPostgres(t *testing.T, logs *bytes.Buffer) *testPostgres {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -85,27 +114,58 @@ func newTestStoreWithLogger(t *testing.T, logs *bytes.Buffer) *testStore {
 		logger = slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
 
-	st, err := New(ctx, Options{
-		Config:   cfg,
-		Security: config.Security{SecretKey: bytes.Repeat([]byte{4}, 32)},
-		Logger:   logger,
-	})
+	security := config.Security{SecretKey: bytes.Repeat([]byte{4}, 32)}
+	control, err := newStore(ctx, cfg, security, logger)
 	if err != nil {
 		_ = ctr.Terminate(ctx)
-		t.Fatalf("failed to create store: %v", err)
+		t.Fatalf("failed to create postgres control store: %v", err)
 	}
 
-	ts := &testStore{
-		Store: st,
-		logs:  logs,
+	db := &testPostgres{
+		cfg:      cfg,
+		security: security,
+		logger:   logger,
+		control:  control,
 	}
-	testStores.Store(st, ts)
-	ts.cleanup = func() {
-		testStores.Delete(st)
-		st.Close()
-		_ = ctr.Terminate(context.Background())
+	var cleanupOnce sync.Once
+	db.cleanup = func() {
+		cleanupOnce.Do(func() {
+			control.Close()
+			_ = ctr.Terminate(context.Background())
+		})
 	}
-	return ts
+	return db
+}
+
+func (db *testPostgres) newMigratedStore(t *testing.T) *Store {
+	t.Helper()
+	return db.newMigratedStoreWithSecurity(t, db.security)
+}
+
+func (db *testPostgres) newMigratedStoreWithoutSecret(t *testing.T) *Store {
+	t.Helper()
+	return db.newMigratedStoreWithSecurity(t, config.Security{})
+}
+
+func (db *testPostgres) newMigratedStoreWithSecurity(t *testing.T, security config.Security) *Store {
+	t.Helper()
+	st, err := New(context.Background(), Options{
+		Config:   db.cfg,
+		Security: security,
+		Logger:   db.logger,
+	})
+	if err != nil {
+		db.cleanup()
+		t.Fatalf("failed to create store: %v", err)
+	}
+	return st
+}
+
+func (db *testPostgres) resetSchema(t *testing.T) {
+	t.Helper()
+	if _, err := db.control.pool.Exec(context.Background(), `DROP SCHEMA IF EXISTS expensor CASCADE`); err != nil {
+		t.Fatalf("failed to reset postgres test schema: %v", err)
+	}
 }
 
 var testStores sync.Map

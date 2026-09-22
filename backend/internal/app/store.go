@@ -8,6 +8,7 @@ import (
 	"github.com/ArionMiles/expensor/backend/internal/store"
 	"github.com/ArionMiles/expensor/backend/internal/store/instrumented"
 	"github.com/ArionMiles/expensor/backend/internal/store/postgres"
+	"github.com/ArionMiles/expensor/backend/internal/store/sqlite"
 	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
@@ -82,15 +83,34 @@ func (s Store) Seed(ctx context.Context, content store.SeedContent) (api.Categor
 }
 
 func openStoreBackend(ctx context.Context, opts StoreOptions) (store.Backend, error) {
+	return openStoreBackendWith(ctx, opts, storeConstructors{
+		openSQLite: func(ctx context.Context, options sqlite.Options) (store.Backend, error) {
+			return sqlite.New(ctx, options)
+		},
+		openPostgres: func(ctx context.Context, options postgres.Options) (store.Backend, error) {
+			return postgres.New(ctx, options)
+		},
+	})
+}
+
+type storeConstructors struct {
+	openSQLite   func(context.Context, sqlite.Options) (store.Backend, error)
+	openPostgres func(context.Context, postgres.Options) (store.Backend, error)
+}
+
+func openStoreBackendWith(ctx context.Context, opts StoreOptions, constructors storeConstructors) (store.Backend, error) {
 	switch opts.Database.Backend {
 	case config.DatabaseBackendPostgres:
-		return postgres.New(ctx, postgres.Options{
+		return constructors.openPostgres(ctx, postgres.Options{
 			Config:   opts.Database.Postgres,
 			Security: opts.Security,
 			Logger:   opts.Logger,
 		})
 	case "", config.DatabaseBackendSQLite:
-		return nil, errors.B.Op("app.store.new").KindFailedPrecondition().Text("sqlite database backend is not supported yet").Build()
+		return constructors.openSQLite(ctx, sqlite.Options{
+			Config:   opts.Database.SQLite,
+			Security: opts.Security,
+		})
 	default:
 		return nil, errors.B.Op("app.store.new").KindInvalidArgument().Textf("unsupported database backend %q", opts.Database.Backend).Build()
 	}

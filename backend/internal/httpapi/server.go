@@ -4,11 +4,12 @@ package httpapi
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
 	"path"
-	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/observability"
@@ -26,8 +27,8 @@ type Server struct {
 func NewServer(port int, handlers *Handlers, staticDir string, logger *slog.Logger) *Server {
 	mux := http.NewServeMux()
 	registerRoutes(mux, handlers)
-	if staticDir != "" {
-		mux.HandleFunc("/", spaHandler(staticDir))
+	if ui := uiFileSystem(staticDir, embeddedUIFileSystem()); ui != nil {
+		mux.HandleFunc("/", spaHandler(ui))
 	}
 
 	scope := observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/internal/httpapi")
@@ -66,21 +67,36 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 }
 
-// spaHandler returns an http.HandlerFunc that serves static files from dir.
+// uiFileSystem selects a disk override when configured, then the bundled UI.
+func uiFileSystem(staticDir string, embedded fs.FS) fs.FS {
+	if staticDir != "" {
+		return os.DirFS(staticDir)
+	}
+	return embedded
+}
+
+// spaHandler returns an http.HandlerFunc that serves static files from files.
 // For paths that don't resolve to an existing file, it falls back to index.html
 // to support client-side SPA routing (React Router, etc.).
-func spaHandler(dir string) http.HandlerFunc {
-	fs := http.FileServer(http.Dir(dir))
+func spaHandler(files fs.FS) http.HandlerFunc {
+	fileServer := http.FileServer(http.FS(files))
 	return func(w http.ResponseWriter, r *http.Request) {
-		// path.Clean normalizes the URL path and removes traversal sequences.
-		// filepath.Join with a cleaned path starting with "/" is safe in Go:
-		// Join never treats intermediate absolute components as new roots.
 		upath := path.Clean("/" + r.URL.Path)
-		fsPath := filepath.Join(dir, filepath.FromSlash(upath))
-		if _, err := os.Stat(fsPath); os.IsNotExist(err) {
-			http.ServeFile(w, r, filepath.Join(dir, "index.html"))
+		name := strings.TrimPrefix(upath, "/")
+		if name == "" {
+			name = "."
+		}
+		if _, err := fs.Stat(files, name); err == nil {
+			fileServer.ServeHTTP(w, r)
 			return
 		}
-		fs.ServeHTTP(w, r)
+		if strings.HasPrefix(upath, "/assets/") || path.Ext(upath) != "" {
+			http.NotFound(w, r)
+			return
+		}
+
+		fallback := r.Clone(r.Context())
+		fallback.URL.Path = "/"
+		fileServer.ServeHTTP(w, fallback)
 	}
 }

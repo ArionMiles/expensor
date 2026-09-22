@@ -357,7 +357,7 @@ func (r *taxonomyRepository) DeleteCategory(ctx context.Context, tenant store.Te
 		removeFromTransactions: removeFromTransactions,
 		spec: taxonomyDeleteSpec{
 			kind:                   "category",
-			selectDefaultSQL:       `SELECT is_default FROM categories WHERE name = $1 AND tenant_id = $2`,
+			selectDefaultSQL:       visibleTaxonomyDefaultSQL("categories"),
 			deleteEmptyMappingsSQL: `DELETE FROM merchant_categories WHERE category = $1 AND bucket IS NULL AND mcc_code IS NULL AND tenant_id = $2`,
 			clearMappingsSQL:       `UPDATE merchant_categories SET category = NULL, updated_at = NOW() WHERE category = $1 AND tenant_id = $2`,
 			clearTransactionsSQL:   `UPDATE transactions SET category = '', updated_at = NOW() WHERE category = $1 AND tenant_id = $2`,
@@ -401,7 +401,7 @@ func (r *taxonomyRepository) DeleteBucket(ctx context.Context, tenant store.Tena
 		removeFromTransactions: removeFromTransactions,
 		spec: taxonomyDeleteSpec{
 			kind:                   "bucket",
-			selectDefaultSQL:       `SELECT is_default FROM buckets WHERE name = $1 AND tenant_id = $2`,
+			selectDefaultSQL:       visibleTaxonomyDefaultSQL("buckets"),
 			deleteEmptyMappingsSQL: `DELETE FROM merchant_categories WHERE bucket = $1 AND category IS NULL AND mcc_code IS NULL AND tenant_id = $2`,
 			clearMappingsSQL:       `UPDATE merchant_categories SET bucket = NULL, updated_at = NOW() WHERE bucket = $1 AND tenant_id = $2`,
 			clearTransactionsSQL:   `UPDATE transactions SET bucket = '', updated_at = NOW() WHERE bucket = $1 AND tenant_id = $2`,
@@ -420,8 +420,15 @@ func globalOrTenantTaxonomyQuery(table string) string {
 		SELECT DISTINCT ON (name) name, COALESCE(description,''), is_default
 		FROM %s
 		WHERE tenant_id IS NULL OR tenant_id = $1
-		ORDER BY name, (tenant_id = $1) DESC
+		ORDER BY name, (tenant_id = $1) DESC NULLS LAST
 	`, table)
+}
+
+func visibleTaxonomyDefaultSQL(table string) string {
+	return fmt.Sprintf(`SELECT is_default FROM %s
+		WHERE name = $1 AND (tenant_id = $2 OR tenant_id IS NULL)
+		ORDER BY (tenant_id = $2) DESC NULLS LAST
+		LIMIT 1`, table)
 }
 
 type taxonomyDeleteSpec struct {
