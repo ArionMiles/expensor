@@ -10,7 +10,7 @@ Be respectful and constructive in issues, pull requests, and discussions.
 
 ```text
 .
-├── backend/                 # Go API, daemon, reader plugins, migrations, PostgreSQL store
+├── backend/                 # Go API, daemon, reader plugins, and database stores
 ├── deploy/                  # Public deployment assets, including Docker Compose
 ├── frontend/                # React + Vite + Tailwind web UI and frontend-owned content
 ├── tests/                   # Component, contract, local DB, and integration helpers
@@ -61,12 +61,14 @@ task openapi:check     # Regenerate OpenAPI and fail on artifact drift
 
 task build:binary      # Build optimized binary -> bin/expensor
 task build:docker      # Build Docker image locally
+task package:release:docker # Build native archives through Docker
+task test:release      # Test Compose, archives, installer, and production runtimes
 task secrets:generate  # Generate a base64-encoded 32-byte encryption key
 ```
 
 Run `task --list-all` to see the full command list.
 
-PostgreSQL-backed tests use Docker. Run the relevant component, contract, or backend test target when changing storage, migrations, ingestion, API behavior, or OpenAPI annotations.
+PostgreSQL-backed tests use Docker. SQLite tests run without PostgreSQL. Run the relevant store, component, contract, or backend target when changing storage, migrations, ingestion, API behavior, or OpenAPI annotations.
 
 ## Testing
 

@@ -42,6 +42,9 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
 
 COPY backend/ .
 
+# Stage the frontend where the production build embeds it.
+COPY --from=frontend-builder /build/frontend/dist ./internal/httpapi/dist
+
 # ARGs are declared here so that changing VERSION/platform does NOT invalidate
 # the apk, go mod download, or COPY layers above.
 ARG TARGETOS
@@ -51,10 +54,28 @@ ARG VERSION=dev
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
-    go build -trimpath -ldflags="-s -w -X github.com/ArionMiles/expensor/backend/pkg/config.Version=${VERSION}" \
+    go build -tags production -trimpath -ldflags="-s -w -X github.com/ArionMiles/expensor/backend/pkg/config.Version=${VERSION}" \
     -o expensor ./cmd/server
 
 RUN test -x ./expensor && test -s ./expensor
+
+# ─── Release artifacts ───────────────────────────────────────────────────────
+FROM backend-builder AS release-builder
+
+ARG VERSION=dev
+
+COPY --from=frontend-builder /build/frontend/dist /build/frontend/dist
+COPY scripts/release /build/scripts/release
+COPY deploy/config.toml.example /build/deploy/config.toml.example
+COPY LICENSE NOTICE /build/
+
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
+    /build/scripts/release/package.sh "${VERSION}" /build/dist/release
+
+FROM scratch AS release-artifacts
+
+COPY --from=release-builder /build/dist/release /
 
 # ─── Stage 3: Runtime ────────────────────────────────────────────────────────
 FROM alpine:3.24
@@ -69,19 +90,14 @@ WORKDIR /app
 # Copy the Go binary
 COPY --from=backend-builder /build/backend/expensor /app/expensor
 
-# Copy the built frontend assets — served by the binary at runtime
-COPY --from=frontend-builder /build/frontend/dist /app/public
-
-# Create the legacy import directory. Current runtime state is stored in PostgreSQL,
-# but upgraded installs can still mount /app/data for one-time file import.
-RUN mkdir -p /app/data && chown -R expensor:expensor /app
+# Prepare a private SQLite directory that is copied into new named volumes.
+RUN mkdir -p /app/data/expensor && \
+    chmod 0700 /app/data/expensor && \
+    chown -R expensor:expensor /app
 
 USER expensor
 
 EXPOSE 8080
-
-# Tell the binary where to find the frontend assets
-ENV EXPENSOR_STATIC_DIR=/app/public
 
 ENTRYPOINT ["/app/expensor"]
 
@@ -89,7 +105,7 @@ ENTRYPOINT ["/app/expensor"]
 # CI workflows override these with dynamic values (created, revision, version)
 # via docker/metadata-action and also write them to the manifest index.
 LABEL org.opencontainers.image.title="Expensor" \
-      org.opencontainers.image.description="Expense tracker that reads Gmail/Thunderbird and writes to PostgreSQL" \
+      org.opencontainers.image.description="Email-driven personal finance tracker with SQLite and PostgreSQL storage" \
       org.opencontainers.image.url="https://github.com/ArionMiles/expensor" \
       org.opencontainers.image.source="https://github.com/ArionMiles/expensor" \
       org.opencontainers.image.documentation="https://github.com/ArionMiles/expensor#readme" \

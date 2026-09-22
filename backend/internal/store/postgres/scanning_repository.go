@@ -217,6 +217,9 @@ func (r *scanningRepository) UpdateScanningState(ctx context.Context, tenant sto
 	if err != nil {
 		return err
 	}
+	if update.RetryCount != nil && *update.RetryCount < 0 {
+		return errors.B.Op("store.scanning.update_scanning_state").KindInvalidInput().Text("retry count cannot be negative").Build()
+	}
 	retryCount := any(nil)
 	if update.RetryCount != nil {
 		retryCount = *update.RetryCount

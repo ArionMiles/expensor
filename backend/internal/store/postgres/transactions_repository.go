@@ -195,6 +195,9 @@ func (r *transactionsRepository) AddLabel(ctx context.Context, tenant store.Tena
 		return errors.B.Op("postgres.transactions.add_label").Text("beginning add-label transaction").Err(err).Build()
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := ensureTransactionBelongsToTenant(ctx, tx, tenant, transactionID, "add_label"); err != nil {
+		return err
+	}
 
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO transaction_label_sources (transaction_id, label, source_type, merchant_pattern)
@@ -234,6 +237,9 @@ func (r *transactionsRepository) AddLabels(ctx context.Context, tenant store.Ten
 		return errors.B.Op("postgres.transactions.add_labels").Text("beginning add-labels transaction").Err(err).Build()
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := ensureTransactionBelongsToTenant(ctx, tx, tenant, transactionID, "add_labels"); err != nil {
+		return err
+	}
 
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO transaction_label_sources (transaction_id, label, source_type, merchant_pattern)
@@ -259,6 +265,20 @@ func (r *transactionsRepository) AddLabels(ctx context.Context, tenant store.Ten
 
 	if err := tx.Commit(ctx); err != nil {
 		return errors.B.Op("postgres.transactions.add_labels").Text("committing add-labels transaction").Err(err).Build()
+	}
+	return nil
+}
+
+func ensureTransactionBelongsToTenant(ctx context.Context, tx pgx.Tx, tenant store.Tenant, transactionID, operation string) error {
+	var exists bool
+	if err := tx.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM transactions WHERE id = $1 AND tenant_id = $2)`,
+		transactionID, tenant.ID,
+	).Scan(&exists); err != nil {
+		return errors.B.Op("postgres.transactions." + operation).Text("checking transaction ownership").Err(err).Build()
+	}
+	if !exists {
+		return errors.B.Op("store.transactions." + operation).KindNotFound().UserMsg("transaction not found").Build()
 	}
 	return nil
 }
@@ -763,7 +783,7 @@ func (r *transactionsRepository) DeleteMutedMerchantAndUnmute(ctx context.Contex
 }
 
 func (r *transactionsRepository) GetMutedMerchantPatterns(ctx context.Context, tenant store.Tenant) ([]string, error) {
-	var patterns []string
+	patterns := []string{}
 	rows, err := r.pool.Query(ctx, `SELECT pattern FROM muted_merchants WHERE tenant_id = $1`, tenant.ID)
 	if err != nil {
 		return nil, errors.B.Op("postgres.transactions.get_muted_merchant_patterns").Text("fetching muted merchant patterns").Err(err).Build()
