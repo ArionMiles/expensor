@@ -56,7 +56,7 @@
       "sender_emails": ["alerts@hdfcbank.bank.in", "alerts@hdfcbank.net"],
       "subject_contains": "UPI txn",
       "amount_regex": "Rs\\.\\s*([\\d,]+(?:\\.\\d+)?)",
-      "merchant_regex": "VPA \\S+\\s+(?:\\(([^)]*)\\)|(.*?))\\s+on\\s",
+      "merchant_regex": "(?:to\s+\S+\s+(.+?)\s+on\s+\d{2}-\d{2}-\d{2}|Paid to\s*<b>([^.@<]+)|VPA\s+\S+\s+(?:\(([^)]*)\)|(.*?))\s+on\b)",
       "currency_regex": "",
       "source": { "type": "UPI", "label": "HDFC UPI", "bank": "HDFC" }
     },
