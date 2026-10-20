@@ -8,11 +8,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
-func escapeLikePattern(value string) string {
-	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-	return "%" + replacer.Replace(value) + "%"
-}
-
 func ftsQuery(value string) string {
 	fields := strings.Fields(value)
 	quoted := make([]string, 0, len(fields))
@@ -40,95 +35,112 @@ func transactionPageOffset(filter store.ListFilter) (int, error) {
 }
 
 func buildTransactionWhere(tenant store.Tenant, search string, filter store.ListFilter) (string, []any) {
-	conditions := []string{"t.tenant_id=?"}
-	args := []any{tenant.ID}
-	contains := func(column, value string) {
-		if value == "" {
-			return
-		}
-		conditions = append(conditions, "instr(expensor_casefold(coalesce("+column+",'')),expensor_casefold(?))>0")
-		args = append(args, value)
+	where := transactionWhere{conditions: []string{"t.tenant_id=?"}, args: []any{tenant.ID}}
+	appendTransactionMuteWhere(&where, filter)
+	where.contains("t.category", filter.Category)
+	where.contains("t.bucket", filter.Bucket)
+	where.contains("t.currency", filter.Currency)
+	where.contains("t.source", filter.Source)
+	where.contains("t.source_type", filter.SourceType)
+	where.contains("t.bank", filter.Bank)
+	where.contains("t.merchant_info", filter.Merchant)
+	appendTransactionTaxonomyWhere(&where, filter)
+	appendTransactionTimeWhere(&where, filter)
+	if condition, searchArgs := buildTransactionSearch(strings.TrimSpace(search)); condition != "" {
+		where.conditions = append(where.conditions, condition)
+		where.args = append(where.args, searchArgs...)
 	}
-	exclude := func(column string, values []string) {
-		if len(values) == 0 {
-			return
-		}
-		conditions = append(conditions, "coalesce("+column+",'')<>''", column+" NOT IN ("+placeholders(len(values))+")")
-		for _, value := range values {
-			args = append(args, value)
-		}
-	}
+	return " WHERE " + strings.Join(where.conditions, " AND "), where.args
+}
 
+type transactionWhere struct {
+	conditions []string
+	args       []any
+}
+
+func (w *transactionWhere) contains(column, value string) {
+	if value == "" {
+		return
+	}
+	w.conditions = append(w.conditions, "instr(expensor_casefold(coalesce("+column+",'')),expensor_casefold(?))>0")
+	w.args = append(w.args, value)
+}
+
+func (w *transactionWhere) exclude(column string, values []string) {
+	if len(values) == 0 {
+		return
+	}
+	w.conditions = append(w.conditions, "coalesce("+column+",'')<>''", column+" NOT IN ("+placeholders(len(values))+")")
+	for _, value := range values {
+		w.args = append(w.args, value)
+	}
+}
+
+func appendTransactionMuteWhere(where *transactionWhere, filter store.ListFilter) {
 	switch {
 	case filter.IndividualOnly:
-		conditions = append(conditions, "t.muted=1", "t.muted_by_merchant=0")
+		where.conditions = append(where.conditions, "t.muted=1", "t.muted_by_merchant=0")
 	case filter.MutedOnly:
-		conditions = append(conditions, "t.muted=1")
+		where.conditions = append(where.conditions, "t.muted=1")
 	case !filter.ShowMuted:
-		conditions = append(conditions, "t.muted=0")
+		where.conditions = append(where.conditions, "t.muted=0")
 	}
-	contains("t.category", filter.Category)
-	contains("t.bucket", filter.Bucket)
-	contains("t.currency", filter.Currency)
-	contains("t.source", filter.Source)
-	contains("t.source_type", filter.SourceType)
-	contains("t.bank", filter.Bank)
-	contains("t.merchant_info", filter.Merchant)
+}
+
+func appendTransactionTaxonomyWhere(where *transactionWhere, filter store.ListFilter) {
 	if filter.Label != "" {
-		conditions = append(conditions, `EXISTS (SELECT 1 FROM transaction_labels tl WHERE tl.transaction_id=t.id
+		where.conditions = append(where.conditions, `EXISTS (SELECT 1 FROM transaction_labels tl WHERE tl.transaction_id=t.id
 			AND instr(expensor_casefold(tl.label),expensor_casefold(?))>0)`)
-		args = append(args, filter.Label)
+		where.args = append(where.args, filter.Label)
 	}
 	if filter.CategoryMissing {
-		conditions = append(conditions, "coalesce(t.category,'')='' ")
+		where.conditions = append(where.conditions, "coalesce(t.category,'')='' ")
 	}
 	if filter.BucketMissing {
-		conditions = append(conditions, "coalesce(t.bucket,'')='' ")
+		where.conditions = append(where.conditions, "coalesce(t.bucket,'')='' ")
 	}
 	if filter.LabelMissing {
-		conditions = append(conditions, "NOT EXISTS (SELECT 1 FROM transaction_labels tl WHERE tl.transaction_id=t.id)")
+		where.conditions = append(where.conditions, "NOT EXISTS (SELECT 1 FROM transaction_labels tl WHERE tl.transaction_id=t.id)")
 	}
-	exclude("t.category", filter.ExcludeCategories)
-	exclude("t.bucket", filter.ExcludeBuckets)
-	exclude("t.source", filter.ExcludeSources)
-	exclude("t.source_type", filter.ExcludeSourceTypes)
-	exclude("t.bank", filter.ExcludeBanks)
+	where.exclude("t.category", filter.ExcludeCategories)
+	where.exclude("t.bucket", filter.ExcludeBuckets)
+	where.exclude("t.source", filter.ExcludeSources)
+	where.exclude("t.source_type", filter.ExcludeSourceTypes)
+	where.exclude("t.bank", filter.ExcludeBanks)
 	if len(filter.ExcludeLabels) > 0 {
-		conditions = append(conditions, `EXISTS (SELECT 1 FROM transaction_labels tl WHERE tl.transaction_id=t.id
+		where.conditions = append(where.conditions, `EXISTS (SELECT 1 FROM transaction_labels tl WHERE tl.transaction_id=t.id
 			AND tl.label NOT IN (`+placeholders(len(filter.ExcludeLabels))+`))`)
 		for _, value := range filter.ExcludeLabels {
-			args = append(args, value)
+			where.args = append(where.args, value)
 		}
 	}
+}
+
+func appendTransactionTimeWhere(where *transactionWhere, filter store.ListFilter) {
 	if filter.From != nil {
-		conditions = append(conditions, "t.timestamp>=?")
-		args = append(args, timeToText(*filter.From))
+		where.conditions = append(where.conditions, "t.timestamp>=?")
+		where.args = append(where.args, timeToText(*filter.From))
 	}
 	if filter.To != nil {
-		conditions = append(conditions, "t.timestamp<=?")
-		args = append(args, timeToText(*filter.To))
+		where.conditions = append(where.conditions, "t.timestamp<=?")
+		where.args = append(where.args, timeToText(*filter.To))
 	}
 	timezone := filter.Timezone
 	if timezone == "" {
 		timezone = "UTC"
 	}
 	if filter.Weekday != nil {
-		conditions = append(conditions, "expensor_local_weekday(t.timestamp,?)=?")
-		args = append(args, timezone, *filter.Weekday)
+		where.conditions = append(where.conditions, "expensor_local_weekday(t.timestamp,?)=?")
+		where.args = append(where.args, timezone, *filter.Weekday)
 	}
 	if filter.HourFrom != nil {
-		conditions = append(conditions, "expensor_local_hour(t.timestamp,?)>=?")
-		args = append(args, timezone, *filter.HourFrom)
+		where.conditions = append(where.conditions, "expensor_local_hour(t.timestamp,?)>=?")
+		where.args = append(where.args, timezone, *filter.HourFrom)
 	}
 	if filter.HourTo != nil {
-		conditions = append(conditions, "expensor_local_hour(t.timestamp,?)<=?")
-		args = append(args, timezone, *filter.HourTo)
+		where.conditions = append(where.conditions, "expensor_local_hour(t.timestamp,?)<=?")
+		where.args = append(where.args, timezone, *filter.HourTo)
 	}
-	if condition, searchArgs := buildTransactionSearch(strings.TrimSpace(search)); condition != "" {
-		conditions = append(conditions, condition)
-		args = append(args, searchArgs...)
-	}
-	return " WHERE " + strings.Join(conditions, " AND "), args
 }
 
 func buildTransactionSearch(search string) (string, []any) {

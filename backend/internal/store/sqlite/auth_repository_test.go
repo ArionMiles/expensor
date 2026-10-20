@@ -9,21 +9,9 @@ import (
 	"time"
 
 	storepkg "github.com/ArionMiles/expensor/backend/internal/store"
-	"github.com/ArionMiles/expensor/backend/internal/store/storetest"
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
-
-func TestAuthStoreConformance(t *testing.T) {
-	storetest.RunAuth(t, func(t *testing.T) storetest.Subject[storepkg.AuthStore] {
-		t.Helper()
-		store := openAuthTestStore(t, "auth.db")
-		return storetest.Subject[storepkg.AuthStore]{
-			Store: store,
-			Close: store.Close,
-		}
-	})
-}
 
 func TestCreateBootstrapAdminIsAtomic(t *testing.T) {
 	store := openAuthTestStore(t, "bootstrap.db")

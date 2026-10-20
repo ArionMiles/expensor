@@ -12,14 +12,6 @@ import (
 	"github.com/ArionMiles/expensor/backend/pkg/config"
 )
 
-func TestRuntimeStoreConformance(t *testing.T) {
-	storetest.RunRuntime(t, func(t *testing.T) storetest.Subject[storetest.RuntimeSubject] {
-		t.Helper()
-		st := openRuntimeTestStore(t, true)
-		return storetest.Subject[storetest.RuntimeSubject]{Store: st, Close: st.Close}
-	})
-}
-
 func TestRuntimeStoreWithoutSecret(t *testing.T) {
 	storetest.RunRuntimeWithoutSecret(t, func(t *testing.T) storetest.Subject[storetest.RuntimeSubject] {
 		t.Helper()

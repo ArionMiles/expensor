@@ -2,7 +2,6 @@ package sqlite
 
 import (
 	"context"
-	"database/sql"
 	"strings"
 
 	"github.com/google/uuid"
@@ -251,5 +250,3 @@ func (s *Store) getTaxonomyMappings(ctx context.Context, tenant store.Tenant, ki
 	}
 	return result, nil
 }
-
-var _ = sql.ErrNoRows

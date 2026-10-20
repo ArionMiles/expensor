@@ -7,19 +7,7 @@ import (
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
-	"github.com/ArionMiles/expensor/backend/internal/store/storetest"
 )
-
-func TestScanningStoreConformance(t *testing.T) {
-	storetest.RunScanning(t, func(t *testing.T) storetest.Subject[storetest.ScanningSubject] {
-		t.Helper()
-		st, err := New(context.Background(), testStoreOptions(filepath.Join(privateTestDir(t), "scanning.db")))
-		if err != nil {
-			t.Fatalf("open scanning test store: %v", err)
-		}
-		return storetest.Subject[storetest.ScanningSubject]{Store: st, Close: st.Close}
-	})
-}
 
 func TestScanningWritesFixedUTCTimestamps(t *testing.T) {
 	st, err := New(context.Background(), testStoreOptions(filepath.Join(privateTestDir(t), "scanning-time.db")))

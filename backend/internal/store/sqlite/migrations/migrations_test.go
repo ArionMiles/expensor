@@ -104,6 +104,32 @@ func TestRunFirstAndRepeatedRun(t *testing.T) {
 	}
 }
 
+func TestBaselineMigrationIsIdempotent(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	migrationSQL, err := FS.ReadFile("001_init.up.sql")
+	if err != nil {
+		t.Fatalf("read baseline migration: %v", err)
+	}
+
+	for attempt := range 2 {
+		if _, err := db.ExecContext(ctx, string(migrationSQL)); err != nil {
+			t.Fatalf("apply baseline migration attempt %d: %v", attempt+1, err)
+		}
+	}
+
+	if got := objectCount(t, db, "table", "users"); got != 1 {
+		t.Fatalf("users table count = %d, want 1", got)
+	}
+	var schedulerRows int
+	if err := db.QueryRowContext(ctx, "SELECT count(*) FROM scheduler_config").Scan(&schedulerRows); err != nil {
+		t.Fatalf("count scheduler rows: %v", err)
+	}
+	if schedulerRows != 1 {
+		t.Fatalf("scheduler rows = %d, want 1", schedulerRows)
+	}
+}
+
 func TestConcurrentRunSerializesVersionCheckWithMigration(t *testing.T) {
 	state := newMigrationDriverState(true)
 	db := sql.OpenDB(migrationTestConnector{state: state})
@@ -1367,7 +1393,7 @@ func canonicalSQL(value string) string {
 			result.WriteRune(unicode.ToLower(char))
 		}
 	}
-	return result.String()
+	return strings.ReplaceAll(result.String(), "ifnotexists", "")
 }
 
 func extractCheckExpressions(t *testing.T, schema string) []string {

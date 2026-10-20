@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
-	"github.com/ArionMiles/expensor/backend/pkg/api"
 	"github.com/ArionMiles/expensor/backend/pkg/errors"
 )
 
@@ -651,5 +650,3 @@ func (s *Store) GetMutedMerchantPatterns(ctx context.Context, tenant store.Tenan
 	}
 	return result, mapSQLiteError("sqlite.transactions.muted_patterns", rows.Err())
 }
-
-var _ = api.Source{}

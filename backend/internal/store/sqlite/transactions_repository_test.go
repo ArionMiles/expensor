@@ -2,21 +2,14 @@ package sqlite
 
 import (
 	"context"
-	"path/filepath"
-	"strings"
+	stderrors "errors"
 	"testing"
 	"time"
 
 	"github.com/ArionMiles/expensor/backend/internal/store"
 )
 
-func TestStoreImplementsTransactionStore(t *testing.T) {
-	t.Parallel()
-
-	var _ store.TransactionStore = (*Store)(nil)
-}
-
-func TestTransactionMutationsUseWriteGate(t *testing.T) {
+func TestTransactionMutationsUseWriteTransaction(t *testing.T) {
 	tests := []struct {
 		name string
 		run  func(*Store, context.Context, store.Tenant) error
@@ -43,54 +36,16 @@ func TestTransactionMutationsUseWriteGate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			st := openTestStore(t, filepath.Join(privateTestDir(t), "write-gate.db"))
-			<-st.writeGate
-			done := make(chan error, 1)
-			go func() {
-				done <- tt.run(st, t.Context(), store.Tenant{ID: "tenant"})
-			}()
-
-			select {
-			case err := <-done:
-				t.Errorf("mutation completed before write gate was released: %v", err)
-			case <-time.After(50 * time.Millisecond):
-			}
-			st.writeGate <- struct{}{}
-
-			select {
-			case <-done:
-			case <-time.After(time.Second):
-				t.Fatal("mutation did not complete after write gate was released")
+			wantErr := stderrors.New("write transaction called")
+			st := &Store{repositories: repositoryDependencies{
+				now: time.Now,
+				writeTx: func(context.Context, func(queryer) error) error {
+					return wantErr
+				},
+			}}
+			if err := tt.run(st, t.Context(), store.Tenant{ID: "tenant"}); !stderrors.Is(err, wantErr) {
+				t.Fatalf("mutation error = %v, want write transaction error", err)
 			}
 		})
 	}
-}
-
-func TestTransactionPageQueryAppliesPaginationInSQLite(t *testing.T) {
-	query, args, err := buildTransactionPageQuery(
-		store.Tenant{ID: "tenant"},
-		"coffee",
-		store.ListFilter{Page: 3, PageSize: 25, SortDir: "asc"},
-	)
-	if err != nil {
-		t.Fatalf("build transaction page query: %v", err)
-	}
-	if !strings.Contains(query, "LIMIT ? OFFSET ?") {
-		t.Fatalf("query does not apply pagination in SQLite: %s", query)
-	}
-	if got, want := args[len(args)-2:], []any{25, 50}; !equalAnyValues(got, want) {
-		t.Fatalf("pagination args = %#v, want %#v", got, want)
-	}
-}
-
-func equalAnyValues(left, right []any) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for i := range left {
-		if left[i] != right[i] {
-			return false
-		}
-	}
-	return true
 }

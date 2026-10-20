@@ -1,4 +1,4 @@
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY NOT NULL,
     email TEXT NOT NULL,
     password_hash TEXT,
@@ -12,9 +12,9 @@ CREATE TABLE users (
     disabled_at TEXT CHECK (disabled_at IS NULL OR (disabled_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',disabled_at,'+0 days') IS substr(disabled_at,1,19)))
 ) STRICT;
 
-CREATE UNIQUE INDEX users_email_casefold_unique ON users (expensor_casefold(email));
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_casefold_unique ON users (expensor_casefold(email));
 
-CREATE TABLE sessions (
+CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY NOT NULL,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token_hash TEXT NOT NULL,
@@ -25,11 +25,11 @@ CREATE TABLE sessions (
     revoked_at TEXT CHECK (revoked_at IS NULL OR (revoked_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',revoked_at,'+0 days') IS substr(revoked_at,1,19)))
 ) STRICT;
 
-CREATE UNIQUE INDEX sessions_token_hash_unique ON sessions (token_hash);
-CREATE INDEX sessions_user_id_idx ON sessions (user_id);
-CREATE INDEX sessions_active_lookup_idx ON sessions (token_hash) WHERE revoked_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS sessions_token_hash_unique ON sessions (token_hash);
+CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions (user_id);
+CREATE INDEX IF NOT EXISTS sessions_active_lookup_idx ON sessions (token_hash) WHERE revoked_at IS NULL;
 
-CREATE TABLE access_tokens (
+CREATE TABLE IF NOT EXISTS access_tokens (
     id TEXT PRIMARY KEY NOT NULL,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -41,12 +41,12 @@ CREATE TABLE access_tokens (
     revoked_at TEXT CHECK (revoked_at IS NULL OR (revoked_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',revoked_at,'+0 days') IS substr(revoked_at,1,19)))
 ) STRICT;
 
-CREATE UNIQUE INDEX access_tokens_token_hash_unique ON access_tokens (token_hash);
-CREATE INDEX access_tokens_user_id_idx ON access_tokens (user_id);
-CREATE INDEX access_tokens_active_lookup_idx ON access_tokens (token_hash) WHERE revoked_at IS NULL;
-CREATE UNIQUE INDEX access_tokens_active_name_unique ON access_tokens (user_id,name) WHERE revoked_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS access_tokens_token_hash_unique ON access_tokens (token_hash);
+CREATE INDEX IF NOT EXISTS access_tokens_user_id_idx ON access_tokens (user_id);
+CREATE INDEX IF NOT EXISTS access_tokens_active_lookup_idx ON access_tokens (token_hash) WHERE revoked_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS access_tokens_active_name_unique ON access_tokens (user_id,name) WHERE revoked_at IS NULL;
 
-CREATE TABLE account_setup_tokens (
+CREATE TABLE IF NOT EXISTS account_setup_tokens (
     id TEXT PRIMARY KEY NOT NULL,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token_hash TEXT NOT NULL,
@@ -56,10 +56,10 @@ CREATE TABLE account_setup_tokens (
     used_at TEXT CHECK (used_at IS NULL OR (used_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',used_at,'+0 days') IS substr(used_at,1,19)))
 ) STRICT;
 
-CREATE UNIQUE INDEX account_setup_tokens_token_hash_unique ON account_setup_tokens (token_hash);
-CREATE INDEX account_setup_tokens_user_id_idx ON account_setup_tokens (user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS account_setup_tokens_token_hash_unique ON account_setup_tokens (token_hash);
+CREATE INDEX IF NOT EXISTS account_setup_tokens_user_id_idx ON account_setup_tokens (user_id);
 
-CREATE TABLE transactions (
+CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY NOT NULL,
     tenant_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     message_id TEXT NOT NULL,
@@ -87,15 +87,15 @@ CREATE TABLE transactions (
         CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',updated_at,'+0 days') IS substr(updated_at,1,19))
 ) STRICT;
 
-CREATE UNIQUE INDEX transactions_tenant_message_id_key ON transactions (tenant_id,message_id) WHERE tenant_id IS NOT NULL;
-CREATE INDEX transactions_tenant_timestamp_idx ON transactions (tenant_id,timestamp DESC);
-CREATE INDEX transactions_currency_idx ON transactions (currency);
-CREATE INDEX transactions_tenant_category_idx ON transactions (tenant_id,category);
-CREATE INDEX transactions_tenant_bucket_idx ON transactions (tenant_id,bucket);
-CREATE INDEX transactions_muted_idx ON transactions (tenant_id,muted) WHERE muted=1;
-CREATE INDEX transactions_muted_by_merchant_idx ON transactions (tenant_id,muted_by_merchant) WHERE muted_by_merchant=1;
+CREATE UNIQUE INDEX IF NOT EXISTS transactions_tenant_message_id_key ON transactions (tenant_id,message_id) WHERE tenant_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS transactions_tenant_timestamp_idx ON transactions (tenant_id,timestamp DESC);
+CREATE INDEX IF NOT EXISTS transactions_currency_idx ON transactions (currency);
+CREATE INDEX IF NOT EXISTS transactions_tenant_category_idx ON transactions (tenant_id,category);
+CREATE INDEX IF NOT EXISTS transactions_tenant_bucket_idx ON transactions (tenant_id,bucket);
+CREATE INDEX IF NOT EXISTS transactions_muted_idx ON transactions (tenant_id,muted) WHERE muted=1;
+CREATE INDEX IF NOT EXISTS transactions_muted_by_merchant_idx ON transactions (tenant_id,muted_by_merchant) WHERE muted_by_merchant=1;
 
-CREATE TABLE transaction_labels (
+CREATE TABLE IF NOT EXISTS transaction_labels (
     id TEXT PRIMARY KEY NOT NULL,
     transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
     label TEXT NOT NULL,
@@ -103,11 +103,11 @@ CREATE TABLE transaction_labels (
         CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',created_at,'+0 days') IS substr(created_at,1,19))
 ) STRICT;
 
-CREATE UNIQUE INDEX transaction_labels_unique ON transaction_labels (transaction_id,label);
-CREATE INDEX transaction_labels_label_idx ON transaction_labels (label);
-CREATE INDEX transaction_labels_transaction_id_idx ON transaction_labels (transaction_id);
+CREATE UNIQUE INDEX IF NOT EXISTS transaction_labels_unique ON transaction_labels (transaction_id,label);
+CREATE INDEX IF NOT EXISTS transaction_labels_label_idx ON transaction_labels (label);
+CREATE INDEX IF NOT EXISTS transaction_labels_transaction_id_idx ON transaction_labels (transaction_id);
 
-CREATE TABLE transaction_label_sources (
+CREATE TABLE IF NOT EXISTS transaction_label_sources (
     id TEXT PRIMARY KEY NOT NULL,
     transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
     label TEXT NOT NULL,
@@ -117,19 +117,19 @@ CREATE TABLE transaction_label_sources (
         CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',created_at,'+0 days') IS substr(created_at,1,19))
 ) STRICT;
 
-CREATE UNIQUE INDEX transaction_label_sources_unique ON transaction_label_sources (transaction_id,label,source_type,merchant_pattern);
-CREATE INDEX transaction_label_sources_transaction_idx ON transaction_label_sources (transaction_id,label);
+CREATE UNIQUE INDEX IF NOT EXISTS transaction_label_sources_unique ON transaction_label_sources (transaction_id,label,source_type,merchant_pattern);
+CREATE INDEX IF NOT EXISTS transaction_label_sources_transaction_idx ON transaction_label_sources (transaction_id,label);
 
-CREATE TABLE app_config (
+CREATE TABLE IF NOT EXISTS app_config (
     tenant_id TEXT REFERENCES users(id) ON DELETE CASCADE,
     key TEXT NOT NULL,
     value TEXT NOT NULL
 ) STRICT;
 
-CREATE UNIQUE INDEX app_config_global_key ON app_config (key) WHERE tenant_id IS NULL;
-CREATE UNIQUE INDEX app_config_tenant_key ON app_config (tenant_id,key) WHERE tenant_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS app_config_global_key ON app_config (key) WHERE tenant_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS app_config_tenant_key ON app_config (tenant_id,key) WHERE tenant_id IS NOT NULL;
 
-CREATE TABLE labels (
+CREATE TABLE IF NOT EXISTS labels (
     tenant_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     color TEXT NOT NULL DEFAULT '#6366f1',
@@ -137,9 +137,9 @@ CREATE TABLE labels (
         CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',created_at,'+0 days') IS substr(created_at,1,19))
 ) STRICT;
 
-CREATE UNIQUE INDEX labels_tenant_name_key ON labels (tenant_id,name) WHERE tenant_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS labels_tenant_name_key ON labels (tenant_id,name) WHERE tenant_id IS NOT NULL;
 
-CREATE TABLE categories (
+CREATE TABLE IF NOT EXISTS categories (
     tenant_id TEXT REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     description TEXT,
@@ -148,10 +148,10 @@ CREATE TABLE categories (
         CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',created_at,'+0 days') IS substr(created_at,1,19))
 ) STRICT;
 
-CREATE UNIQUE INDEX categories_global_name_key ON categories (name) WHERE tenant_id IS NULL;
-CREATE UNIQUE INDEX categories_tenant_name_key ON categories (tenant_id,name) WHERE tenant_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS categories_global_name_key ON categories (name) WHERE tenant_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS categories_tenant_name_key ON categories (tenant_id,name) WHERE tenant_id IS NOT NULL;
 
-CREATE TABLE buckets (
+CREATE TABLE IF NOT EXISTS buckets (
     tenant_id TEXT REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     description TEXT,
@@ -160,10 +160,10 @@ CREATE TABLE buckets (
         CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',created_at,'+0 days') IS substr(created_at,1,19))
 ) STRICT;
 
-CREATE UNIQUE INDEX buckets_global_name_key ON buckets (name) WHERE tenant_id IS NULL;
-CREATE UNIQUE INDEX buckets_tenant_name_key ON buckets (tenant_id,name) WHERE tenant_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS buckets_global_name_key ON buckets (name) WHERE tenant_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS buckets_tenant_name_key ON buckets (tenant_id,name) WHERE tenant_id IS NOT NULL;
 
-CREATE TABLE rules (
+CREATE TABLE IF NOT EXISTS rules (
     id TEXT PRIMARY KEY NOT NULL,
     tenant_id TEXT REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -185,10 +185,10 @@ CREATE TABLE rules (
     CHECK ((predefined=1 AND tenant_id IS NULL) OR (predefined=0 AND tenant_id IS NOT NULL))
 ) STRICT;
 
-CREATE UNIQUE INDEX rules_predefined_name_key ON rules (name) WHERE tenant_id IS NULL AND predefined=1;
-CREATE UNIQUE INDEX rules_tenant_user_name_key ON rules (tenant_id,name) WHERE tenant_id IS NOT NULL AND predefined=0;
+CREATE UNIQUE INDEX IF NOT EXISTS rules_predefined_name_key ON rules (name) WHERE tenant_id IS NULL AND predefined=1;
+CREATE UNIQUE INDEX IF NOT EXISTS rules_tenant_user_name_key ON rules (tenant_id,name) WHERE tenant_id IS NOT NULL AND predefined=0;
 
-CREATE TABLE muted_merchants (
+CREATE TABLE IF NOT EXISTS muted_merchants (
     id TEXT PRIMARY KEY NOT NULL,
     tenant_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     pattern TEXT NOT NULL,
@@ -197,9 +197,9 @@ CREATE TABLE muted_merchants (
         CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',created_at,'+0 days') IS substr(created_at,1,19))
 ) STRICT;
 
-CREATE UNIQUE INDEX muted_merchants_tenant_pattern_key ON muted_merchants (tenant_id,pattern) WHERE tenant_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS muted_merchants_tenant_pattern_key ON muted_merchants (tenant_id,pattern) WHERE tenant_id IS NOT NULL;
 
-CREATE TABLE mcc_codes (
+CREATE TABLE IF NOT EXISTS mcc_codes (
     code TEXT PRIMARY KEY NOT NULL,
     description TEXT NOT NULL,
     category TEXT NOT NULL,
@@ -208,7 +208,7 @@ CREATE TABLE mcc_codes (
         CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',updated_at,'+0 days') IS substr(updated_at,1,19))
 ) STRICT;
 
-CREATE TABLE merchant_categories (
+CREATE TABLE IF NOT EXISTS merchant_categories (
     id TEXT PRIMARY KEY NOT NULL,
     tenant_id TEXT REFERENCES users(id) ON DELETE CASCADE,
     fragment TEXT NOT NULL,
@@ -223,10 +223,10 @@ CREATE TABLE merchant_categories (
         CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',updated_at,'+0 days') IS substr(updated_at,1,19))
 ) STRICT;
 
-CREATE UNIQUE INDEX merchant_categories_global_fragment_key ON merchant_categories (fragment) WHERE tenant_id IS NULL;
-CREATE UNIQUE INDEX merchant_categories_tenant_fragment_key ON merchant_categories (tenant_id,fragment) WHERE tenant_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS merchant_categories_global_fragment_key ON merchant_categories (fragment) WHERE tenant_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS merchant_categories_tenant_fragment_key ON merchant_categories (tenant_id,fragment) WHERE tenant_id IS NOT NULL;
 
-CREATE TABLE label_merchants (
+CREATE TABLE IF NOT EXISTS label_merchants (
     id TEXT PRIMARY KEY NOT NULL,
     tenant_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     label TEXT NOT NULL,
@@ -235,9 +235,9 @@ CREATE TABLE label_merchants (
         CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',created_at,'+0 days') IS substr(created_at,1,19))
 ) STRICT;
 
-CREATE UNIQUE INDEX label_merchants_tenant_mapping_key ON label_merchants (tenant_id,label,merchant_pattern) WHERE tenant_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS label_merchants_tenant_mapping_key ON label_merchants (tenant_id,label,merchant_pattern) WHERE tenant_id IS NOT NULL;
 
-CREATE TABLE extraction_diagnostics (
+CREATE TABLE IF NOT EXISTS extraction_diagnostics (
     id TEXT PRIMARY KEY NOT NULL,
     tenant_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','resolved','ignored')),
@@ -263,13 +263,13 @@ CREATE TABLE extraction_diagnostics (
     resolved_at TEXT CHECK (resolved_at IS NULL OR (resolved_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',resolved_at,'+0 days') IS substr(resolved_at,1,19)))
 ) STRICT;
 
-CREATE UNIQUE INDEX extraction_diagnostics_open_tenant_unique
+CREATE UNIQUE INDEX IF NOT EXISTS extraction_diagnostics_open_tenant_unique
     ON extraction_diagnostics (tenant_id,reader,message_id,rule_name)
     WHERE tenant_id IS NOT NULL AND status='open' AND message_id IS NOT NULL;
-CREATE INDEX extraction_diagnostics_tenant_status_created_idx
+CREATE INDEX IF NOT EXISTS extraction_diagnostics_tenant_status_created_idx
     ON extraction_diagnostics (tenant_id,status,created_at DESC);
 
-CREATE TABLE reader_runtime (
+CREATE TABLE IF NOT EXISTS reader_runtime (
     tenant_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     reader TEXT NOT NULL,
     client_secret_ciphertext BLOB,
@@ -281,18 +281,18 @@ CREATE TABLE reader_runtime (
         CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',updated_at,'+0 days') IS substr(updated_at,1,19))
 ) STRICT;
 
-CREATE UNIQUE INDEX reader_runtime_tenant_reader_key ON reader_runtime (tenant_id,reader) WHERE tenant_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS reader_runtime_tenant_reader_key ON reader_runtime (tenant_id,reader) WHERE tenant_id IS NOT NULL;
 
-CREATE TABLE processed_messages (
+CREATE TABLE IF NOT EXISTS processed_messages (
     tenant_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     message_key TEXT NOT NULL,
     processed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f000Z','now'))
         CHECK (processed_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',processed_at,'+0 days') IS substr(processed_at,1,19))
 ) STRICT;
 
-CREATE UNIQUE INDEX processed_messages_tenant_key ON processed_messages (tenant_id,message_key) WHERE tenant_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS processed_messages_tenant_key ON processed_messages (tenant_id,message_key) WHERE tenant_id IS NOT NULL;
 
-CREATE TABLE scheduler_config (
+CREATE TABLE IF NOT EXISTS scheduler_config (
     id INTEGER PRIMARY KEY NOT NULL DEFAULT 1 CHECK (id=1),
     max_concurrent_scans INTEGER NOT NULL DEFAULT 4 CHECK (max_concurrent_scans BETWEEN 1 AND 64),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f000Z','now'))
@@ -301,9 +301,9 @@ CREATE TABLE scheduler_config (
         CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',updated_at,'+0 days') IS substr(updated_at,1,19))
 ) STRICT;
 
-INSERT INTO scheduler_config (id,max_concurrent_scans) VALUES (1,4);
+INSERT INTO scheduler_config (id,max_concurrent_scans) VALUES (1,4) ON CONFLICT DO NOTHING;
 
-CREATE TABLE tenant_scanning_state (
+CREATE TABLE IF NOT EXISTS tenant_scanning_state (
     tenant_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     active_reader TEXT NOT NULL DEFAULT '',
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)),
@@ -321,9 +321,9 @@ CREATE TABLE tenant_scanning_state (
         CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',updated_at,'+0 days') IS substr(updated_at,1,19))
 ) STRICT;
 
-CREATE INDEX tenant_scanning_state_runnable_idx ON tenant_scanning_state (enabled,state,next_retry_at);
+CREATE INDEX IF NOT EXISTS tenant_scanning_state_runnable_idx ON tenant_scanning_state (enabled,state,next_retry_at);
 
-CREATE TABLE llm_provider_runtime (
+CREATE TABLE IF NOT EXISTS llm_provider_runtime (
     tenant_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     provider TEXT NOT NULL,
     config TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(config)),
@@ -335,8 +335,8 @@ CREATE TABLE llm_provider_runtime (
         CHECK (updated_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z' AND strftime('%Y-%m-%dT%H:%M:%S',updated_at,'+0 days') IS substr(updated_at,1,19))
 ) STRICT;
 
-CREATE UNIQUE INDEX llm_provider_runtime_tenant_provider_key ON llm_provider_runtime (tenant_id,provider) WHERE tenant_id IS NOT NULL;
-CREATE UNIQUE INDEX llm_provider_runtime_tenant_active_key ON llm_provider_runtime (tenant_id) WHERE tenant_id IS NOT NULL AND active=1;
+CREATE UNIQUE INDEX IF NOT EXISTS llm_provider_runtime_tenant_provider_key ON llm_provider_runtime (tenant_id,provider) WHERE tenant_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS llm_provider_runtime_tenant_active_key ON llm_provider_runtime (tenant_id) WHERE tenant_id IS NOT NULL AND active=1;
 
 INSERT INTO categories (tenant_id,name,is_default) VALUES
     (NULL,'Food & Dining',1),
@@ -346,31 +346,33 @@ INSERT INTO categories (tenant_id,name,is_default) VALUES
     (NULL,'Healthcare',1),
     (NULL,'Entertainment',1),
     (NULL,'Travel',1),
-    (NULL,'Finance',1);
+    (NULL,'Finance',1)
+ON CONFLICT(name) WHERE tenant_id IS NULL DO NOTHING;
 
 INSERT INTO buckets (tenant_id,name,is_default) VALUES
     (NULL,'Needs',1),
     (NULL,'Wants',1),
     (NULL,'Investments',1),
-    (NULL,'Income',1);
+    (NULL,'Income',1)
+ON CONFLICT(name) WHERE tenant_id IS NULL DO NOTHING;
 
-CREATE VIRTUAL TABLE transactions_fts USING fts5(
+CREATE VIRTUAL TABLE IF NOT EXISTS transactions_fts USING fts5(
     transaction_id UNINDEXED,
     merchant,
     description
 );
 
-CREATE TRIGGER transactions_fts_insert AFTER INSERT ON transactions BEGIN
+CREATE TRIGGER IF NOT EXISTS transactions_fts_insert AFTER INSERT ON transactions BEGIN
     INSERT INTO transactions_fts (transaction_id,merchant,description)
     VALUES (new.id,new.merchant_info,coalesce(new.description,''));
 END;
 
-CREATE TRIGGER transactions_fts_update AFTER UPDATE OF merchant_info,description ON transactions BEGIN
+CREATE TRIGGER IF NOT EXISTS transactions_fts_update AFTER UPDATE OF merchant_info,description ON transactions BEGIN
     DELETE FROM transactions_fts WHERE transaction_id=old.id;
     INSERT INTO transactions_fts (transaction_id,merchant,description)
     VALUES (new.id,new.merchant_info,coalesce(new.description,''));
 END;
 
-CREATE TRIGGER transactions_fts_delete AFTER DELETE ON transactions BEGIN
+CREATE TRIGGER IF NOT EXISTS transactions_fts_delete AFTER DELETE ON transactions BEGIN
     DELETE FROM transactions_fts WHERE transaction_id=old.id;
 END;
