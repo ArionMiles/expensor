@@ -9,7 +9,6 @@ on:
       - 'AGENTS.md'
       - 'api/openapi/README.md'
       - 'backend/README.md'
-      - 'deploy/**'
       - 'docs/**'
       - 'frontend/README.md'
       - 'tests/component/README.md'
@@ -24,7 +23,6 @@ on:
       - 'AGENTS.md'
       - 'api/openapi/README.md'
       - 'backend/README.md'
-      - 'deploy/**'
       - 'docs/**'
       - 'frontend/README.md'
       - 'tests/component/README.md'
@@ -305,3 +303,35 @@ jobs:
 
       - name: Verify committed OpenAPI artifact
         run: task openapi:check
+
+  test-release:
+    name: Test (release packaging)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: 'backend/go.mod'
+          cache-dependency-path: 'backend/go.sum'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Run release packaging checks
+        run: task test:release

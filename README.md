@@ -3,7 +3,7 @@
 </h1>
 
 <p align="center">
-  Email-driven personal finance tracking with PostgreSQL-backed transaction analytics.
+  Email-driven personal finance tracking with a private SQLite database by default.
 </p>
 
 <p align="center">
@@ -18,14 +18,17 @@
 
 More screenshots are available in [`docs/screenshots`](docs/screenshots/).
 
-Expensor reads expense-related emails from Gmail or Thunderbird, extracts transaction details with configurable rules, and stores them in PostgreSQL. It ships with a web UI for onboarding, dashboard analytics, transaction review, labels, settings, and daemon control.
+Expensor reads expense-related emails from Gmail or Thunderbird and extracts transaction details with configurable rules. It uses SQLite by default and also supports PostgreSQL. The server includes the production web UI in one binary.
 
 > [!IMPORTANT]
 > This project is built with AI-assisted tooling.
 
 ## Quick Start
 
-The fastest way to run Expensor is Docker Compose. It starts Expensor and PostgreSQL, then you finish setup in the browser.
+The fastest way to run Expensor is Docker Compose. The default deployment starts one Expensor service with a persistent SQLite database.
+
+> [!WARNING]
+> Releases before the SQLite default used PostgreSQL in `docker-compose.yml`. If you have an existing `postgres_data` volume, use `docker-compose.postgres.yml`. Do not start the new default file and assume that it migrated your data. Expensor does not automatically copy PostgreSQL data into SQLite.
 
 ```bash
 # Download the Docker Compose file
@@ -40,15 +43,11 @@ docker compose up -d
 
 Open `http://localhost:8080` and follow the onboarding wizard.
 
-This starts:
-
-- Expensor UI and API on port `8080`
-- PostgreSQL on the internal Compose network
-- A persistent `postgres_data` volume containing transactions, settings, reader config, OAuth tokens, and processed-message state
+This starts the UI and API on port `8080`. The `expensor_data` volume stores the SQLite database and all application state.
 
 ### Encryption Secret
 
-Expensor encrypts reader client secrets and OAuth tokens before storing them in PostgreSQL. Set `EXPENSOR_SECRET_KEY` before starting the app and back it up; if it is lost, stored reader credentials cannot be decrypted and readers must be reconnected.
+Expensor encrypts reader secrets and OAuth tokens before storage. Back up `EXPENSOR_SECRET_KEY`. If you lose it, Expensor cannot decrypt saved reader credentials.
 
 For one-off shell usage:
 
@@ -65,28 +64,41 @@ EXPENSOR_SECRET_KEY=base64-encoded-key-here
 
 If you are running from a cloned repository, `task secrets:generate` prints a valid base64-encoded 32-byte key.
 
-### Custom PostgreSQL Password
+### PostgreSQL Deployment
 
-The Compose file uses a default local password for convenience. To set your own password for a new stack:
-
-```bash
-EXPENSOR_POSTGRES_PASSWORD='change-me' docker compose up -d
-```
-
-You can also create a `.env` file next to `docker-compose.yml`:
-
-```dotenv
-EXPENSOR_SECRET_KEY=base64-encoded-key-here
-EXPENSOR_POSTGRES_PASSWORD=change-me
-```
-
-Then run:
+Use the explicit PostgreSQL Compose file when you need a separate database service:
 
 ```bash
-docker compose up -d
+curl -LO https://raw.githubusercontent.com/ArionMiles/expensor/refs/heads/main/deploy/docker-compose.postgres.yml
+export EXPENSOR_SECRET_KEY="$(openssl rand -base64 32)"
+docker compose -f docker-compose.postgres.yml up -d
 ```
 
-For an existing database volume, change the password inside PostgreSQL before changing the Compose environment. The official Postgres image only uses `POSTGRES_PASSWORD` when initializing a new database directory.
+Set `EXPENSOR_POSTGRES_PASSWORD` before the first start to replace the local default password.
+
+### Native Installation
+
+Release archives support Linux and macOS on amd64 and arm64. The installer verifies the archive checksum and does not replace an existing key or configuration file.
+
+```bash
+VERSION=v0.2.6
+curl -fsSLO "https://github.com/ArionMiles/expensor/releases/download/$VERSION/install.sh"
+EXPENSOR_VERSION="$VERSION" sh install.sh
+~/.local/bin/expensor
+```
+
+Replace the version with the required release. The installer creates configuration under `${XDG_CONFIG_HOME:-$HOME/.config}/expensor`. Every release also includes a checksum manifest for manual verification.
+
+### SQLite Data And Backups
+
+Native installations use these default database paths:
+
+- Linux: `${XDG_DATA_HOME:-$HOME/.local/share}/expensor/expensor.db`
+- macOS: `$HOME/Library/Application Support/Expensor/expensor.db`
+
+Set `EXPENSOR_SQLITE_PATH` to use a different path. Stop Expensor before you copy the database, `-wal`, and `-shm` files for a backup. Back up the encryption key with the database.
+
+SQLite is suitable for one Expensor process. Use PostgreSQL when several application processes must share one database or when external database operations are required.
 
 ### Thunderbird
 
@@ -101,13 +113,13 @@ services:
       - /path/to/Thunderbird/Profiles/your.profile:/thunderbird-profile:ro
 ```
 
-The onboarding wizard can then discover the mounted profile and save the selected profile/mailboxes in PostgreSQL.
+The onboarding wizard can then discover the mounted profile and save the selected profile and mailboxes.
 
 ## Features
 
 - Gmail API and Thunderbird MBOX readers
 - Web onboarding for reader selection, credentials upload, OAuth, and reader config
-- PostgreSQL-backed transactions, settings, rules, labels, runtime state, and dedup state
+- SQLite storage by default, with PostgreSQL as an explicit option
 - Dashboard summaries, charts, heatmaps, and transaction drill-downs
 - Transaction search, filters, labeling, muting, and edit flows
 - Predefined extraction rules plus user-managed rules in the UI
@@ -120,7 +132,7 @@ The onboarding wizard can then discover the mounted profile and save the selecte
 3. Expensor polls Gmail or Thunderbird on the configured interval.
 4. Messages are matched against predefined and user-managed rules.
 5. Regex extractors derive amount, currency, merchant, date, and source.
-6. Transactions and processing state are written to PostgreSQL.
+6. Transactions and processing state are written to the selected database.
 7. The UI reads from the API for dashboard, transaction, settings, labels, and rules workflows.
 
 ## Architecture
@@ -134,7 +146,7 @@ flowchart LR
 
     subgraph Daemon
         direction TB
-        Reader[Reader Plugin] --> Runner[Daemon Runner] --> Writer[PostgreSQL Writer]
+        Reader[Reader Plugin] --> Runner[Daemon Runner] --> Writer[Store]
     end
 
     subgraph App["Expensor :8080"]
@@ -144,7 +156,7 @@ flowchart LR
 
     Gmail --> Reader
     TB --> Reader
-    Writer --> DB[(PostgreSQL)]
+    Writer --> DB[(SQLite or PostgreSQL)]
     DB <--> API
     DB -. runtime state .-> Runner
     Static --> UI[Web UI]
@@ -159,7 +171,9 @@ Most setup happens in the web UI. Environment variables are only needed for depl
 |----------|-----|
 | `BASE_URL` | Public URL used for OAuth redirects. Set this if Expensor is not reached at `http://localhost:8080`. |
 | `FRONTEND_URL` | Post-auth redirect target. Usually leave unset unless running the Vite dev server separately. |
-| `EXPENSOR_DB_BACKEND` | Database backend. Set to `postgres` for PostgreSQL deployments. |
+| `EXPENSOR_DB_BACKEND` | Database backend: `sqlite` or `postgres`. Empty values use SQLite. |
+| `EXPENSOR_SQLITE_PATH` | SQLite database path. Empty values use the platform data directory. |
+| `EXPENSOR_SQLITE_BUSY_TIMEOUT` | SQLite lock wait timeout. Defaults to `5s`. |
 | `POSTGRES_HOST` | PostgreSQL host. Required outside the bundled Compose setup. |
 | `POSTGRES_DB` | PostgreSQL database name. |
 | `POSTGRES_USER` | PostgreSQL user. |
@@ -184,7 +198,7 @@ Most setup happens in the web UI. Environment variables are only needed for depl
 
 Tip builds are also published with a pinnable tag: `ghcr.io/arionmiles/expensor:tip-<sha7>`.
 
-Latest release: see [Releases](https://github.com/ArionMiles/expensor/releases).
+Each stable release also contains native archives for Linux and macOS, SHA-256 checksums, and `install.sh`. Latest release: see [Releases](https://github.com/ArionMiles/expensor/releases).
 
 ## Contributing
 

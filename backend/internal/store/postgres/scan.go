@@ -84,7 +84,7 @@ func scanDiagnosticRows(rows pgx.Rows) ([]store.ExtractionDiagnosticRow, error) 
 }
 
 func scanTransactions(rows pgx.Rows) ([]store.Transaction, error) {
-	var txns []store.Transaction
+	txns := []store.Transaction{}
 	for rows.Next() {
 		var t store.Transaction
 		var legacySource, sourceType, sourceLabel, bank string

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"testing/fstest"
 
 	"github.com/google/uuid"
 
@@ -161,6 +162,43 @@ func TestAPIErrorFallbackUsesUnifiedErrorResponse(t *testing.T) {
 			}
 			if response.RequestID == "" || rr.Header().Get(requestIDHeader) != response.RequestID {
 				t.Fatalf("request ID header = %q, response = %q", rr.Header().Get(requestIDHeader), response.RequestID)
+			}
+		})
+	}
+}
+
+func TestAPIErrorFallbackTakesPriorityOverSPA(t *testing.T) {
+	apiMux := http.NewServeMux()
+	apiMux.HandleFunc("GET /api/widgets", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	uiHandler := spaHandler(fstest.MapFS{
+		"index.html": {Data: []byte("<html>spa</html>")},
+	})
+	handler := apiAndUIHandler(apiErrorFallback(apiMux), uiHandler)
+
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		wantStatus int
+	}{
+		{name: "unknown API endpoint", method: http.MethodGet, path: "/api/missing", wantStatus: http.StatusNotFound},
+		{name: "unsupported API method", method: http.MethodPost, path: "/api/widgets", wantStatus: http.StatusMethodNotAllowed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(t.Context(), tt.method, tt.path, nil)
+			rr := httptest.NewRecorder()
+
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d; body = %q", rr.Code, tt.wantStatus, rr.Body.String())
+			}
+			if contentType := rr.Header().Get("Content-Type"); contentType != "application/json" {
+				t.Fatalf("Content-Type = %q, want application/json", contentType)
 			}
 		})
 	}

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -211,6 +212,14 @@ func Load() (App, error) {
 	if err := applyEnvOverrides(&cfg); err != nil {
 		return App{}, err
 	}
+	if cfg.Database.Backend == "" || cfg.Database.Backend == DatabaseBackendSQLite {
+		home, _ := os.UserHomeDir()
+		path, err := resolveSQLitePath(runtime.GOOS, home, os.Getenv("XDG_DATA_HOME"), cfg.Database.SQLite.Path)
+		if err != nil {
+			return App{}, err
+		}
+		cfg.Database.SQLite.Path = path
+	}
 	if err := validate(&cfg); err != nil {
 		return App{}, err
 	}
@@ -225,6 +234,26 @@ func Load() (App, error) {
 	}
 	cfg.Observability.Output = os.Stderr
 	return cfg, nil
+}
+
+func resolveSQLitePath(goos, home, xdgDataHome, explicit string) (string, error) {
+	if strings.TrimSpace(explicit) != "" {
+		return filepath.Clean(explicit), nil
+	}
+	if goos == "linux" && strings.TrimSpace(xdgDataHome) != "" {
+		return filepath.Join(xdgDataHome, "expensor", "expensor.db"), nil
+	}
+	if strings.TrimSpace(home) == "" {
+		return "", errors.B.Op("config.sqlite_path").KindInvalidArgument().Text("home directory is required for the default SQLite path").Build()
+	}
+	switch goos {
+	case "darwin":
+		return filepath.Join(home, "Library", "Application Support", "Expensor", "expensor.db"), nil
+	case "linux":
+		return filepath.Join(home, ".local", "share", "expensor", "expensor.db"), nil
+	default:
+		return "", errors.B.Op("config.sqlite_path").KindInvalidArgument().Text("the operating system does not have a default SQLite path").Build()
+	}
 }
 
 func loadConfigFile(cfg *App) error {

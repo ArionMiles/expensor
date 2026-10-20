@@ -1,0 +1,8 @@
+[database]
+backend = "sqlite"
+
+[database.sqlite]
+busy_timeout = "5s"
+
+[security]
+secret_key_file = "@SECRET_KEY_FILE@"

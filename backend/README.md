@@ -1,6 +1,6 @@
 # Expensor Backend
 
-Daemon that reads expense transactions from email sources and writes them to PostgreSQL.
+Server that reads expense transactions from email sources and writes them to SQLite or PostgreSQL.
 
 ## Directory Structure
 
@@ -18,7 +18,8 @@ backend/
 │   ├── daemon/              # Reader → store ingestion pipeline and scan control
 │   ├── httpapi/             # HTTP transport and consumer-owned control interfaces
 │   ├── store/               # Backend-neutral store types and instrumentation
-│   │   └── postgres/        # PostgreSQL persistence, read models, and migrations
+│   │   ├── postgres/        # PostgreSQL persistence, read models, and migrations
+│   │   └── sqlite/          # SQLite persistence, read models, and migrations
 │   └── plugins/             # Reader plugin catalog/registry
 │       └── registry.go
 └── pkg/
@@ -35,7 +36,7 @@ backend/
 
 ## Plugin System
 
-Email providers are registered at startup via the plugin registry. Adding a new provider requires implementing the required capabilities and registering the provider. PostgreSQL ingestion is owned by `internal/store`.
+Email providers are registered at startup through the plugin registry. Adding a provider requires the supported capabilities and registry entry. Database ingestion is owned by `internal/store`.
 
 ### Providers
 
@@ -66,7 +67,8 @@ type Provider struct {
 
 ```bash
 task build          # go build ./...
-task build:binary   # optimised binary at ../bin/expensor
+task build:binary   # Optimized host binary with the embedded UI
+task package:release:docker # Four native archives and checksums
 ```
 
 ## Running
@@ -79,6 +81,5 @@ task run
 task dev
 ```
 
-The local tasks load `tests/config.dev.toml` through `EXPENSOR_CONFIG_FILE`. Override
-values with environment variables when needed, for example `task run DB_BACKEND=postgres`.
+Local tasks use PostgreSQL explicitly to keep development behavior stable. Production starts with SQLite when no backend is set. The local tasks load `tests/config.dev.toml` through `EXPENSOR_CONFIG_FILE`. Override values when required, for example `task run DB_BACKEND=postgres`.
 See the root [README](../README.md) for the full configuration reference.
