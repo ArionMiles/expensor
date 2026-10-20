@@ -3,7 +3,6 @@ package sqlite
 import (
 	"context"
 	"database/sql"
-	"math"
 	"sort"
 	"strings"
 
@@ -44,50 +43,61 @@ func (s *Store) queryTransactions(
 	search string,
 	filter store.ListFilter,
 ) ([]store.Transaction, store.TransactionListResult, error) {
-	if filter.Page < 1 {
-		filter.Page = 1
-	}
-	if filter.PageSize < 1 {
-		filter.PageSize = 20
-	}
-	if filter.Page-1 > math.MaxInt/filter.PageSize {
-		return nil, store.TransactionListResult{}, errors.B.Op("store.transactions.list").KindInvalidInput().Text("pagination offset overflow").Build()
-	}
-	records, err := s.loadStoredTransactions(ctx, tenant)
+	dataSQL, dataArgs, err := buildTransactionPageQuery(tenant, search, filter)
 	if err != nil {
 		return nil, store.TransactionListResult{}, err
 	}
-	filtered := make([]storedTransaction, 0, len(records))
-	var total scaledAmountTotal
-	for _, record := range records {
-		if matchesListFilter(record.transaction, filter) && matchesSearch(record.transaction, search) {
-			filtered = append(filtered, record)
-			total.add(record.amount)
-		}
+	filter = normalizeTransactionListFilter(filter)
+	where, filterArgs := buildTransactionWhere(tenant, search, filter)
+	var totalCount int
+	var totalAmountScaled float64
+	if err := s.repositories.query.QueryRowContext(ctx,
+		`SELECT count(*),total(t.amount) FROM transactions t`+where, filterArgs...).Scan(&totalCount, &totalAmountScaled); err != nil {
+		return nil, store.TransactionListResult{}, mapSQLiteError("sqlite.transactions.totals", err)
 	}
-	sort.SliceStable(filtered, func(i, j int) bool {
-		if filtered[i].transaction.Timestamp.Equal(filtered[j].transaction.Timestamp) {
-			if strings.EqualFold(filter.SortDir, "asc") {
-				return filtered[i].transaction.ID < filtered[j].transaction.ID
-			}
-			return filtered[i].transaction.ID > filtered[j].transaction.ID
-		}
-		if strings.EqualFold(filter.SortDir, "asc") {
-			return filtered[i].transaction.Timestamp.Before(filtered[j].transaction.Timestamp)
-		}
-		return filtered[i].transaction.Timestamp.After(filtered[j].transaction.Timestamp)
-	})
-	result := store.TransactionListResult{Total: len(filtered), TotalAmount: total.float64()}
-	offset := (filter.Page - 1) * filter.PageSize
-	if offset >= len(filtered) {
-		return []store.Transaction{}, result, nil
+	result := store.TransactionListResult{Total: totalCount, TotalAmount: totalAmountScaled / amountScale}
+
+	rows, err := s.repositories.query.QueryContext(ctx, dataSQL, dataArgs...)
+	if err != nil {
+		return nil, store.TransactionListResult{}, mapSQLiteError("sqlite.transactions.list", err)
 	}
-	end := min(offset+filter.PageSize, len(filtered))
-	transactions := make([]store.Transaction, end-offset)
-	for i := offset; i < end; i++ {
-		transactions[i-offset] = filtered[i].transaction
+	defer rows.Close()
+	records := []storedTransaction{}
+	for rows.Next() {
+		record, scanErr := scanStoredTransaction(rows)
+		if scanErr != nil {
+			return nil, store.TransactionListResult{}, scanErr
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, store.TransactionListResult{}, mapSQLiteError("sqlite.transactions.list", err)
+	}
+	if err := s.loadTransactionLabels(ctx, tenant, records); err != nil {
+		return nil, store.TransactionListResult{}, err
+	}
+	transactions := make([]store.Transaction, len(records))
+	for i := range records {
+		transactions[i] = records[i].transaction
 	}
 	return transactions, result, nil
+}
+
+func buildTransactionPageQuery(tenant store.Tenant, search string, filter store.ListFilter) (string, []any, error) {
+	filter = normalizeTransactionListFilter(filter)
+	offset, err := transactionPageOffset(filter)
+	if err != nil {
+		return "", nil, err
+	}
+	where, args := buildTransactionWhere(tenant, search, filter)
+	direction := "DESC"
+	if strings.EqualFold(filter.SortDir, "asc") {
+		direction = "ASC"
+	}
+	query := `SELECT ` + transactionColumns + ` FROM transactions t` + where +
+		` ORDER BY t.timestamp ` + direction + `,t.id ` + direction + ` LIMIT ? OFFSET ?`
+	args = append(args, filter.PageSize, offset)
+	return query, args, nil
 }
 
 func (s *Store) loadStoredTransactions(ctx context.Context, tenant store.Tenant) ([]storedTransaction, error) {
@@ -167,9 +177,15 @@ func (s *Store) loadTransactionLabels(ctx context.Context, tenant store.Tenant, 
 	for i := range records {
 		byID[records[i].transaction.ID] = i
 	}
+	args := make([]any, 0, len(records)+1)
+	for i := range records {
+		args = append(args, records[i].transaction.ID)
+	}
+	args = append(args, tenant.ID)
 	rows, err := s.repositories.query.QueryContext(ctx, `
 		SELECT tl.transaction_id,tl.label FROM transaction_labels tl
-		JOIN transactions t ON t.id=tl.transaction_id WHERE t.tenant_id=? ORDER BY tl.label`, tenant.ID)
+		JOIN transactions t ON t.id=tl.transaction_id
+		WHERE tl.transaction_id IN (`+placeholders(len(records))+`) AND t.tenant_id=? ORDER BY tl.label`, args...)
 	if err != nil {
 		return mapSQLiteError("sqlite.transactions.load_labels", err)
 	}
@@ -273,12 +289,14 @@ func (s *Store) updateTransactionFields(
 	update transactionFieldUpdate,
 ) error {
 	update.args = append(update.args, timeToText(s.repositories.now()), id, tenant.ID)
-	result, err := s.repositories.query.ExecContext(ctx,
-		`UPDATE transactions SET `+strings.Join(update.sets, ",")+`,updated_at=? WHERE id=? AND tenant_id=?`, update.args...)
-	if err != nil {
-		return mapSQLiteError("sqlite.transactions."+update.operation, err)
-	}
-	return requireTransactionRows(result, update.operation)
+	return s.repositories.writeTx(ctx, func(tx queryer) error {
+		result, err := tx.ExecContext(ctx,
+			`UPDATE transactions SET `+strings.Join(update.sets, ",")+`,updated_at=? WHERE id=? AND tenant_id=?`, update.args...)
+		if err != nil {
+			return mapSQLiteError("sqlite.transactions."+update.operation, err)
+		}
+		return requireTransactionRows(result, update.operation)
+	})
 }
 
 func requireTransactionRows(result sql.Result, operation string) error {
@@ -452,13 +470,15 @@ func (s *Store) MuteTransaction(ctx context.Context, tenant store.Tenant, id str
 			reasonValue = reason
 		}
 	}
-	result, err := s.repositories.query.ExecContext(ctx, `UPDATE transactions
-		SET muted=?,muted_by_merchant=?,mute_reason=?,updated_at=? WHERE id=? AND tenant_id=?`,
-		mutedValue, merchantValue, reasonValue, timeToText(s.repositories.now()), id, tenant.ID)
-	if err != nil {
-		return mapSQLiteError("sqlite.transactions.mute", err)
-	}
-	return requireTransactionRows(result, "mute")
+	return s.repositories.writeTx(ctx, func(tx queryer) error {
+		result, err := tx.ExecContext(ctx, `UPDATE transactions
+			SET muted=?,muted_by_merchant=?,mute_reason=?,updated_at=? WHERE id=? AND tenant_id=?`,
+			mutedValue, merchantValue, reasonValue, timeToText(s.repositories.now()), id, tenant.ID)
+		if err != nil {
+			return mapSQLiteError("sqlite.transactions.mute", err)
+		}
+		return requireTransactionRows(result, "mute")
+	})
 }
 
 func (s *Store) UpdateMuteReason(ctx context.Context, tenant store.Tenant, id, reason string) error {
@@ -466,13 +486,15 @@ func (s *Store) UpdateMuteReason(ctx context.Context, tenant store.Tenant, id, r
 	if reason != "" {
 		value = reason
 	}
-	result, err := s.repositories.query.ExecContext(ctx, `UPDATE transactions
-		SET mute_reason=?,updated_at=? WHERE id=? AND tenant_id=? AND muted=1`,
-		value, timeToText(s.repositories.now()), id, tenant.ID)
-	if err != nil {
-		return mapSQLiteError("sqlite.transactions.update_mute_reason", err)
-	}
-	return requireTransactionRows(result, "update_mute_reason")
+	return s.repositories.writeTx(ctx, func(tx queryer) error {
+		result, err := tx.ExecContext(ctx, `UPDATE transactions
+			SET mute_reason=?,updated_at=? WHERE id=? AND tenant_id=? AND muted=1`,
+			value, timeToText(s.repositories.now()), id, tenant.ID)
+		if err != nil {
+			return mapSQLiteError("sqlite.transactions.update_mute_reason", err)
+		}
+		return requireTransactionRows(result, "update_mute_reason")
+	})
 }
 
 func (s *Store) UpdateMerchantReason(ctx context.Context, tenant store.Tenant, id, reason string) error {
@@ -480,18 +502,20 @@ func (s *Store) UpdateMerchantReason(ctx context.Context, tenant store.Tenant, i
 	if reason != "" {
 		value = reason
 	}
-	result, err := s.repositories.query.ExecContext(ctx, `UPDATE muted_merchants SET reason=? WHERE id=? AND tenant_id=?`, value, id, tenant.ID)
-	if err != nil {
-		return mapSQLiteError("sqlite.transactions.update_merchant_reason", err)
-	}
-	count, err := result.RowsAffected()
-	if err != nil {
-		return mapSQLiteError("sqlite.transactions.update_merchant_reason", err)
-	}
-	if count == 0 {
-		return mutedMerchantNotFound("update_merchant_reason")
-	}
-	return nil
+	return s.repositories.writeTx(ctx, func(tx queryer) error {
+		result, err := tx.ExecContext(ctx, `UPDATE muted_merchants SET reason=? WHERE id=? AND tenant_id=?`, value, id, tenant.ID)
+		if err != nil {
+			return mapSQLiteError("sqlite.transactions.update_merchant_reason", err)
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return mapSQLiteError("sqlite.transactions.update_merchant_reason", err)
+		}
+		if count == 0 {
+			return mutedMerchantNotFound("update_merchant_reason")
+		}
+		return nil
+	})
 }
 
 func (s *Store) MuteByMerchant(ctx context.Context, tenant store.Tenant, pattern, reason string) error {
@@ -565,26 +589,30 @@ func (s *Store) GetMutedMerchantsWithCount(ctx context.Context, tenant store.Ten
 }
 
 func (s *Store) DeleteMutedMerchant(ctx context.Context, tenant store.Tenant, id string) error {
-	result, err := s.repositories.query.ExecContext(ctx, `DELETE FROM muted_merchants WHERE id=? AND tenant_id=?`, id, tenant.ID)
-	if err != nil {
-		return mapSQLiteError("sqlite.transactions.delete_muted_merchant", err)
-	}
-	count, err := result.RowsAffected()
-	if err != nil {
-		return mapSQLiteError("sqlite.transactions.delete_muted_merchant", err)
-	}
-	if count == 0 {
-		return mutedMerchantNotFound("delete_muted_merchant")
-	}
-	return nil
+	return s.repositories.writeTx(ctx, func(tx queryer) error {
+		result, err := tx.ExecContext(ctx, `DELETE FROM muted_merchants WHERE id=? AND tenant_id=?`, id, tenant.ID)
+		if err != nil {
+			return mapSQLiteError("sqlite.transactions.delete_muted_merchant", err)
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return mapSQLiteError("sqlite.transactions.delete_muted_merchant", err)
+		}
+		if count == 0 {
+			return mutedMerchantNotFound("delete_muted_merchant")
+		}
+		return nil
+	})
 }
 
 func (s *Store) UnmuteByPattern(ctx context.Context, tenant store.Tenant, pattern string) error {
-	_, err := s.repositories.query.ExecContext(ctx, `UPDATE transactions
-		SET muted=0,muted_by_merchant=0,mute_reason=NULL,updated_at=?
-		WHERE tenant_id=? AND instr(expensor_casefold(merchant_info),expensor_casefold(?))>0`,
-		timeToText(s.repositories.now()), tenant.ID, pattern)
-	return mapSQLiteError("sqlite.transactions.unmute_by_pattern", err)
+	return s.repositories.writeTx(ctx, func(tx queryer) error {
+		_, err := tx.ExecContext(ctx, `UPDATE transactions
+			SET muted=0,muted_by_merchant=0,mute_reason=NULL,updated_at=?
+			WHERE tenant_id=? AND instr(expensor_casefold(merchant_info),expensor_casefold(?))>0`,
+			timeToText(s.repositories.now()), tenant.ID, pattern)
+		return mapSQLiteError("sqlite.transactions.unmute_by_pattern", err)
+	})
 }
 
 func (s *Store) DeleteMutedMerchantAndUnmute(ctx context.Context, tenant store.Tenant, id string) error {

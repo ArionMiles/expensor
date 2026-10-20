@@ -23,11 +23,16 @@ mode() {
 }
 
 install_dir="$tmp/home/.local/bin"
-config_dir="$tmp/home/.config/expensor"
+config_home="$tmp/config-home"
+config_dir="$config_home/expensor"
+if grep -q 'EXPENSOR_CONFIG_DIR' "$root/install.sh"; then
+  echo "installer exposes a config directory override the application does not load" >&2
+  exit 1
+fi
 EXPENSOR_VERSION=1.2.3 \
 EXPENSOR_DOWNLOAD_ROOT="$tmp/releases" \
 EXPENSOR_INSTALL_DIR="$install_dir" \
-EXPENSOR_CONFIG_DIR="$config_dir" \
+XDG_CONFIG_HOME="$config_home" \
 EXPENSOR_OS=linux EXPENSOR_ARCH=amd64 \
   "$root/install.sh"
 
@@ -42,7 +47,7 @@ printf 'preserved key\n' >"$config_dir/secret.key"
 EXPENSOR_VERSION=1.2.3 \
 EXPENSOR_DOWNLOAD_ROOT="$tmp/releases" \
 EXPENSOR_INSTALL_DIR="$install_dir" \
-EXPENSOR_CONFIG_DIR="$config_dir" \
+XDG_CONFIG_HOME="$config_home" \
 EXPENSOR_OS=linux EXPENSOR_ARCH=amd64 \
   "$root/install.sh"
 test "$(cat "$config_dir/config.toml")" = "preserved config"
@@ -53,7 +58,7 @@ printf 'existing binary\n' >"$tmp/rollback/bin/expensor"
 if EXPENSOR_VERSION=1.2.3 \
   EXPENSOR_DOWNLOAD_ROOT="$tmp/releases" \
   EXPENSOR_INSTALL_DIR="$tmp/rollback/bin" \
-  EXPENSOR_CONFIG_DIR="$tmp/rollback/config" \
+  XDG_CONFIG_HOME="$tmp/rollback/config-home" \
   EXPENSOR_OPENSSL="$tmp/missing-openssl" \
   EXPENSOR_OS=linux EXPENSOR_ARCH=amd64 \
     "$root/install.sh"; then
@@ -61,7 +66,7 @@ if EXPENSOR_VERSION=1.2.3 \
   exit 1
 fi
 test "$(cat "$tmp/rollback/bin/expensor")" = "existing binary"
-test ! -e "$tmp/rollback/config/config.toml"
+test ! -e "$tmp/rollback/config-home/expensor/config.toml"
 
 cp "$tmp/releases/expensor_1.2.3_linux_amd64.tar.gz" "$tmp/corrupt.tar.gz"
 printf 'corrupt\n' >>"$tmp/corrupt.tar.gz"
@@ -69,7 +74,7 @@ cp "$tmp/corrupt.tar.gz" "$tmp/releases/expensor_1.2.3_linux_amd64.tar.gz"
 if EXPENSOR_VERSION=1.2.3 \
   EXPENSOR_DOWNLOAD_ROOT="$tmp/releases" \
   EXPENSOR_INSTALL_DIR="$tmp/rejected/bin" \
-  EXPENSOR_CONFIG_DIR="$tmp/rejected/config" \
+  XDG_CONFIG_HOME="$tmp/rejected/config-home" \
   EXPENSOR_OS=linux EXPENSOR_ARCH=amd64 \
     "$root/install.sh"; then
   echo "installer accepted a corrupt archive" >&2

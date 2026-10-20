@@ -148,6 +148,9 @@ func openDatabase(ctx context.Context, dsn string, busyTimeout time.Duration) (*
 	if err := registerCasefold(ownedDriver); err != nil {
 		return nil, errors.B.Op("sqlite.connection.open").KindInternal().Text("registering case-fold function").Err(err).Build()
 	}
+	if err := registerLocalTimeFunctions(ownedDriver); err != nil {
+		return nil, errors.B.Op("sqlite.connection.open").KindInternal().Text("registering local-time functions").Err(err).Build()
+	}
 	registerConnectionSettings(ownedDriver, busyTimeout)
 
 	db := sql.OpenDB(connector{driver: ownedDriver, dsn: dsn})
@@ -685,6 +688,45 @@ func registerCasefold(ownedDriver *moderncsqlite.Driver) error {
 			}
 		},
 	)
+}
+
+func registerLocalTimeFunctions(ownedDriver *moderncsqlite.Driver) error {
+	functions := []struct {
+		name string
+		part func(time.Time) int64
+	}{
+		{name: "expensor_local_weekday", part: func(value time.Time) int64 { return int64(value.Weekday()) }},
+		{name: "expensor_local_hour", part: func(value time.Time) int64 { return int64(value.Hour()) }},
+	}
+	for _, function := range functions {
+		part := function.part
+		if err := ownedDriver.RegisterDeterministicScalarFunction(
+			function.name,
+			2,
+			func(_ *moderncsqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
+				timestamp, ok := args[0].(string)
+				if !ok {
+					return nil, errors.B.Op("sqlite.connection.local_time").KindInvalidArgument().Text("timestamp must be text").Build()
+				}
+				timezone, ok := args[1].(string)
+				if !ok {
+					return nil, errors.B.Op("sqlite.connection.local_time").KindInvalidArgument().Text("timezone must be text").Build()
+				}
+				value, err := timeFromText(timestamp)
+				if err != nil {
+					return nil, err
+				}
+				location, err := time.LoadLocation(timezone)
+				if err != nil {
+					location = time.UTC
+				}
+				return part(value.In(location)), nil
+			},
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func registerConnectionSettings(ownedDriver *moderncsqlite.Driver, busyTimeout time.Duration) {

@@ -23,7 +23,7 @@ esac
 
 download_root=${EXPENSOR_DOWNLOAD_ROOT:-"https://github.com/ArionMiles/expensor/releases/download/$version"}
 install_dir=${EXPENSOR_INSTALL_DIR:-"$HOME/.local/bin"}
-config_dir=${EXPENSOR_CONFIG_DIR:-"${XDG_CONFIG_HOME:-$HOME/.config}/expensor"}
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/expensor"
 archive="expensor_${version}_${os}_${arch}.tar.gz"
 manifest="expensor_${version}_checksums.txt"
 tmp=$(mktemp -d)

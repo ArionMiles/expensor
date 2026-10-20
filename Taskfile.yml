@@ -183,6 +183,11 @@ tasks:
     desc: Verifies checksums, file modes, atomic installation, and config preservation.
     cmd: tests/release/install_test.sh
 
+  test:release:workflow:
+    summary: Test release workflow safety.
+    desc: Verifies manual release validation, commit checkout, and safe shell input handling.
+    cmd: tests/release/workflow_test.sh
+
   test:smoke:docker:
     summary: Smoke-test the production container with SQLite.
     desc: Builds the image, verifies the embedded UI and API, and restarts it with persistent SQLite data.
@@ -202,6 +207,7 @@ tasks:
       - task: compose:check
       - task: test:release:archives
       - task: test:release:installer
+      - task: test:release:workflow
       - task: package:release
       - task: test:smoke:native
       - task: test:smoke:docker

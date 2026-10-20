@@ -25,14 +25,15 @@ type Server struct {
 // Pass a non-empty staticDir to serve a bundled SPA for all non-/api paths.
 // Leave empty in local dev (Vite serves the frontend separately).
 func NewServer(port int, handlers *Handlers, staticDir string, logger *slog.Logger) *Server {
-	mux := http.NewServeMux()
-	registerRoutes(mux, handlers)
+	apiMux := http.NewServeMux()
+	registerRoutes(apiMux, handlers)
+	applicationHandler := apiErrorFallback(apiMux)
 	if ui := uiFileSystem(staticDir, embeddedUIFileSystem()); ui != nil {
-		mux.HandleFunc("/", spaHandler(ui))
+		applicationHandler = apiAndUIHandler(applicationHandler, spaHandler(ui))
 	}
 
 	scope := observability.NewScope(logger, "github.com/ArionMiles/expensor/backend/internal/httpapi")
-	protectedMux := authMiddleware(handlers, apiErrorFallback(mux))
+	protectedMux := authMiddleware(handlers, applicationHandler)
 	chain := requestIDMiddleware(corsMiddleware(observabilityMiddleware(scope, loggingMiddleware(logger, recoveryMiddleware(logger, protectedMux)))))
 
 	return &Server{
@@ -45,6 +46,16 @@ func NewServer(port int, handlers *Handlers, staticDir string, logger *slog.Logg
 		},
 		logger: logger,
 	}
+}
+
+func apiAndUIHandler(apiHandler, uiHandler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isAPIPath(r.URL.Path) {
+			apiHandler.ServeHTTP(w, r)
+			return
+		}
+		uiHandler.ServeHTTP(w, r)
+	})
 }
 
 // Start listens and serves until ctx is canceled.
