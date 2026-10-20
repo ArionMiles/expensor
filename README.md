@@ -20,15 +20,13 @@ More screenshots are available in [`docs/screenshots`](docs/screenshots/).
 
 Expensor reads expense-related emails from Gmail or Thunderbird and extracts transaction details with configurable rules. It uses SQLite by default and also supports PostgreSQL. The server includes the production web UI in one binary.
 
-> [!IMPORTANT]
-> This project is built with AI-assisted tooling.
+## AI Usage
+
+We use LLM-assisted coding tools across parts of this codebase. Nothing ships that a maintainer has not read and understood: every change goes through a pull request, is reviewed and tested, and has a human who can answer for it. "The AI wrote that" is not an answer any of us would accept from ourselves.
 
 ## Quick Start
 
 The fastest way to run Expensor is Docker Compose. The default deployment starts one Expensor service with a persistent SQLite database.
-
-> [!WARNING]
-> Releases before the SQLite default used PostgreSQL in `docker-compose.yml`. If you have an existing `postgres_data` volume, use `docker-compose.postgres.yml`. Do not start the new default file and assume that it migrated your data. Expensor does not automatically copy PostgreSQL data into SQLite.
 
 ```bash
 # Download the Docker Compose file
