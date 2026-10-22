@@ -1,0 +1,18 @@
+---
+rule: "HDFC UPI"
+sender: "alerts@hdfcbank.net"
+subject: "❗  You have done a UPI txn. Check details!"
+expected:
+  amount: "40.00"
+  merchant: "Redacted Merchant"
+  currency: "<optional>"
+---
+Dear Customer,<br><br>
+Rs.40.00 has been debited from your HDFC Bank RuPay Credit Card XX0000
+to redacted@upi Redacted Merchant on 19-01-26.
+Your UPI transaction reference number is REDACTED.<br><br>
+
+If you did not authorize this transaction, please report it immediately by calling REDACTED Or SMS BLOCK CC XXXX to REDACTED.<br><br>
+
+Warm Regards,<br>
+HDFC Bank
